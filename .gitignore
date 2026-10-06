@@ -1,0 +1,15 @@
+__pycache__/
+.venv/
+.runtime/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+data/
+models/
+mlruns/
+mlflow.db
+evidence/raw/
+tmp/

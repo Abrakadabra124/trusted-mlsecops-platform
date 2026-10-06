@@ -1,0 +1,123 @@
+# Backlog реализации
+
+Все задачи **PLANNED**. Каждый раздел - результат для одной или нескольких коротких итераций, ориентир 6-12 часов с возможным дроблением после discovery. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Будущие команды `mlsecops.acceptance` там описаны как контракт, а не существующий код.
+
+## T01
+- [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
+- Результат: требования к labels/данным, resources inventory, machine-readable report schema и CLI runner с явным fail для отсутствующих checks.
+- Проверка: недоступный tool/несовместимый foundation блокирует bootstrap; повторная инвентаризация не меняет текущий runtime.
+
+## T02
+- [ ] Foundation P0 и совместимые зависимости. Зависимость: T01. Gate: M01.
+- Результат: pinned version matrix, отдельное окружение, проверка registry maintenance path, storage decision, идемпотентный bootstrap и rollback migration plan.
+- Проверка: два bootstrap, schema migration/restore smoke, отсутствие потери артефактов/ключей; lockfile и runtime соответствуют inventory.
+
+## T03
+- [ ] Dataset generator, schema и passport. Зависимость: T02. Gate: M02.
+- Результат: deterministic synthetic generator, data dictionary, ranges, source approval, label/split policy; роли владельцев отмечены.
+- Проверка: valid/invalid fixtures, отсутствие PII и train-test leakage, точное повторение generated inputs.
+
+## T04
+- [ ] Quarantine, DVC и signed manifests. Зависимость: T03. Gates: M02, M03.
+- Результат: state machine dataset, artifact hashes, split manifests, rejection report и storage permissions.
+- Проверка: single-byte tamper, source expiry, traversal/symlink, duplicate rows, missing object; approved версия не перезаписывается.
+
+## T05
+- [ ] Identity и изоляция. Зависимость: T04. Gate: M04.
+- Результат: role/access matrix, namespace/storage/network policies и restricted service accounts.
+- Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
+
+## T06
+- [ ] Sandboxed training Jobs. Зависимость: T05. Gate: M05.
+- Результат: Job runner без host privileges, лимиты, deadlines, pinned image и cleanup.
+- Проверка: denied egress, timeout, memory exhaustion, отсутствие signing secrets и влияния на serving.
+
+## T07
+- [ ] CPU pipeline и export. Зависимость: T06. Gate: M06.
+- Результат: preprocess/train DAG с seed/hyperparameters и machine-readable outputs; fit только на train.
+- Проверка: три fresh-process runs, сравнение входов и predictions; mutation inputs не маскируется cache hit.
+
+## T08
+- [ ] MLflow tracking и lineage. Зависимость: T07. Gate: M06.
+- Результат: защищённый MLflow, отдельная metadata DB, run-to-material binding и artifact access tests.
+- Проверка: anonymous/чужая identity запрещены, потеря metadata не меняет runtime alias, повторное обучение сохраняет отдельные runs.
+
+## T09
+- [ ] Frozen evaluation policy. Зависимость: T08. Gate: M07.
+- Результат: model card, clean baseline, slice definitions, threshold/CI policy до final holdout, бизнес-dataset stop conditions.
+- Проверка: dummy comparison, sample counts, disjoint entities и label maturity; недостаток данных = inconclusive.
+
+## T10
+- [ ] Independent evaluator. Зависимость: T09. Gate: M07.
+- Результат: isolated execution, holdout access budget, signed subject-bound evaluation reports.
+- Проверка: report swap, попытка trainer прочесть holdout, missing metric, signature mismatch; deny self-approval.
+
+## T11
+- [ ] Poisoning benchmark. Зависимость: T10. Gate: M08.
+- Результат: clean controls + label-flip/backdoor matrix, ASR/CIs/utility deltas и полный отчёт failures/bypasses.
+- Проверка: known-violation fixtures блокируются, challenge outcomes не скрываются, train-only attacker budget соблюдён.
+
+## T12
+- [ ] Safe format и robustness probes. Зависимость: T11. Gate: M09.
+- Результат: ONNX allowlist, parity report, declared evasion suite, ограниченный OOD/abstain policy.
+- Проверка: pickle/external tensor/custom operator/oversized graph отклоняются до load; golden cases соответствуют Python output.
+
+## T13
+- [ ] Release bundle и promotion verifier. Зависимость: T12. Gate: M10.
+- Результат: versioned format, signatures/envelopes, subject/environment/policy binding, approval и idempotent state transition.
+- Проверка: весь negative promotion suite; данные, model, report и runtime image проверяются как один release.
+
+## T14
+- [ ] Trust lifecycle. Зависимость: T13. Gate: M11.
+- Результат: revocation/expiry policy, trust lease, key rotation и контролируемый rollback authorization.
+- Проверка: old policy/foreign environment/replay/revoked signer/clock skew; отказ после истечения lease без тихого fallback.
+
+## T15
+- [ ] Inference API и loader. Зависимость: T14. Gate: M12.
+- Результат: API schema, verified readiness, atomic bundle load и явные ошибки/abstain.
+- Проверка: request limit suite, malicious paths/URLs не поддерживаются, TOCTOU и missing signature не дают ready.
+
+## T16
+- [ ] Privacy, quotas и audit. Зависимость: T15. Gate: M13.
+- Результат: auth, per-client throttling, redaction, bounded-cardinality telemetry и trace-to-release correlation.
+- Проверка: test canaries не появляются в logs/evidence, чужие identity отвергаются, raw features не сохраняются по умолчанию.
+
+## T17
+- [ ] Нагрузочный профиль. Зависимость: T16. Gate: M14.
+- Результат: benchmark runner, client-side distribution, resource measurements и overload decision.
+- Проверка: воспроизводимый payload/compute profile, отдельные intentional negatives, отсутствие скрытого исключения timeouts.
+
+## T18
+- [ ] Model/data/security monitoring. Зависимость: T17. Gate: M15.
+- Результат: scheduled reports, dashboards, alert routing, drift versus label-quality distinction и feedback quarantine.
+- Проверка: injected shift, degraded labels, clean windows, telemetry outage; ни один alert не повышает candidate автоматически.
+
+## T19
+- [ ] Canary и rollback. Зависимость: T18. Gate: M16.
+- Результат: staged rollout, совместимость целого bundle и manual-review fallback.
+- Проверка: failure injection с измерением времени, запрет отозванного previous release, отсутствие смешанных preprocessing/model.
+
+## T20
+- [ ] Backup и независимый restore. Зависимость: T19. Gate: M17.
+- Результат: metadata/artifact backup manifest, recovery runbook и evidence из нового namespace/storage.
+- Проверка: RTO/RPO, corrupt/missing blob, denied expired/revoked trust, golden predictions после restore.
+
+## T21
+- [ ] Сквозной release acceptance. Зависимость: T20. Gate: M18.
+- Результат: M01-M17 reports на одном candidate, completeness check и source fingerprint.
+- Проверка: любой missing/fail/inconclusive report блокирует final acceptance; сканирование всего заявленного ML runtime scope.
+
+## T22
+- [ ] Lifecycle и production delta. Зависимость: T21. Gate: M18.
+- Результат: retention/expiry/decommission policy, resource/cost estimate, safety/privacy risks и список внешних предпосылок пилота.
+- Проверка: delete/retire fixture не ломает действующий referenced bundle, отозванная версия больше не serve; backup retention согласован.
+
+## T23
+- [ ] Независимый review и game day. Зависимость: T22. Gate: M18.
+- Результат: review log, проверка заявлений, clean/tamper/recovery демонстрации и residual risk sign-off.
+- Проверка: повтор runbooks по инструкции другим человеком; при self-review явно указать отсутствие независимости.
+
+## T24
+- [ ] Документация и reference release. Зависимость: T23. Gate: M18.
+- Результат: инструкции запуска/удаления, model/dataset cards, release notes, sanitized evidence и честные known limitations.
+- Проверка: clean checkout walkthrough, ссылки/секреты/CI, повторная проверка опубликованного commit и артефактов; реальный pilot не объявлен автоматически.
