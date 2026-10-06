@@ -39,3 +39,13 @@
 | RTO / RPO / DR | Время восстановления, допустимая потеря данных по времени и disaster recovery. Требуют проверки конечного работающего состояния. |
 | LLM / RAG | Large Language Model и Retrieval-Augmented Generation: языковая модель и дополнение её контекстом из поиска. Это отдельный будущий профиль угроз. |
 | ADR | Architecture Decision Record: записанное решение с альтернативами, последствиями и условиями пересмотра. |
+| Control plane / execution worker | Доверенная часть принимает решения о правах и выпуске; недоверенный worker только считает ограниченный результат. Разделение логических классов в одном privileged процессе не создаёт эту границу. |
+| AI-BOM / asset inventory | AI Bill of Materials описывает состав AI-системы; inventory дополнительно отслеживает owner, состояние и реальное использование. Dependency graph позволяет найти все зависимые releases при отзыве данных. |
+| SAIF / CoSAI | Secure AI Framework Google и Coalition for Secure AI: источники архитектурных рекомендаций. Использование рекомендаций не означает сертификацию проекта этими организациями. |
+| SAMM | OWASP Software Assurance Maturity Model: риск-ориентированная модель улучшения software security, не специальный ML scanner. |
+| SAST / DAST / fuzzing | Статический анализ кода, динамическая проверка работающего приложения и испытания множеством необычных входов. Не заменяют независимую оценку семантического poisoning. |
+| Differential privacy / DP | Формальная рамка ограничения раскрытия информации о защищаемой единице данных. Требует конкретного механизма, privacy budget и учёта композиции; redaction сама по себе не DP. |
+| Sigma / SIEM | Переносимое описание detection logic и система сбора/анализа security events. Правило требует корректного logsource и проверенной трансляции в конкретный backend. |
+| ART / Foolbox | Библиотеки экспериментов с adversarial ML. Поддержка framework не гарантирует применимость каждой атаки к выбранной модели. |
+| Safetensors / ModelScan | Формат хранения tensors без pickle object execution и инструмент анализа model files соответственно. Ни формат, ни отсутствие findings не доказывают безопасное поведение модели. |
+| MCP | Model Context Protocol: интерфейс взаимодействия AI-приложений с tools/resources. В текущем reference не применяется; агентам нужны отдельные permissions и threat model. |

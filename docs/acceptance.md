@@ -1,6 +1,6 @@
 # Измеримая приёмка будущей платформы
 
-**Все M01-M18 имеют статус PLANNED. Ни один ML-gate сейчас не запускался.** Числа ниже - предложенные пороги лабораторного профиля, не результаты и не отраслевые нормативы. До baseline-эксперимента T09 пороги фиксируются в versioned policy; нельзя ослаблять их после просмотра final holdout без нового review и новой оценки.
+**Все M01-M23 имеют статус PLANNED. Ни один ML-gate сейчас не запускался.** Числа ниже - предложенные пороги лабораторного профиля, не результаты и не отраслевые нормативы. До baseline-эксперимента T09 пороги фиксируются в versioned policy; нельзя ослаблять их после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18.
 
 ## Единый формат проверки
 
@@ -52,7 +52,7 @@
 **Inference contract и fail-closed.** Проверяются 413/422/429/503, NaN/Inf, неизвестные поля/версии, >100 строк, body >64 KiB, malformed model и отсутствующая подпись. Ready=true только после verified load. Output содержит правильный bundle digest, score в `[0,1]` или abstain. Negative: изменение bytes после проверки не должно попасть в runtime. Evidence: API tests, loader probes и running digest. T15.
 
 ## M13
-**Privacy и audit.** Искусственные PII/secret canaries из input не встречаются в logs/metrics/traces и публичном evidence; raw features по умолчанию не сохраняются. Проверены auth, per-client quotas и ограниченная cardinality. Audit связывает source/run/report/approval/release/request без raw payload. Membership inference не объявляется устранённым; реальный пилот требует отдельной privacy-оценки. T16.
+**Privacy и audit.** Искусственные PII/secret canaries из input не встречаются в logs/metrics/traces и публичном evidence; raw features по умолчанию не сохраняются. Проверены auth, per-client quotas и ограниченная cardinality. Audit связывает source/run/report/approval/release/request без raw payload. Public export не содержит private storage URLs, identifiers и легко перебираемых hashes чувствительных значений. Membership inference не объявляется устранённым; masking не называется DP. Реальный пилот требует purpose/retention/privacy specification, а DP при выборе - отдельного review privacy unit, adjacency, epsilon/delta, composition и реализации. T16.
 
 ## M14
 **Нагрузка и деградация.** 10 s прогрева, затем 120 s, 10 concurrent clients, одна строка/запрос, pinned golden payload, >= 1 000 измеренных запросов. Предлагаемые lab targets: p95 <= 200 ms, p99 <= 500 ms, неожиданные 5xx < 0.1%; намеренные invalid-input тесты отдельно. Результат включает RPS, CPU/RAM, errors, latency distribution и отсутствие неверного digest. Overload приводит к ограниченному отказу, не OOM loop. T17.
@@ -67,12 +67,27 @@
 **Независимый restore.** В новом namespace/storage восстановить metadata, artifacts и approvals из согласованной резервной копии; провести digest verification и golden predictions. Target lab RTO <=15 min, RPO <=24 h при ежедневной копии. Negative: corrupt/missing artifact и revoked key выявляются до ready. Измерять от начала recovery, не только SQL import. Offsite/HA lab не доказывает. T20.
 
 ## M18
-**Итоговый evidence и governance.** M01-M17 выполнены на одном зафиксированном release candidate; каждый report имеет полные inputs и отсутствуют скрытые skipped gates. Новая security-critical логика имеет >=95% branch coverage и все перечисленные negative cases, coverage не заменяет review. Проверены inventory runtime+controllers in scope, severity policy без молчаливых scanner exceptions, документация, model/dataset cards, expiry/retention и teardown. Независимый reviewer для пилота обязателен. Evidence содержит limitations и не содержит secrets. T21-T24.
+**Итоговый evidence и governance.** M01-M17 и M19-M23 выполнены на одном зафиксированном release candidate; каждый report имеет полные inputs и отсутствуют скрытые skipped gates. Новая security-critical логика имеет >=95% branch coverage и все перечисленные negative cases, coverage не заменяет review. Проверены inventory runtime+controllers in scope, severity policy без молчаливых scanner exceptions, документация, model/dataset cards, expiry/retention и teardown. Независимый reviewer для пилота обязателен. Evidence содержит limitations и не содержит secrets. T21-T24. M18 остаётся последним по исполнению независимо от номера.
+
+## M19
+**Инвентаризация и transitive impact.** Для fixture graph из 2 datasets, 3 models, 4 deployments и shared runtime/policy получить точный ожидаемый набор зависимостей. Неизвестный owner, dangling edge, запрещённый cycle или actual digest mismatch блокируют promotion. Отзыв dataset запрещает все его descendants, включая previous rollback candidate, но не независимую ветвь; serving следует lease M11. Evidence: versioned graph, observed deployment snapshot, expected/actual impacted sets. T25.
+
+## M20
+**Изоляция model worker от evaluator authority.** Под worker identity попытки чтения holdout labels, signer material, metadata DB, `/proc` процесса controller, service tokens и controller admin API отвергнуты. С разрешённым batch predictions проходят schema/order/size/finiteness проверки; arbitrary text, extra fields, missing rows, oversized output и повтор batch ID не превращаются в signed report. Доказательство: manifests плюс реальные access/output probes. Host-admin и все covert channels вне гарантии. T26.
+
+## M21
+**Покрытие intake и fail-closed scanner.** Scan report связывает все входные hashes, tool/policy version, inspected/unsupported/skipped/error counts. Набор approved outputs состоит только из реально проверенных разрешённых объектов. Empty scan, renamed unsupported payload, timeout/crash, stale report, report для другого digest, traversal/symlink и modified conversion output дают reject/inconclusive, не pass. Clean allowed ONNX fixture проходит полный путь до оценки, unsafe format не допускается даже при «no findings». Evidence: support matrix и negative reports. T27.
+
+## M22
+**Дополнительная assurance campaign.** Выполнены 36 absolute-budget poisoned runs + 6 clean controls по [расширенному протоколу](threat-model.md) и минимум 2 независимых challenge cases. Для сопоставимых probes сохраняются M08-пороги, нельзя выбрать только выгодные seeds. Отчёт отделяет deterministic enforcement от statistical robustness, фиксирует независимую единицу CI и запрещает объявлять per-scenario CI общей гарантией. Любой подтверждённый обход hard boundary блокирует release; недостаточные данные/неразобранный challenge = inconclusive. Для challenge с новым воздействием метрика и severity утверждаются до запуска, не подгоняются под результат. T28.
+
+## M23
+**Security events и доставка реакции.** Минимум по одному fixture для каждого из 7 event types архитектуры; authentic denied/revoked/mismatch events доходят до ожидаемого alert route <=60 s в lab после ingest, без raw payload. Подделанный producer отклонён, duplicate event id не создаёт повторный incident, out-of-order доставлен с признаком задержки, missing sequence/heartbeat обнаружен <=120 s. При audit sink outage новые promotions блокируются, даже если drift dashboard зелёный. Если выбран Sigma backend, дополнительно проверяются field mapping и replay результата после конвертации; без backend не заявляется Sigma deployment. T29.
 
 ## Измерение качества: определения
 
 - AUPRC - площадь под precision-recall кривой; положительный класс и prevalence записываются, иначе число трудно интерпретировать.
-- ASR (attack success rate) - доля успешных целевых ошибок среди заранее определённых eligible probes. Для доли использовать Wilson 95% CI, для разницы matched controls - заранее выбранный paired bootstrap с фиксированным seed и 2 000 повторений.
+- ASR (attack success rate) - доля успешных целевых ошибок среди заранее определённых eligible probes. Для доли независимых Bernoulli observations использовать Wilson 95% CI, для разницы matched controls - заранее выбранный paired bootstrap с фиксированным seed и 2 000 повторений. Для зависимых release/entity observations выбирать cluster/block resampling до эксперимента; не считать повторные seeds или дубликаты строк независимыми новыми примерами.
 - p95/p99 считаются по клиентской end-to-end latency без прогрева; timeout/error не удаляются из отчёта.
 - PSI - Population Stability Index, сигнал различия распределений по зафиксированным bins; не доказательство concept drift, атаки или бесполезности модели.
 - RTO/RPO - время восстановления и максимально допустимая потеря данных по времени. Их lab-измерение не создаёт production SLA.

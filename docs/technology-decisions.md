@@ -41,6 +41,22 @@ Feature store пока не нужен: нет нескольких online/offli
 
 ## Ресурсный и финансовый предел
 
-Сначала инвентаризация реально свободной памяти, CPU и диска. Начальные per-job limits даны в [приёмке](acceptance.md); отдельно надо сложить MLflow/PostgreSQL/monitoring и прежние workloads. Если headroom недостаточен, запускать фазы последовательно и оставить одну модель. Облачные расходы и GPU в 12-недельный local-reference план не включены; production стоимость оценивается отдельно по storage, egress, retention, compute и on-call.
+Сначала инвентаризация реально свободной памяти, CPU и диска. Начальные per-job limits даны в [приёмке](acceptance.md); отдельно надо сложить MLflow/PostgreSQL/monitoring и прежние workloads. Если headroom недостаточен, запускать фазы последовательно и оставить одну модель. Облачные расходы и GPU в local-reference план не включены; production стоимость оценивается отдельно по storage, egress, retention, compute и on-call.
 
-Решения, которые дорого менять: [ADR-001](decisions/0001-reference-scope.md), [ADR-002](decisions/0002-release-trust.md).
+Решения, которые дорого менять: [ADR-001](decisions/0001-reference-scope.md), [ADR-002](decisions/0002-release-trust.md), [ADR-003](decisions/0003-control-and-execution.md).
+
+## Дополнительный отбор R0.2
+
+| Практика или инструмент | Решение | Условие применения |
+| --- | --- | --- |
+| Asset inventory graph | Обязательный небольшой versioned graph, не новая CMDB-платформа | M19: owners, dependencies, reconciliation и transitive revocation |
+| Worker/controller separation | Обязательная граница, не один privileged evaluator container | M20 и ADR-003; проверить реальные read/write/egress permissions |
+| ModelScan | Кандидат на compatibility spike, не утверждённый ONNX scanner | Подтвердить поддерживаемый формат/версию и scanned coverage; M21 не зависит от названия продукта |
+| ART | Кандидат для подходящих attack estimators | Сначала минимальные воспроизводимые fixtures; dependency допустима только при подтверждённой поддержке модели и сценария |
+| Foolbox | Отложен | Neural-network workload вне текущего Logistic Regression reference |
+| Safetensors | Отложен | Хранит tensors, не заменяет ONNX graph; нужен при появлении соответствующего workload |
+| Sigma | Условно, после event contract | Выбранный log backend, проверенные fields и replay; M23 можно реализовать без SIEM |
+| Differential privacy | Отдельное решение для sensitive pilot | Privacy unit, budget/accountant, utility trade-off и verification; synthetic lab не требует DP |
+| PyRIT, Garak, LLM guards, MCP tooling | Отложены вместе с agent/LLM треком | Новый scope, угрозы, данные и acceptance, а не механическая установка из каталога |
+
+Основания и ограничения: [разбор материалов](material-review.md), [S35-S44](sources.md#s35). Ни один инструмент этой таблицы не установлен в рамках R0.2. Уменьшение полномочий и fail-closed поведение важнее числа подключённых scanners.

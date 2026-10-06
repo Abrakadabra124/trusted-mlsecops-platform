@@ -1,4 +1,4 @@
-# Модель угроз v0.1
+# Модель угроз v0.2
 
 Статус: проектная модель, без выполненного red-team тестирования. Объект - Release Risk Advisor и его ML delivery chain. Основания: [NIST AML](sources.md#s05), [MITRE ATLAS](sources.md#s07), [OWASP AI Exchange](sources.md#s08). Internal IDs `THxx` не являются идентификаторами стандартов.
 
@@ -28,6 +28,11 @@
 | TH12 | Слепое переобучение из feedback | Feedback quarantine и независимая разметка | Прислать поддельные labels/дубликаты | Colluding source/label owners; M02, M15 |
 | TH13 | Drift/label delay скрывает ухудшение | Раздельные metrics, sample-size gates, matured labels | Drift, затем labels с ухудшением; метрики не смешиваются | Несвоевременная/смещённая разметка; M07, M15 |
 | TH14 | Restore/rollback возвращает отозванную модель | Current trust check, compatibility group, coherent backup | Corrupt artifact, missing data, revoked previous release | Общий failure domain lab; M16, M17 |
+| TH15 | Неучтённый endpoint или потомок отозванного dataset | Asset graph, owner, reconciliation, transitive revoke | Dangling edge, unknown owner, running alias mismatch, revoked ancestor | Inventory/control-plane compromise; M19, M11 |
+| TH16 | Candidate компрометирует evaluator parser и получает authority | Отдельные controller/scorer и prediction worker без keys/labels | Worker читает token, labels, signing key или controller socket | Kernel escape/covert channels не исключены; M20 |
+| TH17 | Пустой/неподдерживаемый scan даёт ложный green | Coverage-aware intake report, quarantine, no auto-load | Unsupported format, zero objects, scanner crash, stale policy | Неизвестные parser defects и backdoor; M21 |
+| TH18 | Overfit к известной suite или малый абсолютный poison count | Hidden challenge и absolute-count budgets | Новая стратегия/trigger после freeze policy, fixture gaming | Ограниченность конечных probes; M22 |
+| TH19 | Потеря/подделка security telemetry скрывает атаку | Authenticated events, sequence/gap, ingest health, replay | Duplicate/out-of-order/forged event, collector outage | Trusted producer compromise; M23 |
 
 ATLAS mapping на проверенном snapshot: TH02/TH03 относятся к `AML.T0020` Poison Training Data; TH04/TH05/TH07 к `AML.T0010` AI Supply Chain Compromise; TH09 к `AML.T0015` Evade AI Model; privacy часть TH08 связана с `AML.T0024.000` Infer Training Data Membership. Это сопоставление сценариев, не доказательство полного покрытия ATLAS.
 
@@ -42,6 +47,18 @@ ATLAS mapping на проверенном snapshot: TH02/TH03 относятся
 7. В отчёте публиковать и пропущенные challenge-атаки, и false alarms на clean controls. Никакого удаления неудачных результатов ради «100 из 100».
 
 Для первых двух poison families бюджет относится к числу изменённых train-строк, а не размеру файла. ASR считается на заранее определённом наборе подходящих примеров, который clean model классифицировала корректно. Размер набора и доверительный интервал обязательны; малый denominator даёт inconclusive.
+
+### Дополнение R0.2: absolute и adaptive challenges
+
+Исходные 30 poisoned runs + 5 controls сохраняются. Отдельный M22-профиль: два размера train (2 000 и 14 000 строк), budgets 1/5/25 изменённых строк, три seeds, два семейства (label flipping и backdoor) = 36 poisoned runs + 6 matched clean controls. Во всех reports указывать и count, и fraction, источник/позицию poison rows, возможности атакующего и фактический размер train. Holdout остаётся независимым и одинаково определённым для сравниваемой пары.
+
+Это наша ограниченная tabular-матрица, мотивированная вопросом из [S31](sources.md#s31), а не воспроизведение эксперимента с LLM или перенос его «250 документов». Дополнительно reviewer задаёт минимум по одному не использованному при настройке защиты challenge на семейство. Policy и тестовые методы фиксируются до reveal; после обнаруженного bypass нельзя подправить detector и повторно назвать тот же holdout независимым.
+
+Адаптивность означает, что reviewer знает документированные защитные правила и подбирает challenge с учётом этих правил в заранее ограниченном train-only/query/time budget. Доступ к final labels, signer или внешним сервисам это не разрешает. Budget, knowledge и tuning queries записываются до запуска; defender не получает challenge cases для настройки. Если reviewer и автор защиты один человек, человеческая независимость не заявляется.
+
+Учитывать вероятную зависимость samples внутри release/entity и reuse одних и тех же примеров между seeds. Bootstrap выполняется по объявленной независимой единице (entity/time block при необходимости), а не по искусственно размноженным копиям строк. При трёх seeds не заявлять статистически надёжную оценку всей популяции моделей. Per-scenario CIs не являются одновременной 95% гарантией для всей матрицы; pooling и multiple-testing policy объявляются заранее.
+
+Challenge bypass сохраняется в evidence и классифицируется по воздействию. Неустранённый bypass hard authorization/integrity boundary блокирует reference release. Остальные отклонения требуют явно принятого ограниченного риска; нет владельца/достаточных данных - inconclusive, не pass.
 
 ## Политика остаточного риска
 

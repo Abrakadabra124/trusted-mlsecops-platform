@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-06",
+  "scope": "research-design-only",
+  "decisions": [
+    {
+      "id": "D01",
+      "title": "Asset graph and transitive revocation",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S28", "S30", "S42"],
+      "gates": ["M19", "M11"],
+      "tasks": ["T25", "T14"],
+      "artifacts": ["docs/architecture.md", "docs/acceptance.md"],
+      "owner": "Platform owner",
+      "verification": "Reconcile fixture dependency graph with running releases and reject descendants of revoked inputs.",
+      "limitation": "No live inventory has been implemented or observed."
+    },
+    {
+      "id": "D02",
+      "title": "Deterministic authorization outside model output",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S32", "S33"],
+      "gates": ["M04", "M10", "M12"],
+      "tasks": ["T05", "T13", "T15"],
+      "artifacts": ["docs/architecture.md", "docs/decisions/0003-control-and-execution.md"],
+      "owner": "Security reviewer",
+      "verification": "Deny an advisory result or forged model output that requests a privileged transition.",
+      "limitation": "Agent-source lessons are adapted principles, not tabular-model attack evidence."
+    },
+    {
+      "id": "D03",
+      "title": "Separate evaluation controller and model worker",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S30", "S32"],
+      "gates": ["M20", "M05", "M07"],
+      "tasks": ["T26", "T06", "T10"],
+      "artifacts": ["docs/architecture.md", "docs/threat-model.md"],
+      "owner": "Platform and ML owner",
+      "verification": "Probe worker access to report keys, labels, controller socket, service tokens and egress; all forbidden paths denied.",
+      "limitation": "Host administrator and sandbox escape remain outside the local guarantee."
+    },
+    {
+      "id": "D04",
+      "title": "Coverage-aware untrusted artifact intake",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S35", "S36", "S43"],
+      "gates": ["M21", "M09"],
+      "tasks": ["T27", "T12"],
+      "artifacts": ["docs/architecture.md", "docs/technology-decisions.md"],
+      "owner": "Security reviewer",
+      "verification": "Unsupported format, empty scan, scanner timeout and altered converted artifact must not pass promotion.",
+      "limitation": "A clean serialization scan does not prove model quality or absence of poisoning."
+    },
+    {
+      "id": "D05",
+      "title": "Absolute-budget and adaptive evaluation",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S29", "S31", "S37"],
+      "gates": ["M22", "M08"],
+      "tasks": ["T28", "T11"],
+      "artifacts": ["docs/threat-model.md", "docs/acceptance.md"],
+      "owner": "ML evaluator",
+      "verification": "Run bounded absolute-count probes and unseen challenge cases with matched clean controls and report bypasses.",
+      "limitation": "LLM poison counts do not transfer as universal thresholds to tabular data."
+    },
+    {
+      "id": "D06",
+      "title": "Explicit privacy claims and evidence minimization",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S28", "S40"],
+      "gates": ["M13"],
+      "tasks": ["T16"],
+      "artifacts": ["docs/acceptance.md", "docs/material-review.md"],
+      "owner": "Data owner",
+      "verification": "Canary inputs and private identifiers must not appear in public reports or logs; DP claims require a separate reviewed specification.",
+      "limitation": "Masking and hashing do not establish differential privacy."
+    },
+    {
+      "id": "D07",
+      "title": "Security event contracts and replay validation",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S32", "S39", "S42"],
+      "gates": ["M23", "M15"],
+      "tasks": ["T29", "T18"],
+      "artifacts": ["docs/runbooks.md", "docs/architecture.md"],
+      "owner": "Platform SRE owner",
+      "verification": "Replay identity, promotion and integrity events; confirm alert delivery and telemetry-loss detection.",
+      "limitation": "No SIEM backend or Sigma rules are deployed in the reference yet."
+    },
+    {
+      "id": "D08",
+      "title": "Risk-based maturity and conditional agent profile",
+      "status": "design-applied-runtime-planned",
+      "sources": ["S26", "S34", "S38", "S41", "S44"],
+      "gates": ["M01", "M18"],
+      "tasks": ["T01", "T02", "T22"],
+      "artifacts": ["docs/technology-decisions.md", "tasks/plan.md"],
+      "owner": "Project owner",
+      "verification": "Review workload applicability, support status, license, resources and risk before adding each dependency.",
+      "limitation": "A framework mapping is neither certification nor proof of maximum maturity."
+    }
+  ]
+}

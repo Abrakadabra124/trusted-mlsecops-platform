@@ -1,6 +1,6 @@
 # Backlog реализации
 
-Все задачи **PLANNED**. Каждый раздел - результат для одной или нескольких коротких итераций, ориентир 6-12 часов с возможным дроблением после discovery. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Будущие команды `mlsecops.acceptance` там описаны как контракт, а не существующий код.
+Все 29 задач **PLANNED**. Каждый раздел - результат для одной или нескольких коротких итераций, ориентир 6-12 часов с возможным дроблением после discovery. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Будущие команды `mlsecops.acceptance` там описаны как контракт, а не существующий код. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, а порядок исполнения задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01
 - [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
@@ -39,7 +39,7 @@
 
 ## T08
 - [ ] MLflow tracking и lineage. Зависимость: T07. Gate: M06.
-- Результат: защищённый MLflow, отдельная metadata DB, run-to-material binding и artifact access tests.
+- Результат: защищённый MLflow, отдельная metadata DB, run-to-material binding и artifact access tests. Только внешний publisher получает право записи; training worker не получает его credentials.
 - Проверка: anonymous/чужая identity запрещены, потеря metadata не меняет runtime alias, повторное обучение сохраняет отдельные runs.
 
 ## T09
@@ -48,8 +48,8 @@
 - Проверка: dummy comparison, sample counts, disjoint entities и label maturity; недостаток данных = inconclusive.
 
 ## T10
-- [ ] Independent evaluator. Зависимость: T09. Gate: M07.
-- Результат: isolated execution, holdout access budget, signed subject-bound evaluation reports.
+- [ ] Independent evaluator. Зависимости: T09, T26. Gate: M07.
+- Результат: trusted scorer вне prediction worker, holdout access budget, signed subject-bound evaluation reports. Labels и signing keys недоступны worker.
 - Проверка: report swap, попытка trainer прочесть holdout, missing metric, signature mismatch; deny self-approval.
 
 ## T11
@@ -63,7 +63,7 @@
 - Проверка: pickle/external tensor/custom operator/oversized graph отклоняются до load; golden cases соответствуют Python output.
 
 ## T13
-- [ ] Release bundle и promotion verifier. Зависимость: T12. Gate: M10.
+- [ ] Release bundle и promotion verifier. Зависимости: T12, T25, T27. Gate: M10.
 - Результат: versioned format, signatures/envelopes, subject/environment/policy binding, approval и idempotent state transition.
 - Проверка: весь negative promotion suite; данные, model, report и runtime image проверяются как один release.
 
@@ -79,7 +79,7 @@
 
 ## T16
 - [ ] Privacy, quotas и audit. Зависимость: T15. Gate: M13.
-- Результат: auth, per-client throttling, redaction, bounded-cardinality telemetry и trace-to-release correlation.
+- Результат: auth, per-client throttling, redaction, bounded-cardinality telemetry и trace-to-release correlation. Public evidence не содержит приватных identifiers/URLs или угадываемых hashes чувствительных значений; masking не объявляется differential privacy.
 - Проверка: test canaries не появляются в logs/evidence, чужие identity отвергаются, raw features не сохраняются по умолчанию.
 
 ## T17
@@ -103,13 +103,13 @@
 - Проверка: RTO/RPO, corrupt/missing blob, denied expired/revoked trust, golden predictions после restore.
 
 ## T21
-- [ ] Сквозной release acceptance. Зависимость: T20. Gate: M18.
-- Результат: M01-M17 reports на одном candidate, completeness check и source fingerprint.
+- [ ] Сквозной release acceptance. Зависимости: T20, T25, T26, T27, T28, T29. Gate: M18.
+- Результат: M01-M17 и M19-M23 reports на одном candidate, completeness check и source fingerprint. M18 агрегирует все gates и выполняется последним.
 - Проверка: любой missing/fail/inconclusive report блокирует final acceptance; сканирование всего заявленного ML runtime scope.
 
 ## T22
 - [ ] Lifecycle и production delta. Зависимость: T21. Gate: M18.
-- Результат: retention/expiry/decommission policy, resource/cost estimate, safety/privacy risks и список внешних предпосылок пилота.
+- Результат: retention/expiry/decommission policy, resource/cost estimate, safety/privacy risks и список внешних предпосылок пилота. Риск-ориентированный scope и пересмотр источников по изменению угроз; LLM/MCP остаются отдельным треком.
 - Проверка: delete/retire fixture не ломает действующий referenced bundle, отозванная версия больше не serve; backup retention согласован.
 
 ## T23
@@ -121,3 +121,28 @@
 - [ ] Документация и reference release. Зависимость: T23. Gate: M18.
 - Результат: инструкции запуска/удаления, model/dataset cards, release notes, sanitized evidence и честные known limitations.
 - Проверка: clean checkout walkthrough, ссылки/секреты/CI, повторная проверка опубликованного commit и артефактов; реальный pilot не объявлен автоматически.
+
+## T25
+- [ ] Inventory graph и reconciliation. Зависимости: T04, T08. Gate: M19.
+- Результат: versioned asset schema, owners, dependency graph, точный impacted set и блокировка неизвестных assets. В недели 4-5 готовится компонент; после T14-T15 проверяется интеграция отзыва до serving.
+- Проверка: fixture M19, dangling/cyclic reference, unknown owner, alias/digest mismatch; интеграционный отзыв ancestor укладывается в M11 и не затрагивает независимую ветвь.
+
+## T26
+- [ ] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
+- Результат: изолированные training/prediction workers, publisher/scorer с отдельной identity, typed bounded prediction protocol. Контракт и компонентные fixtures готовы до T10; полная проверка с evaluator завершается в T10.
+- Проверка: попытки чтения labels/keys/DB/service-account token и /proc соседнего controller запрещены; malformed/replayed/oversized outputs не становятся подписанным результатом.
+
+## T27
+- [ ] Artifact intake coverage. Зависимости: T12, T26. Gate: M21.
+- Результат: quarantine report с declared format/tool coverage, scanned count, digest, policy version и явным inconclusive. Выбор scanner после проверки поддержки фактического ONNX-профиля.
+- Проверка: unsupported/zero-scanned/crash/timeout/stale report, подмена digest и mutation после conversion блокируются; разрешённый clean ONNX проходит полный intake.
+
+## T28
+- [ ] Absolute-budget и независимые attack challenges. Зависимости: T10, T11, T12. Gate: M22.
+- Результат: 36 poisoned runs + 6 clean controls, не менее двух отложенных reviewer challenges, заранее заданные attacker capabilities и корректная единица статистического анализа.
+- Проверка: абсолютные бюджеты и доли записаны вместе, challenge не использован для tuning, hard-boundary bypass блокирует release, неопределённый результат не превращается в pass.
+
+## T29
+- [ ] Security event contracts и replay. Зависимости: T14, T18. Gate: M23.
+- Результат: семь типизированных событий, trusted producers, schema validation, idempotent ingestion, gap/heartbeat detection и fail-closed promotion при недоступном audit sink.
+- Проверка: positive/negative replay, forgery, duplicates, out-of-order, sequence gaps и sink outage; alert/gap latency измерены. Sigma добавляется только с выбранным и проверенным backend.

@@ -8,11 +8,11 @@
 
 1. Остановить promotion и изолировать объект, не удаляя forensic evidence.
 2. Записать actual/expected digest, identities, source request и текущий approved release.
-3. Если affected object уже используется, отозвать конкретный release; не ограничиваться сменой alias.
+3. По inventory graph найти все зависимые runs/models/releases/endpoints, включая общий preprocessing/runtime policy. Отозвать затронутое множество, сверить реально работающие digests; не ограничиваться сменой alias или одной моделью.
 4. Проверить audit источника, storage write permissions и возможности скомпрометированного credential.
 5. Пересоздать candidate из отдельно проверенных inputs; провести полный gate set.
 
-**Восстановление:** только новый approval или разрешённый совместимый release без компрометации. **Проверка:** M03, M10-M12; runtime digest соответствует принятому решению.
+**Восстановление:** только новый approval или разрешённый совместимый release без компрометации. **Проверка:** M03, M10-M12, M19; runtime digest соответствует принятому решению, независимая ветвь не отозвана ошибочно.
 
 ## 2. Poisoning или подозрительная разметка
 
@@ -24,7 +24,7 @@
 4. Не считать высокий confidence или нормальную среднюю accuracy оправданием модели.
 5. Проверить исправленную независимую выборку и необходимость полного retrain.
 
-**Восстановление:** утверждённый clean dataset и полный independent evaluation. **Проверка:** M07-M09; пропущенные challenge cases остаются в отчёте.
+**Восстановление:** утверждённый clean dataset и полный independent evaluation. **Проверка:** M07-M09, M22; пропущенные challenge cases остаются в отчёте, абсолютный бюджет и доля poisoned rows указаны вместе.
 
 ## 3. Drift без подтверждённого ухудшения
 
@@ -81,6 +81,18 @@
 Найти все model/dataset references, запретить новые approvals, отозвать serving-разрешение, перевести клиентов на согласованную замену. Только затем удалять артефакты по политике хранения; запрещено удалять объект, ещё нужный действующему разрешённому release. Правовые сроки и основания устанавливаются для реального набора отдельно, не придумываются в lab.
 
 Если удаление данных влияет на обученную модель, определить необходимость retrain или retirement. Удаление raw rows само по себе не доказывает machine unlearning. Сохранять минимальный допустимый audit без запрещённых персональных данных.
+
+## 8. Неполный intake, нарушение worker boundary или audit gap
+
+**Ответственный:** security reviewer + platform operator. **Сигнал:** inconclusive scanner, denied worker operation, неизвестный producer, sequence gap или недоступный audit sink.
+
+1. Блокировать новую promotion; сохранить ограниченный технический report без raw payloads. Отсутствие findings при отсутствии покрытия не считать clean.
+2. Проверить claimed/actual format и digest, scanner exit status и scanned count. После conversion проверяется новый артефакт; unsafe loader не запускается рядом с credentials.
+3. При worker policy violation остановить Job, проверить доступ к labels/keys/controller, отозвать затронутые credentials и releases по фактическому воздействию. Недоверенный stdout не является authoritative evidence.
+4. При audit gap проверить trusted producer, sequence и heartbeat, восстановить доставку с idempotent event IDs. Потерянные события не заменять выдуманными записями.
+5. Повторить intake, isolation probes и replay; получить отдельное разрешение на возобновление. Уже работающий serving следует своей trust lease/availability policy, а не неявному auto-restart из-за alert.
+
+**Проверка:** M20, M21, M23. Измерить восстановление telemetry и перечислить реально утраченные evidence; при неизвестном воздействии оставить риск открытым.
 
 ## Обязательный incident record
 

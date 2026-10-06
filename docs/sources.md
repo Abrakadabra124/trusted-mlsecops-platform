@@ -73,3 +73,67 @@
 
 ## S24
 [GitHub Actions baseline run 37211112894](https://github.com/Abrakadabra124/enterprise-devsecops-platform/actions/runs/37211112894). Через API 2026-10-06 проверены conclusion=success и head SHA `fe73d86ef8cf4564478058e50a21ac6a1d3e2dc2`. Hosted source CI не подтверждает текущую доступность локального Kubernetes.
+
+## Дополнение R0.2
+
+Ниже дополнительные материалы, проверенные **2026-10-06**. Дата публикации указана только если найдена в самом источнике; дата получения не заменяет её. Восемь компаний представляют выборку публичных инженерных материалов, а не весь мировой рынок. Полные сторонние тексты в Git не копируются.
+
+## S25
+Предоставленный текст «MLSecOps (Machine Learning Security Operations)...», SHA-256 `f715c867df1df60bb4c78ec9b5750188ea45d57459d527e6d39b45dc649556dc`. Дата автора неизвестна, получен 2026-10-06. Упоминания доменов без конкретных статей не считаются проверенными цитатами. Используется как набор гипотез для [fact-check](material-review.md), оригинальный файл не републикуется.
+
+## S26
+[CyberOrda: инструменты и курсы MLSecOps](https://cyberorda.com/MlSecOps/). Каталог сообщества, дата публикации страницы не установлена. Полезен для discovery, сам предупреждает о неподдерживаемых инструментах. Не comparative benchmark и не гарантия безопасности перечисленного ПО.
+
+## S27
+[Google: Introducing Secure AI Framework](https://blog.google/innovation-and-ai/technology/safety-security/introducing-googles-secure-ai-framework/), 2023-06-08. Первичное объявление SAIF. Используется для исторической точки отсчёта, не как новость 2026 года.
+
+## S28
+[Google: How we’re securing the AI frontier](https://blog.google/innovation-and-ai/technology/safety-security/ai-security-frontier-strategy-tools/), 2025-10-06; [SAIF risk map](https://www.saif.google/secure-ai-framework), [controls](https://saif.google/secure-ai-framework/controls), страницы актуальной документации. Подтверждено объявление SAIF 2.0 и расширение к агентам. Из карты переносим компонентный risk mapping; автоматического соответствия SAIF не заявляем.
+
+## S29
+[Microsoft Research: Lessons From Red Teaming 100 Generative AI Products](https://www.microsoft.com/en-us/research/publication/lessons-from-red-teaming-100-generative-ai-products/), январь 2025; [engineering summary](https://www.microsoft.com/en-us/security/blog/2025/01/13/3-takeaways-from-red-teaming-100-generative-ai-products/), 2025-01-13. Опыт команды Microsoft, не независимый межвендорный benchmark. Изучены выводы об области применения, роли человека и различии red teaming/benchmarking.
+
+## S30
+[AWS: Governing the ML lifecycle at scale, Part 4](https://aws.amazon.com/blogs/machine-learning/governing-the-ml-lifecycle-at-scale-part-4-scaling-mlops-with-security-and-governance-controls/), 2025-02-07. Reference multi-account ML platform, разделение development/test/production/data governance и ролей approval. Переносится принцип, не обязательная покупка SageMaker и не эквивалентность namespace облачному account.
+
+## S31
+[Anthropic, UK AISI, Alan Turing Institute: A small number of samples can poison LLMs](https://www.anthropic.com/research/small-samples-poison), 2025-10-09. Эксперимент с узким backdoor и моделями 600M-13B; 250 документов относятся к исследованной постановке. Используется для проверки предположения о процентном бюджете, не для универсального порога или утверждения о нашем классификаторе.
+
+## S32
+[NVIDIA AI Red Team: Four Ways to Deploy More Secure AI Agents](https://developer.nvidia.com/blog/four-ways-to-deploy-more-secure-ai-agents/), 2026-07-30. Изучен основной текст, не только AI-generated summary. Описывает access control, execution isolation, egress и secret handling. После timeout web-reader основной текст получен напрямую с того же официального URL; эксперименты NVIDIA не воспроизводились.
+
+## S33
+[OpenAI: Designing AI agents to resist prompt injection](https://openai.com/index/designing-agents-to-resist-prompt-injection/), 2026-03-11. Источник о защите agent systems и ограничении последствий манипуляции. Для predictive ML переносится принцип внешнего контроля действий, а не prompt-инструменты или обещание полной защиты.
+
+## S34
+[Databricks: Agentic AI Security, DASF v3.0](https://www.databricks.com/blog/agentic-ai-security-new-risks-and-controls-databricks-ai-security-framework-dasf-v30), 2026-03-20. Расширяет модель рисков на agents/MCP. Дата и версия относятся к проверенной публикации, не заявляется отсутствие более поздних версий. Capability boundaries рассматриваются отдельно от рекомендаций поставщика по конкретным продуктам.
+
+## S35
+[Hugging Face: Pickle Scanning](https://huggingface.co/docs/hub/security-pickle). Документация без надёжно установленной даты публикации, проверена 2026-10-06. Прямо оговаривает неполноту сканирования и best-effort списков imports. Нельзя интерпретировать чистый scan как доказательство безопасности модели.
+
+## S36
+[Hugging Face: Safetensors](https://huggingface.co/docs/safetensors/index). Документация формата хранения tensors, дата страницы не установлена. Используется для уточнения границ формата; не обеспечивает честность весов, качество модели или безопасность процесса конвертации из pickle.
+
+## S37
+[Trusted-AI: Adversarial Robustness Toolbox](https://github.com/Trusted-AI/adversarial-robustness-toolbox). README описывает evasion, poisoning, extraction, inference и поддерживаемые estimators. GitHub API 2026-10-06: archived=false. Название библиотеки не доказывает поддержку конкретной атаки нашим estimator; требуется compatibility spike.
+
+## S38
+[OWASP SAMM: About](https://owaspsamm.org/about/). Technology/process-agnostic модель зрелости software assurance, не специализированный MLSecOps стандарт. Дата страницы не установлена. Используется для risk-based уровня зрелости, не требования достичь максимума во всех категориях.
+
+## S39
+[Sigma: Rules](https://sigmahq.io/docs/basics/rules.html), [официальная спецификация](https://sigmahq.io/sigma-specification/). Формат описания детектирующих правил с logsource и полями, а не готовый ML anomaly detector. Конкретный backend и field mappings пока не выбраны.
+
+## S40
+[NIST SP 800-226: Guidelines for Evaluating Differential Privacy Guarantees](https://csrc.nist.gov/pubs/sp/800/226/final), final 2025-03-06. Проверены publication record и scope документа. DP рассматривается как математическая гарантия с условиями и privacy hazards, не синоним маскирования и не функция, которую достаточно включить галочкой.
+
+## S41
+[CoSAI: Model Context Protocol Security](https://www.coalitionforsecureai.org/wp-content/uploads/2026/03/model-context-protocol-security-1.pdf). В документе approval date **2026-01-08**; путь загрузки `/2026/03/` не подменяет эту дату. Изучены scope, supply-chain и lifecycle guidance. Это условный GenAI/MCP-трек, не требование установить MCP в CPU reference.
+
+## S42
+[CoSAI: Agentic Identity and Access Management](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf). Approval Technical Steering Committee **2026-03-20**, не «апрель» по URL. Изучены capability-risk matrix, short-lived scoped identities и lifecycle. Применимость к будущим агентам отделена от контроля обычных ML Jobs.
+
+## S43
+[Protect AI: ModelScan](https://github.com/protectai/modelscan). Первичный репозиторий инструмента анализа serialization attacks. GitHub API 2026-10-06: archived=false, pushed_at=2026-09-28T23:10:13Z. Это признак активности репозитория, не гарантия качества, отсутствия CVE или поддержки нашего ONNX профиля.
+
+## S44
+[Bethge Lab: Foolbox](https://github.com/bethgelab/foolbox). Описывает adversarial examples для PyTorch/TensorFlow/JAX. GitHub API 2026-10-06: archived=false, pushed_at=2025-12-03T08:37:14Z. Не выбран как обязательная зависимость tabular scikit-learn reference; дата push не равна дате стабильного релиза.

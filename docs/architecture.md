@@ -12,13 +12,16 @@ flowchart TB
         Intake --> Holdout[Закрытый holdout]
     end
     subgraph TrainZone[Training boundary]
-        Approved --> Job[Ephemeral training Job]
-        Job --> Candidate[Candidate model и run metadata]
-        Job --> Tracking[MLflow metadata]
+        Approved --> Job[Недоверенный training worker]
+        Job -->|Ограниченный output volume| Publisher[Trusted publisher и provenance wrapper]
+        Publisher --> Candidate[Candidate model и run metadata]
+        Publisher --> Tracking[MLflow metadata]
     end
     subgraph EvalZone[Evaluation boundary]
-        Candidate --> Eval[Sandbox evaluator]
-        Holdout --> Eval
+        Candidate --> Worker[Недоверенный prediction worker]
+        Holdout --> Eval[Trusted controller и scorer]
+        Eval -->|Только batches features| Worker
+        Worker -->|Typed bounded predictions| Eval
         Eval --> Report[Signed evaluation report]
     end
     subgraph ReleaseZone[Release boundary]
@@ -50,13 +53,15 @@ flowchart TB
 | --- | --- | --- | --- |
 | ingestor | Только разрешённый источник | Quarantine | Approved, releases, signer |
 | curator | Quarantine, schema, provenance | Новый approved snapshot; разделение split | Promotion модели |
-| trainer | Approved train/validation, pinned deps | Candidates, собственные runs | Holdout labels, releases, ключи, production API |
-| evaluator | Candidate и holdout | Evaluation reports | Изменение train/model, promotion |
+| training worker | Approved train/validation, pinned deps | Только bounded output volume | Holdout labels, releases, ключи, metadata DB, production API |
+| publisher/wrapper | Проверенные inputs и worker outputs | Candidates и run metadata | Holdout labels, promotion, выполнение candidate code |
+| prediction worker | Один candidate и feature batches | Только typed predictions | Holdout labels, signing keys, metadata DB, promotion |
+| evaluator controller/scorer | Holdout, provenance, typed predictions | Evaluation reports | Загрузка недоверенного model code, изменение train/model, promotion |
 | promoter | Reports, bundle candidates, trust policy | Release envelope, GitOps proposal | Обучение и редактирование holdout |
 | serving | Один approved release и актуальная trust policy | Только ограниченная telemetry | Candidate storage, training data, registry write |
 | operator | Статус, разрешённые recovery interfaces | Incident actions по роли | Неаудируемый обход verification |
 
-Ключи signer и evaluator не монтируются в trainer. В production - короткоживущая workload identity и отдельный KMS; в lab - раздельные локальные ключи с явным ограничением доверия к host. Подпись job не делает job добросовестным: exporter provenance должен быть защищён от изменения самой training job.
+Ключи signer и evaluator не монтируются в workers. В production - короткоживущая workload identity и отдельный KMS; в lab - раздельные локальные ключи с явным ограничением доверия к host. Подпись job не делает job добросовестным: exporter provenance должен быть защищён от изменения самой training job.
 
 ## 3. Dataset contract и жизненный цикл данных
 
@@ -81,9 +86,9 @@ Split выбирается по времени/группе релизов, а �
 
 1. Orchestrator проверяет approved dataset, pinned code/image и разрешённые параметры.
 2. Создаёт ephemeral Job с ресурсными лимитами, readonly root, seccomp, non-root и deny-by-default egress. Зависимости заранее собраны в image, online `pip install` внутри training запрещён.
-3. Job обучает preprocessing + Logistic Regression, экспортирует ONNX и пишет candidate. Не может повысить candidate до release.
-4. Доверенный wrapper фиксирует входные digest и окружение; MLflow получает run metadata. Произвольные HTML/модельные загрузчики не открываются автоматически в привилегированном контуре.
-5. Evaluator проверяет структуру ONNX в отдельном ограниченном процессе, затем измеряет clean/slice/parity/robustness на разрешённых наборах.
+3. Job обучает preprocessing + Logistic Regression, экспортирует ONNX в bounded output volume. Не может писать в registry или повысить candidate до release.
+4. Доверенный wrapper фиксирует входные digest и окружение; publisher проверяет outputs и отправляет run metadata в MLflow. Произвольные HTML/модельные загрузчики не открываются автоматически в привилегированном контуре.
+5. ONNX parser/prediction worker выполняет модель в отдельном ограниченном контуре; scorer вне worker измеряет clean/slice/parity/robustness по проверенным predictions и закрытым labels.
 6. Report содержит все результаты, ограничения и policy digest; отсутствие теста или малый sample size дают `inconclusive`, не `pass`.
 
 Повторный запуск с теми же inputs создаёт отдельный run, но не перезаписывает approved artifacts. Идемпотентный promotion использует `(bundle_digest, environment, policy_digest)`; повтор не меняет state и не создаёт новый неаудируемый approval.
@@ -134,3 +139,34 @@ Rollback допускает меньший release sequence только чер�
 Backup должен включать совместимые snapshots metadata и artifact references, approved datasets, bundles, policy и approvals. Private keys восстанавливаются отдельной защищённой процедурой. После restore проверяются ссылки и digest, затем пробные predictions; один успешный SQL restore не завершает ML recovery.
 
 Production отличается от lab не именем namespace: нужны TLS, отдельный identity provider, KMS, внешняя копия, HA, capacity planning, контроль administrators, retention/удаление данных, on-call, независимый review и утверждённые бизнес-риски. Переход описан в [плане](../tasks/plan.md), процедуры - в [runbooks](runbooks.md).
+
+## 9. Уточнение R0.2: кто исполняет модель, а кто удостоверяет результат
+
+Этот раздел уточняет исполнение ролей из таблицы выше. `trainer` и `evaluator` - логические участники; их недоверенным worker-процессам не выдаются все полномочия orchestration identity. Основание: [ADR-003](decisions/0003-control-and-execution.md), решения D02-D04 в [карте практик](practice-adoption.md).
+
+- **Training worker:** read-only approved train/validation mounts и отдельный output volume. Нет MLflow/storage root credentials, signing keys, service-account token, Docker socket или writable control configuration. Отдельный publisher проверяет размер/пути выходных файлов и публикует candidate; provenance о входах формирует trusted wrapper, не произвольный stdout trainer.
+- **Prediction worker:** один candidate и ограниченные feature batches; нет labels, report-signing key, metadata DB access или общего artifact-store credential. Не может обращаться к controller API иначе, чем через узкий output protocol.
+- **Controller/scorer:** хранит holdout labels отдельно, отправляет batches, проверяет row correspondence, type/shape/size, конечность чисел и допустимый диапазон. Метрики вычисляет сам. Report-signing permission не передаётся в контейнер, загружающий candidate.
+- **Promoter:** принимает только связанное evidence, не выполняет candidate code и не использует model output как команду или authority.
+
+Одинаковый pod с общими volumes/process namespace/credentials не считается доказанным разделением. Изоляция проверяется фактическим доступом к `/proc`, mounts, credentials, controller socket и egress. Worker неизбежно видит переданные features; ограниченные outputs не доказывают отсутствие всех covert channels. Остаточный риск и доверие к kernel/host остаются явными.
+
+## 10. Asset graph и blast radius
+
+Предлагаемый asset record: `asset_id`, `kind`, content digest/revision, owner, purpose, data classification, lifecycle state, dependencies, allowed environment, current policy/approval refs, expiry, retention, observed deployments. В `kind` первого профиля входят dataset, split, run, preprocessing, model, runtime image, evaluation policy/report, release, endpoint и workload identity. Prompts/agents/MCP допустимы только в отдельном будущем профиле.
+
+Реестр хранит directed dependency graph: dataset -> run -> model -> bundle -> endpoint; runtime image и policy также связаны с bundle. Перед promotion нет dangling references, неизвестных владельцев и запрещённых cycles. Inventory reconciliation сравнивает actual running digest с approved graph, а не доверяет изменяемому alias. Публичный экспорт содержит только разрешённые поля, без приватных URLs, credentials и raw data.
+
+При отзыве dataset строится transitive impacted set. Выпуск потомков останавливается, owner получает инцидент, действующие releases теряют доверие через механизм M11. Откат к другому потомку того же отозванного dataset запрещён. Registry corruption или устаревшая inventory snapshot не разрешают новый promotion; текущий serving соблюдает bounded trust lease.
+
+## 11. Intake для внешних и преобразованных артефактов
+
+MVP не требует публичных моделей, но любой появившийся импорт проходит отдельный quarantine path: source revision/license -> size/type/path limits -> format coverage -> scanner + parser policy -> isolated conversion при необходимости -> повторная проверка output -> обычная оценка и approval. У imported candidate нет исключения из общей цепочки.
+
+Report scanner содержит version/digest/policy, все input hashes, список реально проверенных объектов, unsupported/skipped/error counts и outcome. `unsupported`, timeout, parse error, zero scanned objects или неизвестная policy дают inconclusive и запрещают promotion. «No findings» означает только отсутствие известных находок в проверенной области. Оно не разрешает unsafe format и не заменяет model quality/poisoning evaluation. Набор scanner tools выбирается после проверки ONNX coverage, не по списку каталога.
+
+## 12. Security telemetry contract
+
+События: `artifact.rejected`, `promotion.denied`, `trust.revoked`, `identity.denied`, `inventory.mismatch`, `worker.policy_violation`, `telemetry.gap`. Минимальные поля: schema version, event ID, producer identity, UTC event/observed time, sequence/correlation ID, asset/bundle digest, policy digest, action, outcome и ограниченный reason code. Labels/raw features, secrets и текст рассуждений модели не включаются.
+
+Producer authentication и sequence/gap checks важнее доверия к строке `severity=critical` из worker stdout. Retry допускает повторную доставку, collector обеспечивает idempotency по event ID. Отсутствие сигналов не считается здоровьем: heartbeat и ingest lag наблюдаются отдельно. Формат можно позже переводить в Sigma/SIEM, но сначала replay должен доказать доставку и реакцию. Режим потери audit для release boundary - fail closed; уже работающий ML-path подчиняется согласованной trust policy, а не неявной логике dashboard.

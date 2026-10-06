@@ -26,6 +26,7 @@ flowchart TB
     Product --> Ops[Безопасная эксплуатация]
     Governance --> Cards[Dataset card и model card]
     Governance --> Risks[Угрозы и владельцы риска]
+    Governance --> Inventory[Inventory graph и reconciliation]
     Data --> Quarantine[Контракты и карантин]
     Data --> Lineage[Версии и lineage]
     ML --> Reproduce[Повторяемость]
@@ -65,8 +66,8 @@ sequenceDiagram
 
 | Этап | Что доступно | Условие выхода |
 | --- | --- | --- |
-| R0 Research | Этот репозиторий: исследование и design | Документы связаны, опубликованы, границы честно указаны |
-| R1 Local reference | Синтетический end-to-end путь, изоляция и ML-gates | M01-M18 на лабораторном CPU-профиле |
+| R0 Research | Этот репозиторий: исследование и design, редакция R0.2 | Документы и source-to-decision связи проверены, границы честно указаны |
+| R1 Local reference | Синтетический end-to-end путь, изоляция и ML-gates | M01-M23 на лабораторном CPU-профиле |
 | R2 Controlled pilot | Разрешённые реальные данные, shadow/advisory режим | Data owner, значимая utility, независимый review, production prerequisites |
 | R3 Production profile | HA, OIDC/KMS, TLS, offsite DR, on-call | Отдельная приёмка по инфраструктуре и требованиям владельца |
 | R4 Extensions | Другие модели, команды, GPU или GenAI | Новая модель угроз и измеренная необходимость каждого расширения |
@@ -80,3 +81,9 @@ sequenceDiagram
 - Для реального пилота: precision/recall или ожидаемая стоимость ошибок против простого правила при фиксированном бюджете ручной проверки.
 
 Измерения пользы и удобства пока не проведены. Обнаружение неизвестного poisoning нельзя достоверно выразить одной долей без известного распределения атак.
+
+## Изменение карты после международного исследования
+
+Пользователь должен видеть не просто список моделей, а цепочку dataset -> run -> model -> approval -> фактически загруженный endpoint. Отзыв источника показывает точное множество зависимых releases. Оценка модели разделяется на недоверенный execution и доверенный scorer; scanner report содержит покрытие, а security telemetry проверяется replay-сценариями.
+
+Каждое изменение связано с источником, gate и задачей в [карте применения](practice-adoption.md). Это требования к R1, не уже доступные функции интерфейса. LLM/agent extensions остаются R4; появление новых отраслевых публикаций само по себе не переносит их в первый release.
