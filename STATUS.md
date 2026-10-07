@@ -14,7 +14,13 @@
 
 Dependency audit проверил 59 установленных пакетов, известных уязвимостей не сообщил. Первый запрос завершился timeout; успешный результат получен повторным полноценным запуском, без отключения проверок. Host-side qualification coverage около 64% combined line/branch, код внутри worker containers этим замером не покрыт. Требование M18 >=95% ещё не выполнено.
 
-## Подготовлено
+## Kubernetes increment
+
+Развёрнут отдельный kind 0.33.0/Kubernetes 1.36.4/Cilium 1.20.2 lab, bootstrap повторён без изменения namespace identity. 52 локальные component checks прошли: реальные role API denials, admission, egress с positive control, readonly/non-root/capabilities, PID/RAM/CPU limits, OOM и deadline. Training и prediction проходят в отдельных Jobs/namespaces, scorer остаётся вне worker. Подробности: [runbook](docs/kubernetes-lab.md). Контрольный HTTP Pod не объявляется настоящим serving service; полные M04/M05/M20 остаются inconclusive.
+
+Docker developer profile независимо воспроизведён из clean checkout в [успешном run 37656458568](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37656458568), commit `188884d9c0238fb31a155bafab79a1be6e115b77`. Этот run не выполнял Kubernetes suite; для неё добавлен отдельный workflow, результат фиксируется после проверки.
+
+## Подготовлено исследованием
 
 - Изучены статья PT, 11 страниц предоставленного PDF и изображение ML lifecycle; права третьих лиц сохранены через ссылки/атрибуцию без републикации оригиналов.
 - Составлен реестр из 44 источников/записей evidence, включая локальный PDF, новый текст, CyberOrda и отдельные code/evidence/CI ссылки baseline.
@@ -26,7 +32,7 @@ Dependency audit проверил 59 установленных пакетов, 
 
 ## Что не реализовано
 
-Полный MLflow/DVC/Kubernetes контур, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Все полные M01-M23 остаются inconclusive; частичные component checks не закрывают их. Все T01-T29 пока открыты, прогресс отмечен в [журнале реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+Полный MLflow/DVC контур, storage ACL и least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes уже работают, но не закрывают полный integration scope. Все полные M01-M23 остаются inconclusive. Все T01-T29 пока открыты, прогресс отмечен в [журнале реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## Что проверяется отдельно
 

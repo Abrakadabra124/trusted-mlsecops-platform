@@ -24,11 +24,13 @@
 
 ## T05
 - [ ] Identity и изоляция. Зависимость: T04. Gate: M04.
+- Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials и Cilium probes работают; storage ACL и least-privilege controller ещё не завершены.
 - Результат: role/access matrix, namespace/storage/network policies и restricted service accounts.
 - Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
 
 ## T06
 - [ ] Sandboxed training Jobs. Зависимость: T05. Gate: M05.
+- Прогресс: настоящий Job backend, admission, deadline, PID/OOM/egress probes и cleanup проверены; влияние на будущий настоящий serving service ещё не измерено.
 - Результат: Job runner без host privileges, лимиты, deadlines, pinned image и cleanup.
 - Проверка: denied egress, timeout, memory exhaustion, отсутствие signing secrets и влияния на serving.
 

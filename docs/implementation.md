@@ -34,7 +34,13 @@ DSSE (Dead Simple Signing Envelope) связывает тип документа
 
 Dataset/model bytes проверяются перед использованием. Candidate loader не загружает pickle; ONNX parser запускается в resource-limited worker, запрещает external tensors, вложенные graphs/functions и операторы вне ограниченного allowlist. Это проверка формата, не универсальный model malware scanner.
 
-Осталось: полноценные M-gates, DVC, MLflow, Kubernetes permissions/Jobs, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. Goal остаётся активной, первый increment не считается R1 release.
+Осталось: полноценные M-gates, DVC, MLflow, storage-role ACL, least-privilege controller, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. Goal остаётся активной, component increments не считаются R1 release.
+
+## Второй increment: Kubernetes
+
+Принят [ADR 0004](decisions/0004-isolated-kubernetes-lab.md), создан отдельный cluster. [Runbook](kubernetes-lab.md) объясняет две реализации executor и повторение из clean checkout. 52 isolation component checks прошли локально, Docker qualification после интеграции сохраняет 65 успешных checks. Настоящие Jobs обучают и оценивают ту же синтетическую модель. Действующая foundation не изменяется.
+
+Отрицательные проверки выявили и помогли исправить реальные интеграционные ошибки: минимальное число log files kubelet должно быть 2; containerd добавляет вложенный OCI index; Kubernetes объединяет stderr/stdout, поэтому ONNX telemetry initialization нарушала strict protocol; deadline controller может удалить Pod до финального чтения, поэтому runner сохраняет последнюю наблюдаемую identity и отдельно подтверждает удаление. Проверка PID limit изменена с неверного leaf-file assumption на фактическое ограниченное создание процессов. Ошибки не замаскированы отключением контроля.
 
 ## Проверенные технические основания реализации
 

@@ -1,0 +1,51 @@
+name: Kubernetes isolation qualification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-kubernetes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked tools and workspace
+        run: |
+          uv sync --locked --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+      - name: Build pinned worker
+        run: uv run --locked python -m mlsecops build
+      - name: Bootstrap isolated lab twice
+        id: bootstrap
+        run: |
+          uv run --locked python -m mlsecops.cluster bootstrap
+          uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Real role, network and termination probes
+        run: uv run --locked python -m mlsecops.kube_qualification
+      - name: Train and evaluate with Kubernetes Jobs
+        run: uv run --locked python -m mlsecops demo --backend kubernetes
+      - name: Sanitized component evidence
+        run: |
+          uv run --locked python -c "from mlsecops.contracts import canonical,read_json; print(canonical(read_json('.runtime/evidence/kubernetes-qualification.json')).decode())"
+          echo 'Kubernetes component evidence only. Full R1 acceptance remains inconclusive.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove owned disposable CI cluster
+        if: always() && steps.bootstrap.outcome == 'success'
+        run: kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig

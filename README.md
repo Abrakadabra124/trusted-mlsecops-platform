@@ -23,6 +23,10 @@ Qualification запускает отрицательные сценарии и 
 
 Постановка эксперимента: [dataset card](docs/dataset-card.md), [model card](docs/model-card.md). Метрики и ограничения должны читаться вместе.
 
+## Kubernetes backend
+
+Добавлен отдельный local cluster с Jobs, Cilium deny policies, admission restrictions и реальными identity/resource probes. Инструкции, требования к памяти, 52 локальные проверки и честные ограничения: [Kubernetes lab](docs/kubernetes-lab.md). Это следующий component increment, не завершённая M01-M23 приёмка.
+
 ## Зачем нужен проект
 
 MLSecOps (Machine Learning Security Operations) в этом проекте означает включение безопасности в сбор данных, обучение, оценку, выпуск и эксплуатацию ML-системы. Это не просто применение искусственного интеллекта для поиска атак: защищается сама система машинного обучения.
