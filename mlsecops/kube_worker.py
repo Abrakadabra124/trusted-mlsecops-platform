@@ -133,7 +133,12 @@ def image_config(identifier):
         ]
         if not matches and len(document["manifests"]) == 1:
             entry = document["manifests"][0]
-            if entry.get("mediaType") == "application/vnd.oci.image.index.v1+json":
+            if "platform" not in entry and entry.get("mediaType") in {
+                "application/vnd.oci.image.index.v1+json",
+                "application/vnd.oci.image.manifest.v1+json",
+                "application/vnd.docker.distribution.manifest.list.v2+json",
+                "application/vnd.docker.distribution.manifest.v2+json",
+            }:
                 matches = [entry]
         if len(matches) != 1:
             raise Rejected("ambiguous_image_platform")
