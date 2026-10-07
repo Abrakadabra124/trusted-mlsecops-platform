@@ -43,8 +43,9 @@ jobs:
       - name: Train and evaluate with Kubernetes Jobs
         run: uv run --locked python -m mlsecops demo --backend kubernetes
       - name: Sanitized component evidence
+        if: always()
         run: |
-          uv run --locked python -c "from mlsecops.contracts import canonical,read_json; print(canonical(read_json('.runtime/evidence/kubernetes-qualification.json')).decode())"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Qualification report not produced; bootstrap/build may have failed.')"
           echo 'Kubernetes component evidence only. Full R1 acceptance remains inconclusive.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove owned disposable CI cluster
         if: always() && steps.bootstrap.outcome == 'success'

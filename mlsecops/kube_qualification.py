@@ -361,6 +361,10 @@ def main():
                 "status": report["status"],
                 "cases": len(report["cases"]),
                 "full_acceptance": report["full_acceptance"],
+                "reason": report.get("reason"),
+                "failed_cases": [
+                    case["id"] for case in report["cases"] if case["status"] != "pass"
+                ],
             }
         ).decode()
     )
