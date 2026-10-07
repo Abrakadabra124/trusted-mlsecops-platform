@@ -24,6 +24,8 @@ Kubernetes isolation и настоящий train/evaluate независимо �
 
 Локально прошли 44 проверки source/intake и executable M02. Source lock, signed snapshot authorization, quarantine, отдельное curator approval и signed lineage связаны с run. Kubernetes demo с `--versioned-data` обучил и оценил candidate с lineage; AUPRC и parity сохранились. [Описание и воспроизведение](docs/data-lifecycle.md). T03 завершена для synthetic-only профиля, T04 остаётся открытой до storage ACL.
 
+Clean checkout подтверждён на commit `8857eba675bdb50a4e8ceb9e664019a9a3d44ac7`: [runtime/M02 run 37672915427](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37672915427), [Kubernetes versioned demo run 37672915437](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37672915437) и documentation CI завершились success. Это приёмка перечисленного scope, не всех 23 gates.
+
 DVC 3.67.1 был проверен в spike, но не принят: pip-audit обнаружил CVE-2025-69872 в diskcache 5.6.3, без указанной исправленной версии. Пакеты удалены из active environment/lock; повторный строгий audit не нашёл известных vulnerabilities, ignore не добавлен. [ADR 0005](docs/decisions/0005-data-lineage.md) фиксирует замену одним fixed-step SHA-256 source lock, не ослабляя пороги приёмки.
 
 ## Подготовлено исследованием
