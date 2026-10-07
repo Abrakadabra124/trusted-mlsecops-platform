@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 
 from mlsecops.contracts import (
     Rejected,
+    atomic_write,
     bounded_read,
     canonical,
     decode,
@@ -27,7 +29,12 @@ FEATURES = (
 
 
 def generate(seed=24017, rows=20000):
-    if type(seed) is not int or type(rows) is not int or not 100 <= rows <= 20000:
+    if (
+        type(seed) is not int
+        or not 0 <= seed <= 2**32 - 1
+        or type(rows) is not int
+        or not 100 <= rows <= 20000
+    ):
         raise Rejected("invalid_generator_parameters")
     generator = np.random.default_rng(seed)
     features = np.round(generator.uniform(0, 1, (rows, len(FEATURES))), 6)
@@ -81,7 +88,8 @@ def arrays(records):
 def validate_approval(approval, policy):
     require_fields(approval, ("schema_version", "source", "purpose", "expires_at", "owner"))
     if (
-        approval["schema_version"] != 1
+        type(approval["schema_version"]) is not int
+        or approval["schema_version"] != 1
         or approval["source"] != policy["source"]
         or approval["purpose"] != "synthetic-lab"
         or approval["owner"] != "lab-curator"
@@ -95,11 +103,11 @@ def validate_approval(approval, policy):
         raise Rejected("expired_source_approval")
 
 
-def prepare(state, policy):
+def source_approval(state, policy, create=False):
     state = Path(state)
     public = read_json(state / "trusted-keys.json")
     approval_path = state / "source-approval.json"
-    if not approval_path.exists():
+    if create and not approval_path.exists():
         approval = {
             "schema_version": 1,
             "source": policy["source"],
@@ -110,7 +118,17 @@ def prepare(state, policy):
         write_json(approval_path, sign(approval, "source", state / "keys/curator.pem"))
     approval = verify(read_json(approval_path), "source", public["curator"])
     validate_approval(approval, policy)
-    rows = generate(policy["data_seed"], policy["rows"])
+    return approval
+
+
+def prepare(state, policy):
+    source_approval(state, policy, create=True)
+    return publish_records(state, policy, generate(policy["data_seed"], policy["rows"]))
+
+
+def publish_records(state, policy, rows):
+    state = Path(state)
+    approval = source_approval(state, policy)
     validate_rows(rows, policy["rows"])
     sizes = policy["split_counts"]
     if sizes != [14000, 3000, 3000] or sum(sizes) != len(rows):
@@ -140,12 +158,11 @@ def prepare(state, policy):
     if destination.exists():
         verify_dataset(state, identifier, policy)
         return identifier
-    quarantine = safe_child(state / "quarantine", identifier)
-    quarantine.mkdir(parents=True, exist_ok=True)
+    quarantine = safe_child(state, f"publishing/{uuid4().hex}")
+    quarantine.mkdir(parents=True, exist_ok=False)
     for name, content in split_bytes.items():
         path = quarantine / f"{name}.json"
-        with path.open("wb") as output:
-            output.write(content)
+        atomic_write(path, content)
     write_json(quarantine / "manifest.json", sign(manifest, "dataset", state / "keys/curator.pem"))
     quarantine.rename(destination)
     verify_dataset(state, identifier, policy)
@@ -179,6 +196,16 @@ def verify_dataset(state, identifier, policy):
         canonical(policy)
     ):
         raise Rejected("dataset_manifest_mismatch")
+    if (
+        type(manifest["schema_version"]) is not int
+        or manifest["schema_version"] != 1
+        or manifest["source"] != policy["source"]
+        or type(manifest["seed"]) is not int
+        or manifest["seed"] != policy["data_seed"]
+        or manifest["features"] != list(FEATURES)
+        or not isinstance(manifest["objects"], dict)
+    ):
+        raise Rejected("invalid_dataset_manifest_schema")
     approval = verify(read_json(state / "source-approval.json"), "source", public["curator"])
     validate_approval(approval, policy)
     if manifest["source_approval_digest"] != digest(canonical(approval)):
@@ -189,6 +216,20 @@ def verify_dataset(state, identifier, policy):
     result = {}
     for name, metadata in manifest["objects"].items():
         require_fields(metadata, ("sha256", "bytes", "rows"))
+        expected_rows = dict(
+            zip(
+                ("train.json", "validation.json", "holdout.json"),
+                policy["split_counts"],
+                strict=True,
+            )
+        )
+        if (
+            type(metadata["bytes"]) is not int
+            or not 0 < metadata["bytes"] <= 16 * 1024 * 1024
+            or type(metadata["rows"]) is not int
+            or metadata["rows"] != expected_rows[name]
+        ):
+            raise Rejected("invalid_dataset_object_metadata")
         path = safe_child(location, name)
         content = bounded_read(path)
         if len(content) != metadata["bytes"] or digest(content) != metadata["sha256"]:

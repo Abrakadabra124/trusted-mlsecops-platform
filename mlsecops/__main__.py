@@ -5,6 +5,7 @@ from pathlib import Path
 
 from mlsecops.bootstrap import initialize
 from mlsecops.contracts import Rejected, canonical, read_json, write_json
+from mlsecops.data_source import prepare_versioned, reproduce
 from mlsecops.datasets import prepare
 from mlsecops.inventory import build_image
 from mlsecops.pipeline import evaluate_candidate, train_candidate
@@ -20,6 +21,8 @@ def main():
     parser.add_argument("--image", default="trusted-mlsecops:dev")
     parser.add_argument("--dataset")
     parser.add_argument("--run")
+    parser.add_argument("--lineage")
+    parser.add_argument("--versioned-data", action="store_true")
     parser.add_argument("--backend", choices=["docker", "kubernetes"], default="docker")
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -39,7 +42,12 @@ def main():
             result = {"dataset_id": prepare(arguments.state, policy)}
         elif arguments.action == "train":
             result = train_candidate(
-                arguments.state, arguments.dataset, policy, arguments.image, executor
+                arguments.state,
+                arguments.dataset,
+                policy,
+                arguments.image,
+                executor,
+                arguments.lineage,
             )
         elif arguments.action == "evaluate":
             result = evaluate_candidate(
@@ -47,9 +55,14 @@ def main():
             )
         else:
             bootstrap = initialize(root, arguments.state)
-            dataset_id = prepare(arguments.state, policy)
+            if arguments.versioned_data:
+                reproduce(root, arguments.state)
+                source = prepare_versioned(root, arguments.state)
+                dataset_id, lineage_id = source["dataset_id"], source["lineage_id"]
+            else:
+                dataset_id, lineage_id = prepare(arguments.state, policy), None
             candidate = train_candidate(
-                arguments.state, dataset_id, policy, arguments.image, executor
+                arguments.state, dataset_id, policy, arguments.image, executor, lineage_id
             )
             evaluation = evaluate_candidate(
                 arguments.state, candidate["run_id"], policy, arguments.image, executor

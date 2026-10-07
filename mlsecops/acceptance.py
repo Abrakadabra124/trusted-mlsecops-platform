@@ -2,19 +2,19 @@ import argparse
 import sys
 from pathlib import Path
 
-from mlsecops.contracts import Rejected, canonical, digest, now, read_json, write_json
+from mlsecops.contracts import Rejected, bounded_read, canonical, digest, now, read_json, write_json
 from mlsecops.inventory import command, source_fingerprint
 
 GATES = tuple(f"M{number:02}" for number in range(1, 24))
 
 
-def report(gate, profile, root):
+def report(gate, profile, root, state=None):
     started = now()
     policy_path = root / "policies/local-cpu.json"
     policy = read_json(policy_path)
     if profile != policy["environment"] or gate not in GATES:
         raise Rejected("unknown_acceptance_profile_or_gate")
-    return {
+    result = {
         "schema_version": 1,
         "gate": gate,
         "status": "inconclusive",
@@ -31,6 +31,31 @@ def report(gate, profile, root):
         "redaction_version": 1,
         "residual_risks": ["Full gate implementation and runtime evidence not yet available"],
     }
+    if gate == "M02":
+        from mlsecops.data_qualification import qualify
+
+        try:
+            state = Path(state) if state else root / ".runtime"
+            evidence = qualify(root, state)
+            result.update(
+                status=evidence["status"],
+                cases=evidence["cases"],
+                exit_code=0,
+                metrics={"rows": evidence["rows"]},
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    "data_qualification": digest(
+                        bounded_read(state / "evidence/data-qualification.json")
+                    )
+                },
+            )
+            result["input_digests"].update(
+                source=evidence["source_sha256"], data_lock=evidence["source_lock_digest"]
+            )
+        except (Rejected, OSError) as error:
+            result.update(status="fail", exit_code=1, residual_risks=[str(error)])
+        result["finished_at"] = now()
+    return result
 
 
 def main():
@@ -38,9 +63,12 @@ def main():
     parser.add_argument("--gate", choices=GATES, required=True)
     parser.add_argument("--profile", choices=["local-cpu"], default="local-cpu")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--state", type=Path, default=Path(".runtime"))
     arguments = parser.parse_args()
     try:
-        result = report(arguments.gate, arguments.profile, Path(__file__).resolve().parents[1])
+        result = report(
+            arguments.gate, arguments.profile, Path(__file__).resolve().parents[1], arguments.state
+        )
         write_json(arguments.output, result)
         print(f"{result['gate']}: {result['status']}")
         return result["exit_code"]

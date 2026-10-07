@@ -41,7 +41,7 @@ jobs:
       - name: Real role, network and termination probes
         run: uv run --locked python -m mlsecops.kube_qualification
       - name: Train and evaluate with Kubernetes Jobs
-        run: uv run --locked python -m mlsecops demo --backend kubernetes
+        run: uv run --locked python -m mlsecops demo --backend kubernetes --versioned-data
       - name: Sanitized component evidence
         if: always()
         run: |

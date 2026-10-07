@@ -13,7 +13,7 @@ git clone https://github.com/Abrakadabra124/trusted-mlsecops-platform.git
 cd trusted-mlsecops-platform
 uv sync --locked --python 3.12.15
 uv run --locked python -m mlsecops build
-uv run --locked python -m mlsecops demo
+uv run --locked python -m mlsecops demo --versioned-data
 uv run --locked python -m mlsecops.qualification
 ```
 
@@ -26,6 +26,10 @@ Qualification запускает отрицательные сценарии и 
 ## Kubernetes backend
 
 Добавлен отдельный local cluster с Jobs, Cilium deny policies, admission restrictions и реальными identity/resource probes. Инструкции, требования к памяти, 52 локальные проверки и честные ограничения: [Kubernetes lab](docs/kubernetes-lab.md). Это следующий component increment, не завершённая M01-M23 приёмка.
+
+## Данные и проверяемый intake
+
+`--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализован M02; M03 storage ACL остаётся открытым. [Команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.
 
 ## Зачем нужен проект
 

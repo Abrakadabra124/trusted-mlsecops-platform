@@ -42,6 +42,14 @@ Dataset/model bytes проверяются перед использование
 
 Отрицательные проверки выявили и помогли исправить реальные интеграционные ошибки: минимальное число log files kubelet должно быть 2; containerd добавляет вложенный OCI index; Kubernetes объединяет stderr/stdout, поэтому ONNX telemetry initialization нарушала strict protocol; deadline controller может удалить Pod до финального чтения, поэтому runner сохраняет последнюю наблюдаемую identity и отдельно подтверждает удаление. Проверка PID limit изменена с неверного leaf-file assumption на фактическое ограниченное создание процессов. Ошибки не замаскированы отключением контроля.
 
+## Третий increment: источник и quarantine
+
+Реализованы [source lock и intake](data-lifecycle.md), 44 проверяемых сценария и M02 runner. Quarantine не даёт approved статус; curator повторяет validation, проверяет отдельную подпись исходного snapshot и текущий source approval. Типизированная signed lineage связывает dataset с source и lock, optional `--versioned-data` переносит её в training run. Старый developer путь не объявляется R1-совместимым.
+
+DVC spike был остановлен после настоящего dependency finding, а не после ошибки установки. Уязвимая dependency chain удалена, не скрыта из audit. [ADR 0005](decisions/0005-data-lineage.md) меняет инструмент, но сохраняет integrity/reproducibility acceptance. Strict audit после удаления: известных vulnerabilities не найдено.
+
+В Kubernetes CI исправлены различия OCI index/config между Docker stores. Протокол отделяет ограниченный stderr дочернего worker от JSON stdout: arbitrary stderr не печатается в публичный evidence, фиксируются только число bytes и разрешённый diagnostic flag. CI действительно наблюдал ненулевой stderr, но тип предупреждения не установлен; GPU-причина не заявляется. Все typed output checks остаются на стороне controller. 52 Kubernetes probes и 74 developer checks прошли в GitHub на `f7cdc59`.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

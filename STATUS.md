@@ -8,7 +8,7 @@
 - Идемпотентный bootstrap с отдельными локальными ключами ролей, inventory и runner, возвращающий inconclusive для ещё не реализованных полных gates.
 - Генератор 20 000 строк, split 14 000/3 000/3 000, signed source approval/dataset manifest, проверки схемы, digest, expiry и leakage.
 - Linux Docker workers без сети, host mounts, root, capabilities и ключей. Обучение Logistic Regression и ONNX export; scorer считает метрики вне prediction worker и подписывает report.
-- Исполняемая qualification: 65 компонентных проверок, включая три fresh-process обучения, malformed model/protocol, tamper и fail-closed. Исходная платформа не изменена.
+- Исполняемая qualification: первоначально 65, после bounded transport 74 компонентные проверки, включая три fresh-process обучения, malformed model/protocol, tamper и fail-closed. Исходная платформа не изменена.
 
 Локальный результат: AUPRC 0.9323007296445032 против 0.4073333333333333 у constant-score baseline, 1 222 positive labels из 3 000 holdout rows. Максимальная разница вероятностей между тремя повторами 0.0; Python/ONNX parity error 2.086162567138672e-7. Это synthetic developer evidence, не доказательство пользы для реальных релизов.
 
@@ -18,7 +18,13 @@ Dependency audit проверил 59 установленных пакетов, 
 
 Развёрнут отдельный kind 0.33.0/Kubernetes 1.36.4/Cilium 1.20.2 lab, bootstrap повторён без изменения namespace identity. 52 локальные component checks прошли: реальные role API denials, admission, egress с positive control, readonly/non-root/capabilities, PID/RAM/CPU limits, OOM и deadline. Training и prediction проходят в отдельных Jobs/namespaces, scorer остаётся вне worker. Подробности: [runbook](docs/kubernetes-lab.md). Контрольный HTTP Pod не объявляется настоящим serving service; полные M04/M05/M20 остаются inconclusive.
 
-Docker developer profile независимо воспроизведён из clean checkout в [успешном run 37656458568](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37656458568), commit `188884d9c0238fb31a155bafab79a1be6e115b77`. Этот run не выполнял Kubernetes suite; для неё добавлен отдельный workflow, результат фиксируется после проверки.
+Kubernetes isolation и настоящий train/evaluate независимо воспроизведены из clean checkout в [успешном run 37668677667](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37668677667), commit `f7cdc5913537f40e904da5aee153f02abc8563f9`. Docker qualification на том же commit: [успешный run 37668677845](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37668677845). Это CI до добавления нового data increment; его результат не переносится автоматически на последующие commits.
+
+## Source lineage и M02
+
+Локально прошли 44 проверки source/intake и executable M02. Source lock, signed snapshot authorization, quarantine, отдельное curator approval и signed lineage связаны с run. Kubernetes demo с `--versioned-data` обучил и оценил candidate с lineage; AUPRC и parity сохранились. [Описание и воспроизведение](docs/data-lifecycle.md). T03 завершена для synthetic-only профиля, T04 остаётся открытой до storage ACL.
+
+DVC 3.67.1 был проверен в spike, но не принят: pip-audit обнаружил CVE-2025-69872 в diskcache 5.6.3, без указанной исправленной версии. Пакеты удалены из active environment/lock; повторный строгий audit не нашёл известных vulnerabilities, ignore не добавлен. [ADR 0005](docs/decisions/0005-data-lineage.md) фиксирует замену одним fixed-step SHA-256 source lock, не ослабляя пороги приёмки.
 
 ## Подготовлено исследованием
 
@@ -32,7 +38,7 @@ Docker developer profile независимо воспроизведён из cl
 
 ## Что не реализовано
 
-Полный MLflow/DVC контур, storage ACL и least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes уже работают, но не закрывают полный integration scope. Все полные M01-M23 остаются inconclusive. Все T01-T29 пока открыты, прогресс отмечен в [журнале реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+MLflow, storage ACL и least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 работает; полные M01 и M03-M23 остаются inconclusive. T03 завершена только в synthetic scope, остальные 28 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## Что проверяется отдельно
 
@@ -52,4 +58,4 @@ Docker developer profile независимо воспроизведён из cl
 
 ## Следующий допустимый шаг
 
-Продолжить активную цель R1: довести T01-T04 до полной приёмки, DVC tracking и storage permissions, затем Kubernetes identities/Jobs, MLflow и независимый evaluation budget по зависимостям. Не публиковать trusted release на основании зелёной developer qualification.
+Продолжить активную цель R1: довести T01-T02/T04 до полной приёмки, реализовать storage permissions и least-privilege controller, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёной developer qualification.

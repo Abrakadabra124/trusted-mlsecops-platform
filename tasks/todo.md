@@ -1,6 +1,6 @@
 # Backlog реализации
 
-Все 29 задач пока **открыты**, реализация начата 2026-10-07. Первый developer increment закрывает части T01-T04/T06-T10/T26, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат для одной или нескольких коротких итераций, ориентир 6-12 часов с дроблением после discovery. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` уже существует, но неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, а порядок исполнения задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
+T03 завершена для synthetic-only профиля; остальные **28 задач открыты**, реализация начата 2026-10-07. Промежуточные increments закрывают части других задач, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, а неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01
 - [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
@@ -13,12 +13,14 @@
 - Проверка: два bootstrap, schema migration/restore smoke, отсутствие потери артефактов/ключей; lockfile и runtime соответствуют inventory.
 
 ## T03
-- [ ] Dataset generator, schema и passport. Зависимость: T02. Gate: M02.
+- [x] Dataset generator, schema и passport. Зависимость: T02. Gate: M02.
+- Evidence: 44 source/intake checks, schema/expiry/feedback/signature negatives и dataset card. Только синтетика; unresolved foundation P0 не объявляются закрытыми этим gate.
 - Результат: deterministic synthetic generator, data dictionary, ranges, source approval, label/split policy; роли владельцев отмечены.
 - Проверка: valid/invalid fixtures, отсутствие PII и train-test leakage, точное повторение generated inputs.
 
 ## T04
-- [ ] Quarantine, DVC и signed manifests. Зависимость: T03. Gates: M02, M03.
+- [ ] Quarantine, versioned source и signed manifests. Зависимость: T03. Gates: M02, M03.
+- Решение: DVC не принят после dependency security spike; [ADR 0005](../docs/decisions/0005-data-lineage.md) заменяет его фиксированным source lock без изменения acceptance. M02 работает, storage permissions M03 ещё не завершены.
 - Результат: state machine dataset, artifact hashes, split manifests, rejection report и storage permissions.
 - Проверка: single-byte tamper, source expiry, traversal/symlink, duplicate rows, missing object; approved версия не перезаписывается.
 

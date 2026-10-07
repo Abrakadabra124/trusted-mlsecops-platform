@@ -33,7 +33,7 @@ flowchart LR
 
 ## Неделя 2: Контракт данных и происхождение
 
-**Задачи:** T03, T04. Создать синтетический generator, data dictionary и dataset card; определить temporal/group split для реального профиля. Реализовать quarantine, schema/range/duplicate checks, DVC tracking и отдельный подписанный SHA-256 manifest. Пройти tamper/path/permission negative tests.
+**Задачи:** T03, T04. Создать синтетический generator, data dictionary и dataset card; определить temporal/group split для реального профиля. Реализовать quarantine, schema/range/duplicate checks, versioned source и подписанный SHA-256 manifest. По [ADR 0005](../docs/decisions/0005-data-lineage.md) DVC исключён из активного стека после security spike; для одного source используется fixed-step lock. Пройти tamper/path/permission negative tests, не снижая пороги приёмки.
 
 **Результат:** approved immutable dataset + split, повторяемая подготовка, отчёт отказов. **Приёмка:** M02, M03. **Зависимость:** согласованный формат и storage profile недели 1. Реальные приватные данные не добавляются в Git.
 

@@ -16,6 +16,7 @@ from mlsecops.contracts import (
     safe_child,
     write_json,
 )
+from mlsecops.data_source import verify_lineage
 from mlsecops.datasets import verify_dataset
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.sandbox import run_worker
@@ -33,9 +34,11 @@ def validate_scores(scores, count):
     return np.asarray(scores, dtype=float)
 
 
-def train_candidate(state, dataset_id, policy, image, executor=run_worker):
+def train_candidate(state, dataset_id, policy, image, executor=run_worker, lineage_id=None):
     state = Path(state)
     splits, manifest = verify_dataset(state, dataset_id, policy)
+    if lineage_id is not None:
+        verify_lineage(state, lineage_id, dataset_id, policy)
     request = {
         "action": "train",
         "train": splits["train"],
@@ -76,6 +79,7 @@ def train_candidate(state, dataset_id, policy, image, executor=run_worker):
         "run_id": run_id,
         "created_at": now(),
         "dataset_id": dataset_id,
+        "lineage_id": lineage_id,
         "model_digest": digest(content),
         "policy_digest": digest(canonical(policy)),
         "input_digest": output["input_digest"],
@@ -119,6 +123,8 @@ def load_candidate(state, run_id, policy):
 def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
     state = Path(state)
     metadata, content = load_candidate(state, run_id, policy)
+    if metadata.get("lineage_id"):
+        verify_lineage(state, metadata["lineage_id"], metadata["dataset_id"], policy)
     splits, manifest = verify_dataset(state, metadata["dataset_id"], policy)
     holdout = splits["holdout"]
     batch_id = uuid.uuid4().hex

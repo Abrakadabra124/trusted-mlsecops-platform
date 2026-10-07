@@ -184,10 +184,12 @@ def qualify(root, state, image):
         lambda: run_worker(image, {"action": "shell", "command": "ignored"}),
     )
     for gate in policy["required_gates"]:
-        result = report(gate, "local-cpu", root)
+        result = report(gate, "local-cpu", root, state)
         confirmed(
-            f"unimplemented-{gate}-closed",
-            result["status"] == "inconclusive" and result["exit_code"] != 0,
+            f"acceptance-dispatch-{gate}",
+            (result["status"] == "pass" and result["exit_code"] == 0 and len(result["cases"]) >= 44)
+            if gate == "M02"
+            else result["status"] == "inconclusive" and result["exit_code"] != 0,
         )
     runs = [train_candidate(state, dataset_id, policy, image) for _ in range(3)]
     evaluations = [evaluate_candidate(state, run["run_id"], policy, image) for run in runs]
@@ -233,7 +235,7 @@ def qualify(root, state, image):
         "limitations": [
             "No production or full R1 acceptance",
             "Synthetic utility only",
-            "No MLflow/DVC/Kubernetes gate evidence yet",
+            "M02 implemented; other full M-gates remain incomplete",
             "No poisoning campaign, release service, monitoring or disaster recovery yet",
             "Human evaluator and author are not independent",
         ],

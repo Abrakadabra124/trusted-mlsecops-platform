@@ -1,5 +1,7 @@
 # Выбор технологий и цена решений
 
+Runtime update 2026-10-07: историческая таблица ниже относится к R0 design. DVC проверен и не принят из-за неисправленной транзитивной vulnerability; для одного synthetic source используется fixed-step SHA-256 lock и signed lineage по [ADR 0005](decisions/0005-data-lineage.md). Acceptance не ослаблена. Точный deployed/verified scope находится в [STATUS](../STATUS.md).
+
 Все новые ML-компоненты ниже **предлагаются**, а не объявляются установленными. Базовые определения: [словарь](glossary.md). Версии не фиксируются наугад из текущих `latest`-страниц: T02 проверяет совместимую матрицу Python/scikit-learn/skl2onnx/ONNX Runtime/MLflow/DVC и сохраняет lock + image digests.
 
 | Ответственность | Выбор для reference | Почему так | Альтернатива и когда нужна |
