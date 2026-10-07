@@ -1,4 +1,3 @@
-import os
 import re
 from pathlib import Path
 
@@ -6,7 +5,7 @@ import psycopg
 from psycopg import sql
 
 from mlsecops.contracts import Rejected, bounded_read, digest, read_json, require_fields, safe_child
-from mlsecops.storage_pki import ROLES
+from mlsecops.storage_pki import CLUSTER_HOST, ROLES
 from mlsecops.storage_schema import DATABASE, MAX_BYTES, TABLES
 
 
@@ -22,9 +21,10 @@ def connection_parameters(directory):
         type(settings.get("schema_version")) is not int
         or settings["schema_version"] != 1
         or settings.get("role") not in ROLES
-        or settings.get("host") != "127.0.0.1"
+        or settings.get("host") not in ("127.0.0.1", CLUSTER_HOST)
         or type(settings.get("port")) is not int
         or not 1024 <= settings["port"] <= 65535
+        or (settings.get("host") == CLUSTER_HOST and settings["port"] != 5432)
     ):
         raise Rejected("storage_client_config_invalid")
     for filename, expected in settings["certificates"].items():
@@ -32,10 +32,13 @@ def connection_parameters(directory):
             raise Rejected("storage_client_certificate_changed")
     key = safe_child(directory, "client.key")
     bounded_read(key, 4096)
+    passfile = safe_child(directory, ".no-passwords")
+    if passfile.exists():
+        raise Rejected("storage_password_file_forbidden")
     return {
         "dbname": DATABASE,
         "host": settings["host"],
-        "hostaddr": settings["host"],
+        "hostaddr": settings["host"] if settings["host"] == "127.0.0.1" else "",
         "port": settings["port"],
         "user": f"ml_{settings['role']}",
         "sslmode": "verify-full",
@@ -47,7 +50,7 @@ def connection_parameters(directory):
         "gssencmode": "disable",
         "connect_timeout": 5,
         "password": "",
-        "passfile": os.devnull,
+        "passfile": str(passfile),
         "application_name": f"trusted-mlsecops-{settings['role']}",
         "options": "-c search_path=pg_catalog -c statement_timeout=5000 -c lock_timeout=2000",
     }

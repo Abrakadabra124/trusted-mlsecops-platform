@@ -21,6 +21,15 @@ from mlsecops.contracts import (
 
 ROLES = ("ingestor", "curator", "publisher", "scorer", "promoter", "serving")
 IDENTITIES = ("ca", "server", *(f"ml_{role}" for role in ROLES))
+CLUSTER_HOST = "postgres.ml-storage.svc.cluster.local"
+
+
+def server_names(host):
+    if host == "127.0.0.1":
+        return [x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address(host))]
+    if host == CLUSTER_HOST:
+        return [x509.DNSName(host)]
+    raise Rejected("storage_server_host_invalid")
 
 
 def workspace_id(state):
@@ -37,7 +46,7 @@ def workspace_id(state):
     return identity
 
 
-def issue(identity, issuer_key=None, issuer_certificate=None):
+def issue(identity, issuer_key=None, issuer_certificate=None, server_host="127.0.0.1"):
     if identity not in IDENTITIES:
         raise Rejected("storage_certificate_identity_invalid")
     key = ec.generate_private_key(ec.SECP256R1())
@@ -76,9 +85,7 @@ def issue(identity, issuer_key=None, issuer_certificate=None):
         )
     if identity == "server":
         builder = builder.add_extension(
-            x509.SubjectAlternativeName(
-                [x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
-            ),
+            x509.SubjectAlternativeName(server_names(server_host)),
             False,
         )
     return key, builder.sign(issuer_key or key, hashes.SHA256())
@@ -98,7 +105,7 @@ def write_pair(directory, identity, key, certificate):
     )
 
 
-def validate(state):
+def validate(state, server_host="127.0.0.1"):
     directory = safe_child(state, "storage-pki")
     marker = read_json(safe_child(directory, "identity.json"))
     if marker.get("workspace_id") != workspace_id(state) or marker.get("schema_version") != 1:
@@ -124,6 +131,10 @@ def validate(state):
                 [x509.NameAttribute(NameOID.COMMON_NAME, identity)]
             ):
                 raise Rejected("storage_certificate_subject_mismatch")
+            if identity == "server" and list(
+                certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            ) != server_names(server_host):
+                raise Rejected("storage_certificate_host_mismatch")
             if (
                 not certificate.not_valid_before_utc
                 <= datetime.now(UTC)
@@ -133,23 +144,24 @@ def validate(state):
             certificates[identity] = digest(content)
     except Rejected:
         raise
-    except (ValueError, TypeError, InvalidSignature) as error:
+    except (ValueError, TypeError, InvalidSignature, x509.ExtensionNotFound) as error:
         raise Rejected("storage_pki_invalid") from error
     if certificates != marker.get("certificates"):
         raise Rejected("storage_certificate_changed")
     return marker
 
 
-def initialize(state):
+def initialize(state, server_host="127.0.0.1"):
+    server_names(server_host)
     identity = workspace_id(state)
     directory = safe_child(state, "storage-pki")
     if directory.exists():
-        return validate(state)
+        return validate(state, server_host)
     directory.mkdir(mode=0o700)
     authority_key, authority = issue("ca")
     write_pair(directory, "ca", authority_key, authority)
     for name in IDENTITIES[1:]:
-        write_pair(directory, name, *issue(name, authority_key, authority))
+        write_pair(directory, name, *issue(name, authority_key, authority, server_host))
     write_json(
         directory / "identity.json",
         {
@@ -160,4 +172,4 @@ def initialize(state):
             },
         },
     )
-    return validate(state)
+    return validate(state, server_host)

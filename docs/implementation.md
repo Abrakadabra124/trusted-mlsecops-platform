@@ -70,6 +70,12 @@ T04 завершена в synthetic-only профиле. Developer qualification
 
 430 локальных checks подтвердили отрицательные сценарии, конкурентную вставку, отдельную восстановленную БД, реальные ACL/TLS и 1 000 golden predictions с max error 0.0. Strict negative fixture обнаружил `bool == int` в migration metadata, проверка типа исправлена до публикации. T02 получает настоящий restore smoke; T20/M17 остаются открытыми до полного release/trust/serving recovery и проверенного RPO. Чужие Docker resources и исходная foundation не изменяются.
 
+## Седьмой increment: private cluster storage
+
+[ADR 0008](decisions/0008-private-cluster-storage.md) добавляет отдельный private Kubernetes data plane, не открывая host loopback endpoint. Bootstrap создаёт 46 owned ресурсов, фиксирует UID, проверяет конфигурацию и не присваивает foreign resources. Роли используют отдельные client certificates, namespaces и ServiceAccounts; CA private key не попадает в Kubernetes. Прежние SQL migration и ACL переиспользуются через небольшой admin transport adapter.
+
+436 локальных checks подтвердили шесть identity boundaries, настоящий TLS, запреты API/network и persistence после пересоздания Pod. Linux libpq warning не скрывался: некорректный `/dev/null` password-file profile заменён явным отсутствующим файлом с guard от подмены. Shared client regression: M03 431 cases; developer regression 74 cases. [Runbook](private-cluster-storage.md) отдельно описывает single-node persistence, concurrency ограничения и отсутствие production key custody. Следующий increment должен перенести проверенные artifacts и запустить scoped controllers; полные M04/M20 не закрыты.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

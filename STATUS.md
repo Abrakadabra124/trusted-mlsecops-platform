@@ -76,6 +76,16 @@ M17 остаётся inconclusive: нет полного release/serving recover
 
 Clean checkout подтверждён на commit `6722a0355062a3f1aca01ffb9445ebc0e1d1f1f1`: [storage + recovery run 37686666806](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666806) прошёл M03 (431 case) и recovery component (430 cases). CI восстановил 16 объектов из 7 813 539-byte archive; до golden verification 5.325799 s, 1 000 scores совпали. Число объектов отличается от локального workspace с накопленной историей. [Developer 37686666906](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666906), [Kubernetes 37686666871](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666871) и [documentation 37686666742](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666742) также завершились success. Эти результаты не закрывают остальной R1 scope.
 
+## Закрытый storage внутри Kubernetes
+
+По [ADR 0008](docs/decisions/0008-private-cluster-storage.md) развёрнут отдельный PostgreSQL profile: ClusterIP, DNS-bound mTLS/TLS 1.3, шесть SQL identities в отдельных namespaces, server deny-egress и restricted non-root StatefulSet с retained PVC. Host SQL source и operator restore instance не заменяются. [Команды и границы](docs/private-cluster-storage.md).
+
+Локально 2026-10-08 (Europe/Moscow) прошли **436 component checks**: 378 SQL/TLS/runtime assertions в шести role Pods, реальные API denials, network negatives с положительными controls, повтор bootstrap, spec/config negatives и сохранение bytes после пересоздания PostgreSQL Pod на прежнем томе. Все IDs checks уникальны. Проверены актуальный image config digest и отсутствие оставшихся probe Jobs; в БД после qualification нет её test records. Source fingerprint `812d9caed8d9007bc67c01b761cd7007b89013b3e8c37a032877b310839835f4`.
+
+Обнаружена и исправлена Linux-проблема общего libpq client: `/dev/null` в качестве password file выдавал stderr warning и ломал strict JSON чтение Kubernetes logs. Теперь используется явно заданный отсутствующий path в role bundle; существующий файл там отвергается. TLS verification не отключалась, посторонний текст из logs не фильтровался. После shared-client изменений M03 повторно прошёл 431 case; developer suite на финальном source fingerprint прошёл 74 cases.
+
+Это подготовленный private storage, не работающие publisher/scorer controllers. Signed migration history, controller RBAC и постоянный serving ещё впереди. Нет HA, KMS, автоматической ротации сертификатов или подтверждённого image vulnerability scan. Namespace quotas не доказывают безопасную суммарную concurrency: probes последовательны, перед постоянными controllers нужны measured requests/limits. M04/M20 и R1 остаются открытыми.
+
 ## Что проверяется отдельно
 
 Локальная команда `python scripts/check_docs.py` подтверждает структурную связность документов и ограниченные publication checks. CI повторяет её на опубликованном commit. Актуальный результат смотрите в [GitHub Actions](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions); наличие workflow-файла само по себе не доказывает успешный запуск.

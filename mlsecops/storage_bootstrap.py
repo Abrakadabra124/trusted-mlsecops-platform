@@ -233,28 +233,29 @@ def admin(name, statement, database=DATABASE, timeout=30):
     return result.stdout.decode().strip()
 
 
-def migrate(name):
-    admin(name, roles_sql(), "postgres")
-    exists = admin(name, "SELECT 1 FROM pg_database WHERE datname = 'mlsecops';", "postgres")
+def migrate(name, execute=admin):
+    execute(name, roles_sql(), "postgres")
+    exists = execute(name, "SELECT 1 FROM pg_database WHERE datname = 'mlsecops';", "postgres")
     if exists != "1":
-        admin(name, "CREATE DATABASE mlsecops OWNER ml_owner TEMPLATE template0;", "postgres")
+        execute(name, "CREATE DATABASE mlsecops OWNER ml_owner TEMPLATE template0;", "postgres")
     script = migration_sql()
     checksum = digest(script.encode())
-    exists = admin(name, "SELECT to_regclass('ml.schema_migrations');")
+    exists = execute(name, "SELECT to_regclass('ml.schema_migrations');")
     if not exists:
-        admin(
+        execute(
             name,
             f"BEGIN;\n{script}\nINSERT INTO ml.schema_migrations VALUES ({SCHEMA_VERSION}, '{checksum}');\nCOMMIT;",
         )
     if (
-        admin(name, "SELECT version || ':' || sha256 FROM ml.schema_migrations ORDER BY version;")
+        execute(name, "SELECT version || ':' || sha256 FROM ml.schema_migrations ORDER BY version;")
         != f"{SCHEMA_VERSION}:{checksum}"
     ):
         raise Rejected("storage_migration_history_mismatch")
     return {"version": SCHEMA_VERSION, "sha256": checksum}
 
 
-def export_clients(state, port):
+def export_clients(state, port, host="127.0.0.1"):
+    storage_pki.server_names(host)
     for role in storage_pki.ROLES:
         directory = safe_child(state, f"storage-clients/{role}")
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -268,7 +269,7 @@ def export_clients(state, port):
                 {
                     "schema_version": 1,
                     "role": role,
-                    "host": "127.0.0.1",
+                    "host": host,
                     "port": port,
                     "certificates": {
                         name: digest(content)
