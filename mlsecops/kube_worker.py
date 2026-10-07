@@ -142,14 +142,19 @@ def image_config(identifier):
                 matches = [entry]
         if len(matches) != 1:
             raise Rejected("ambiguous_image_platform")
-        document = image_document(matches[0]["digest"])
+        identifier = matches[0]["digest"]
+        document = image_document(identifier)
     if "manifests" in document:
         raise Rejected("image_index_depth_exceeded")
-    if "config" in document:
+    if "rootfs" in document:
+        config_id, config = identifier, document
+    elif isinstance(document.get("config"), dict) and isinstance(
+        document["config"].get("digest"), str
+    ):
         config_id = document["config"]["digest"]
         config = image_document(config_id)
     else:
-        config_id, config = identifier, document
+        raise Rejected("invalid_image_descriptor_structure")
     if (
         config.get("os") != "linux"
         or config.get("architecture") != "amd64"
