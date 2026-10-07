@@ -39,6 +39,18 @@ def train_candidate(state, dataset_id, policy, image, executor=run_worker, linea
     splits, manifest = verify_dataset(state, dataset_id, policy)
     if lineage_id is not None:
         verify_lineage(state, lineage_id, dataset_id, policy)
+    metadata, content, scores = train_verified_dataset(
+        dataset_id, lineage_id, splits, manifest, policy, image, executor
+    )
+    location = state / "candidates" / metadata["run_id"]
+    location.mkdir()
+    atomic_write(location / "model.onnx", content)
+    write_json(location / "run.json", metadata)
+    write_json(location / "validation-scores.json", scores)
+    return metadata
+
+
+def train_verified_dataset(dataset_id, lineage_id, splits, manifest, policy, image, executor):
     request = {
         "action": "train",
         "train": splits["train"],
@@ -72,8 +84,6 @@ def train_candidate(state, dataset_id, policy, image, executor=run_worker, linea
     if parity > policy["parity_tolerance"]:
         raise Rejected("parity_threshold_failed")
     run_id = uuid.uuid4().hex
-    location = state / "candidates" / run_id
-    location.mkdir()
     metadata = {
         "schema_version": 1,
         "run_id": run_id,
@@ -95,10 +105,7 @@ def train_candidate(state, dataset_id, policy, image, executor=run_worker, linea
             ["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "HEAD"]
         ),
     }
-    atomic_write(location / "model.onnx", content)
-    write_json(location / "run.json", metadata)
-    write_json(location / "validation-scores.json", output["onnx_scores"])
-    return metadata
+    return metadata, content, output["onnx_scores"]
 
 
 def load_candidate(state, run_id, policy):
@@ -127,6 +134,23 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
         verify_lineage(state, metadata["lineage_id"], metadata["dataset_id"], policy)
     splits, manifest = verify_dataset(state, metadata["dataset_id"], policy)
     holdout = splits["holdout"]
+    report = evaluate_verified_candidate(
+        metadata, content, holdout, manifest, policy, image, executor
+    )
+    envelope = sign(report, "evaluation", state / "keys/evaluator.pem")
+    write_json(state / "evaluations" / f"{run_id}.json", envelope)
+    public = read_json(state / "trusted-keys.json")
+    if (
+        verify(
+            read_json(state / "evaluations" / f"{run_id}.json"), "evaluation", public["evaluator"]
+        )
+        != report
+    ):
+        raise Rejected("evaluation_persistence_mismatch")
+    return report
+
+
+def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, image, executor):
     batch_id = uuid.uuid4().hex
     output, execution = executor(
         image,
@@ -170,7 +194,7 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
     )
     report = {
         "schema_version": 1,
-        "run_id": run_id,
+        "run_id": metadata["run_id"],
         "created_at": now(),
         "model_digest": digest(content),
         "dataset_id": metadata["dataset_id"],
@@ -193,14 +217,4 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
             "Full MLflow, holdout query budget and storage-role acceptance pending",
         ],
     }
-    envelope = sign(report, "evaluation", state / "keys/evaluator.pem")
-    write_json(state / "evaluations" / f"{run_id}.json", envelope)
-    public = read_json(state / "trusted-keys.json")
-    if (
-        verify(
-            read_json(state / "evaluations" / f"{run_id}.json"), "evaluation", public["evaluator"]
-        )
-        != report
-    ):
-        raise Rejected("evaluation_persistence_mismatch")
     return report

@@ -1,6 +1,6 @@
 # ADR 0006: PostgreSQL как локальное role-isolated storage
 
-Дата: 2026-10-07. Статус: storage component реализован, 367 локальных checks прошли; интеграция с pipeline и полный M03/M04 ещё не выполнены. [Runbook](../storage-lab.md).
+Дата: 2026-10-07. Статус: storage component реализован, 367 checks прошли локально и в CI. SQL pipeline slice имеет ещё 26 локальных checks; независимые controllers и полный M03/M04/M20 ещё не приняты. [Runbook](../storage-lab.md).
 
 ## Требование и ресурсы
 

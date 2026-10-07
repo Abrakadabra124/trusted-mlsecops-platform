@@ -40,13 +40,17 @@ DVC 3.67.1 был проверен в spike, но не принят: pip-audit �
 
 ## Что не реализовано
 
-MLflow, интеграция storage ACL с pipeline и least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 работает; полные M01 и M03-M23 остаются inconclusive. T03 завершена только в synthetic scope, остальные 28 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+MLflow, least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 работает; полные M01 и M03-M23 остаются inconclusive. T03 завершена только в synthetic scope, остальные 28 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## PostgreSQL storage increment
 
-Локально работает отдельный PostgreSQL 18.6: mTLS/TLS 1.3, шесть SQL identities, девять content-addressed tables, append-only runtime privileges, checksum migration и собственный persistent volume. Прошли 367 component checks, включая действительные SQLSTATE denials, wrong/expired certificates и positive controls. Повтор bootstrap сохранил container/keys; idle memory snapshot около 22.4 MiB при лимите 512 MiB, это не worst-case замер. [Воспроизведение и ограничения](docs/storage-lab.md). CI этого increment ещё ожидается; статус успеха сюда заранее не переносится.
+Локально работает отдельный PostgreSQL 18.6: mTLS/TLS 1.3, шесть SQL identities, девять content-addressed tables, append-only runtime privileges, checksum migration и собственный persistent volume. Прошли 367 component checks, включая действительные SQLSTATE denials, wrong/expired certificates и positive controls. Повтор bootstrap сохранил container/keys; idle memory snapshot около 22.4 MiB при лимите 512 MiB, это не worst-case замер. [Воспроизведение и ограничения](docs/storage-lab.md).
 
-Обычная bridge network публикует БД только на loopback; outbound БД не запрещён. `--internal` не обеспечил действительный host port mapping на этой среде, что выявлено проверкой, а не скрыто. Worker deny policies не менялись. Pipeline всё ещё использует host files, поэтому SQL ACL component не закрывает M03/M04 автоматически.
+Clean checkout component подтверждён на commit `6c289872ec23093493a76b73b4f94f68acdf941a`: [storage run 37676298502](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37676298502), [developer run 37676298438](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37676298438), [Kubernetes run 37676298377](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37676298377) и documentation CI завершились success. Это CI до следующего SQL pipeline slice.
+
+Обычная bridge network публикует БД только на loopback; outbound БД не запрещён. `--internal` не обеспечил действительный host port mapping на этой среде, что выявлено проверкой, а не скрыто. Worker deny policies не менялись.
+
+Новый SQL pipeline локально обучил и оценил модель через отдельные publisher/scorer credentials. Publisher читает train/validation, scorer - holdout; результат хранится в candidates/evaluations, signed report связан с точными dataset/candidate refs и lineage. 26 integration checks прошли в Docker profile, отдельный SQL demo прошёл и с Kubernetes Jobs. AUPRC `0.9323007296445032`, parity max error `2.086162567138672e-7`, release остаётся `unapproved`. Host orchestrator пока привилегирован, независимость controllers и полный M03/M04/M20 не заявляются. CI нового slice ещё ожидается.
 
 ## Что проверяется отдельно
 

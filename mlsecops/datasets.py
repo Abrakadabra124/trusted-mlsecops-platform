@@ -169,17 +169,14 @@ def publish_records(state, policy, rows):
     return identifier
 
 
-def verify_dataset(state, identifier, policy):
-    state = Path(state)
+def verify_manifest(envelope, identifier, policy, approval_envelope, curator_public):
     if (
         not isinstance(identifier, str)
         or len(identifier) != 64
         or any(character not in "0123456789abcdef" for character in identifier)
     ):
         raise Rejected("invalid_dataset_id")
-    location = safe_child(state / "approved", identifier)
-    public = read_json(state / "trusted-keys.json")
-    manifest = verify(read_json(location / "manifest.json"), "dataset", public["curator"])
+    manifest = verify(envelope, "dataset", curator_public)
     require_fields(
         manifest,
         (
@@ -206,14 +203,12 @@ def verify_dataset(state, identifier, policy):
         or not isinstance(manifest["objects"], dict)
     ):
         raise Rejected("invalid_dataset_manifest_schema")
-    approval = verify(read_json(state / "source-approval.json"), "source", public["curator"])
+    approval = verify(approval_envelope, "source", curator_public)
     validate_approval(approval, policy)
     if manifest["source_approval_digest"] != digest(canonical(approval)):
         raise Rejected("source_version_mismatch")
     if set(manifest["objects"]) != {"train.json", "validation.json", "holdout.json"}:
         raise Rejected("unexpected_dataset_objects")
-    all_identifiers = set()
-    result = {}
     for name, metadata in manifest["objects"].items():
         require_fields(metadata, ("sha256", "bytes", "rows"))
         expected_rows = dict(
@@ -228,8 +223,27 @@ def verify_dataset(state, identifier, policy):
             or not 0 < metadata["bytes"] <= 16 * 1024 * 1024
             or type(metadata["rows"]) is not int
             or metadata["rows"] != expected_rows[name]
+            or not isinstance(metadata["sha256"], str)
+            or len(metadata["sha256"]) != 64
+            or any(character not in "0123456789abcdef" for character in metadata["sha256"])
         ):
             raise Rejected("invalid_dataset_object_metadata")
+    return manifest
+
+
+def verify_dataset(state, identifier, policy):
+    state = Path(state)
+    location = safe_child(state / "approved", identifier)
+    manifest = verify_manifest(
+        read_json(location / "manifest.json"),
+        identifier,
+        policy,
+        read_json(state / "source-approval.json"),
+        read_json(state / "trusted-keys.json")["curator"],
+    )
+    all_identifiers = set()
+    result = {}
+    for name, metadata in manifest["objects"].items():
         path = safe_child(location, name)
         content = bounded_read(path)
         if len(content) != metadata["bytes"] or digest(content) != metadata["sha256"]:

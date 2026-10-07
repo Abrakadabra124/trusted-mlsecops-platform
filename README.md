@@ -33,7 +33,7 @@ Qualification запускает отрицательные сценарии и 
 
 ## Role-isolated storage component
 
-Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 локальными component checks. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). Training path пока не переключён на БД, полный M03/M04 не объявлен пройденным.
+Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 component checks. Новый SQL pipeline действительно обучает/оценивает модель через publisher/scorer credentials; ещё 26 локальных checks проверяют интеграцию и подмены. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). Старый developer demo сохранён отдельно; независимые controllers и полный M03/M04/M20 ещё не приняты.
 
 ## Зачем нужен проект
 

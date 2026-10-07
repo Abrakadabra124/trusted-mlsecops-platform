@@ -154,14 +154,10 @@ def prepare_versioned(root, state):
     return result
 
 
-def verify_lineage(state, identifier, dataset_id, policy):
-    state = Path(state)
+def verify_lineage_statement(envelope, identifier, dataset_id, policy, curator_public):
     if not isinstance(identifier, str) or not re.fullmatch("[0-9a-f]{64}", identifier):
         raise Rejected("invalid_lineage_id")
-    public = read_json(state / "trusted-keys.json")["curator"]
-    lineage = verify(
-        read_json(safe_child(state, f"lineage/{identifier}.json")), "data-lineage", public
-    )
+    lineage = verify(envelope, "data-lineage", curator_public)
     require_fields(
         lineage,
         (
@@ -200,6 +196,22 @@ def verify_lineage(state, identifier, dataset_id, policy):
         "[0-9a-f]{64}", lineage["lock_sha256"]
     ):
         raise Rejected("invalid_lineage_lock")
+    if not isinstance(lineage["source_sha256"], str) or not re.fullmatch(
+        "[0-9a-f]{64}", lineage["source_sha256"]
+    ):
+        raise Rejected("invalid_lineage_source_digest")
+    return lineage
+
+
+def verify_lineage(state, identifier, dataset_id, policy):
+    state = Path(state)
+    lineage = verify_lineage_statement(
+        read_json(safe_child(state, f"lineage/{identifier}.json")),
+        identifier,
+        dataset_id,
+        policy,
+        read_json(state / "trusted-keys.json")["curator"],
+    )
     splits, manifest = verify_dataset(state, dataset_id, policy)
     rows = [record for name in ("train", "validation", "holdout") for record in splits[name]]
     if digest(canonical(rows)) != lineage["source_sha256"]:

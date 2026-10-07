@@ -34,8 +34,13 @@ jobs:
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_qualification
+      - name: Actual training and evaluation through scoped SQL identities
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m mlsecops.storage_pipeline_qualification
       - name: Sanitized storage evidence
         if: always()
         run: |
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage qualification evidence')"
-          echo 'Storage components only. Integration with training and full M03/M04 remain pending.' >> "$GITHUB_STEP_SUMMARY"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-pipeline-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage pipeline evidence')"
+          echo 'Role-restricted SQL pipeline components. Independent controllers and full M03/M04/M20 remain pending.' >> "$GITHUB_STEP_SUMMARY"

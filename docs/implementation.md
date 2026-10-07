@@ -54,7 +54,9 @@ DVC spike был остановлен после настоящего dependency
 
 [PostgreSQL component](storage-lab.md) добавляет настоящие SQL GRANT и проверяемую mTLS identity вместо условных имён directories. 367 локальных checks подтверждают матрицу разрешённых/запрещённых операций, byte constraints, TLS negatives и идемпотентность. Storage client не требует Docker API; bootstrap-admin отделён от выдаваемых role credential directories. Runtime имеет 1 CPU/512 MiB/64 PID, readonly root и pinned image.
 
-Это пока самостоятельный компонент, не фактическая смена backend у существующего training path. Суммарная квота данных, image scan, backup/restore, MLflow и независимые controllers остаются отдельными задачами. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M03/M04.
+Первый storage commit `6c28987` воспроизведён в CI. Следующий slice добавляет настоящий SQL training/evaluation path: scoped publisher/scorer reads, candidate persistence, signed evaluation с binding до dataset/lineage и 26 integration checks. Общая математическая логика не дублируется: legacy filesystem wrappers и SQL controllers используют одни train/evaluate primitives. Проверка metadata отделена от загрузки всех split, поэтому publisher больше не открывает holdout в новом path.
+
+Суммарная квота данных, image scan, backup/restore, MLflow и независимые controllers остаются отдельными задачами. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M03/M04/M20; общий host administrator остаётся доверенным.
 
 ## Проверенные технические основания реализации
 

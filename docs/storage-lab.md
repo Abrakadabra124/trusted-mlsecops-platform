@@ -2,7 +2,7 @@
 
 ## Результат и границы
 
-Четвёртый increment R1 добавляет самостоятельный storage component: PostgreSQL 18.6, взаимную TLS-аутентификацию, шесть SQL identities, девять классов объектов, versioned migration и 367 component checks. Это ещё **не переключение training/evaluation на БД** и не полная приёмка M03/M04. До интеграции прежний demo хранит артефакты в host filesystem.
+Четвёртый increment R1 добавляет PostgreSQL 18.6, взаимную TLS-аутентификацию, шесть SQL identities, девять классов объектов, versioned migration и 367 component checks. Следующий slice подключает реальные training/evaluation reads/writes через ограниченные credentials и добавляет 26 integration checks. Это не полная приёмка M03/M04/M20: оркестратор пока сохраняет host-admin доступ. Старый developer demo хранит артефакты в host filesystem и остаётся отдельным preview path.
 
 PostgreSQL - реляционная база данных. Здесь она хранит небольшие lab artifacts как `bytea` и проверяет размер и SHA-256 непосредственно при записи. mTLS (mutual Transport Layer Security) проверяет сертификат сервера и клиента; сервер дополнительно сопоставляет Common Name сертификата с SQL login. Psycopg 3.3.6 - Python-драйвер, который передаёт значения через SQL parameters, а не вставляет входные bytes в текст запроса.
 
@@ -17,11 +17,14 @@ uv sync --locked --no-build --python 3.12.15
 uv run --locked python -m mlsecops bootstrap
 uv run --locked python -m mlsecops.storage_bootstrap
 uv run --locked python -m mlsecops.storage_qualification
+uv run --locked python -m mlsecops build
+uv run --locked python -m mlsecops.storage_pipeline
+uv run --locked python -m mlsecops.storage_pipeline_qualification
 ```
 
 Повтор bootstrap без изменения идентичности входит в qualification. `--port` задаётся только при первоначальном создании. Порт проверяется настоящим bind, затем проверяются фактический Docker port mapping и SQL connection; одного успешного `docker create` недостаточно.
 
-Отчёты: `.runtime/evidence/storage-bootstrap.json` и `.runtime/evidence/storage-qualification.json`. CI [storage.yml](../.github/workflows/storage.yml) повторяет создание из clean checkout и публикует только очищенные результаты в logs. Private keys, certificates, DB bytes и raw connection errors в Git/CI output не публикуются.
+Отчёты: `.runtime/evidence/storage-bootstrap.json`, `.runtime/evidence/storage-qualification.json`, `.runtime/evidence/storage-pipeline-qualification.json`, demo refs - `.runtime/storage-demo.json`. CI [storage.yml](../.github/workflows/storage.yml) повторяет создание из clean checkout и публикует только очищенные результаты в logs. Private keys, certificates, DB bytes и raw connection errors в Git/CI output не публикуются.
 
 ## Права и данные
 
@@ -58,13 +61,25 @@ SQL denials принимаются только с ожидаемым SQLSTATE `
 
 ## Ограничения и следующий этап
 
-- Pipeline пока использует host files; SQL ACL не объявлены защитой уже работающего training path.
+- Новый SQL path использует ограниченные credentials, но curator staging, CA и orchestration остаются под общим host administrator. Это ещё не раздельные OS identities controllers. Старый filesystem path не получает SQL ACL автоматически.
 - Нет автоматической rotation/CRL, HA, внешнего KMS, проверенного backup/restore или независимого reviewer.
 - Предел bytes на один объект не ограничивает суммарное заполнение volume. Container memory/CPU/PID limits не доказывают доступность БД при злоупотреблении SQL. Statement timeout - default для trusted clients, не неотменяемая квота атакующего SQL role.
 - Dependency audit после добавления Psycopg не нашёл известных Python vulnerabilities. Это не image/OS scan и не доказательство отсутствия всех уязвимостей. Binary Psycopg выбран для одинаковой установки Windows/Linux; его bundled libpq/OpenSSL требуют отдельного контроля обновлений. Production может предпочесть C build с системными libraries.
 - Не удалять volume или PKI для «починки» startup. При missing/foreign ресурсе bootstrap отказывает; восстановление должно сохранять ownership и проверять evidence, не переиспользовать чужую БД.
 
-Следующий проверяемый этап - перевести actual curator/publisher/scorer reads/writes на эти identities, исключить holdout из publisher path и повторить model pipeline без широкого storage credential. Только затем оценивать полноту M03/M04.
+Следующий проверяемый этап - убрать широкие credentials у controllers, добавить независимый scorer/query budget, persistent audit и recovery. Только после всей отрицательной матрицы оценивать полноту M03/M04/M20.
+
+## Реальный SQL pipeline
+
+Curator сначала проверяет M02 data path, подписанный manifest и полную lineage, затем ingestor сохраняет synthetic source в quarantine. Curator читает эти bytes через свою SQL identity, проверяет связь с source digest, публикует split objects, подписанные metadata и последним - signed dataset index. Hash index служит точкой входа; произвольный SQL object сам по себе не считается approved dataset.
+
+Publisher читает только signed manifests/lineage и train/validation, проверяет pinned curator public key, актуальный source approval digest, expiry и policy. Он передаёт train и validation features в offline worker, проверяет bounded output и сохраняет модель/run metadata/scores в candidates. Scorer читает candidate и holdout, но не train; prediction worker получает только features, без holdout labels и SQL credentials. Scorer подписывает report, дополнительно связанный с точными candidate reference, dataset reference и lineage ID, и записывает его в evaluations.
+
+Publisher и scorer больше не вызывают full-dataset verifier, который открывал все три split. Общая проверка подписи/schema отделена от чтения bytes; curator сохраняет ответственность за полную cross-split проверку. Подпись curator - явная доверительная граница, не обещание, что consumer без holdout может независимо пересчитать весь исходный dataset.
+
+26 integration checks подтверждают actual read-table scopes, AUPRC/parity, signed report bindings, stale source, missing objects, неверного signer, подмену подписанного index, перепутанные dataset/lineage/source ссылки, SQL denials и single-byte mutation модели. Подмена candidate metadata останавливается до запуска prediction worker. Локальный результат: AUPRC `0.9323007296445032`, baseline `0.4073333333333333`, parity max error `2.086162567138672e-7`, release остаётся `unapproved`. Known synthetic generator не обеспечивает секретности labels и не доказывает бизнес-utility.
+
+При уже поднятом собственном kind можно выбрать `python -m mlsecops.storage_pipeline --backend kubernetes`. Этот SQL demo также выполнен локально, training/prediction Jobs завершились успешно с теми же AUPRC/parity; qualification CLI из 26 checks измеряет Docker profile. Это не межпрофильное сравнение всех probability vectors. Ни одному worker не передаются DB certificates или signing keys.
 
 ## Первоисточники
 
