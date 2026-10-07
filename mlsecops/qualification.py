@@ -184,7 +184,13 @@ def qualify(root, state, image):
         lambda: run_worker(image, {"action": "shell", "command": "ignored"}),
     )
     for gate in policy["required_gates"]:
-        result = report(gate, "local-cpu", root, state)
+        if gate == "M03":
+            with tempfile.TemporaryDirectory(
+                prefix="missing-storage-", dir=state / "evidence"
+            ) as temporary:
+                result = report(gate, "local-cpu", root, Path(temporary))
+        else:
+            result = report(gate, "local-cpu", root, state)
         confirmed(
             f"acceptance-dispatch-{gate}",
             (result["status"] == "pass" and result["exit_code"] == 0 and len(result["cases"]) >= 44)
@@ -235,7 +241,7 @@ def qualify(root, state, image):
         "limitations": [
             "No production or full R1 acceptance",
             "Synthetic utility only",
-            "M02 implemented; other full M-gates remain incomplete",
+            "M02 implemented; M03 separately runs storage-backed acceptance, not this developer suite",
             "No poisoning campaign, release service, monitoring or disaster recovery yet",
             "Human evaluator and author are not independent",
         ],

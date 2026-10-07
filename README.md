@@ -29,11 +29,11 @@ Qualification запускает отрицательные сценарии и 
 
 ## Данные и проверяемый intake
 
-`--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализован M02; M03 storage ACL остаётся открытым. [Команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.
+`--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализованы M02 и [M03 integrity gate](docs/integrity-gate.md) для synthetic-only профиля. [Source/intake: команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.
 
 ## Role-isolated storage component
 
-Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 component checks. Новый SQL pipeline действительно обучает/оценивает модель через publisher/scorer credentials; ещё 26 локальных checks проверяют интеграцию и подмены. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). Старый developer demo сохранён отдельно; независимые controllers и полный M03/M04/M20 ещё не приняты.
+Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 component checks. Новый SQL pipeline действительно обучает/оценивает модель через publisher/scorer credentials; ещё 26 checks проверяют интеграцию и подмены. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). M03 заново выполняет эти suites, 36 Linux tamper/path fixtures и 2 SQL integrity controls. Старый developer demo сохранён отдельно; независимые controllers и полные M04/M20 ещё не приняты.
 
 ## Зачем нужен проект
 

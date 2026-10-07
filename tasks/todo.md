@@ -1,6 +1,6 @@
 # Backlog реализации
 
-T03 завершена для synthetic-only профиля; остальные **28 задач открыты**, реализация начата 2026-10-07. Промежуточные increments закрывают части других задач, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, а неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
+T03 и T04 завершены для synthetic-only профиля; остальные **27 задач открыты**, реализация начата 2026-10-07. Промежуточные increments закрывают части других задач, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02 и M03, а неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01
 - [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
@@ -19,14 +19,15 @@ T03 завершена для synthetic-only профиля; остальные 
 - Проверка: valid/invalid fixtures, отсутствие PII и train-test leakage, точное повторение generated inputs.
 
 ## T04
-- [ ] Quarantine, versioned source и signed manifests. Зависимость: T03. Gates: M02, M03.
-- Решение: DVC не принят после dependency security spike; [ADR 0005](../docs/decisions/0005-data-lineage.md) заменяет его фиксированным source lock без изменения acceptance. M02 работает, storage permissions M03 ещё не завершены.
+- [x] Quarantine, versioned source и signed manifests. Зависимость: T03. Gates: M02, M03.
+- Evidence: [executable M03](../docs/integrity-gate.md), 36 файловых fixtures, 367 SQL/TLS checks, 26 pipeline checks и 2 сквозные проверки. Доверенные curator/host остаются допущением; M04/M20 не закрыты.
+- Решение: DVC не принят после dependency security spike; [ADR 0005](../docs/decisions/0005-data-lineage.md) заменяет его фиксированным source lock без изменения acceptance. M02 и M03 работают, незакрытые foundation P0 не объявляются решёнными этим gate.
 - Результат: state machine dataset, artifact hashes, split manifests, rejection report и storage permissions.
 - Проверка: single-byte tamper, source expiry, traversal/symlink, duplicate rows, missing object; approved версия не перезаписывается.
 
 ## T05
 - [ ] Identity и изоляция. Зависимость: T04. Gate: M04.
-- Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials и Cilium probes работают; storage ACL и least-privilege controller ещё не завершены.
+- Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials, Cilium probes и SQL storage ACL работают; least-privilege controllers и полная интеграция identities ещё не завершены.
 - Результат: role/access matrix, namespace/storage/network policies и restricted service accounts.
 - Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
 

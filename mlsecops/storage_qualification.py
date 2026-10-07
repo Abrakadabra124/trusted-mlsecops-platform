@@ -297,7 +297,7 @@ def qualify(state):
             "config_digest": marker["config_digest"],
         },
         "limitations": [
-            "Storage component only; independent controllers and full M03/M04 acceptance pending",
+            "Storage component only; M03 aggregates this separately, independent controllers and full M04 remain pending",
             "Local CA and Docker/host administrator remain trusted",
             "DB outbound traffic is not denied; untrusted workers receive no DB credentials",
             "Append-only runtime roles are not WORM storage or an administrator boundary",

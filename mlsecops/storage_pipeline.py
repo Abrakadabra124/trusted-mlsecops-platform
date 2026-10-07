@@ -181,7 +181,7 @@ def demo(root, state, image, executor=run_worker):
         "limitations": [
             "Host orchestrator retains administrator access; independent controller identities are pending",
             "Synthetic data and known generator do not establish business utility or secret labels",
-            "MLflow, query budget, full M03/M04/M20, promotion and serving remain pending",
+            "MLflow, query budget, full M04/M20, promotion and serving remain pending; M03 runs separately",
         ],
     }
     write_json(state / "storage-demo.json", result)

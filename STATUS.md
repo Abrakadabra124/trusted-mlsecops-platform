@@ -22,7 +22,7 @@ Kubernetes isolation и настоящий train/evaluate независимо �
 
 ## Source lineage и M02
 
-Локально прошли 44 проверки source/intake и executable M02. Source lock, signed snapshot authorization, quarantine, отдельное curator approval и signed lineage связаны с run. Kubernetes demo с `--versioned-data` обучил и оценил candidate с lineage; AUPRC и parity сохранились. [Описание и воспроизведение](docs/data-lifecycle.md). T03 завершена для synthetic-only профиля, T04 остаётся открытой до storage ACL.
+Локально прошли 44 проверки source/intake и executable M02. Source lock, signed snapshot authorization, quarantine, отдельное curator approval и signed lineage связаны с run. Kubernetes demo с `--versioned-data` обучил и оценил candidate с lineage; AUPRC и parity сохранились. [Описание и воспроизведение](docs/data-lifecycle.md). T03 завершена для synthetic-only профиля; последующее завершение T04/M03 описано отдельно ниже.
 
 Clean checkout подтверждён на commit `8857eba675bdb50a4e8ceb9e664019a9a3d44ac7`: [runtime/M02 run 37672915427](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37672915427), [Kubernetes versioned demo run 37672915437](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37672915437) и documentation CI завершились success. Это приёмка перечисленного scope, не всех 23 gates.
 
@@ -40,7 +40,7 @@ DVC 3.67.1 был проверен в spike, но не принят: pip-audit �
 
 ## Что не реализовано
 
-MLflow, least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 работает; полные M01 и M03-M23 остаются inconclusive. T03 завершена только в synthetic scope, остальные 28 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+MLflow, least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 и M03 работают; полные M01 и M04-M23 остаются inconclusive. T03/T04 завершены только в synthetic scope, остальные 27 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## PostgreSQL storage increment
 
@@ -50,9 +50,17 @@ Clean checkout component подтверждён на commit `6c289872ec23093493a
 
 Обычная bridge network публикует БД только на loopback; outbound БД не запрещён. `--internal` не обеспечил действительный host port mapping на этой среде, что выявлено проверкой, а не скрыто. Worker deny policies не менялись.
 
-Новый SQL pipeline локально обучил и оценил модель через отдельные publisher/scorer credentials. Publisher читает train/validation, scorer - holdout; результат хранится в candidates/evaluations, signed report связан с точными dataset/candidate refs и lineage. 26 integration checks прошли в Docker profile, отдельный SQL demo прошёл и с Kubernetes Jobs. AUPRC `0.9323007296445032`, parity max error `2.086162567138672e-7`, release остаётся `unapproved`. Host orchestrator пока привилегирован, независимость controllers и полный M03/M04/M20 не заявляются.
+Новый SQL pipeline локально обучил и оценил модель через отдельные publisher/scorer credentials. Publisher читает train/validation, scorer - holdout; результат хранится в candidates/evaluations, signed report связан с точными dataset/candidate refs и lineage. 26 integration checks прошли в Docker profile, отдельный SQL demo прошёл и с Kubernetes Jobs. AUPRC `0.9323007296445032`, parity max error `2.086162567138672e-7`, release остаётся `unapproved`. Host orchestrator пока привилегирован, независимость controllers и полные M04/M20 не заявляются. M03 принят отдельным последующим gate ниже.
 
 SQL pipeline независимо повторён на commit `18161b8c02499376d3ddd9a276f8aee92c367994`: [storage + pipeline run 37678040396](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37678040396), [legacy developer run 37678040284](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37678040284), [Kubernetes regression run 37678040291](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37678040291) и documentation CI завершились success. Storage workflow строит новую worker image и выполняет настоящие training/evaluation, не использует готовую модель. Kubernetes CI в этом commit проверяет старый versioned-filesystem demo; SQL+Kubernetes подтверждён отдельно локальным запуском, не этим CI job.
+
+## Исполняемый M03
+
+Локально прошёл полный synthetic-profile M03: 36 Linux файловых fixtures, 367 реальных SQL/TLS checks, 26 SQL pipeline checks и 2 сквозные проверки, всего 431 case. Approved dataset reference и hashes split/manifest/lineage/approval до и после denials сохранились. Подмены bytes, manifest/signature, split, stale source, missing objects, traversal и реальные symlink escape отклонены. [Покрытие, команды и ограничения](docs/integrity-gate.md).
+
+Windows host не даёт текущему процессу symlink privilege, поэтому suite выполняется в offline Linux container, без изменения Windows security settings и без skip-as-pass. Все component checks запускаются заново. Отсутствие storage prerequisites = inconclusive, неправильный отказ = fail. T04 закрыта только в этом профиле; полномочия host administrator, независимость controllers и защита от semantic poisoning не объявляются решёнными.
+
+В этом increment container image audit не завершён: три запроса официального Grype updater закончились TLS/network timeout. Уязвимости образов не подсчитаны, отсутствие базы не записано как «0 findings». Python dependency audit и integrity gate не заменяют image scan; M01 и trusted release остаются незавершёнными.
 
 ## Что проверяется отдельно
 
@@ -72,4 +80,4 @@ SQL pipeline независимо повторён на commit `18161b8c02499376
 
 ## Следующий допустимый шаг
 
-Продолжить активную цель R1: довести T01-T02/T04 до полной приёмки, реализовать storage permissions и least-privilege controller, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёной developer qualification.
+Продолжить активную цель R1: довести T01-T02 до полной приёмки, реализовать least-privilege controllers и связать проверенные storage/API/network identities, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03 или developer qualification.

@@ -31,11 +31,11 @@ def report(gate, profile, root, state=None):
         "redaction_version": 1,
         "residual_risks": ["Full gate implementation and runtime evidence not yet available"],
     }
+    state = Path(state) if state else root / ".runtime"
     if gate == "M02":
         from mlsecops.data_qualification import qualify
 
         try:
-            state = Path(state) if state else root / ".runtime"
             evidence = qualify(root, state)
             result.update(
                 status=evidence["status"],
@@ -51,6 +51,40 @@ def report(gate, profile, root, state=None):
             )
             result["input_digests"].update(
                 source=evidence["source_sha256"], data_lock=evidence["source_lock_digest"]
+            )
+        except (Rejected, OSError) as error:
+            result.update(status="fail", exit_code=1, residual_risks=[str(error)])
+        result["finished_at"] = now()
+    elif gate == "M03":
+        if not (state / "storage.json").exists():
+            result["residual_risks"] = [
+                "M03 requires explicit storage bootstrap and current worker image"
+            ]
+            return result
+        from mlsecops.integrity_qualification import qualify
+
+        try:
+            evidence = qualify(root, state)
+            result.update(
+                status=evidence["status"],
+                cases=evidence["cases"],
+                exit_code=0,
+                metrics={"checks": evidence["checks"], **evidence["component_checks"]},
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    **evidence["artifact_hashes"],
+                    "integrity_qualification": digest(
+                        bounded_read(state / "evidence/integrity-qualification.json")
+                    ),
+                },
+            )
+            result["input_digests"].update(
+                source=evidence["source_sha256"],
+                data_lock=evidence["source_lock_digest"],
+                dataset_reference=evidence["dataset_reference"],
+                candidate_reference=evidence["candidate_reference"],
+                worker_image=evidence["execution"]["image_id"],
+                storage_config=evidence["storage_inputs"]["config_digest"],
             )
         except (Rejected, OSError) as error:
             result.update(status="fail", exit_code=1, residual_risks=[str(error)])

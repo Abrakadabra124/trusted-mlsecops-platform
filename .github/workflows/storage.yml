@@ -29,18 +29,16 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked pip-audit --strict --progress-spinner off
-      - name: Fresh PostgreSQL bootstrap and actual role operations
+      - name: Fresh PostgreSQL bootstrap
         run: |
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.storage_bootstrap
-          uv run --locked python -m mlsecops.storage_qualification
-      - name: Actual training and evaluation through scoped SQL identities
+      - name: M03 integrity, actual SQL roles and training/evaluation
         run: |
           uv run --locked python -m mlsecops build
-          uv run --locked python -m mlsecops.storage_pipeline_qualification
+          uv run --locked python -m mlsecops.acceptance --gate M03 --output .runtime/evidence/M03.json
       - name: Sanitized storage evidence
         if: always()
         run: |
-          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage qualification evidence')"
-          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-pipeline-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage pipeline evidence')"
-          echo 'Role-restricted SQL pipeline components. Independent controllers and full M03/M04/M20 remain pending.' >> "$GITHUB_STEP_SUMMARY"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/M03.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed M03 evidence')"
+          echo 'M03 runs Linux integrity fixtures and real storage/pipeline qualification. Independent controllers, M04/M20 and full R1 remain pending.' >> "$GITHUB_STEP_SUMMARY"

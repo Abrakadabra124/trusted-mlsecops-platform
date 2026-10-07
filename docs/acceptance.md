@@ -1,6 +1,6 @@
 # Измеримая приёмка будущей платформы
 
-**M02 реализован и проверяется executable runner; M01 и M03-M23 пока не приняты полностью.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
+**M02 и M03 реализованы и проверяются executable runner; M01 и M04-M23 пока не приняты полностью.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
 
 ## Единый формат проверки
 
@@ -23,6 +23,8 @@ CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 
 
 ## M03
 **Целостность dataset и split.** 100% перечисленных fixtures подмены bytes/manifest/split/signature дают reject; approved dataset читается с теми же digest. Неавторизованная перезапись невозможна для ingestor/trainer. Negative: single-byte tamper, traversal, symlink escape, missing object и stale source version. Evidence: hashes до/после, access-denied и verifier output. Не обещает обнаружение semantic poisoning. T04.
+
+Реализация и точная карта покрытия: [M03 runbook](integrity-gate.md). Отсутствие storage prerequisites даёт inconclusive, а не пропуск отрицательных проверок.
 
 ## M04
 **Изоляция прав.** Trainer не читает holdout/keys, не пишет releases и не создаёт privileged Job; serving не читает train/candidates. Evaluator не изменяет candidate. Проверить реальными API/storage/network-запросами под каждой identity, а не только YAML или `can-i`. Все запрещённые операции отклонены, все минимально необходимые разрешены. Evidence: identity/access matrix и network probes. T05.

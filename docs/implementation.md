@@ -34,7 +34,7 @@ DSSE (Dead Simple Signing Envelope) связывает тип документа
 
 Dataset/model bytes проверяются перед использованием. Candidate loader не загружает pickle; ONNX parser запускается в resource-limited worker, запрещает external tensors, вложенные graphs/functions и операторы вне ограниченного allowlist. Это проверка формата, не универсальный model malware scanner.
 
-Осталось: полноценные M-gates, MLflow, интеграция storage-role ACL, least-privilege controller, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
+Осталось: полноценная приёмка M01/M04-M23, MLflow, least-privilege controllers, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. Storage ACL и M03 добавлены последующими increments ниже. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
 
 ## Второй increment: Kubernetes
 
@@ -56,7 +56,13 @@ DVC spike был остановлен после настоящего dependency
 
 Первый storage commit `6c28987` воспроизведён в CI. Следующий slice добавляет настоящий SQL training/evaluation path: scoped publisher/scorer reads, candidate persistence, signed evaluation с binding до dataset/lineage и 26 integration checks. Общая математическая логика не дублируется: legacy filesystem wrappers и SQL controllers используют одни train/evaluate primitives. Проверка metadata отделена от загрузки всех split, поэтому publisher больше не открывает holdout в новом path.
 
-Суммарная квота данных, image scan, backup/restore, MLflow и независимые controllers остаются отдельными задачами. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M03/M04/M20; общий host administrator остаётся доверенным.
+Суммарная квота данных, image scan, backup/restore, MLflow и независимые controllers остаются отдельными задачами. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M04/M20; общий host administrator остаётся доверенным.
+
+## Пятый increment: приёмка целостности
+
+[M03](integrity-gate.md) стал исполняемым gate: до изменения runner выдавал inconclusive; после подключения негативных fixtures и реальных SQL checks локально прошёл 431 case. Файловый suite использует Linux symlinks в offline container, не требует новых Windows privileges и не получает host artifacts/keys. SQL part заново выполняет существующие ACL/TLS и train/evaluate suites, затем сравнивает approved dataset hashes до и после. Это реальное чтение защищённых объектов, не только наличие GRANT statements в migration.
+
+T04 завершена в synthetic-only профиле. Developer qualification отдельно проверяет fail-closed dispatch при отсутствующей БД; storage workflow запускает весь M03 из clean checkout. M01/M04-M23 остаются обязательными и незавершёнными; approved dataset не означает approved model release.
 
 ## Проверенные технические основания реализации
 

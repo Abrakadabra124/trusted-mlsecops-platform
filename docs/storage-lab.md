@@ -2,7 +2,7 @@
 
 ## Результат и границы
 
-Четвёртый increment R1 добавляет PostgreSQL 18.6, взаимную TLS-аутентификацию, шесть SQL identities, девять классов объектов, versioned migration и 367 component checks. Следующий slice подключает реальные training/evaluation reads/writes через ограниченные credentials и добавляет 26 integration checks. Это не полная приёмка M03/M04/M20: оркестратор пока сохраняет host-admin доступ. Старый developer demo хранит артефакты в host filesystem и остаётся отдельным preview path.
+Четвёртый increment R1 добавляет PostgreSQL 18.6, взаимную TLS-аутентификацию, шесть SQL identities, девять классов объектов, versioned migration и 367 component checks. Следующий slice подключает реальные training/evaluation reads/writes через ограниченные credentials и добавляет 26 integration checks. [M03](integrity-gate.md) объединяет их с integrity fixtures и сквозным сравнением hashes. Это не полная приёмка M04/M20: оркестратор пока сохраняет host-admin доступ. Старый developer demo хранит артефакты в host filesystem и остаётся отдельным preview path.
 
 PostgreSQL - реляционная база данных. Здесь она хранит небольшие lab artifacts как `bytea` и проверяет размер и SHA-256 непосредственно при записи. mTLS (mutual Transport Layer Security) проверяет сертификат сервера и клиента; сервер дополнительно сопоставляет Common Name сертификата с SQL login. Psycopg 3.3.6 - Python-драйвер, который передаёт значения через SQL parameters, а не вставляет входные bytes в текст запроса.
 
@@ -24,7 +24,7 @@ uv run --locked python -m mlsecops.storage_pipeline_qualification
 
 Повтор bootstrap без изменения идентичности входит в qualification. `--port` задаётся только при первоначальном создании. Порт проверяется настоящим bind, затем проверяются фактический Docker port mapping и SQL connection; одного успешного `docker create` недостаточно.
 
-Отчёты: `.runtime/evidence/storage-bootstrap.json`, `.runtime/evidence/storage-qualification.json`, `.runtime/evidence/storage-pipeline-qualification.json`, demo refs - `.runtime/storage-demo.json`. CI [storage.yml](../.github/workflows/storage.yml) повторяет создание из clean checkout и публикует только очищенные результаты в logs. Private keys, certificates, DB bytes и raw connection errors в Git/CI output не публикуются.
+Отчёты самостоятельных component CLIs: `.runtime/evidence/storage-bootstrap.json`, `.runtime/evidence/storage-qualification.json`, `.runtime/evidence/storage-pipeline-qualification.json`, demo refs - `.runtime/storage-demo.json`. CI [storage.yml](../.github/workflows/storage.yml) теперь вызывает весь M03 и сохраняет `.runtime/evidence/M03.json` с component hashes. Private keys, certificates, DB bytes и raw connection errors в Git/CI output не публикуются.
 
 ## Права и данные
 
@@ -67,7 +67,7 @@ SQL denials принимаются только с ожидаемым SQLSTATE `
 - Dependency audit после добавления Psycopg не нашёл известных Python vulnerabilities. Это не image/OS scan и не доказательство отсутствия всех уязвимостей. Binary Psycopg выбран для одинаковой установки Windows/Linux; его bundled libpq/OpenSSL требуют отдельного контроля обновлений. Production может предпочесть C build с системными libraries.
 - Не удалять volume или PKI для «починки» startup. При missing/foreign ресурсе bootstrap отказывает; восстановление должно сохранять ownership и проверять evidence, не переиспользовать чужую БД.
 
-Следующий проверяемый этап - убрать широкие credentials у controllers, добавить независимый scorer/query budget, persistent audit и recovery. Только после всей отрицательной матрицы оценивать полноту M03/M04/M20.
+Следующий проверяемый этап - убрать широкие credentials у controllers, добавить независимый scorer/query budget, persistent audit и recovery. M03 проверяет integrity и SQL roles; полнота M04/M20 ещё не достигнута.
 
 ## Реальный SQL pipeline
 
