@@ -1,6 +1,8 @@
 import argparse
+import gzip
 import importlib.metadata
 import sys
+from pathlib import Path
 
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 from mlsecops.datasets import arrays, validate_features
@@ -79,15 +81,22 @@ def execute(request):
 
 
 def main():
-    argparse.ArgumentParser(description="Offline bounded training/prediction worker").parse_args()
+    parser = argparse.ArgumentParser(description="Offline bounded training/prediction worker")
+    parser.add_argument("--request-file", type=Path)
+    arguments = parser.parse_args()
     try:
-        request = decode(sys.stdin.buffer.read(MAX_PROTOCOL + 1), MAX_PROTOCOL)
+        if arguments.request_file:
+            with gzip.open(arguments.request_file, "rb") as source:
+                content = source.read(MAX_PROTOCOL + 1)
+        else:
+            content = sys.stdin.buffer.read(MAX_PROTOCOL + 1)
+        request = decode(content, MAX_PROTOCOL)
         output = canonical(execute(request))
         if len(output) > MAX_PROTOCOL:
             raise Rejected("worker_output_too_large")
         sys.stdout.buffer.write(output)
         return 0
-    except Rejected as error:
+    except (Rejected, OSError, EOFError) as error:
         sys.stderr.write(f"Worker rejected: {error}\n")
         return 1
 

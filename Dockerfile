@@ -7,6 +7,7 @@ ENV UV_LINK_MODE=copy \
     OMP_NUM_THREADS=1 \
     OPENBLAS_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
+    ORT_DISABLE_TELEMETRY=1 \
     PATH="/app/.venv/bin:${PATH}"
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project

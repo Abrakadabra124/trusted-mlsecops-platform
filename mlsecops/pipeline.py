@@ -33,7 +33,7 @@ def validate_scores(scores, count):
     return np.asarray(scores, dtype=float)
 
 
-def train_candidate(state, dataset_id, policy, image):
+def train_candidate(state, dataset_id, policy, image, executor=run_worker):
     state = Path(state)
     splits, manifest = verify_dataset(state, dataset_id, policy)
     request = {
@@ -42,7 +42,7 @@ def train_candidate(state, dataset_id, policy, image):
         "seed": policy["training_seed"],
         "features": [row["features"] for row in splits["validation"]],
     }
-    output, execution = run_worker(image, request)
+    output, execution = executor(image, request)
     require_fields(
         output,
         (
@@ -116,13 +116,13 @@ def load_candidate(state, run_id, policy):
     return metadata, content
 
 
-def evaluate_candidate(state, run_id, policy, image):
+def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
     state = Path(state)
     metadata, content = load_candidate(state, run_id, policy)
     splits, manifest = verify_dataset(state, metadata["dataset_id"], policy)
     holdout = splits["holdout"]
     batch_id = uuid.uuid4().hex
-    output, execution = run_worker(
+    output, execution = executor(
         image,
         {
             "action": "predict",
@@ -184,7 +184,7 @@ def evaluate_candidate(state, run_id, policy, image):
         "limitations": [
             "Synthetic utility only",
             "Full M07 and R1 acceptance not established",
-            "No MLflow, holdout query budget or Kubernetes identity evidence yet",
+            "Full MLflow, holdout query budget and storage-role acceptance pending",
         ],
     }
     envelope = sign(report, "evaluation", state / "keys/evaluator.pem")

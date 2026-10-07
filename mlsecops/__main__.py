@@ -1,5 +1,6 @@
 import argparse
 import sys
+from functools import partial
 from pathlib import Path
 
 from mlsecops.bootstrap import initialize
@@ -7,7 +8,7 @@ from mlsecops.contracts import Rejected, canonical, read_json, write_json
 from mlsecops.datasets import prepare
 from mlsecops.inventory import build_image
 from mlsecops.pipeline import evaluate_candidate, train_candidate
-from mlsecops.sandbox import resolve_image
+from mlsecops.sandbox import resolve_image, run_worker
 
 
 def main():
@@ -19,9 +20,15 @@ def main():
     parser.add_argument("--image", default="trusted-mlsecops:dev")
     parser.add_argument("--dataset")
     parser.add_argument("--run")
+    parser.add_argument("--backend", choices=["docker", "kubernetes"], default="docker")
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     policy = read_json(root / "policies/local-cpu.json")
+    executor = run_worker
+    if arguments.backend == "kubernetes":
+        from mlsecops.kube_worker import run_worker as kube_worker
+
+        executor = partial(kube_worker, arguments.state)
     try:
         if arguments.action == "build":
             fingerprint = build_image(root, arguments.image)
@@ -31,15 +38,21 @@ def main():
         elif arguments.action == "prepare":
             result = {"dataset_id": prepare(arguments.state, policy)}
         elif arguments.action == "train":
-            result = train_candidate(arguments.state, arguments.dataset, policy, arguments.image)
+            result = train_candidate(
+                arguments.state, arguments.dataset, policy, arguments.image, executor
+            )
         elif arguments.action == "evaluate":
-            result = evaluate_candidate(arguments.state, arguments.run, policy, arguments.image)
+            result = evaluate_candidate(
+                arguments.state, arguments.run, policy, arguments.image, executor
+            )
         else:
             bootstrap = initialize(root, arguments.state)
             dataset_id = prepare(arguments.state, policy)
-            candidate = train_candidate(arguments.state, dataset_id, policy, arguments.image)
+            candidate = train_candidate(
+                arguments.state, dataset_id, policy, arguments.image, executor
+            )
             evaluation = evaluate_candidate(
-                arguments.state, candidate["run_id"], policy, arguments.image
+                arguments.state, candidate["run_id"], policy, arguments.image, executor
             )
             result = {
                 "bootstrap": bootstrap,
