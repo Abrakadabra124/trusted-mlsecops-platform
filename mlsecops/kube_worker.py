@@ -9,6 +9,7 @@ from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.inventory import command
 from mlsecops.sandbox import MAX_PROTOCOL, resolve_image
 from mlsecops.signing import encode64
+from mlsecops.worker_transport import unwrap
 
 
 def load_image(state, image):
@@ -200,7 +201,10 @@ def run_worker(state, image, request, timeout=600):
     }
     memory = "4Gi" if request["action"] == "train" else "1Gi"
     spec = pod_spec(
-        tag, identity, ["mlsecops.worker", "--request-file", "/input/request.gz"], memory=memory
+        tag,
+        identity,
+        ["mlsecops.worker_transport", "--request-file", "/input/request.gz"],
+        memory=memory,
     )
     spec["containers"][0]["resources"]["requests"]["memory"] = memory
     spec["volumes"].append({"name": "request", "configMap": {"name": name, "defaultMode": 292}})
@@ -233,10 +237,12 @@ def run_worker(state, image, request, timeout=600):
                 "onnx_telemetry_warning": b"Telemetry" in output,
             }
             raise Rejected(f"kubernetes_worker_protocol:{canonical(detail).decode()}") from error
-        return decoded, {
+        result, diagnostics = unwrap(decoded)
+        return result, {
             "backend": "kubernetes",
             "image_id": image_id,
             "runtime_image_id": runtime_id,
+            "worker_diagnostics": diagnostics,
             "namespace": namespace,
             "job_uid": pod["metadata"]["ownerReferences"][0]["uid"],
             "pod_uid": pod["metadata"]["uid"],

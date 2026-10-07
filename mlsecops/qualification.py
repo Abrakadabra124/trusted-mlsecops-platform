@@ -27,6 +27,7 @@ from mlsecops.inventory import collect, source_fingerprint
 from mlsecops.pipeline import evaluate_candidate, train_candidate, validate_scores
 from mlsecops.sandbox import run_worker
 from mlsecops.signing import encode64, pae, sign, verify
+from mlsecops.worker_transport import capture, unwrap
 
 
 def qualify(root, state, image):
@@ -67,6 +68,40 @@ def qualify(root, state, image):
     ):
         rejected(f"json-invalid-{index}", lambda payload=payload: decode(payload))
     rejected("json-size-limit", lambda: decode(b"{}", limit=1))
+    transport = capture(
+        [
+            sys.executable,
+            "-c",
+            'import json,sys; sys.stderr.buffer.write(b"controlled warning\\n"); '
+            'print(json.dumps({"ok":True}))',
+        ]
+    )
+    output, diagnostics = unwrap(transport)
+    confirmed(
+        "transport-separate-diagnostic",
+        output == {"ok": True} and diagnostics["bytes"] == 19,
+    )
+    for name, script, timeout in (
+        ("malformed", 'print("not-json")', 10),
+        ("nonzero", "raise SystemExit(7)", 10),
+        ("overflow", 'import sys; sys.stderr.write("x"*70000)', 10),
+        ("deadline", "import time; time.sleep(30)", 0.1),
+    ):
+        rejected(
+            f"transport-{name}",
+            lambda script=script, timeout=timeout: capture(
+                [sys.executable, "-c", script], timeout=timeout
+            ),
+        )
+    for key, value in (
+        ("bytes", True),
+        ("bytes", 65537),
+        ("raw_output_retained", True),
+        ("gpu_discovery_warning", "yes"),
+    ):
+        invalid = copy.deepcopy(transport)
+        invalid["diagnostics"][key] = value
+        rejected(f"transport-field-{key}-{value}", lambda invalid=invalid: unwrap(invalid))
     for index, name in enumerate(("../escape", "/absolute", "a\\b", "C:escape")):
         rejected(f"path-invalid-{index}", lambda name=name: safe_child(state, name))
     rejected("probability-count", lambda: validate_scores([0.1], 2))
