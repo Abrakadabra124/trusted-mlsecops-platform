@@ -60,6 +60,8 @@ SQL pipeline независимо повторён на commit `18161b8c02499376
 
 Windows host не даёт текущему процессу symlink privilege, поэтому suite выполняется в offline Linux container, без изменения Windows security settings и без skip-as-pass. Все component checks запускаются заново. Отсутствие storage prerequisites = inconclusive, неправильный отказ = fail. T04 закрыта только в этом профиле; полномочия host administrator, независимость controllers и защита от semantic poisoning не объявляются решёнными.
 
+Clean checkout M03 подтверждён на commit `534ed9e23bdd27a607b6976e15c97f3db20a0e77`: [storage/M03 run 37683278769](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278769) завершился success, в опубликованном report `status=pass`, 431 case и тот же source SHA-256. [Developer regression 37683278837](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278837), [Kubernetes regression 37683278782](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278782) и [documentation CI 37683278900](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278900) также success. CI создаёт новые ключи/dataset references; совпадение source bytes не означает совпадение всех identities или bit-for-bit container builds.
+
 В этом increment container image audit не завершён: три запроса официального Grype updater закончились TLS/network timeout. Уязвимости образов не подсчитаны, отсутствие базы не записано как «0 findings». Python dependency audit и integrity gate не заменяют image scan; M01 и trusted release остаются незавершёнными.
 
 ## Что проверяется отдельно
