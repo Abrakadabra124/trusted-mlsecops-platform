@@ -1,3 +1,6 @@
+import copy
+
+from mlsecops.kube_worker import pod_spec
 from mlsecops.storage_bootstrap import IMAGE, MOUNT, PGDATA
 from mlsecops.storage_pki import ROLES
 
@@ -7,6 +10,37 @@ CLIENT_NAMESPACES = {role: f"ml-{role}" for role in ROLES}
 WORKSPACE = "trusted-mlsecops/workspace"
 ACCOUNT = "io.cilium.k8s.policy.serviceaccount"
 POD_NAMESPACE = "k8s:io.kubernetes.pod.namespace"
+
+
+def client_pod_spec(image, identity, arguments):
+    spec = pod_spec(image, identity, arguments, memory="256Mi")
+    spec["volumes"].extend(
+        [
+            {"name": "credentials", "secret": {"secretName": "storage-client", "defaultMode": 416}},
+            {"name": "client", "emptyDir": {"medium": "Memory", "sizeLimit": "1Mi"}},
+        ]
+    )
+    spec["containers"][0]["volumeMounts"].append(
+        {"name": "client", "mountPath": "/client", "readOnly": True}
+    )
+    initializer = copy.deepcopy(spec["containers"][0])
+    initializer.update(
+        {
+            "name": "client-files",
+            "command": [
+                "sh",
+                "-eu",
+                "-c",
+                "umask 077; cp /source/ca.crt /source/client.crt /source/client.key /source/connection.json /client/; chmod 600 /client/*",
+            ],
+            "volumeMounts": [
+                {"name": "credentials", "mountPath": "/source", "readOnly": True},
+                {"name": "client", "mountPath": "/client"},
+            ],
+        }
+    )
+    spec["initContainers"] = [initializer]
+    return spec
 
 
 def resource(kind, name, workspace, namespace=None, **fields):

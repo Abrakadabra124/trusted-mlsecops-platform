@@ -45,7 +45,7 @@ Bootstrap создаёт 46 явно описанных ресурсов и за
 
 ## Ограничения и следующий этап
 
-Нет HA, KMS, автоматической ротации TLS, node-loss recovery и завершённого native image vulnerability scan. Host storage, backup и SQL demo остаются отдельным working path. Новый instance сначала пустой; здесь ещё нет подписанной миграции dataset/model history, controller RBAC, независимого scorer process, serving API или release-ready статуса. Следующий этап переносит проверенный backup и запускает настоящие controller Jobs с минимальными полномочиями, не выдавая им host kubeconfig.
+Нет HA, KMS, автоматической ротации TLS, node-loss recovery и завершённого native image vulnerability scan. Host storage, backup и SQL demo остаются отдельным working path. Bootstrap создаёт пустой instance; следующий реализованный компонент - [подписанная migration](cluster-storage-migration.md) dataset/model/evaluation history с role readers и golden verification. Controller RBAC, независимый scorer controller, serving API и release-ready статус ещё не реализованы. Следующий этап запускает настоящие controller Jobs с минимальными полномочиями, не выдавая им host kubeconfig.
 
 Secrets доступны cluster administrator, а локальный etcd не объявляется зашифрованным хранилищем ключей. Default-deny не защищает от доверенного администратора, который меняет policies или node. `Retain` не равен backup: автоматическое удаление namespace/PVC/PV не реализовано. Для rollback не используйте новый profile; исходный host instance не изменён этим increment.
 

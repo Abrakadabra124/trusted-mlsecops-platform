@@ -29,6 +29,7 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 ## T05
 - [ ] Identity и изоляция. Зависимость: T04. Gate: M04.
 - Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials, Cilium probes и SQL storage ACL работают. [Private cluster storage](../docs/private-cluster-storage.md) прошёл 436 component checks; least-privilege controllers и полная интеграция identities ещё не завершены.
+- Следующий компонент: [signed migration](../docs/cluster-storage-migration.md) прошла 497 локальных checks, включая role artifact reads и 1 000 golden predictions. Это не закрывает controller permissions и M04.
 - Результат: role/access matrix, namespace/storage/network policies и restricted service accounts.
 - Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
 

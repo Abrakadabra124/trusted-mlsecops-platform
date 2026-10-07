@@ -57,27 +57,9 @@ def validate_ledger(value):
 
 
 @contextmanager
-def snapshot(name):
+def json_session(arguments, query):
     process = subprocess.Popen(
-        [
-            "docker",
-            "exec",
-            "--user",
-            "999:999",
-            "-i",
-            name,
-            "psql",
-            "-X",
-            "-qAt",
-            "-v",
-            "ON_ERROR_STOP=1",
-            "-h",
-            "/tmp",
-            "-U",
-            "postgres",
-            "-d",
-            DATABASE,
-        ],
+        arguments,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
@@ -88,27 +70,12 @@ def snapshot(name):
     )
     reader.start()
     try:
-        query = (
-            "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
-            "SET LOCAL idle_in_transaction_session_timeout = '180s';\n"
-            "SET LOCAL statement_timeout = '60s';\n"
-            f"SELECT jsonb_build_object('snapshot', pg_export_snapshot(), 'tables', ({ledger_sql()}));\n"
-        )
         process.stdin.write(query.encode())
         process.stdin.flush()
         reader.join(timeout=65)
         if reader.is_alive() or not captured or not captured[0] or len(captured[0]) > 65536:
             raise Rejected("backup_snapshot_unavailable")
-        result = decode(captured[0], 65536)
-        if (
-            not isinstance(result, dict)
-            or set(result) != {"snapshot", "tables"}
-            or not isinstance(result["snapshot"], str)
-            or not re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+", result["snapshot"])
-        ):
-            raise Rejected("backup_snapshot_identity_invalid")
-        validate_ledger(result["tables"])
-        yield result
+        yield decode(captured[0], 65536), process
     finally:
         try:
             process.stdin.close()
@@ -119,6 +86,45 @@ def snapshot(name):
         reader.join(timeout=5)
         if not reader.is_alive():
             process.stdout.close()
+
+
+@contextmanager
+def snapshot(name):
+    arguments = [
+        "docker",
+        "exec",
+        "--user",
+        "999:999",
+        "-i",
+        name,
+        "psql",
+        "-X",
+        "-qAt",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-h",
+        "/tmp",
+        "-U",
+        "postgres",
+        "-d",
+        DATABASE,
+    ]
+    query = (
+        "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
+        "SET LOCAL idle_in_transaction_session_timeout = '180s';\n"
+        "SET LOCAL statement_timeout = '60s';\n"
+        f"SELECT jsonb_build_object('snapshot', pg_export_snapshot(), 'tables', ({ledger_sql()}));\n"
+    )
+    with json_session(arguments, query) as (result, process):
+        if (
+            not isinstance(result, dict)
+            or set(result) != {"snapshot", "tables"}
+            or not isinstance(result["snapshot"], str)
+            or not re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+", result["snapshot"])
+        ):
+            raise Rejected("backup_snapshot_identity_invalid")
+        validate_ledger(result["tables"])
+        yield result
 
 
 def binary_command(arguments, content=None, output_limit=MAX_ARCHIVE, timeout=120):

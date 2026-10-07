@@ -76,6 +76,12 @@ T04 завершена в synthetic-only профиле. Developer qualification
 
 436 локальных checks подтвердили шесть identity boundaries, настоящий TLS, запреты API/network и persistence после пересоздания Pod. Linux libpq warning не скрывался: некорректный `/dev/null` password-file profile заменён явным отсутствующим файлом с guard от подмены. Shared client regression: M03 431 cases; developer regression 74 cases. [Runbook](private-cluster-storage.md) отдельно описывает single-node persistence, concurrency ограничения и отсутствие production key custody. Следующий increment должен перенести проверенные artifacts и запустить scoped controllers; полные M04/M20 не закрыты.
 
+## Восьмой increment: подписанная migration и чтение артефактов
+
+[ADR 0009](decisions/0009-storage-migration.md) и [runbook](cluster-storage-migration.md) связывают backup digest с target namespace/volume/spec. Живая advisory-lock session координирует migration processes, database maintenance закрывает обычные clients до проверки native import. Signed intent сохраняет контекст незавершённого действия; receipt появляется только после совпадения ledger. Повтор не пересоздаёт identity и не перезаписывает позднюю историю.
+
+Локально прошли 497 checks: реальные backup negatives, interruption после commit, отказ клиента в maintenance, resume без второй копии, receipt binding, publisher/scorer artifact reads и повтор всех 436 storage checks. 1 000 golden predictions совпали с max error 0.0; 40 объектов сохранены в private target. Source подготовительного demo меняется до backup, но migration не меняет его ledger. Подробные digests и различие training/verification images записаны в STATUS. Controllers и полные M04/M17/M20 по-прежнему не приняты.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

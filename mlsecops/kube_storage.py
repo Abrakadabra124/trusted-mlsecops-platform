@@ -100,25 +100,29 @@ def verify_resource(document, observed, expected_uid):
         raise Rejected("cluster_storage_external_service_forbidden")
 
 
+def command_arguments(state, arguments):
+    return [
+        "kubectl",
+        "--kubeconfig",
+        str((Path(state) / "kubeconfig").resolve()),
+        "--context",
+        CONTEXT,
+        "--request-timeout=30s",
+        "exec",
+        "-i",
+        "postgres-0",
+        "-n",
+        NAMESPACE,
+        "-c",
+        "postgres",
+        "--",
+        *arguments,
+    ]
+
+
 def execute(state, arguments, content=None, timeout=30, limit=65536):
     return binary_command(
-        [
-            "kubectl",
-            "--kubeconfig",
-            str((Path(state) / "kubeconfig").resolve()),
-            "--context",
-            CONTEXT,
-            "--request-timeout=30s",
-            "exec",
-            "-i",
-            "postgres-0",
-            "-n",
-            NAMESPACE,
-            "-c",
-            "postgres",
-            "--",
-            *arguments,
-        ],
+        command_arguments(state, arguments),
         content=content,
         timeout=timeout,
         output_limit=limit,

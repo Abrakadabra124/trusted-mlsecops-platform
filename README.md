@@ -29,6 +29,8 @@ Qualification запускает отрицательные сценарии и 
 
 [Private cluster storage](docs/private-cluster-storage.md) добавляет отдельную PostgreSQL с ClusterIP, mTLS, role-specific namespaces и persistence qualification. Это подготовка к изолированным controllers; host SQL demo не переключается автоматически на новый instance.
 
+[Подписанная migration](docs/cluster-storage-migration.md) переносит snapshot dataset/model/evaluation history в этот instance: maintenance barrier, атомарный import, продолжение после сбоя и реальные role readers с 1 000 golden predictions. Полная qualification запускается один раз на пустом target; она не сбрасывает существующие данные.
+
 ## Данные и проверяемый intake
 
 `--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализованы M02 и [M03 integrity gate](docs/integrity-gate.md) для synthetic-only профиля. [Source/intake: команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.

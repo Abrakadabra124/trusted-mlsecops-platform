@@ -11,7 +11,7 @@ from mlsecops import kube_storage, storage, storage_pki
 from mlsecops.cluster import CONTEXT, NAMESPACES, kubectl
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, read_json, write_json
 from mlsecops.inventory import source_fingerprint
-from mlsecops.kube_storage_resources import CLIENT_NAMESPACES, NAMESPACE, postgres
+from mlsecops.kube_storage_resources import CLIENT_NAMESPACES, NAMESPACE, client_pod_spec, postgres
 from mlsecops.kube_worker import job_document, load_image, pod_spec, verify_running_image, wait_job
 from mlsecops.sandbox import resolve_image
 from mlsecops.storage_bootstrap import IMAGE, export_clients
@@ -23,39 +23,11 @@ def probe(state, image, image_id, namespace, identity, action, address=None, por
     arguments = ["mlsecops.kube_storage_probe", action]
     if address:
         arguments.extend(["--address", address, "--port", str(port)])
-    if action == "sql":
+    if action in {"sql", "maintenance"}:
         arguments.extend(["--role", identity])
     spec = pod_spec(image, identity, arguments, memory="256Mi")
-    if action == "sql":
-        spec["volumes"].extend(
-            [
-                {
-                    "name": "credentials",
-                    "secret": {"secretName": "storage-client", "defaultMode": 416},
-                },
-                {"name": "client", "emptyDir": {"medium": "Memory", "sizeLimit": "1Mi"}},
-            ]
-        )
-        spec["containers"][0]["volumeMounts"].append(
-            {"name": "client", "mountPath": "/client", "readOnly": True}
-        )
-        initializer = copy.deepcopy(spec["containers"][0])
-        initializer.update(
-            {
-                "name": "client-files",
-                "command": [
-                    "sh",
-                    "-eu",
-                    "-c",
-                    "umask 077; cp /source/ca.crt /source/client.crt /source/client.key /source/connection.json /client/; chmod 600 /client/*",
-                ],
-                "volumeMounts": [
-                    {"name": "credentials", "mountPath": "/source", "readOnly": True},
-                    {"name": "client", "mountPath": "/client"},
-                ],
-            }
-        )
-        spec["initContainers"] = [initializer]
+    if action in {"sql", "maintenance"}:
+        spec = client_pod_spec(image, identity, arguments)
     job = job_document(name, namespace, spec, 90)
     created = False
     try:

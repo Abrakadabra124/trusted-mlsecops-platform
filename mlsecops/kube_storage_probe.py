@@ -27,6 +27,19 @@ def network(address, port):
         return {"result": "other-error"}
 
 
+def maintenance(directory, role):
+    parameters = storage.connection_parameters(directory)
+    if parameters["user"] != f"ml_{role}":
+        raise Rejected("migration_maintenance_role_mismatch")
+    try:
+        with psycopg.connect(**parameters):
+            raise Rejected("migration_maintenance_bypass")
+    except psycopg.Error as error:
+        if "too many connections for database" not in str(error).lower():
+            raise Rejected("migration_maintenance_wrong_failure") from None
+    return {"status": "pass", "role": role, "result": "database-maintenance-denied"}
+
+
 def qualify(directory, role):
     cases = []
 
@@ -133,16 +146,17 @@ def qualify(directory, role):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["sql", "network"])
+    parser.add_argument("action", choices=["sql", "network", "maintenance"])
     parser.add_argument("--role", choices=ROLES)
     parser.add_argument("--address")
     parser.add_argument("--port", type=int, default=5432)
     arguments = parser.parse_args()
-    result = (
-        qualify(Path("/client"), arguments.role)
-        if arguments.action == "sql"
-        else network(arguments.address, arguments.port)
-    )
+    if arguments.action == "sql":
+        result = qualify(Path("/client"), arguments.role)
+    elif arguments.action == "maintenance":
+        result = maintenance(Path("/client"), arguments.role)
+    else:
+        result = network(arguments.address, arguments.port)
     print(canonical(result).decode())
     return 0
 
