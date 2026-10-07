@@ -8,6 +8,8 @@ Storage restore занял 11.109 s; путь от начала восстано
 
 Это storage component T02/T20, **не полный M17**: ещё нет работающего release/serving recovery, online revocation service, проверенного ежедневного расписания и offsite copy. Результат CLI всегда `storage-restored-not-release-ready`, `release_ready=false`.
 
+Код: [snapshot и bounded process transport](../mlsecops/storage_snapshot.py), [backup и manifest verification](../mlsecops/storage_backup.py), [restore](../mlsecops/storage_restore.py), [qualification](../mlsecops/storage_recovery_qualification.py). В [clean-checkout CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666806) на commit `6722a03` все 430 checks повторились успешно; полный R1 не принят.
+
 ## Технологии и цепочка
 
 PostgreSQL `pg_dump` создаёт native custom-format archive, `pg_restore` импортирует его. REPEATABLE READ snapshot задаёт одну согласованную картину таблиц: все участвующие чтения видят одно состояние, даже если другой клиент добавляет строки. Используется [поддержка exported snapshot](https://www.postgresql.org/docs/18/app-pgdump.html), не попытка скопировать живой PGDATA как обычную папку.

@@ -74,6 +74,8 @@ Clean checkout M03 подтверждён на commit `534ed9e23bdd27a607b6976e1
 
 M17 остаётся inconclusive: нет полного release/serving recovery, динамической проверки отзыва через trust service, ежедневного расписания и offsite copy. Возраст копии <=24 h проверяется при restore, но это не доказательство ежедневного RPO. Ключи подписи не входят в backup и требуют отдельной custody/recovery процедуры.
 
+Clean checkout подтверждён на commit `6722a0355062a3f1aca01ffb9445ebc0e1d1f1f1`: [storage + recovery run 37686666806](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666806) прошёл M03 (431 case) и recovery component (430 cases). CI восстановил 16 объектов из 7 813 539-byte archive; до golden verification 5.325799 s, 1 000 scores совпали. Число объектов отличается от локального workspace с накопленной историей. [Developer 37686666906](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666906), [Kubernetes 37686666871](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666871) и [documentation 37686666742](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37686666742) также завершились success. Эти результаты не закрывают остальной R1 scope.
+
 ## Что проверяется отдельно
 
 Локальная команда `python scripts/check_docs.py` подтверждает структурную связность документов и ограниченные publication checks. CI повторяет её на опубликованном commit. Актуальный результат смотрите в [GitHub Actions](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions); наличие workflow-файла само по себе не доказывает успешный запуск.
