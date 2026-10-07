@@ -1,0 +1,32 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ml-worker-boundary
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        trusted-mlsecops/scope: worker
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods, pods/ephemeralcontainers]
+  validations:
+    - expression: "object.spec.containers.size() == 1 && (!has(object.spec.initContainers) || object.spec.initContainers.size() == 0) && (!has(object.spec.ephemeralContainers) || object.spec.ephemeralContainers.size() == 0)"
+      message: "A worker has exactly one container and no injected containers"
+    - expression: "has(object.spec.automountServiceAccountToken) && object.spec.automountServiceAccountToken == false"
+      message: "Worker service account tokens must not be mounted"
+    - expression: "object.spec.containers.all(container, has(container.securityContext) && has(container.securityContext.readOnlyRootFilesystem) && container.securityContext.readOnlyRootFilesystem)"
+      message: "Worker root filesystem must be read-only"
+    - expression: "!has(object.spec.volumes) || object.spec.volumes.all(volume, has(volume.configMap) || has(volume.emptyDir))"
+      message: "Worker volumes are limited to ConfigMaps and emptyDir"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: ml-worker-boundary
+spec:
+  policyName: ml-worker-boundary
+  validationActions: [Deny]

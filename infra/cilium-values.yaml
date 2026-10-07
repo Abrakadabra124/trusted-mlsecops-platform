@@ -1,0 +1,27 @@
+ipam:
+  mode: kubernetes
+kubeProxyReplacement: false
+socketLB:
+  enabled: false
+operator:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+debug:
+  enabled: false
+envoy:
+  enabled: false
+hubble:
+  enabled: false
