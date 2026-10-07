@@ -219,7 +219,21 @@ def run_worker(state, image, request, timeout=600):
             state,
             ["logs", "-n", namespace, pod["metadata"]["name"], f"--limit-bytes={MAX_PROTOCOL + 1}"],
         ).stdout
-        return decode(output, MAX_PROTOCOL), {
+        try:
+            decoded = decode(output, MAX_PROTOCOL)
+        except Rejected as error:
+            detail = {
+                "bytes": len(output),
+                "sha256": digest(output),
+                "json_error_offset": getattr(error.__cause__, "pos", None),
+                "starts_object": output.lstrip().startswith(b"{"),
+                "ends_object": output.rstrip().endswith(b"}"),
+                "newlines": output.count(b"\n"),
+                "joblib_serial_warning": b"joblib will operate in serial mode" in output,
+                "onnx_telemetry_warning": b"Telemetry" in output,
+            }
+            raise Rejected(f"kubernetes_worker_protocol:{canonical(detail).decode()}") from error
+        return decoded, {
             "backend": "kubernetes",
             "image_id": image_id,
             "runtime_image_id": runtime_id,
