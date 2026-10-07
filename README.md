@@ -35,6 +35,8 @@ Qualification запускает отрицательные сценарии и 
 
 Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 component checks. Новый SQL pipeline действительно обучает/оценивает модель через publisher/scorer credentials; ещё 26 checks проверяют интеграцию и подмены. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). M03 заново выполняет эти suites, 36 Linux tamper/path fixtures и 2 SQL integrity controls. Старый developer demo сохранён отдельно; независимые controllers и полные M04/M20 ещё не приняты.
 
+[Backup/restore CLI](docs/storage-recovery.md) создаёт подписанную согласованную копию и восстанавливает новую БД без перезаписи исходной. Локально прошли 430 component checks и 1 000 golden predictions после восстановления. Полный M17, ежедневный RPO и serving readiness этим не заявляются.
+
 ## Зачем нужен проект
 
 MLSecOps (Machine Learning Security Operations) в этом проекте означает включение безопасности в сбор данных, обучение, оценку, выпуск и эксплуатацию ML-системы. Это не просто применение искусственного интеллекта для поиска атак: защищается сама система машинного обучения.

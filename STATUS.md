@@ -1,6 +1,6 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-07**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-08**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 ## Реализовано в первом increment
 
@@ -40,7 +40,7 @@ DVC 3.67.1 был проверен в spike, но не принят: pip-audit �
 
 ## Что не реализовано
 
-MLflow, least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 и M03 работают; полные M01 и M04-M23 остаются inconclusive. T03/T04 завершены только в synthetic scope, остальные 27 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+MLflow, least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. SQL backup/restore проверен отдельным компонентом ниже. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 и M03 работают; полные M01 и M04-M23 остаются inconclusive. T03/T04 завершены только в synthetic scope, остальные 27 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## PostgreSQL storage increment
 
@@ -63,6 +63,16 @@ Windows host не даёт текущему процессу symlink privilege, 
 Clean checkout M03 подтверждён на commit `534ed9e23bdd27a607b6976e15c97f3db20a0e77`: [storage/M03 run 37683278769](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278769) завершился success, в опубликованном report `status=pass`, 431 case и тот же source SHA-256. [Developer regression 37683278837](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278837), [Kubernetes regression 37683278782](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278782) и [documentation CI 37683278900](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37683278900) также success. CI создаёт новые ключи/dataset references; совпадение source bytes не означает совпадение всех identities или bit-for-bit container builds.
 
 В этом increment container image audit не завершён: три запроса официального Grype updater закончились TLS/network timeout. Уязвимости образов не подсчитаны, отсутствие базы не записано как «0 findings». Python dependency audit и integrity gate не заменяют image scan; M01 и trusted release остаются незавершёнными.
+
+## Согласованный backup и storage recovery
+
+Реализованы [backup/restore CLI](docs/storage-recovery.md): native PostgreSQL exported snapshot для dump и ledger, DSSE manifest, внешние public trust roots, ограниченный data-only archive и восстановление только в новую БД. Исходные CA, signing keys, container и data не заменяются. Restore создаёт новую SQL identity/storage и не разрешает serving или promotion.
+
+Локально 2026-10-07 прошли 430 checks, включая 367 повторных SQL/TLS probes уже восстановленного экземпляра. Настоящая конкурентная вставка не попала в более ранний snapshot. Ledger всех девяти таблиц совпал; 31 объект / 3 926 350 bytes восстановлены из archive 7 858 806 bytes. Storage restore 11.109 s, до 1 000 golden predictions и проверки evaluation signature 14.562 s, максимальная разница scores 0.0. Images уже были доступны на host; это не cold-machine или production RTO.
+
+Дополнительно оставлен операторский recovery instance `.runtime/recovery/storage-01`, отдельный endpoint `127.0.0.1:15440`. Qualification создавала другой временный экземпляр и удалила только его проверенные owned resources. Source idle transactions после проверки: 0. Отчёты и dumps не публикуются как raw artifacts в Git; CLI evidence содержит только очищенные метаданные.
+
+M17 остаётся inconclusive: нет полного release/serving recovery, динамической проверки отзыва через trust service, ежедневного расписания и offsite copy. Возраст копии <=24 h проверяется при restore, но это не доказательство ежедневного RPO. Ключи подписи не входят в backup и требуют отдельной custody/recovery процедуры.
 
 ## Что проверяется отдельно
 

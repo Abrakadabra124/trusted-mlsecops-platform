@@ -9,6 +9,7 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T02
 - [ ] Foundation P0 и совместимые зависимости. Зависимость: T01. Gate: M01.
+- Прогресс: [storage snapshot/restore](../docs/storage-recovery.md) сохраняет ledger и восстанавливает отдельный экземпляр; image audit и полный P0-отчёт ещё не приняты.
 - Результат: pinned version matrix, отдельное окружение, проверка registry maintenance path, storage decision, идемпотентный bootstrap и rollback migration plan.
 - Проверка: два bootstrap, schema migration/restore smoke, отсутствие потери артефактов/ключей; lockfile и runtime соответствуют inventory.
 
@@ -104,6 +105,7 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T20
 - [ ] Backup и независимый restore. Зависимость: T19. Gate: M17.
+- Прогресс: native consistent SQL backup, signed manifest, fresh storage restore, 430 component checks и 1 000 golden predictions работают. Нет полного release/serving recovery, актуального trust-service revocation и ежедневного расписания, поэтому задача и M17 остаются открытыми.
 - Результат: metadata/artifact backup manifest, recovery runbook и evidence из нового namespace/storage.
 - Проверка: RTO/RPO, corrupt/missing blob, denied expired/revoked trust, golden predictions после restore.
 

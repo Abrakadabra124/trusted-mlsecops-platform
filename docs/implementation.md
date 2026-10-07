@@ -56,13 +56,19 @@ DVC spike был остановлен после настоящего dependency
 
 Первый storage commit `6c28987` воспроизведён в CI. Следующий slice добавляет настоящий SQL training/evaluation path: scoped publisher/scorer reads, candidate persistence, signed evaluation с binding до dataset/lineage и 26 integration checks. Общая математическая логика не дублируется: legacy filesystem wrappers и SQL controllers используют одни train/evaluate primitives. Проверка metadata отделена от загрузки всех split, поэтому publisher больше не открывает holdout в новом path.
 
-Суммарная квота данных, image scan, backup/restore, MLflow и независимые controllers остаются отдельными задачами. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M04/M20; общий host administrator остаётся доверенным.
+Суммарная квота данных, image scan, полный ML recovery, MLflow и независимые controllers остаются отдельными задачами. SQL backup/restore добавлен последующим increment ниже. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M04/M20; общий host administrator остаётся доверенным.
 
 ## Пятый increment: приёмка целостности
 
 [M03](integrity-gate.md) стал исполняемым gate: до изменения runner выдавал inconclusive; после подключения негативных fixtures и реальных SQL checks локально прошёл 431 case. Файловый suite использует Linux symlinks в offline container, не требует новых Windows privileges и не получает host artifacts/keys. SQL part заново выполняет существующие ACL/TLS и train/evaluate suites, затем сравнивает approved dataset hashes до и после. Это реальное чтение защищённых объектов, не только наличие GRANT statements в migration.
 
 T04 завершена в synthetic-only профиле. Developer qualification отдельно проверяет fail-closed dispatch при отсутствующей БД; storage workflow запускает весь M03 из clean checkout. M01/M04-M23 остаются обязательными и незавершёнными; approved dataset не означает approved model release.
+
+## Шестой increment: согласованный storage recovery
+
+[ADR 0007](decisions/0007-storage-recovery.md) и [runbook](storage-recovery.md) добавляют native PostgreSQL backup/restore, а не только проверку наличия файла. Открытый snapshot связывает artifact bytes с ledger; metadata подписывается существующей ролью trust, приватные ключи не экспортируются. Restore отказывает до создания target при неверном archive/signature/context, проверяет пустоту нового storage, импортирует атомарно и сравнивает итоговый ledger. Повтор не меняет identity и не затирает последующие записи.
+
+430 локальных checks подтвердили отрицательные сценарии, конкурентную вставку, отдельную восстановленную БД, реальные ACL/TLS и 1 000 golden predictions с max error 0.0. Strict negative fixture обнаружил `bool == int` в migration metadata, проверка типа исправлена до публикации. T02 получает настоящий restore smoke; T20/M17 остаются открытыми до полного release/trust/serving recovery и проверенного RPO. Чужие Docker resources и исходная foundation не изменяются.
 
 ## Проверенные технические основания реализации
 

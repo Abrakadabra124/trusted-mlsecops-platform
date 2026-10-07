@@ -62,12 +62,12 @@ SQL denials принимаются только с ожидаемым SQLSTATE `
 ## Ограничения и следующий этап
 
 - Новый SQL path использует ограниченные credentials, но curator staging, CA и orchestration остаются под общим host administrator. Это ещё не раздельные OS identities controllers. Старый filesystem path не получает SQL ACL автоматически.
-- Нет автоматической rotation/CRL, HA, внешнего KMS, проверенного backup/restore или независимого reviewer.
+- Нет автоматической rotation/CRL, HA, внешнего KMS или независимого reviewer. [SQL backup/restore](storage-recovery.md) проверен компонентно; полный release/serving recovery M17 ещё не принят.
 - Предел bytes на один объект не ограничивает суммарное заполнение volume. Container memory/CPU/PID limits не доказывают доступность БД при злоупотреблении SQL. Statement timeout - default для trusted clients, не неотменяемая квота атакующего SQL role.
 - Dependency audit после добавления Psycopg не нашёл известных Python vulnerabilities. Это не image/OS scan и не доказательство отсутствия всех уязвимостей. Binary Psycopg выбран для одинаковой установки Windows/Linux; его bundled libpq/OpenSSL требуют отдельного контроля обновлений. Production может предпочесть C build с системными libraries.
 - Не удалять volume или PKI для «починки» startup. При missing/foreign ресурсе bootstrap отказывает; восстановление должно сохранять ownership и проверять evidence, не переиспользовать чужую БД.
 
-Следующий проверяемый этап - убрать широкие credentials у controllers, добавить независимый scorer/query budget, persistent audit и recovery. M03 проверяет integrity и SQL roles; полнота M04/M20 ещё не достигнута.
+Следующий проверяемый этап - убрать широкие credentials у controllers, добавить независимый scorer/query budget, persistent audit и полный release recovery. M03 проверяет integrity и SQL roles; полнота M04/M20 ещё не достигнута.
 
 ## Реальный SQL pipeline
 
