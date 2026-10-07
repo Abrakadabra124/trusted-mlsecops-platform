@@ -4,7 +4,7 @@
 
 ## Единый формат проверки
 
-Будущий CLI-контракт: `python -m mlsecops.acceptance --gate M01 --profile local-cpu --output evidence/M01.json`. Этот модуль **пока отсутствует**; T01 должен создать исполняемый runner, последующие задачи - реальные проверки. До реализации не запускать эти команды как готовую инструкцию. Сейчас доступен только [документационный валидатор](../scripts/check_docs.py).
+CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 --profile local-cpu --output .runtime/evidence/M01.json`. Runner создан в первом increment R1; пока полный gate не подключён, он сохраняет `inconclusive` и возвращает exit code 2. Это не ошибка, которую следует обходить, и не пройденная приёмка. [Документационный валидатор](../scripts/check_docs.py) остаётся отдельной проверкой.
 
 Каждый report: gate ID, status=`pass|fail|inconclusive`, timestamps, git SHA, input digests, policy digest, compute profile, test cases с expected/actual, метрики, exit codes, artifact hashes, redaction version и residual risks. Любая незавершённая обязательная проверка запрещает promotion. Evidence хранится отдельно от ключей и сырых чувствительных данных; публично публикуется только очищенная копия.
 

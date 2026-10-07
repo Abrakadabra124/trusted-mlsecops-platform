@@ -13,3 +13,9 @@ mlruns/
 mlflow.db
 evidence/raw/
 tmp/
+.coverage*
+htmlcov/
+.ruff_cache/
+*.egg-info/
+dist/
+build/

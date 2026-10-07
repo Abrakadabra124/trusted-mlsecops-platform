@@ -1,6 +1,18 @@
 # Статус и границы доказательств
 
-Дата snapshot: **2026-10-06**. Стадия: **R0.2 research/design**. Изменения по сравнению с R0.1: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-07**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+
+## Реализовано в первом increment
+
+- Frozen synthetic policy, locked Python dependencies, pinned base image и проверка соответствия image текущему source fingerprint.
+- Идемпотентный bootstrap с отдельными локальными ключами ролей, inventory и runner, возвращающий inconclusive для ещё не реализованных полных gates.
+- Генератор 20 000 строк, split 14 000/3 000/3 000, signed source approval/dataset manifest, проверки схемы, digest, expiry и leakage.
+- Linux Docker workers без сети, host mounts, root, capabilities и ключей. Обучение Logistic Regression и ONNX export; scorer считает метрики вне prediction worker и подписывает report.
+- Исполняемая qualification: 65 компонентных проверок, включая три fresh-process обучения, malformed model/protocol, tamper и fail-closed. Исходная платформа не изменена.
+
+Локальный результат: AUPRC 0.9323007296445032 против 0.4073333333333333 у constant-score baseline, 1 222 positive labels из 3 000 holdout rows. Максимальная разница вероятностей между тремя повторами 0.0; Python/ONNX parity error 2.086162567138672e-7. Это synthetic developer evidence, не доказательство пользы для реальных релизов.
+
+Dependency audit проверил 59 установленных пакетов, известных уязвимостей не сообщил. Первый запрос завершился timeout; успешный результат получен повторным полноценным запуском, без отключения проверок. Host-side qualification coverage около 64% combined line/branch, код внутри worker containers этим замером не покрыт. Требование M18 >=95% ещё не выполнено.
 
 ## Подготовлено
 
@@ -10,11 +22,11 @@
 - Сопоставлены DevSecOps baseline, отсутствующие ML-контроли, P0-долги и ограничения локального стенда.
 - Подготовлены карта продукта, архитектура, 19 сценариев угроз, 23 критерия приёмки, план на 14-16 недель плюс 25% резерва и 29 задач.
 - Добавлены 8 source-to-decision записей с owner, ограничениями и связями до gates/tasks; их структурная связность проверяется кодом.
-- Реализован только документационный валидатор и GitHub Actions workflow для него. Архитектурные изменения применены к design, не к работающему ML runtime.
+- В R0 был реализован только документационный валидатор и workflow; с 2026-10-07 добавлен developer runtime, перечисленный отдельно.
 
 ## Что не реализовано
 
-Training pipeline, MLflow deployment, модели, dataset manifests, production verifier, inference API, poisoning/evasion experiments, drift monitoring, ML restore и M01-M23. Их описания и численные thresholds - требования к будущему результату. Все T01-T29 открыты. Дообучение весов модели или ассистента не выполнялось.
+Полный MLflow/DVC/Kubernetes контур, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и ML restore ещё не реализованы. Все полные M01-M23 остаются inconclusive; частичные component checks не закрывают их. Все T01-T29 пока открыты, прогресс отмечен в [журнале реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## Что проверяется отдельно
 
@@ -28,10 +40,10 @@ Training pipeline, MLflow deployment, модели, dataset manifests, productio
 
 Дополнительно выполнены 35 отрицательных проверок валидатора через временную подмену чтения в памяти: неверные JSON/schema/date/scope, повтор ключа/ID, неизвестные sources/tasks, gate без связанной задачи, отсутствующий owner/limitation, выход artifact path за репозиторий, ложный runtime status, битые ссылки/якоря, закрытая research-only задача, marker конфликта, незакрытый code block и синтетический token marker. Все 35 отвергнуты. Harness выполнялся локально, не добавлен как постоянная test suite; обычный CI запускает структурный validator, не повторяет эти mutation cases и не вычисляет ML coverage.
 
-## Ограничения исследования
+## Ограничения исследования R0
 
 Не измерялись актуальные ресурсы PC/кластера, не выбирался настоящий бизнес-dataset, не выполнялись новые security/ML эксперименты, не проверялось соответствие применимому законодательству. Веб-документация `latest` может измениться. Отдельные недоступные страницы обозначены в [реестре](docs/sources.md), выводы не основаны на их предполагаемом содержимом. Обзор не является исчерпывающей оценкой мирового рынка; публикации компаний не заменяют независимую проверку нашего решения.
 
 ## Следующий допустимый шаг
 
-Новая реализационная цель по T01-T02: подтвердить scope, inventory, compatibility, разрешённый путь работы с foundation и данные. Не начинать со скачивания всей экосистемы и не менять статус проекта на production-ready после одной установки.
+Продолжить активную цель R1: довести T01-T04 до полной приёмки, DVC tracking и storage permissions, затем Kubernetes identities/Jobs, MLflow и независимый evaluation budget по зависимостям. Не публиковать trusted release на основании зелёной developer qualification.

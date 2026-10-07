@@ -1,8 +1,27 @@
 # Trusted MLSecOps Platform
 
-Исследование, архитектура и проверяемый план перехода от DevSecOps к доверенному жизненному циклу машинного обучения.
+Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
-**Статус: R0.2 research/design, не готовая ML-платформа.** Здесь опубликованы оригинальные документы и проверка их связности. Обучение, inference, защита моделей и эксплуатационные испытания в этом репозитории пока не реализованы. Дата исследования: **2026-10-06**.
+**Статус: R1 в разработке, первый рабочий developer preview.** Уже доступны синтетические данные, подписанные manifests, контейнерное обучение, ONNX-предсказания и отдельный scorer с подписанным evaluation report. Полная приёмка M01-M23 пока не пройдена: preview не является trusted release или production-платформой. Исследование: 2026-10-06; начало реализации: **2026-10-07**.
+
+## Запустить рабочий пример
+
+Требуются Git, uv и Docker Engine с Linux x86_64 containers. Bootstrap требует Python 3.12, Docker с минимум 2 CPU/6 GiB общей памяти и 8 GiB свободного диска. Свободную RAM для worker с лимитом 4 GiB проверяйте отдельно: capacity не означает доступный headroom. На Windows подходит Docker Desktop/WSL2 (Windows Subsystem for Linux 2).
+
+```bash
+git clone https://github.com/Abrakadabra124/trusted-mlsecops-platform.git
+cd trusted-mlsecops-platform
+uv sync --locked --python 3.12.15
+uv run --locked python -m mlsecops build
+uv run --locked python -m mlsecops demo
+uv run --locked python -m mlsecops.qualification
+```
+
+Первая установка/сборка использует сеть; training/prediction workers работают без сети, host mounts и ключей. Состояние, модели и ключи сохраняются только в игнорируемой `.runtime/`. Повторный bootstrap сохраняет identities, обучение создаёт новый run. Demo выводит метрики и явно указывает `unapproved`; оно не меняет исходную DevSecOps-платформу.
+
+Qualification запускает отрицательные сценарии и три fresh-process обучения. Полный отчёт: `.runtime/evidence/developer-qualification.json`. CLI приёмки для ещё не реализованных полных gates возвращает `inconclusive`, exit code 2. [Подробности реализации и ограничения](docs/implementation.md).
+
+Постановка эксперимента: [dataset card](docs/dataset-card.md), [model card](docs/model-card.md). Метрики и ограничения должны читаться вместе.
 
 ## Зачем нужен проект
 
@@ -51,7 +70,7 @@ flowchart LR
     Monitor --> Stop[Остановка или совместимый rollback]
 ```
 
-Первый предложенный ML-сценарий - **Release Risk Advisor**, консультативная оценка риска релиза по разрешённым метаданным CI. ML не разрешает публикацию и не отменяет детерминированные security gates. Сценарий является проектным допущением, а не существующей бизнес-системой.
+ML-сценарий - **Release Risk Advisor**, консультативная оценка риска релиза. В preview используются только синтетические нормированные признаки. ML не разрешает публикацию и не отменяет детерминированные security gates. Работа с реальными метаданными CI остаётся будущим пилотом, а не существующей бизнес-системой.
 
 Для проверки механики сначала используются синтетические данные. Их метрики не доказывают пользу на реальных релизах. Реальные данные, разметка, допустимые ошибки и их владельцы должны быть согласованы до пилота.
 
@@ -69,7 +88,7 @@ python scripts/check_docs.py
 
 Изучены материалы Google, Microsoft, AWS, Anthropic, NVIDIA, OpenAI, Databricks и Hugging Face, а также отраслевые первоисточники. Реестр содержит 44 записи, включая предоставленные материалы и baseline evidence, не 44 независимых эксперимента. Это качественный обзор выбранных публикаций, не статистика всего рынка.
 
-В design добавлены inventory graph с транзитивным отзывом, раздельные worker/controller полномочия, проверяемое покрытие artifact scanning, абсолютные poisoning budgets с независимыми challenges и security-event replay. ML/LLM output никогда не становится разрешением privileged action. Внедрение этих ML-контролей ещё впереди; сейчас реализованы документация и её проверки.
+В design добавлены inventory graph с транзитивным отзывом, раздельные worker/controller полномочия, проверяемое покрытие artifact scanning, абсолютные poisoning budgets с независимыми challenges и security-event replay. ML/LLM output никогда не становится разрешением privileged action. Полное внедрение ещё впереди; начатый developer preview не закрывает все design decisions автоматически.
 
 ## Условия реализации
 

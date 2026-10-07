@@ -1,0 +1,41 @@
+name: Developer runtime qualification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  developer-profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked environment and source checks
+        run: |
+          uv sync --locked --python 3.12.15
+          uv run --locked ruff check mlsecops scripts/check_docs.py
+          uv run --locked ruff format --check mlsecops scripts/check_docs.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked pip-audit --strict --progress-spinner off
+      - name: Build pinned Linux worker
+        run: uv run --locked python -m mlsecops build
+      - name: Reproduce developer components from clean checkout
+        run: |
+          uv run --locked coverage run -m mlsecops.qualification
+          uv run --locked coverage report
+      - name: Publish sanitized component evidence in logs
+        run: |
+          uv run --locked python -c "from mlsecops.contracts import canonical,read_json; print(canonical(read_json('.runtime/evidence/developer-qualification.json')).decode())"
+          echo 'Developer components only. Full R1 acceptance remains inconclusive.' >> "$GITHUB_STEP_SUMMARY"

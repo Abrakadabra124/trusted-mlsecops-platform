@@ -1,0 +1,42 @@
+[project]
+name = "trusted-mlsecops-platform"
+version = "0.1.0"
+description = "Reproducible local CPU MLSecOps reference with fail-closed release controls"
+requires-python = "==3.12.*"
+dependencies = [
+  "cryptography==50.0.2",
+  "fastapi==0.142.2",
+  "numpy==2.5.3",
+  "onnx==1.23.2",
+  "onnxruntime==1.30.0",
+  "scikit-learn==1.9.1",
+  "skl2onnx==1.20.0",
+  "uvicorn==0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/check_docs.py" = ["UP036"]
+
+[tool.coverage.run]
+branch = true
+source = ["mlsecops"]
+
+[tool.coverage.report]
+show_missing = true
+
+[dependency-groups]
+dev = [
+    "coverage==7.16.2",
+    "pip-audit==2.10.1",
+    "ruff==0.16.10",
+]

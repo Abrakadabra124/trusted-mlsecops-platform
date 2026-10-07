@@ -1,10 +1,10 @@
-from datetime import date
 import json
-from pathlib import Path
 import re
+import subprocess
 import sys
+from datetime import date
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
-
 
 ROOT = Path(__file__).resolve().parents[1]
 DECISION_FILE = "docs/research-decisions.json"
@@ -14,15 +14,31 @@ GROUPS = (
     ("S", 44, "docs/sources.md"),
 )
 REQUIRED = (
-    "README.md", "GOAL.md", "STATUS.md", "AGENTS.md", "CHANGELOG.md",
-    "docs/research.md", "docs/sources.md", "docs/provided-materials.md",
-    "docs/baseline-gap.md", "docs/product-map.md", "docs/architecture.md",
-    "docs/threat-model.md", "docs/acceptance.md", "docs/technology-decisions.md",
-    "docs/runbooks.md", "docs/glossary.md", "tasks/plan.md", "tasks/todo.md",
-    "docs/decisions/0001-reference-scope.md", "docs/decisions/0002-release-trust.md",
+    "README.md",
+    "GOAL.md",
+    "STATUS.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "docs/research.md",
+    "docs/sources.md",
+    "docs/provided-materials.md",
+    "docs/baseline-gap.md",
+    "docs/product-map.md",
+    "docs/architecture.md",
+    "docs/threat-model.md",
+    "docs/acceptance.md",
+    "docs/technology-decisions.md",
+    "docs/runbooks.md",
+    "docs/glossary.md",
+    "tasks/plan.md",
+    "tasks/todo.md",
+    "docs/decisions/0001-reference-scope.md",
+    "docs/decisions/0002-release-trust.md",
     "docs/decisions/0003-control-and-execution.md",
-    "docs/global-research-2026-10.md", "docs/material-review.md",
-    "docs/practice-adoption.md", DECISION_FILE,
+    "docs/global-research-2026-10.md",
+    "docs/material-review.md",
+    "docs/practice-adoption.md",
+    DECISION_FILE,
     ".github/workflows/docs.yml",
 )
 SENSITIVE = (
@@ -67,7 +83,10 @@ def validate_decisions(documents, known, task_gates):
     except json.JSONDecodeError:
         fail("invalid decision register JSON")
     if not isinstance(register, dict) or set(register) != {
-        "schema_version", "as_of", "scope", "decisions"
+        "schema_version",
+        "as_of",
+        "scope",
+        "decisions",
     }:
         fail("invalid decision register fields")
     if type(register["schema_version"]) is not int or register["schema_version"] != 1:
@@ -88,8 +107,16 @@ def validate_decisions(documents, known, task_gates):
     expected = {f"D{number:02}" for number in range(1, 9)}
     identifiers = set()
     fields = {
-        "id", "title", "status", "sources", "gates", "tasks", "artifacts",
-        "owner", "verification", "limitation",
+        "id",
+        "title",
+        "status",
+        "sources",
+        "gates",
+        "tasks",
+        "artifacts",
+        "owner",
+        "verification",
+        "limitation",
     }
     for decision in decisions:
         if not isinstance(decision, dict) or set(decision) != fields:
@@ -106,9 +133,11 @@ def validate_decisions(documents, known, task_gates):
         for field, prefix in (("sources", "S"), ("gates", "M"), ("tasks", "T")):
             values = decision[field]
             if (
-                not isinstance(values, list) or not values
+                not isinstance(values, list)
+                or not values
                 or any(not isinstance(value, str) for value in values)
-                or len(set(values)) != len(values) or set(values) - known[prefix]
+                or len(set(values)) != len(values)
+                or set(values) - known[prefix]
             ):
                 fail(f"{identifier}: unknown, empty or duplicate {field}")
         covered_gates = set().union(*(task_gates[task] for task in decision["tasks"]))
@@ -116,7 +145,8 @@ def validate_decisions(documents, known, task_gates):
             fail(f"{identifier}: selected tasks do not cover decision gates")
         artifacts = decision["artifacts"]
         if (
-            not isinstance(artifacts, list) or not artifacts
+            not isinstance(artifacts, list)
+            or not artifacts
             or any(not isinstance(value, str) or not value for value in artifacts)
             or len(set(artifacts)) != len(artifacts)
         ):
@@ -125,8 +155,12 @@ def validate_decisions(documents, known, task_gates):
             parsed = urlsplit(artifact)
             candidate = ROOT / artifact
             if (
-                parsed.scheme or parsed.netloc or parsed.query or parsed.fragment
-                or "\\" in artifact or Path(artifact).is_absolute()
+                parsed.scheme
+                or parsed.netloc
+                or parsed.query
+                or parsed.fragment
+                or "\\" in artifact
+                or Path(artifact).is_absolute()
                 or ".." in Path(artifact).parts
                 or not candidate.resolve().is_relative_to(ROOT)
                 or candidate.resolve() not in documents
@@ -146,19 +180,31 @@ def main():
     for name in REQUIRED:
         if not (ROOT / name).is_file():
             fail(f"missing required document: {name}")
+    publication = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        capture_output=True,
+        check=True,
+    )
     files = sorted(
-        path for path in ROOT.rglob("*")
-        if path.is_file() and ".git" not in path.relative_to(ROOT).parts
-        and "__pycache__" not in path.relative_to(ROOT).parts
+        {ROOT / name.decode("utf-8") for name in publication.stdout.split(b"\0") if name}
     )
     documents = {}
     for path in files:
         relative = path.relative_to(ROOT)
         if path.is_symlink() or not path.resolve().is_relative_to(ROOT):
             fail(f"symlink or external path: {relative}")
-        if path.suffix.lower() not in {".md", ".py", ".yml"} and path.name not in {
-            ".gitignore", ".gitattributes"
-        } and relative.as_posix() != DECISION_FILE:
+        if (
+            path.suffix.lower() not in {".md", ".py", ".yml", ".yaml", ".toml", ".lock"}
+            and path.name
+            not in {
+                ".gitignore",
+                ".gitattributes",
+                ".dockerignore",
+                ".python-version",
+                "Dockerfile",
+            }
+            and relative.as_posix() not in {DECISION_FILE, "policies/local-cpu.json"}
+        ):
             fail(f"unexpected publication file: {relative}")
         content = path.read_text(encoding="utf-8")
         if any(pattern.search(content) for pattern in SENSITIVE):
@@ -199,8 +245,8 @@ def main():
             if used - expected:
                 fail(f"unknown identifiers in {path.name}: {sorted(used - expected)}")
     backlog = documents[ROOT / "tasks/todo.md"]
-    if backlog.count("- [ ]") != len(known["T"]) or "- [x]" in backlog.lower():
-        fail("research-only backlog must keep all implementation tasks open")
+    if backlog.count("- [ ]") + backlog.lower().count("- [x]") != len(known["T"]):
+        fail("every implementation task needs one status checkbox")
     task_gates = {}
     for identifier, section in re.findall(
         r"^## (T\d{2})\n(.*?)(?=^## T\d{2}$|\Z)", backlog, re.MULTILINE | re.DOTALL
@@ -210,14 +256,18 @@ def main():
         task_gates[identifier] = set(re.findall(r"\bM\d{2}\b", section))
     if set(task_gates) != known["T"]:
         fail("cannot parse all task sections")
-    for section in re.split(r"^## M\d{2}$", documents[ROOT / "docs/acceptance.md"], flags=re.MULTILINE)[1:]:
+    for section in re.split(
+        r"^## M\d{2}$", documents[ROOT / "docs/acceptance.md"], flags=re.MULTILINE
+    )[1:]:
         if not re.search(r"\bT\d{2}\b", section):
             fail("each acceptance gate needs an implementation task")
     decision_count = validate_decisions(documents, known, task_gates)
-    print(f"PASS: {len(files)} files, {len(documents)} Markdown documents, {local_links} local links")
+    print(
+        f"PASS: {len(files)} files, {len(documents)} Markdown documents, {local_links} local links"
+    )
     print(
         f"PASS: {len(known['S'])} sources, {len(known['M'])} planned gates, "
-        f"{len(known['T'])} open tasks, {decision_count} traceable design decisions"
+        f"{len(known['T'])} tracked tasks, {decision_count} traceable design decisions"
     )
     print("Scope: documentation only; external URLs, ML controls and runtime are NOT validated")
 
