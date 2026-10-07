@@ -41,6 +41,8 @@ Bootstrap создаёт 46 явно описанных ресурсов и за
 
 Итог `.runtime/evidence/kubernetes-storage-qualification.json` - component evidence. Fail записывается поверх прежнего отчёта; успешный запуск команд bootstrap сам по себе не доказывает denials, persistence или всю приёмку.
 
+На 2026-10-08 локально и в [clean-checkout CI 37690561970](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37690561970) прошли 436 checks. Проверенный feature commit: `6577de7bc181dbdb462c08fa8eebff00f57a1e0a`. Эти числа относятся к данному component suite, не к общему M04/M20 gate.
+
 ## Ограничения и следующий этап
 
 Нет HA, KMS, автоматической ротации TLS, node-loss recovery и завершённого native image vulnerability scan. Host storage, backup и SQL demo остаются отдельным working path. Новый instance сначала пустой; здесь ещё нет подписанной миграции dataset/model history, controller RBAC, независимого scorer process, serving API или release-ready статуса. Следующий этап переносит проверенный backup и запускает настоящие controller Jobs с минимальными полномочиями, не выдавая им host kubeconfig.
