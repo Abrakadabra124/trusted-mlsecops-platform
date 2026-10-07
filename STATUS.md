@@ -100,7 +100,11 @@ Clean checkout подтверждён на commit `6577de7bc181dbdb462c08fa8eebf
 
 После изменения shared SQL-session helper повторно прошёл storage recovery suite: 430 cases. Developer regression на том же source fingerprint прошёл 74 cases. Дополнительный live negative с неверным 1 MiB archive подтвердил native-error propagation и неизменность target ledger; он не включён в число 497. Документационный validator прошёл 102 publication files / 40 Markdown documents / 228 local links, Ruff и diff whitespace checks также прошли. Эти проверки не являются полной M18 coverage или image security audit.
 
-Это component progress T05/T26 и T20, не приёмка полных M04/M17/M20. Least-privilege controllers, независимое approval, serving/revocation и остальные R1 gates остаются открытыми. Новый CI workflow запускает migration из clean checkout; его наличие не считается успешным CI до проверки run.
+Clean checkout подтверждён на commit `1bd78c98ed1e529f8a82ef4f02e7b314a8751b48`: [Kubernetes run 37694981606](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694981606) завершился success за 7m43s. Прочитанный report содержит 497 уникальных успешных migration cases, 1 000 golden scores и max error 0.0; source fingerprint совпадает с локальным. В свежем CI перенесены 13 объектов / 3 900 229 bytes, training и prediction использовали один CI image `sha256:09f4e28149fc6b1af139427e151b8635a6ba87ff68214484006334dcbe50668f`. Разница с 40 локальными объектами объясняется историей workspace, а не пропуском tables. В этом же job прошли 52 isolation checks, настоящее Kubernetes train/evaluate и 436 private storage checks.
+
+[Storage regression 37694985371](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694985371) подтвердил M03 (431 case) и recovery (430 cases); [developer 37694981629](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694981629) и [documentation 37694981589](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694981589) также success на том же feature commit. Runtime logs/архивы/keys не добавлялись в Git, в workflow выводится очищенный report.
+
+Это component progress T05/T26 и T20, не приёмка полных M04/M17/M20. Least-privilege controllers, независимое approval, serving/revocation и остальные R1 gates остаются открытыми. Следующий scoped controller increment описан в [ADR 0010](docs/decisions/0010-scoped-controllers.md), статус Proposed; его новые права ещё не выданы.
 
 ## Что проверяется отдельно
 

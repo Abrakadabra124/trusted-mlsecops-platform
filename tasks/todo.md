@@ -137,6 +137,7 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T26
 - [ ] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
+- Следующий scoped increment описан в [ADR 0010](../docs/decisions/0010-scoped-controllers.md): cross-namespace RBAC, admission, short-lived controller tokens и bounded API transport. Статус Proposed, новые controller полномочия пока не выданы.
 - Результат: изолированные training/prediction workers, publisher/scorer с отдельной identity, typed bounded prediction protocol. Контракт и компонентные fixtures готовы до T10; полная проверка с evaluator завершается в T10.
 - Проверка: попытки чтения labels/keys/DB/service-account token и /proc соседнего controller запрещены; malformed/replayed/oversized outputs не становятся подписанным результатом.
 

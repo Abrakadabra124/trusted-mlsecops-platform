@@ -1,6 +1,6 @@
 # ADR 0009: Подписанная миграция storage snapshot в Kubernetes
 
-Дата: 2026-10-08. Статус: implemented, local qualification passed; clean-checkout evidence фиксируется отдельно в STATUS. Связь: T05/T26 и storage component T20; полные M04/M17/M20 остаются обязательными.
+Дата: 2026-10-08. Статус: implemented, local и clean-checkout qualification passed; exact commit/run зафиксированы в [STATUS](../../STATUS.md). Связь: T05/T26 и storage component T20; полные M04/M17/M20 остаются обязательными.
 
 ## Scope и причина
 

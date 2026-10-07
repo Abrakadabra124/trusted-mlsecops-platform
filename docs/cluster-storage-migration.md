@@ -30,6 +30,8 @@ Qualification предназначена для **первого перенос�
 
 Приватные inputs сохраняются в `.runtime/kubernetes-storage/migration-inputs.json`; очищенный итог в `.runtime/evidence/kubernetes-migration-qualification.json`. Отчёт перед запуском становится `inconclusive`, а ожидаемый отказ засчитывается только при точной причине. Не удаляйте уже перенесённые данные ради нового зелёного отчёта. Для повторения всей qualification нужен новый disposable стенд; на существующем проверяется безопасный повтор CLI и текущее конечное состояние.
 
+Проверенный feature commit: `1bd78c98ed1e529f8a82ef4f02e7b314a8751b48`. [Clean-checkout run 37694981606](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694981606) прошёл 497 уникальных migration checks и 1 000 golden predictions с max error 0.0. Свежий CI обучил модель сам, без локального backup или готового image; полный job занял 7m43s. Это время CI component workflow, не cold-machine production RTO. Для точного воспроизведения данной редакции выполните `git checkout 1bd78c98ed1e529f8a82ef4f02e7b314a8751b48` после clone, до build/bootstrap.
+
 ## Обычный перенос и продолжение после сбоя
 
 Создайте backup командой из [storage recovery runbook](storage-recovery.md), сохраните напечатанный backup ID и укажите его вместо `BACKUP_ID`:
