@@ -34,13 +34,13 @@ DSSE (Dead Simple Signing Envelope) связывает тип документа
 
 Dataset/model bytes проверяются перед использованием. Candidate loader не загружает pickle; ONNX parser запускается в resource-limited worker, запрещает external tensors, вложенные graphs/functions и операторы вне ограниченного allowlist. Это проверка формата, не универсальный model malware scanner.
 
-Осталось: полноценные M-gates, DVC, MLflow, storage-role ACL, least-privilege controller, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. Goal остаётся активной, component increments не считаются R1 release.
+Осталось: полноценные M-gates, MLflow, интеграция storage-role ACL, least-privilege controller, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
 
 ## Второй increment: Kubernetes
 
 Принят [ADR 0004](decisions/0004-isolated-kubernetes-lab.md), создан отдельный cluster. [Runbook](kubernetes-lab.md) объясняет две реализации executor и повторение из clean checkout. 52 isolation component checks прошли локально, Docker qualification после интеграции сохраняет 65 успешных checks. Настоящие Jobs обучают и оценивают ту же синтетическую модель. Действующая foundation не изменяется.
 
-Отрицательные проверки выявили и помогли исправить реальные интеграционные ошибки: минимальное число log files kubelet должно быть 2; containerd добавляет вложенный OCI index; Kubernetes объединяет stderr/stdout, поэтому ONNX telemetry initialization нарушала strict protocol; deadline controller может удалить Pod до финального чтения, поэтому runner сохраняет последнюю наблюдаемую identity и отдельно подтверждает удаление. Проверка PID limit изменена с неверного leaf-file assumption на фактическое ограниченное создание процессов. Ошибки не замаскированы отключением контроля.
+Отрицательные проверки выявили и помогли исправить реальные интеграционные ошибки: минимальное число log files kubelet должно быть 2; containerd добавляет вложенный OCI index; Kubernetes объединяет stderr/stdout, что нарушало strict protocol; deadline controller может удалить Pod до финального чтения, поэтому runner сохраняет последнюю наблюдаемую identity и отдельно подтверждает удаление. Конкретное содержание stderr не доказало причину в ONNX telemetry, поэтому такая атрибуция не утверждается. Исправление разделяет каналы через bounded wrapper, не фильтрует произвольные строки из общего вывода. Проверка PID limit изменена с неверного leaf-file assumption на фактическое ограниченное создание процессов. Ошибки не замаскированы отключением контроля.
 
 ## Третий increment: источник и quarantine
 
@@ -49,6 +49,12 @@ Dataset/model bytes проверяются перед использование
 DVC spike был остановлен после настоящего dependency finding, а не после ошибки установки. Уязвимая dependency chain удалена, не скрыта из audit. [ADR 0005](decisions/0005-data-lineage.md) меняет инструмент, но сохраняет integrity/reproducibility acceptance. Strict audit после удаления: известных vulnerabilities не найдено.
 
 В Kubernetes CI исправлены различия OCI index/config между Docker stores. Протокол отделяет ограниченный stderr дочернего worker от JSON stdout: arbitrary stderr не печатается в публичный evidence, фиксируются только число bytes и разрешённый diagnostic flag. CI действительно наблюдал ненулевой stderr, но тип предупреждения не установлен; GPU-причина не заявляется. Все typed output checks остаются на стороне controller. 52 Kubernetes probes и 74 developer checks прошли в GitHub на `f7cdc59`.
+
+## Четвёртый increment: storage identities
+
+[PostgreSQL component](storage-lab.md) добавляет настоящие SQL GRANT и проверяемую mTLS identity вместо условных имён directories. 367 локальных checks подтверждают матрицу разрешённых/запрещённых операций, byte constraints, TLS negatives и идемпотентность. Storage client не требует Docker API; bootstrap-admin отделён от выдаваемых role credential directories. Runtime имеет 1 CPU/512 MiB/64 PID, readonly root и pinned image.
+
+Это пока самостоятельный компонент, не фактическая смена backend у существующего training path. Суммарная квота данных, image scan, backup/restore, MLflow и независимые controllers остаются отдельными задачами. Network restriction у БД ограничивается loopback publication и mTLS, не deny-egress. Подробное evidence не подменяет полные M03/M04.
 
 ## Проверенные технические основания реализации
 

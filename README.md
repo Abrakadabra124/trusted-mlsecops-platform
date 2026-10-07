@@ -31,6 +31,10 @@ Qualification запускает отрицательные сценарии и 
 
 `--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализован M02; M03 storage ACL остаётся открытым. [Команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.
 
+## Role-isolated storage component
+
+Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 локальными component checks. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). Training path пока не переключён на БД, полный M03/M04 не объявлен пройденным.
+
 ## Зачем нужен проект
 
 MLSecOps (Machine Learning Security Operations) в этом проекте означает включение безопасности в сбор данных, обучение, оценку, выпуск и эксплуатацию ML-системы. Это не просто применение искусственного интеллекта для поиска атак: защищается сама система машинного обучения.
