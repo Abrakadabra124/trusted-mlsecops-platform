@@ -28,8 +28,8 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T05
 - [ ] Identity и изоляция. Зависимость: T04. Gate: M04.
-- Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials, Cilium probes и SQL storage ACL работают. [Private cluster storage](../docs/private-cluster-storage.md) прошёл 436 component checks; least-privilege controllers и полная интеграция identities ещё не завершены.
-- Следующий компонент: [signed migration](../docs/cluster-storage-migration.md) прошла 497 локальных checks, включая role artifact reads и 1 000 golden predictions. Это не закрывает controller permissions и M04.
+- Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials, Cilium probes и SQL storage ACL работают. [Private cluster storage](../docs/private-cluster-storage.md) прошёл 436 component checks; полная интеграция identities, включая serving, ещё не завершена.
+- [Signed migration](../docs/cluster-storage-migration.md) прошла 497 локальных checks. Следующий [controller component](../docs/scoped-controllers.md) прошёл 133: scoped RBAC/admission, API TLS и реальное обучение/оценка из отдельных Jobs. Это не закрывает полный M04.
 - Результат: role/access matrix, namespace/storage/network policies и restricted service accounts.
 - Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
 
@@ -137,7 +137,7 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T26
 - [ ] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
-- Следующий scoped increment описан в [ADR 0010](../docs/decisions/0010-scoped-controllers.md): cross-namespace RBAC, admission, short-lived controller tokens и bounded API transport. Статус Proposed, новые controller полномочия пока не выданы.
+- [ADR 0010](../docs/decisions/0010-scoped-controllers.md) реализован как component: cross-namespace RBAC, native admission, projected controller tokens, bounded API transport и отдельные worker Jobs. Локально 133 checks прошли; полный ordered/replay-resistant output protocol и live access matrix M20 ещё не приняты.
 - Результат: изолированные training/prediction workers, publisher/scorer с отдельной identity, typed bounded prediction protocol. Контракт и компонентные fixtures готовы до T10; полная проверка с evaluator завершается в T10.
 - Проверка: попытки чтения labels/keys/DB/service-account token и /proc соседнего controller запрещены; malformed/replayed/oversized outputs не становятся подписанным результатом.
 

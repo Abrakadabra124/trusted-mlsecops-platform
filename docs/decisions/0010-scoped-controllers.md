@@ -1,6 +1,6 @@
 # ADR 0010: Scoped publisher/scorer controllers
 
-Дата: 2026-10-08. Статус: **Proposed, не реализовано**. Следующий slice T05/T26 после [migration](0009-storage-migration.md). Это scoped план изменения owned lab, не выдача полномочий действующим Pods самим документом. M04/M20 остаются открытыми.
+Дата: 2026-10-08. Статус: **Implemented component, локально проверен**. Slice T05/T26 после [migration](0009-storage-migration.md). Scoped resources установлены только в owned lab; документ сам по себе не выдаёт полномочия. 133 проверки прошли, точное evidence и CI записываются в [STATUS](../../STATUS.md), команды в [runbook](../scoped-controllers.md). Полные M04/M20 остаются открытыми.
 
 ## Требование и проверенные основания
 
@@ -16,7 +16,7 @@ Cilium рекомендует `kube-apiserver` entity для API, а не шир
 
 Описанная ниже композиция - проектное решение лаборатории на основе источников, а не обещание авторов документации о безопасности всей системы.
 
-## Предлагаемые полномочия
+## Реализованные полномочия
 
 | Controller | SQL роль | Worker namespace | Разрешённый Kubernetes API |
 |---|---|---|---|
@@ -43,7 +43,13 @@ Input ConfigMaps содержат только необходимый payload: t
 4. Запустить настоящее обучение от publisher и отдельное предсказание от scorer. Подпись report остаётся вне model execution. Model bytes не парсятся в процессе с signing key; byte/hash/schema checks контроллера не подменяют отдельный intake/parser sandbox.
 5. Зафиксировать build provenance для controller environment. Сейчас host path получает source revision через Git и fingerprint включает Dockerfile, которого нет в runtime image; нельзя просто вызвать этот helper внутри Pod и подставить фиктивные значения. Controller использует явно проверенные image-bound materials, без `.git` или Docker socket.
 6. Измерить requests/peak memory и concurrency. Первый профиль запускает publisher и scorer последовательно, без новых постоянных сервисов. Нельзя выводить безопасность нагрузки из суммы namespace quotas; сохранить запас для control plane, PostgreSQL и будущего serving.
-7. Повторить storage/isolation regressions, negative output/replay cases и clean-checkout CI. Evidence хранит фактические image/namespace/Job/Pod identities, input digests и точные причины отказов. До этого slice остаётся Proposed; он не закрывает автоматически все требования M04/M20 и тем более R1.
+7. Повторить storage/isolation regressions, negative output/replay cases и clean-checkout CI. Evidence хранит фактические image/namespace/Job/Pod identities, input digests и точные причины отказов. Локальный controller component проверен отдельно; полная replay/order suite M20 и итоговая M04 приёмка остаются следующими задачами. Component pass не заменяет эти требования и тем более R1.
+
+## Реализованный scope и остатки
+
+Сейчас два последовательных controller Jobs действительно создают отдельные model workers. API client перечитывает projected token, проверяет CA/hostname/TLS 1.3, ограничивает HTTP body и не повторяет неоднозначный POST. Реальные API probes подтверждают правильные credentials, отказ чужой CA и неверного token. Native Job negatives проверяют конкретную policy и причину; ошибки схемы не считаются доказательством admission. Отдельно проверяются SQL signature/content, unchanged protected history и measured controller RSS.
+
+Проверка `onnx`/`onnxruntime` imports до/после controller execution подтверждает отсутствие этих parsers в данном процессе, но не доказывает отсутствие всех возможных parser vulnerabilities. Полный ordered/replay-resistant протокол, holdout query budget, serving и production key custody ещё не реализованы. Host launcher сохраняет admin role. Обновление десяти ресурсов не атомарно и требует отсутствия параллельных запусков; crash между API mutation и receipt требует operator review. Эти границы не скрываются словом «controller».
 
 ## Откат и исключённые альтернативы
 

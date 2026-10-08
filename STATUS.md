@@ -40,7 +40,7 @@ DVC 3.67.1 был проверен в spike, но не принят: pip-audit �
 
 ## Что не реализовано
 
-MLflow, least-privilege controller, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. SQL backup/restore проверен отдельным компонентом ниже. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 и M03 работают; полные M01 и M04-M23 остаются inconclusive. T03/T04 завершены только в synthetic scope, остальные 27 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+MLflow, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. SQL backup/restore и scoped publisher/scorer controllers проверены отдельными компонентами ниже. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 и M03 работают; полные M01 и M04-M23 остаются inconclusive. T03/T04 завершены только в synthetic scope, остальные 27 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## PostgreSQL storage increment
 
@@ -104,7 +104,21 @@ Clean checkout подтверждён на commit `1bd78c98ed1e529f8a82ef4f02e7b
 
 [Storage regression 37694985371](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694985371) подтвердил M03 (431 case) и recovery (430 cases); [developer 37694981629](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694981629) и [documentation 37694981589](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37694981589) также success на том же feature commit. Runtime logs/архивы/keys не добавлялись в Git, в workflow выводится очищенный report.
 
-Это component progress T05/T26 и T20, не приёмка полных M04/M17/M20. Least-privilege controllers, независимое approval, serving/revocation и остальные R1 gates остаются открытыми. Следующий scoped controller increment описан в [ADR 0010](docs/decisions/0010-scoped-controllers.md), статус Proposed; его новые права ещё не выданы.
+Это component progress T05/T26 и T20, не приёмка полных M04/M17/M20. На момент migration controllers ещё не были реализованы; следующий проверенный increment описан ниже. Независимое approval, serving/revocation и остальные R1 gates остаются открытыми.
+
+## Scoped controller increment
+
+По [ADR 0010](docs/decisions/0010-scoped-controllers.md) publisher и scorer запускают независимые training/prediction Jobs из собственных Kubernetes identities. У них нет host kubeconfig, Docker socket или cluster-admin. Worker admission ограничивает digest image, команду, volumes, ServiceAccount и resources; signer монтируется только scorer. Host launcher остаётся привилегированным оператором, production KMS и multi-tenancy не заявляются. [Команды воспроизведения](docs/scoped-controllers.md).
+
+Локально 2026-10-08 в 18:13:53 UTC прошли **133 уникальные проверки**: 37 request/mocked HTTP, 60 настоящих admission/RBAC, live API TLS/token probes и end-to-end с проверкой сохранённой подписи. Candidate `6bae7af74b250ad9fabb31de4f7c8211e80a1a48b751e761a885bd82cb27b69a`, evaluation `40235dd81a410152c905f5092221545ecf9902957e13f19fb89b2378809f035c`. Protected data/release tables и исходная host БД не изменились, новые candidate/evaluation rows сохранены в private target, временные Jobs/ConfigMaps удалены.
+
+AUPRC **0.9323007296445032**, Python/ONNX parity max error **2.086162567138672e-7**. Peak RSS publisher **159 336 KiB**, scorer **149 896 KiB**, каждый с request/limit 512 MiB. Это последовательный synthetic run, не worst-case нагрузочная квалификация. Source fingerprint `5d4508cbf1a56bb7c588fc23ce620f51dcde85f247b99c3185b5d13de7cc4610`, local image `sha256:6e6769d8a13e1011ff9c247c84133481b5fdeedc6daf2e281a557e27fbfe3b98`, kind manifest `sha256:48fd201aaad7e4b6d005916d451fd45250701d74b9f51265958363b1cd3c0873`. Локальный image label ещё указывает исходный commit `e3940c6`; незакоммиченный код зафиксирован отдельным source fingerprint, а не приписан этому commit.
+
+Тестирование выявило ошибку qualification, а не разрешение privileged Job: Kubernetes schema validator отклонял противоречивый fixture, native admission использует Invalid по умолчанию, TokenRequest CLI выводит forbidden в нижнем регистре. Fixture исправлен, теперь проверяются точные policy/binding/reason и identity. TLS/admission не ослаблялись. Image alias registration и Dockerfile context исправлены отдельно; причина первоначального ErrImageNeverPull сохранена в runbook.
+
+На том же source fingerprint повторно прошли legacy developer qualification (74 cases, три обучения с max probability difference 0.0), M03 (431 case), storage recovery (430 cases) и private Kubernetes storage (436 cases). Последний suite пересоздал PostgreSQL Pod и сохранил ledger и volume UID `1e850f7b-f90a-4daa-b72e-e2ff3c81a615`; новые controller artifacts не потеряны. Это независимые suites с пересекающимся покрытием, их числа нельзя складывать как уникальные гарантии.
+
+Clean-checkout controller CI ещё не подтверждён на момент записи локального результата. Полные M04/M05/M20, ordered/replay-resistant protocol, holdout query budget, MLflow, production promotion и private-target backup остаются отдельной работой. Новая SQL история после migration не покрыта прежним host backup. Итоговая цель R1 активна, `release_ready=false`.
 
 ## Что проверяется отдельно
 
@@ -124,4 +138,4 @@ Clean checkout подтверждён на commit `1bd78c98ed1e529f8a82ef4f02e7b
 
 ## Следующий допустимый шаг
 
-Продолжить активную цель R1: довести T01-T02 до полной приёмки, реализовать least-privilege controllers и связать проверенные storage/API/network identities, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03 или developer qualification.
+Продолжить активную цель R1: довести T01-T02 до полной приёмки, завершить controller output/replay boundary и полную storage/API/network access matrix, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03 или component qualification.

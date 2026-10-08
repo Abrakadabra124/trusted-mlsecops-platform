@@ -34,7 +34,7 @@ DSSE (Dead Simple Signing Envelope) связывает тип документа
 
 Dataset/model bytes проверяются перед использованием. Candidate loader не загружает pickle; ONNX parser запускается в resource-limited worker, запрещает external tensors, вложенные graphs/functions и операторы вне ограниченного allowlist. Это проверка формата, не универсальный model malware scanner.
 
-Осталось: полноценная приёмка M01/M04-M23, MLflow, least-privilege controllers, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, recovery и >=95% security branch coverage. Storage ACL и M03 добавлены последующими increments ниже. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
+Осталось: полноценная приёмка M01/M04-M23, MLflow, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, полный ML recovery и >=95% security branch coverage. Storage ACL, M03 и scoped controllers добавлены последующими increments ниже. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
 
 ## Второй increment: Kubernetes
 
@@ -81,6 +81,14 @@ T04 завершена в synthetic-only профиле. Developer qualification
 [ADR 0009](decisions/0009-storage-migration.md) и [runbook](cluster-storage-migration.md) связывают backup digest с target namespace/volume/spec. Живая advisory-lock session координирует migration processes, database maintenance закрывает обычные clients до проверки native import. Signed intent сохраняет контекст незавершённого действия; receipt появляется только после совпадения ledger. Повтор не пересоздаёт identity и не перезаписывает позднюю историю.
 
 Локально прошли 497 checks: реальные backup negatives, interruption после commit, отказ клиента в maintenance, resume без второй копии, receipt binding, publisher/scorer artifact reads и повтор всех 436 storage checks. 1 000 golden predictions совпали с max error 0.0; 40 объектов сохранены в private target. Source подготовительного demo меняется до backup, но migration не меняет его ledger. Подробные digests и различие training/verification images записаны в STATUS. Controllers и полные M04/M17/M20 по-прежнему не приняты.
+
+## Девятый increment: scoped publisher/scorer
+
+[ADR 0010](decisions/0010-scoped-controllers.md) реализован отдельным opt-in runtime. Десять owned RBAC/admission/network ресурсов ограничивают publisher/scorer их worker namespaces. API client работает через проверенный HTTPS и explicit projected token, model workers остаются offline. Scorer подписывает evaluation вне ONNX parser; его собственный Secret не монтируется в worker. Общие train/evaluate primitives сохранены, provenance берётся из проверенного image, а не из отсутствующего внутри image Git.
+
+Локально прошли 133 controller checks: 37 request/mocked transport, 60 реальных admission/RBAC и остальные TLS, end-to-end, persistence и cleanup controls. AUPRC 0.9323007296445032, parity error 2.086162567138672e-7. Peak RSS publisher/scorer 159 336/149 896 KiB при отдельных 512 MiB limits. Зафиксированы candidate/evaluation digests и фактические worker/controller identities. Это измерение конкретного synthetic run, не worst-case capacity.
+
+Отладка выявила три интеграционные ошибки: Dockerfile отсутствовал в allowlisted build context; digest из CRI inspection не был зарегистрирован как containerd image alias; тест путал admission Invalid с RBAC Forbidden и сначала использовал schema-invalid privileged fixture. Исправлены первопричины без отключения pin, policy или TLS. Негативные fixtures теперь требуют точную admission policy/reason. [Runbook](scoped-controllers.md) разделяет реальные и mocked проверки, а также предупреждает, что новые private SQL runs не входят в старый host backup.
 
 ## Проверенные технические основания реализации
 

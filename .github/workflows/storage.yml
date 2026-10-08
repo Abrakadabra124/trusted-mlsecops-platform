@@ -44,4 +44,4 @@ jobs:
         run: |
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/M03.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed M03 evidence')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-recovery-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage recovery evidence')"
-          echo 'M03 plus storage recovery components. Independent controllers, full M17 and full R1 remain pending.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'M03 plus storage recovery components. Controllers are checked separately; full M17 and full R1 remain pending.' >> "$GITHUB_STEP_SUMMARY"
