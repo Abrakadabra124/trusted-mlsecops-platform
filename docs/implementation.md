@@ -22,7 +22,7 @@ Read-only inspection 2026-10-07: baseline checkout HEAD уже `52cc83067d146f6b
 
 Не реализованный gate отдаёт `inconclusive` и exit code 2. Наличие CLI, файла evidence или успешного component probe само по себе не означает прохождение полного gate. Отчёты с missing/fail/inconclusive не разрешают trusted promotion.
 
-## Текущий проверяемый increment
+## Первый проверяемый increment
 
 Команды запуска находятся в [README](../README.md). `mlsecops.qualification` - часть исполняемого acceptance-инструментария продукта, не замена полной приёмке. Она проверяет component boundaries и численное повторение; полные gates пока не переводятся в pass.
 
@@ -34,7 +34,7 @@ DSSE (Dead Simple Signing Envelope) связывает тип документа
 
 Dataset/model bytes проверяются перед использованием. Candidate loader не загружает pickle; ONNX parser запускается в resource-limited worker, запрещает external tensors, вложенные graphs/functions и операторы вне ограниченного allowlist. Это проверка формата, не универсальный model malware scanner.
 
-Осталось: полноценная приёмка M01/M04-M23, MLflow, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, полный ML recovery и >=95% security branch coverage. Storage ACL, M03 и scoped controllers добавлены последующими increments ниже. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
+На текущую дату остаются полноценная приёмка M01/M04-M19/M21-M23, MLflow, dataset intake API, holdout query budget, adversarial campaign, promotion/revocation, online serving, monitoring, полный ML recovery и >=95% security branch coverage. Storage ACL, M03, scoped controllers и M20 добавлены последующими increments ниже. DVC не принят после security spike, source versioning реализован другим механизмом ниже. Goal остаётся активной, component increments не считаются R1 release.
 
 ## Второй increment: Kubernetes
 

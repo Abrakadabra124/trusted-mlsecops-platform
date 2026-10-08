@@ -2,6 +2,8 @@
 
 Дата текущей реализации: **2026-10-08**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
+Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последний проверенный runtime commit `2831d6c`, полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
+
 ## Реализовано в первом increment
 
 - Frozen synthetic policy, locked Python dependencies, pinned base image и проверка соответствия image текущему source fingerprint.
@@ -174,7 +176,13 @@ Source fingerprint `718367566a39b8d4d4f81fb731d89a012f5bee09333277a2d4e37bbbf739
 
 AUPRC **0.9323007296445032**, parity max error **2.086162567138672e-7**. На том же fingerprint developer regression прошла 74 cases и три fresh-process runs с difference 0.0; protocol suite прошла 164 cases со 100% coverage только своего module. Дополнительные CLI tests подтвердили инвалидацию stale pass при missing prerequisites, Rejected, I/O error и unexpected crash. Это не full M18 coverage.
 
-Clean-checkout CI для этого increment ещё не подтверждён на момент feature commit; T26 остаётся открытой до проверки опубликованного run. Полный R1 остаётся active/incomplete, `release_ready=false`, остальные gates не становятся pass от успеха M20.
+Clean checkout подтверждён на commit `2831d6c273ca682f0ae9f648336fe27ccf0fa8c9`: [Kubernetes run 37835470267](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470267) завершился success. Прочитанный M20 report от **20:05:58 UTC** содержит все 722 уникальных успешных cases и тот же fingerprint. CI image `sha256:1d10550b2fc7e75c1e16a054269d47bc35c3bfb748e887457f2f4016a3ec9dcb`, candidate `172df3ccbeec6b0d340df35c945d3318961222bdfc1db523ecf4427972e2f7b9`. Native scorer peak RSS **205 720 KiB**, 19 rejects без sign/write, два настоящих positive reports. Controller AUPRC/parity сохранились. Перед M20 прошли 436 private-storage и 497 migration checks, 1 000 golden scores с error 0.0; после suite disposable cluster удалён.
+
+CI evaluation references: controller `3c0667cfcd2e471a669a3a944b8c1bd7bcb3ca71ffee6d0943855e19f8b18880`, native before `a69d9103621f4efa79838b46a0af08563ce39e090689d708c0b84e73d739104f`, native after `dd85d24b9446f57b4b4dbf42daddb84b821c4894f03a3b2a07f3d3b51a42906d`. Fresh bootstrap создаёт свои trust roots и signed references; локальные и CI hashes не объявляются идентичными. Внутри каждого run subject binding проверен.
+
+На том же commit [developer run 37835470370](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470370) подтвердил 43 boundary unit, 60 M20 contract, 164 protocol и 74 developer cases. [Storage run 37835470340](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470340) подтвердил M03 (431) и recovery (430, 1 000 scores, error 0.0). [Documentation run 37835470398](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470398) также success. Узкий protocol coverage - 100%, полный host developer measurement - 18%, не выполненный M18 >=95%. Эти suites частично пересекаются.
+
+T26/M20 приняты для оговорённого synthetic local scope. Полный R1 остаётся active/incomplete, `release_ready=false`, остальные gates не становятся pass от успеха M20.
 
 M01: официальный `grype db list` наконец вернул schema v6.1.10, metadata DB от 2026-10-08 и checksum archive. Но последующие `db update` и checksum-bound `db import` снова завершились TLS handshake timeout. Cache пуст, image scan не выполнен, vulnerability count неизвестен; freshness/hash/TLS validation не отключались. Получение metadata не приравнивается к сканированию.
 
@@ -196,4 +204,4 @@ M01: официальный `grype db list` наконец вернул schema v
 
 ## Следующий допустимый шаг
 
-Продолжить активную цель R1: довести T01-T02 до полной приёмки, объединить live worker/controller access и output matrix в subject-bound M20, завершить полную storage/API/network integration, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03 или component qualification.
+Продолжить активную цель R1: довести T01-T02 до полной приёмки, завершить serving части storage/API/network integration, затем MLflow и независимый evaluation budget по зависимостям. M20 повторять при изменениях worker/controller/protocol или добавлении metadata service. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03/M20 или component qualification.

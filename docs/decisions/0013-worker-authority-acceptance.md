@@ -1,6 +1,6 @@
 # ADR 0013: полная проверка worker/evaluator boundary M20
 
-Дата: 2026-10-08. Статус: **Implemented, verification in progress**. Первый полный локальный M20 прошёл; финальный source и clean-checkout CI проверяются отдельно в [STATUS](../../STATUS.md). Полная цель R1 и остальные gates не изменяются.
+Дата: 2026-10-08. Статус: **Accepted for synthetic local M20**. Финальный source прошёл 722 checks локально и в clean-checkout CI на `2831d6c`; точное evidence в [STATUS](../../STATUS.md). Полная цель R1 и остальные gates не изменяются.
 
 ## Что осталось доказать
 

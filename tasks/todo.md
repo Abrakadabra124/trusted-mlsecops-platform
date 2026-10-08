@@ -1,6 +1,6 @@
 # Backlog реализации
 
-T03 и T04 завершены для synthetic-only профиля; остальные **27 задач открыты**, реализация начата 2026-10-07. Промежуточные increments закрывают части других задач, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02 и M03, а неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
+T03, T04 и T26 завершены для synthetic-only профиля; остальные **26 задач открыты**, реализация начата 2026-10-07. Промежуточные increments закрывают части других задач, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, M03 и M20, а неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01
 - [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
@@ -136,10 +136,10 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 - Проверка: fixture M19, dangling/cyclic reference, unknown owner, alias/digest mismatch; интеграционный отзыв ancestor укладывается в M11 и не затрагивает независимую ветвь.
 
 ## T26
-- [ ] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
-- [Исполняемый M20](../docs/worker-authority-gate.md) прошёл локально 722 cases, включая 19 native malformed responses без sign/write, два настоящих positive controls, subject binding и cleanup. T26 пока открыта до подтверждения clean-checkout CI для опубликованного increment.
+- [x] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
+- [Исполняемый M20](../docs/worker-authority-gate.md) прошёл локально и в [clean-checkout CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470267) на `2831d6c`: 722 cases, включая 19 native malformed responses без sign/write, два настоящих positive controls, subject binding и cleanup. T26 закрыта для текущего synthetic local scope. Непроверенные serving permissions/stress части T05/T06 этим не закрыты.
 - [ADR 0010](../docs/decisions/0010-scoped-controllers.md) реализован как component: cross-namespace RBAC, native admission, projected controller tokens, bounded API transport и отдельные worker Jobs.
-- [Prediction protocol v2](../docs/prediction-protocol.md) прошёл 164 contract checks и 136 controller checks: одноразовый consume, row order и request/image binding до подписи. [Live access component](../docs/live-worker-boundary.md) прошёл 137 локальных checks, включая `/proc` живого scorer, актуальные credentials и SQL/API. Полная агрегированная приёмка M20 с subject-bound evidence и расширенным native malformed-output path ещё не принята. Это не persistent holdout budget M07.
+- [Prediction protocol v2](../docs/prediction-protocol.md) прошёл 164 contract checks и 136 controller checks: одноразовый consume, row order и request/image binding до подписи. [Live access component](../docs/live-worker-boundary.md) прошёл 137 checks, включая `/proc` живого scorer, актуальные credentials и SQL/API. M20 заново запускает эти suites вместе с native output matrix. Это не persistent holdout budget M07.
 - Результат: изолированные training/prediction workers, publisher/scorer с отдельной identity, typed bounded prediction protocol. Контракт и компонентные fixtures готовы до T10; полная проверка с evaluator завершается в T10.
 - Проверка: попытки чтения labels/keys/DB/service-account token и /proc соседнего controller запрещены; malformed/replayed/oversized outputs не становятся подписанным результатом.
 

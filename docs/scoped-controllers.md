@@ -85,6 +85,6 @@ Admission и RBAC имеют разные причины отказа. Native po
 
 ## Что осталось
 
-Нет serving, promotion verifier, независимого human approval, полного holdout query budget, MLflow или динамического revocation. Полный M20 требует отдельной приёмки replay/order/output и всех runtime access scenarios; наличие controller Pods само по себе её не заменяет. Полные M04/M05/M17/M18 также остаются открытыми. Формат/parser intake и poisoning/evasion campaigns не считаются выполненными этим scope.
+Нет serving, promotion verifier, независимого human approval, полного holdout query budget, MLflow или динамического revocation. Отдельный [M20 runner](worker-authority-gate.md) теперь проверяет replay/order/output и live access вместе и принят для synthetic local scope; наличие controller Pods само по себе эту приёмку не заменяет. Полные M04/M05/M17/M18 остаются открытыми. Формат/parser intake и poisoning/evasion campaigns не считаются выполненными этим scope.
 
 Код: [API client](../mlsecops/controller_api.py), [resources/admission](../mlsecops/controller_resources.py), [bootstrap](../mlsecops/controller_bootstrap.py), [worker executor](../mlsecops/controller_worker.py), [controller](../mlsecops/controller.py), [operator launcher](../mlsecops/controller_runtime.py), [qualification](../mlsecops/controller_qualification.py).

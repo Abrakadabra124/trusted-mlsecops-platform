@@ -1,6 +1,6 @@
 # M20: worker/evaluator authority boundary
 
-[План и ограничения](decisions/0013-worker-authority-acceptance.md). Новый runner объединяет уже проверенные компоненты, но не использует их прежний pass как разрешение: каждый запуск выполняет все suites заново. До подтверждения конечного runtime/CI результата статус реализации сверять в [STATUS](../STATUS.md).
+[Решение и ограничения](decisions/0013-worker-authority-acceptance.md). Runner объединяет компоненты, но не использует их прежний pass как разрешение: каждый запуск выполняет все suites заново. **722 checks прошли локально и в clean-checkout CI** на `2831d6c`: [успешный run](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470267), [точное evidence](../STATUS.md). Принят synthetic local M20, не полный R1.
 
 ## Полный путь проверки
 

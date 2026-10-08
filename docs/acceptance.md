@@ -1,6 +1,6 @@
 # Измеримая приёмка будущей платформы
 
-**M02 и M03 реализованы и проверяются executable runner; M01 и M04-M23 пока не приняты полностью.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
+**M02, M03 и M20 реализованы и проверяются executable runner; остальные gates пока не приняты полностью.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
 
 ## Единый формат проверки
 
@@ -76,6 +76,8 @@ CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 
 
 ## M20
 **Изоляция model worker от evaluator authority.** Под worker identity попытки чтения holdout labels, signer material, metadata DB, `/proc` процесса controller, service tokens и controller admin API отвергнуты. С разрешённым batch predictions проходят schema/order/size/finiteness проверки; arbitrary text, extra fields, missing rows, oversized output и повтор batch ID не превращаются в signed report. Доказательство: manifests плюс реальные access/output probes. Host-admin и все covert channels вне гарантии. T26.
+
+Реализация и точная карта покрытия: [M20 runbook](worker-authority-gate.md). 722 cases прошли локально и в clean-checkout CI на `2831d6c`; fault injection на receive boundary явно отделён от parser exploitation. Это приёмка synthetic local scope, не всех MLSecOps-сервисов или полного R1.
 
 ## M21
 **Покрытие intake и fail-closed scanner.** Scan report связывает все входные hashes, tool/policy version, inspected/unsupported/skipped/error counts. Набор approved outputs состоит только из реально проверенных разрешённых объектов. Empty scan, renamed unsupported payload, timeout/crash, stale report, report для другого digest, traversal/symlink и modified conversion output дают reject/inconclusive, не pass. Clean allowed ONNX fixture проходит полный путь до оценки, unsafe format не допускается даже при «no findings». Evidence: support matrix и negative reports. T27.

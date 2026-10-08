@@ -31,13 +31,13 @@ Qualification запускает отрицательные сценарии и 
 
 [Подписанная migration](docs/cluster-storage-migration.md) переносит snapshot dataset/model/evaluation history в этот instance: maintenance barrier, атомарный import, продолжение после сбоя и реальные role readers с 1 000 golden predictions. Полная qualification запускается один раз на пустом target; она не сбрасывает существующие данные.
 
-[Scoped controllers](docs/scoped-controllers.md) запускают обучение и оценку из отдельных publisher/scorer Jobs с ограниченными Kubernetes и SQL identities. Model workers остаются без сети, токенов и ключей. Qualification проверяет настоящие API/TLS отказы и сохранённый signed evaluation. Runbook содержит путь из clean checkout и безопасное обновление image profile; полные M04/M20 и R1 ещё не приняты.
+[Scoped controllers](docs/scoped-controllers.md) запускают обучение и оценку из отдельных publisher/scorer Jobs с ограниченными Kubernetes и SQL identities. Model workers остаются без сети, токенов и ключей. Qualification проверяет настоящие API/TLS отказы и сохранённый signed evaluation. Runbook содержит путь из clean checkout и безопасное обновление image profile; полный M04 и R1 ещё не приняты.
 
 [Prediction protocol v2](docs/prediction-protocol.md) связывает каждую строку ответа с одноразовым запросом и проверяет version, порядок, размеры и probabilities до подписи. Локально прошли 164 contract checks и 136 controller checks; [точное evidence](STATUS.md). Это не гарантия правильных scores от malicious worker и не persistent holdout query budget.
 
-[Live worker boundary](docs/live-worker-boundary.md) проверяет доступ обоих worker identities к одновременно работающему scorer: реальные SQL/API endpoints, keys/tokens, holdout fixture и `/proc` соседнего процесса. Локально прошли 137 checks с положительными контрольными запросами и сохранением SQL history. Это component evidence, не полный M20 или R1 release.
+[Live worker boundary](docs/live-worker-boundary.md) проверяет доступ обоих worker identities к одновременно работающему scorer: реальные SQL/API endpoints, keys/tokens, holdout fixture и `/proc` соседнего процесса. Прошли 137 checks с положительными контрольными запросами и сохранением SQL history. Это один из компонентов M20, не самостоятельный R1 release.
 
-[Исполняемый M20](docs/worker-authority-gate.md) объединяет эти components с настоящим signer/SQL и native fault injection. Локально прошли 722 checks: 19 повреждённых responses не подписываются и не публикуются, два положительных контроля сохраняются и независимо проверяются. Gate заново выполняет suites, проверяет общий subject binding и не читает прежний pass как разрешение. Состояние clean-checkout CI и полные ограничения: [STATUS](STATUS.md). Это не завершённый R1 release.
+[Исполняемый M20](docs/worker-authority-gate.md) объединяет эти components с настоящим signer/SQL и native fault injection. Локально и в [clean-checkout CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37835470267) прошли **722 checks**: 19 повреждённых responses не подписываются и не публикуются, два положительных контроля сохраняются и независимо проверяются. Gate заново выполняет suites, проверяет общий subject binding и не читает прежний pass как разрешение. Точные measurements и ограничения: [STATUS](STATUS.md). Это не завершённый R1 release.
 
 ## Данные и проверяемый intake
 
@@ -45,7 +45,7 @@ Qualification запускает отрицательные сценарии и 
 
 ## Role-isolated storage component
 
-Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 component checks. Новый SQL pipeline действительно обучает/оценивает модель через publisher/scorer credentials; ещё 26 checks проверяют интеграцию и подмены. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). M03 заново выполняет эти suites, 36 Linux tamper/path fixtures и 2 SQL integrity controls. Старый developer demo сохранён отдельно; opt-in controllers описаны выше, полные M04/M20 ещё не приняты.
+Добавлен отдельный PostgreSQL 18.6 с mTLS, шестью SQL identities, immutable-by-role objects и 367 component checks. Новый SQL pipeline действительно обучает/оценивает модель через publisher/scorer credentials; ещё 26 checks проверяют интеграцию и подмены. [Воспроизведение, матрица прав и ограничения](docs/storage-lab.md). M03 заново выполняет эти suites, 36 Linux tamper/path fixtures и 2 SQL integrity controls. Старый developer demo сохранён отдельно; opt-in controllers описаны выше, полный M04 ещё не принят.
 
 [Backup/restore CLI](docs/storage-recovery.md) создаёт подписанную согласованную копию и восстанавливает новую БД без перезаписи исходной. Локально прошли 430 component checks и 1 000 golden predictions после восстановления. Полный M17, ежедневный RPO и serving readiness этим не заявляются.
 
