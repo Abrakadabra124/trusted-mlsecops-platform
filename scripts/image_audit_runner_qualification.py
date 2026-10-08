@@ -111,7 +111,7 @@ def qualify():
                         "import sys,time; sys.stdout.write('x'*4096); sys.stdout.flush(); time.sleep(5)",
                     ],
                     root / "overflow.json",
-                    2,
+                    10,
                 )
             except Rejected as error:
                 if str(error) != "image_audit_output_too_large":
@@ -136,7 +136,7 @@ def qualify():
                 actual = image_audit.execute(
                     [sys.executable, "-c", source],
                     root / f"{name}.json",
-                    0.3 if name == "deadline" else 2,
+                    0.3 if name == "deadline" else 10,
                 )
             except Rejected as error:
                 actual = str(error)

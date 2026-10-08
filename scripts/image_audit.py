@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import os
 import re
@@ -22,8 +23,10 @@ from mlsecops.contracts import (
 )
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
+from scripts import image_candidates
 from scripts.image_archive import identity
 from scripts.image_audit_contract import assess, database, detection_control, inventory
+from scripts.image_comparison import compare
 
 SYFT_IMAGE = (
     "anchore/syft:v1.54.1@sha256:3eb5379ba7b409c3f4069b686110527af0c47df993fa5c10d13e7cf34f49b1aa"
@@ -182,7 +185,7 @@ def snapshot(cache):
     return {path.relative_to(cache).as_posix(): file_hash(path) for path in paths}
 
 
-def audit(root):
+def audit(root, include_candidates=False):
     if shutil.disk_usage(root).free < 8 * 1024**3:
         raise Rejected("image_audit_disk_headroom_required")
     run_id = uuid.uuid4().hex
@@ -206,6 +209,7 @@ def audit(root):
             path.name: file_hash(path) for path in sorted((root / "scripts").glob("image_*.py"))
         },
         "components": [],
+        "includes_candidates": include_candidates,
         "detection_control": "inconclusive",
         "vulnerability_count": None,
         "limitations": [
@@ -228,9 +232,16 @@ def audit(root):
         "worker": {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
         "storage": {"libc6", "postgresql-18"},
     }
-    for name, reference in (("worker", "trusted-mlsecops:dev"), ("storage", STORAGE_IMAGE)):
+    targets = [("worker", "worker", "trusted-mlsecops:dev"), ("storage", "storage", STORAGE_IMAGE)]
+    if include_candidates:
+        targets.extend(
+            (role + "-candidate", role, spec["reference"])
+            for role, spec in image_candidates.SPECS.items()
+        )
+    for name, role, reference in targets:
         component = {
             "name": name,
+            "role": role,
             "status": "inconclusive",
             "scan_executed": False,
             "vulnerability_count": None,
@@ -240,13 +251,17 @@ def audit(root):
         try:
             details = inspect_image(reference)
             if (
-                name == "worker"
+                role == "worker"
                 and details["Config"]
                 .get("Labels", {})
                 .get("org.trusted-mlsecops.source-fingerprint")
                 != fingerprint
             ):
                 raise Rejected("image_audit_worker_source_mismatch")
+            if name.endswith("-candidate"):
+                component["recipe_digest"] = image_candidates.validate(root, role, details)[
+                    "recipe_digest"
+                ]
             component["runtime_image_id"] = details["Id"]
             command(
                 ["docker", "image", "save", "--output", str(archive), details["Id"]], timeout=300
@@ -263,7 +278,7 @@ def audit(root):
             if exit_code:
                 raise Rejected("image_audit_sbom_failed")
             packages = inventory(
-                decode(bounded_read(path, LIMIT), LIMIT), config_id, required[name]
+                decode(bounded_read(path, LIMIT), LIMIT), config_id, required[role]
             )
             component["catalogued_packages"] = len(packages)
             component["sbom_validated"] = True
@@ -328,7 +343,7 @@ def audit(root):
                 decode(bounded_read(path, LIMIT), LIMIT),
                 decode(bounded_read(scan_path, LIMIT), LIMIT),
                 component["image_config_id"],
-                required[name],
+                required[component["role"]],
                 exit_code,
             )
             if (
@@ -361,10 +376,12 @@ def audit(root):
             }
         )
     report["completed_at"] = now()
+    if include_candidates:
+        report["comparison"] = compare(report["components"])
     return report
 
 
-def main(root=None):
+def main(root=None, include_candidates=False):
     root = Path(root or Path(__file__).resolve().parents[1]).resolve()
     output = safe_child(root, REPORT)
     write_json(
@@ -378,7 +395,7 @@ def main(root=None):
         },
     )
     try:
-        report = audit(root)
+        report = audit(root, include_candidates=include_candidates)
     except Exception as error:
         report = read_json(output)
         report.update(
@@ -393,4 +410,8 @@ def main(root=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(
+        description="Audit baseline images and optional separate candidates"
+    )
+    parser.add_argument("--compare-candidates", action="store_true")
+    sys.exit(main(include_candidates=parser.parse_args().compare_candidates))

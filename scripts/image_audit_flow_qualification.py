@@ -6,13 +6,15 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, write_json
-from scripts import image_audit
+from scripts import image_audit, image_candidates
 from scripts.image_audit_qualification import fixtures
 
 
 def qualify():
     cases = []
     scenarios = {
+        "comparison": "pass",
+        "comparison-foreign": "inconclusive",
         "clean": "pass",
         "high": "fail",
         "unknown": "inconclusive",
@@ -112,6 +114,14 @@ def qualify():
                 return returncode, path
 
             with (
+                patch.object(
+                    image_candidates,
+                    "validate",
+                    side_effect=Rejected("foreign-recipe")
+                    if name == "comparison-foreign"
+                    else None,
+                    return_value={"recipe_digest": "c" * 64},
+                ),
                 patch.object(image_audit, "inspect_image", side_effect=inspect),
                 patch.object(image_audit, "command", side_effect=command),
                 patch.object(image_audit, "identity", return_value=image_id),
@@ -131,7 +141,9 @@ def qualify():
                 ),
             ):
                 try:
-                    outcome = image_audit.audit(root)["status"]
+                    outcome = image_audit.audit(
+                        root, include_candidates=name.startswith("comparison")
+                    )["status"]
                 except Rejected:
                     outcome = "rejected"
             if outcome != expected or list(root.rglob("*.tar")):

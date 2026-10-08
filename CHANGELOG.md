@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 isolated image candidates - 2026-10-09
+
+Добавлены multi-stage worker с исправленным PCRE2 и без uv в runtime, PostgreSQL 18.6-trixie candidate без unused gosu и old layers, source/recipe binding и four-image same-DB comparison. 123 controlled checks прошли, worker candidate локально прошёл 74 developer checks. [Runbook и границы](docs/image-candidates.md). Native severity comparison проверяется отдельно; working SQL не меняется.
+
 ## R1 native audit findings - 2026-10-09
 
 Проверен clean-checkout run `37842817452` на `19c618c`: native SBOM, свежая DB, positive detection control и оба image scans завершены. Исправлены реальные форматы Grype `db.status`/`v6.1.10`. 99 controlled checks прошли, branch coverage трёх audit modules 98,78%. Severity gate правильно вернул fail: 56 High matches worker, 7 Critical и 101 High matches storage. [Evidence и 69 triage groups](docs/evidence/container-audit-2026-10-08.md). Порог не ослаблен, working SQL и runtime не переключались, M01/R1 остаются открытыми.

@@ -12,6 +12,8 @@ Docker экспортирует образ, не запуская его при�
 
 ## Воспроизведение
 
+Опциональный безопасный remediation flow: [сборка, квалификация и сравнение candidates](image-candidates.md). Флаг `--compare-candidates` добавляет два отдельные images к текущим baseline на том же DB snapshot; он не выполняет deployment.
+
 Из корня чистого checkout на Linux amd64 или Windows с Linux Docker Engine:
 
 ```bash

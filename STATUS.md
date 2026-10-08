@@ -6,6 +6,8 @@
 
 ## Реализовано в первом increment
 
+Продолжение remediation: [отдельные image candidates](docs/image-candidates.md) собраны без смены baseline tags/SQL. Worker candidate прошёл 74 developer checks; 123 controlled image checks имеют 98% branch coverage пяти modules. Native SBOM candidates: 128/145 package artifacts; vulnerability comparison ещё не принят. Это ещё не adoption и не закрытый M01.
+
 Текущий T01/T02 slice: [воспроизводимый container audit](docs/container-audit.md). 99 controlled checks прошли локально и в CI, audit modules имеют 81/82 covered branches (98,78%). Native scan на `19c618c`, run `37842817452`, завершился **fail по реальным findings**, а не инфраструктурной ошибке: worker 1 152 packages/56 High matches, PostgreSQL 151 package/7 Critical и 101 High matches. PURL detection control прошёл. [Evidence, hashes и 69 triage groups](docs/evidence/container-audit-2026-10-08.md). Локальная загрузка DB остаётся inconclusive из-за TLS/download timeout; CI-результат не переименован в локальный. M01 и T01/T02 открыты до remediation и полного inventory/P0. Принятые M02/M03/M20 не являются допуском релиза.
 
 - Frozen synthetic policy, locked Python dependencies, pinned base image и проверка соответствия image текущему source fingerprint.
@@ -44,7 +46,7 @@ DVC 3.67.1 был проверен в spike, но не принят: pip-audit �
 
 ## Что не реализовано
 
-MLflow, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. SQL backup/restore и scoped publisher/scorer controllers проверены отдельными компонентами ниже. Kubernetes Jobs и isolation probes не закрывают полный integration scope. M02 и M03 работают; полные M01 и M04-M23 остаются inconclusive. T03/T04 завершены только в synthetic scope, остальные 27 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+MLflow, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. SQL backup/restore и scoped publisher/scorer controllers проверены отдельными компонентами ниже. Kubernetes Jobs и isolation probes не закрывают полный integration scope. Приняты только M02, M03 и M20; остальные полные gates не приняты. T03/T04/T26 завершены только в synthetic scope, остальные 26 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## PostgreSQL storage increment
 
