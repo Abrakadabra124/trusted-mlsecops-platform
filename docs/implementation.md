@@ -108,6 +108,14 @@ Review усилил observed-spec guard: subset matching недостаточн�
 
 Это конечная live проверка текущего access slice, но не full M20: нужны агрегированное subject binding и дополнительный native malformed-output сценарий до подписи. Общий host administrator, shared kernel, persistent evaluation budget и будущие metadata/serving services остаются вне этой локальной проверки.
 
+## Двенадцатый increment: executable M20
+
+[ADR 0013](decisions/0013-worker-authority-acceptance.md) объединяет ранее отдельные доказательства в заново исполняемый gate. Qualification scorer использует настоящие credentials и стандартный builder, вызывает реальный `storage_pipeline.evaluate`, а test executor намеренно повреждает response после настоящего prediction Job. Рабочий admission и permissions не ослабляются, test mode в production request не добавляется.
+
+Для каждого из 19 повреждённых batches проверяются точная причина отказа, отсутствие вызовов sign/SQL writer и неизменность evaluation history. Before/after controls создают два настоящих signed reports, независимо проверяемых после сохранения. Gate также запускает обычный publisher/scorer positive path, live access matrix и isolation suite на том же source/image и проверяет dataset/candidate/model/policy binding. SQL rows не удаляются, unexpected write остаётся failure evidence, не маскируется rollback тестовых данных.
+
+Отрицательные contract tests проверяют missing/failed/stale/mismatched component, пустые/повторные case IDs и stale CLI pass после missing prerequisites, Rejected, I/O error или unexpected crash. Пропущенная проверка не становится pass. [Runbook](worker-authority-gate.md) связывает каждое требование M20 с исполняемым доказательством; текущие measurements и CI находятся в STATUS. Это граница полномочий model worker, не semantic poison detector, независимый human review или готовый R1 release.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

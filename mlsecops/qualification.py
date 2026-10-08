@@ -180,9 +180,9 @@ def qualify(root, state, image):
         lambda: run_worker(image, {"action": "shell", "command": "ignored"}),
     )
     for gate in policy["required_gates"]:
-        if gate == "M03":
+        if gate in {"M03", "M20"}:
             with tempfile.TemporaryDirectory(
-                prefix="missing-storage-", dir=state / "evidence"
+                prefix="missing-gate-prerequisites-", dir=state / "evidence"
             ) as temporary:
                 result = report(gate, "local-cpu", root, Path(temporary))
         else:
@@ -237,7 +237,7 @@ def qualify(root, state, image):
         "limitations": [
             "No production or full R1 acceptance",
             "Synthetic utility only",
-            "M02 implemented; M03 separately runs storage-backed acceptance, not this developer suite",
+            "M02 implemented; M03 and M20 run separately with explicit storage/cluster prerequisites",
             "No poisoning campaign, release service, monitoring or disaster recovery yet",
             "Human evaluator and author are not independent",
         ],

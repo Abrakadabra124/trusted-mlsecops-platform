@@ -137,6 +137,7 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T26
 - [ ] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
+- [Исполняемый M20](../docs/worker-authority-gate.md) прошёл локально 722 cases, включая 19 native malformed responses без sign/write, два настоящих positive controls, subject binding и cleanup. T26 пока открыта до подтверждения clean-checkout CI для опубликованного increment.
 - [ADR 0010](../docs/decisions/0010-scoped-controllers.md) реализован как component: cross-namespace RBAC, native admission, projected controller tokens, bounded API transport и отдельные worker Jobs.
 - [Prediction protocol v2](../docs/prediction-protocol.md) прошёл 164 contract checks и 136 controller checks: одноразовый consume, row order и request/image binding до подписи. [Live access component](../docs/live-worker-boundary.md) прошёл 137 локальных checks, включая `/proc` живого scorer, актуальные credentials и SQL/API. Полная агрегированная приёмка M20 с subject-bound evidence и расширенным native malformed-output path ещё не принята. Это не persistent holdout budget M07.
 - Результат: изолированные training/prediction workers, publisher/scorer с отдельной identity, typed bounded prediction protocol. Контракт и компонентные fixtures готовы до T10; полная проверка с evaluator завершается в T10.

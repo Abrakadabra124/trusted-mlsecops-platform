@@ -37,6 +37,8 @@ Qualification запускает отрицательные сценарии и 
 
 [Live worker boundary](docs/live-worker-boundary.md) проверяет доступ обоих worker identities к одновременно работающему scorer: реальные SQL/API endpoints, keys/tokens, holdout fixture и `/proc` соседнего процесса. Локально прошли 137 checks с положительными контрольными запросами и сохранением SQL history. Это component evidence, не полный M20 или R1 release.
 
+[Исполняемый M20](docs/worker-authority-gate.md) объединяет эти components с настоящим signer/SQL и native fault injection. Локально прошли 722 checks: 19 повреждённых responses не подписываются и не публикуются, два положительных контроля сохраняются и независимо проверяются. Gate заново выполняет suites, проверяет общий subject binding и не читает прежний pass как разрешение. Состояние clean-checkout CI и полные ограничения: [STATUS](STATUS.md). Это не завершённый R1 release.
+
 ## Данные и проверяемый intake
 
 `--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализованы M02 и [M03 integrity gate](docs/integrity-gate.md) для synthetic-only профиля. [Source/intake: команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.

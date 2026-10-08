@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -89,6 +90,61 @@ def report(gate, profile, root, state=None):
         except (Rejected, OSError) as error:
             result.update(status="fail", exit_code=1, residual_risks=[str(error)])
         result["finished_at"] = now()
+    elif gate == "M20":
+        required = (
+            "workspace.json",
+            "kubeconfig",
+            "controllers/resources.json",
+            "kubernetes-storage/migration-inputs.json",
+            "storage.json",
+        )
+        if not all((state / name).is_file() for name in required):
+            result["residual_risks"] = [
+                "M20 requires the owned cluster, private migrated storage, current controller profile and original host storage"
+            ]
+            return result
+        from mlsecops.authority_qualification import qualify
+
+        try:
+            evidence = qualify(root, state)
+            result.update(
+                status=evidence["status"],
+                cases=evidence["cases"],
+                exit_code=0,
+                metrics={
+                    "checks": evidence["checks"],
+                    "negative_native_batches": evidence["negative_native_batches"],
+                    **evidence["component_checks"],
+                },
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    **evidence["artifact_hashes"],
+                    "authority_qualification": digest(
+                        bounded_read(state / "evidence/authority-qualification.json")
+                    ),
+                },
+            )
+            result["input_digests"].update(
+                {
+                    name: evidence[name]
+                    for name in (
+                        "image_id",
+                        "dataset_reference",
+                        "candidate_reference",
+                        "model_digest",
+                        "policy_digest",
+                    )
+                }
+            )
+        except (Rejected, OSError, subprocess.TimeoutExpired) as error:
+            result.update(
+                status="fail",
+                exit_code=1,
+                residual_risks=[
+                    str(error) if isinstance(error, Rejected) else "M20 runtime execution failed"
+                ],
+            )
+        result["finished_at"] = now()
     return result
 
 
@@ -100,6 +156,18 @@ def main():
     parser.add_argument("--state", type=Path, default=Path(".runtime"))
     arguments = parser.parse_args()
     try:
+        write_json(
+            arguments.output,
+            {
+                "schema_version": 1,
+                "gate": arguments.gate,
+                "profile": arguments.profile,
+                "status": "inconclusive",
+                "exit_code": 2,
+                "started_at": now(),
+                "residual_risks": ["Acceptance running; previous output is not current evidence"],
+            },
+        )
         result = report(
             arguments.gate, arguments.profile, Path(__file__).resolve().parents[1], arguments.state
         )

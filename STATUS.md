@@ -162,6 +162,22 @@ CI image `sha256:0c3967e382d0935181685cc135265efb931809dd5d7a83dcae47c1ba20bce46
 
 Параллельная ограниченная диагностика M01 не дала базы Grype: host-side запрос schema listing `https://grype.anchore.io/databases/v6/latest.json` завершился connect timeout. Один успешный TLS HEAD к базовому distribution URL с HTTP 404 не доказывает доступность schema listing или DB. Freshness/TLS/hash checks не отключались; image scan по-прежнему не выполнен, CVE count неизвестен. Это не причина блокировать выполненный независимый access test и не основание разрешить release.
 
+## Исполняемый M20: локальная приёмка
+
+2026-10-08 в **19:53:19 UTC** полный [M20 runner](docs/worker-authority-gate.md) завершился pass на текущем source. **722 уникальных успешных cases:** 52 isolation, 164 protocol, 136 controller, 152 native output, 137 live access, 60 contract и 21 integration. Компоненты пересекаются; это не 722 независимые гарантии безопасности. Повторно проверены uniqueness/status/expected/actual, source fingerprint и hashes всех component reports.
+
+Qualification scorer выполнил **21 настоящий prediction Job**: 19 повреждённых responses получили точные отказы без вызова sign/SQL writer и без изменения evaluation history; два положительных контроля действительно подписаны и сохранены. Независимые reader Jobs перечитали обе подписи и subject binding. Model parser в scorer не загружен, peak RSS **204 036 KiB** при 512 MiB limit. Fault injection выполняется после реального transport внутри тестового executor, не выдаётся за exploit parser или доказательство честности любых scores.
+
+Source fingerprint `718367566a39b8d4d4f81fb731d89a012f5bee09333277a2d4e37bbbf7391436`, local image `sha256:1d3097282d04d64be21329fc9c60690c6a64f3517a9df4d102335000a6e933e0`, kind manifest `sha256:b64c16435290fe31de1b879033defbfbf3e0550d208697df883229ec2d005a76`. Revision label `3f161fc` обозначает исходный commit; новый code связан fingerprint, не приписан старому commit. Dataset `05dc61fd25795c960ad1ae59689fdf33467b84cd99c33f2f9a0214e17b815b79`, candidate `89be2ec4a023f389969cbb98d69c01073ab226df2314f7f0558a8429fbf56774`, model `09c48030c2a98d78d74d0a31d4fe18b081e4906abadf5be8a246ec4faa416b8f`.
+
+Три допустимых evaluations: controller positive `7b24f178934cab30904fab15eb0d1834e7ea41cd51b744c099278b71d8150d2e`, native before `49a557daf5d69a8b39ad7ecd2753c3ae0190b6088c047ed1f1e10692735f5c37`, native after `c2a28f4d888219c356301eb661ae3360a5fc5822a7eab7722226969bf2af8c96`. Protected data/release tables не изменены, временные resources очищены, постоянный controller profile сохранился. Private SQL history не сбрасывалась и не входит автоматически в старый host backup.
+
+AUPRC **0.9323007296445032**, parity max error **2.086162567138672e-7**. На том же fingerprint developer regression прошла 74 cases и три fresh-process runs с difference 0.0; protocol suite прошла 164 cases со 100% coverage только своего module. Дополнительные CLI tests подтвердили инвалидацию stale pass при missing prerequisites, Rejected, I/O error и unexpected crash. Это не full M18 coverage.
+
+Clean-checkout CI для этого increment ещё не подтверждён на момент feature commit; T26 остаётся открытой до проверки опубликованного run. Полный R1 остаётся active/incomplete, `release_ready=false`, остальные gates не становятся pass от успеха M20.
+
+M01: официальный `grype db list` наконец вернул schema v6.1.10, metadata DB от 2026-10-08 и checksum archive. Но последующие `db update` и checksum-bound `db import` снова завершились TLS handshake timeout. Cache пуст, image scan не выполнен, vulnerability count неизвестен; freshness/hash/TLS validation не отключались. Получение metadata не приравнивается к сканированию.
+
 ## Что проверяется отдельно
 
 Локальная команда `python scripts/check_docs.py` подтверждает структурную связность документов и ограниченные publication checks. CI повторяет её на опубликованном commit. Актуальный результат смотрите в [GitHub Actions](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions); наличие workflow-файла само по себе не доказывает успешный запуск.
