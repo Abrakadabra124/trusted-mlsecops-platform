@@ -2,6 +2,8 @@
 
 Этот component реализует следующий шаг [ADR 0010](decisions/0010-scoped-controllers.md): publisher и scorer работают в отдельных Kubernetes Jobs, а model execution остаётся в отдельных offline worker Pods. Это не полный M04/M20 и не trusted release. Точное проверенное состояние, числа и CI: [STATUS](../STATUS.md).
 
+Воспроизведение из clean checkout: [успешный GitHub run 37823410795](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410795), commit `2ad6f7767cc06fb95b8c159637b5d150c27c77e6`, 133 controller checks и настоящее обучение/оценка. Это evidence конкретного commit; успешный прежний run не подтверждает автоматически будущие изменения.
+
 ## Ответственность компонентов
 
 - **Publisher** читает approved train/validation через свою SQL mTLS identity, создаёт training Job и сохраняет candidate в private PostgreSQL. Holdout и signer ему не выдаются.

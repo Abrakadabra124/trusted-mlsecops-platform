@@ -118,7 +118,13 @@ AUPRC **0.9323007296445032**, Python/ONNX parity max error **2.086162567138672e-
 
 На том же source fingerprint повторно прошли legacy developer qualification (74 cases, три обучения с max probability difference 0.0), M03 (431 case), storage recovery (430 cases) и private Kubernetes storage (436 cases). Последний suite пересоздал PostgreSQL Pod и сохранил ledger и volume UID `1e850f7b-f90a-4daa-b72e-e2ff3c81a615`; новые controller artifacts не потеряны. Это независимые suites с пересекающимся покрытием, их числа нельзя складывать как уникальные гарантии.
 
-Clean-checkout controller CI ещё не подтверждён на момент записи локального результата. Полные M04/M05/M20, ordered/replay-resistant protocol, holdout query budget, MLflow, production promotion и private-target backup остаются отдельной работой. Новая SQL история после migration не покрыта прежним host backup. Итоговая цель R1 активна, `release_ready=false`.
+Повторная локальная isolation suite также прошла: 52 checks, включая реальные OOM/deadline, PID и egress negatives, на том же fingerprint. Admission/RBAC grants controllers не открыли worker network или worker API privileges.
+
+Clean checkout подтверждён на commit `2ad6f7767cc06fb95b8c159637b5d150c27c77e6`: [Kubernetes run 37823410795](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410795) завершился success. Прочитанный job report содержит 133 уникальные успешные controller checks, те же AUPRC/parity и тот же source fingerprint. CI image `sha256:7326b2997ae38cc4a36f7b3e3b0d34732777b911e9c57f88553fa9fcdce410ec`; peak RSS publisher/scorer 159 160/149 400 KiB. CI candidate `62c30d1e8a75a8b9e282e15957b8fb7578cd02e6c48bb5900e18c696d22fcab8`, evaluation `1e1de83b39e2e1aebc6764fc7e65b8b9595f4785e62288503a833f04767669b6`. Ранее в этом же job прошли 52 isolation, 436 private-storage и 497 migration cases; последняя suite повторяет часть storage tests, это не независимые суммируемые проверки.
+
+На том же commit [storage run 37823410834](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410834) подтвердил M03 (431) и recovery (430) по прочитанным reports. [Developer run 37823410802](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410802) и [documentation run 37823410798](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410798) также завершились success. В public logs опубликованы очищенные reports, не `.runtime`, keys, SQL dumps или private diagnostics.
+
+Полные M04/M05/M20, ordered/replay-resistant protocol, holdout query budget, MLflow, production promotion и private-target backup остаются отдельной работой. Новая SQL история после migration не покрыта прежним host backup. Итоговая цель R1 активна, `release_ready=false`.
 
 ## Что проверяется отдельно
 
