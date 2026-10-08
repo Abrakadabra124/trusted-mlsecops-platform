@@ -52,6 +52,7 @@ jobs:
           uv run --locked python -m mlsecops.kube_storage_migration_qualification
       - name: Scoped controllers, API boundaries and independent ML Jobs
         run: |
+          uv run --locked python -m mlsecops.prediction_protocol_qualification
           uv run --locked python -m mlsecops.controller_bootstrap
           uv run --locked python -m mlsecops.controller_qualification
       - name: Sanitized component evidence

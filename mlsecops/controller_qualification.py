@@ -311,6 +311,26 @@ def qualify(root, state, image):
         and evaluation["report"]["model_digest"] == metadata["model_digest"]
         and evaluation["report"]["image_id"] == profile["image_id"],
     )
+    prediction = evaluation["report"]["prediction_execution"]
+    protocol = evaluation["report"]["prediction_protocol"]
+    confirmed(
+        "scoped-prediction-worker",
+        prediction["backend"] == "scoped-kubernetes-controller"
+        and prediction["namespace"] == "ml-eval"
+        and prediction["image_id"] == profile["image_id"],
+    )
+    confirmed(
+        "separate-scorer-and-prediction-worker",
+        prediction["pod_uid"] != scorer["controller"]["pod_uid"]
+        and prediction["pod_uid"] != execution["pod_uid"],
+    )
+    confirmed(
+        "prediction-protocol-bound-to-executed-request",
+        protocol["schema_version"] == 2
+        and protocol["rows"] == evaluation["report"]["rows"]
+        and protocol["request_digest"] == prediction["input_digest"]
+        and protocol["model_digest"] == metadata["model_digest"],
+    )
     policy = read_json(root / "policies/local-cpu.json")
     confirmed(
         "synthetic-quality-component",

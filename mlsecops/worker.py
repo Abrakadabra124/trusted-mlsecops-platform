@@ -7,7 +7,8 @@ from pathlib import Path
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 from mlsecops.datasets import arrays, validate_features
 from mlsecops.model import predict, session
-from mlsecops.signing import decode64, encode64
+from mlsecops.prediction_protocol import response, validate_request
+from mlsecops.signing import encode64
 
 MAX_PROTOCOL = 16 * 1024 * 1024
 
@@ -55,19 +56,9 @@ def train(request):
 
 
 def predict_request(request):
-    require_fields(request, ("action", "model", "features", "batch_id"))
-    if not isinstance(request["batch_id"], str) or len(request["batch_id"]) != 32:
-        raise Rejected("invalid_batch_id")
-    content = decode64(request["model"])
+    content = validate_request(request)
     runtime, scan = session(content)
-    return {
-        "schema_version": 1,
-        "action": "predict",
-        "batch_id": request["batch_id"],
-        "model_digest": digest(content),
-        "scores": predict(runtime, request["features"]),
-        "scan": scan,
-    }
+    return response(request, predict(runtime, request["features"]), scan)
 
 
 def execute(request):

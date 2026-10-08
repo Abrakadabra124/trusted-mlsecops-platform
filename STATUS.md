@@ -124,7 +124,21 @@ Clean checkout подтверждён на commit `2ad6f7767cc06fb95b8c159637b5d
 
 На том же commit [storage run 37823410834](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410834) подтвердил M03 (431) и recovery (430) по прочитанным reports. [Developer run 37823410802](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410802) и [documentation run 37823410798](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37823410798) также завершились success. В public logs опубликованы очищенные reports, не `.runtime`, keys, SQL dumps или private diagnostics.
 
-Полные M04/M05/M20, ordered/replay-resistant protocol, holdout query budget, MLflow, production promotion и private-target backup остаются отдельной работой. Новая SQL история после migration не покрыта прежним host backup. Итоговая цель R1 активна, `release_ready=false`.
+На момент этого increment ordered/replay-resistant protocol оставался следующей работой; его реализация описана ниже. Полные M04/M05/M20, holdout query budget, MLflow, production promotion и private-target backup ещё не закрыты. Новая SQL история после migration не покрыта прежним host backup. Итоговая цель R1 активна, `release_ready=false`.
+
+## Prediction protocol v2 increment
+
+Воспроизведён и исправлен приём `schema_version=999` и произвольного scan в unsigned evaluation result. [Protocol v2](docs/prediction-protocol.md) проверяет точную схему, одноразовый batch, model/request digests и ordered `row_id/score` records до metrics/signing/publication. Response от другого batch, повторный consume, перестановка/дублирование rows, неверные probabilities и scan contract отказывают. Model parser по-прежнему остаётся вне процесса signer. [ADR 0011](docs/decisions/0011-prediction-protocol.md).
+
+Локально прошли **164 contract checks**, включая controlled integration со spies, подтверждающими отсутствие вызовов signer/SQL publication при malformed response. Coverage одного `mlsecops.prediction_protocol`: **100%** statements/branches, 71 statements и 28 branches. Это не full M18 coverage, не native parser coverage и не независимый attack review. Native developer suite прошла 74 checks: три fresh-process обучения, max probability difference 0.0.
+
+2026-10-08 в 18:46:46 UTC прошли **136 controller checks** с настоящими publisher/scorer и worker Jobs. Candidate `1da0b22daf407cd01dc42deed2750852bc26912be01eccf392490bb5225e2ac6`, evaluation `3da18ae66234c3a44848eb42b632a6705e8dbbe311ca249234af74dd2c72e36f`. Signed report связывает 3 000 predictions с request `0322328c2818b6a5fddba75b0d3b4cf5e42a60f8f10cedf8ebec30adb85983b9`, response `8335dc9bebb76691dc3bef8186bb578bf9a431436eaf3bdeef465479564e7b1a` и фактическим отдельным worker в `ml-eval`. Request digest совпал с execution input digest; persisted evaluation независимо прочитан и проверен по evaluator public key.
+
+AUPRC **0.9323007296445032**, parity max error **2.086162567138672e-7**. Publisher/scorer peak RSS 159 448/152 416 KiB. Source fingerprint `9200d4597f40aab27ba1b280b1962964e07acd8ffe4d5db64102f0e2d37b0d11`, local image `sha256:36cd28e900693c0fe6c5c0730ab15b46d1ddfbd020f2a2af0cb941f4e87ebf26`, kind manifest `sha256:3f061042d384a4d5582c29f25eefdf90382db17e2b954cc767fe26863c87847a`. Local revision label указывает исходный `0bb0e68`; новый код связан fingerprint, не приписан старому commit.
+
+После обновления общих callers повторно прошли M03 (**431**) и storage recovery (**430**, 1 000 golden predictions, max error 0.0). Populated private target не сбрасывался для новой migration; её обновлённый golden verifier должен отдельно пройти fresh CI. Первая native regression выявила несовместимое сравнение input image alias с digest: проверка оставлена по фактическому execution digest, разрешённый alias и неверный observed digest закреплены отдельными tests.
+
+Clean-checkout CI нового protocol increment ещё не подтверждён на момент записи локального evidence. Single-use state относится к одному последовательному run и не заменяет persistent query budget M07 или release replay prevention M11. Корректный формат не доказывает честные scores malicious worker; scan contract не равен независимому intake M21. Полный live access scope M20 и итоговая приёмка R1 остаются открытыми.
 
 ## Что проверяется отдельно
 
@@ -144,4 +158,4 @@ Clean checkout подтверждён на commit `2ad6f7767cc06fb95b8c159637b5d
 
 ## Следующий допустимый шаг
 
-Продолжить активную цель R1: довести T01-T02 до полной приёмки, завершить controller output/replay boundary и полную storage/API/network access matrix, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03 или component qualification.
+Продолжить активную цель R1: довести T01-T02 до полной приёмки, завершить live worker/controller access matrix M20 и полную storage/API/network integration, затем MLflow и независимый evaluation budget по зависимостям. DVC не является обязательным инструментом после security ADR; требования воспроизводимости сохраняются. Не публиковать trusted release на основании зелёных M02/M03 или component qualification.

@@ -20,19 +20,9 @@ from mlsecops.contracts import (
 from mlsecops.data_source import verify_lineage
 from mlsecops.datasets import verify_dataset
 from mlsecops.inventory import command, source_fingerprint
+from mlsecops.prediction_protocol import PredictionBatch, validate_scores
 from mlsecops.sandbox import run_worker
-from mlsecops.signing import decode64, encode64, sign, verify
-
-
-def validate_scores(scores, count):
-    if not isinstance(scores, list) or len(scores) != count:
-        raise Rejected("prediction_count_mismatch")
-    if any(
-        type(score) not in (float, int) or not np.isfinite(score) or not 0 <= score <= 1
-        for score in scores
-    ):
-        raise Rejected("invalid_probability")
-    return np.asarray(scores, dtype=float)
+from mlsecops.signing import decode64, sign, verify
 
 
 def train_candidate(state, dataset_id, policy, image, executor=run_worker, lineage_id=None):
@@ -165,27 +155,11 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
 
 
 def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, image, executor):
-    batch_id = uuid.uuid4().hex
-    output, execution = executor(
-        image,
-        {
-            "action": "predict",
-            "model": encode64(content),
-            "batch_id": batch_id,
-            "features": [row["features"] for row in holdout],
-        },
-    )
-    require_fields(
-        output, ("schema_version", "action", "batch_id", "model_digest", "scores", "scan")
-    )
-    if (
-        output["batch_id"] != batch_id
-        or output["model_digest"] != digest(content)
-        or output["action"] != "predict"
-        or execution["image_id"] != metadata["image_id"]
-    ):
+    batch = PredictionBatch(content, [row["features"] for row in holdout])
+    output, execution = executor(image, batch.request)
+    if execution["image_id"] != metadata["image_id"]:
         raise Rejected("evaluation_protocol_mismatch")
-    scores = validate_scores(output["scores"], len(holdout))
+    scores, scan, protocol = batch.consume(output)
     labels = np.array([row["label"] for row in holdout])
     positives = int(labels.sum())
     auprc = float(average_precision_score(labels, scores))
@@ -224,7 +198,9 @@ def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, im
         "validation_parity_max_error": metadata["validation_parity_max_error"],
         "quality_component": "pass" if quality else "fail",
         "release_status": "unapproved",
-        "scan": output["scan"],
+        "scan": scan,
+        "prediction_protocol": protocol,
+        "prediction_execution": execution,
         "limitations": [
             "Synthetic utility only",
             "Full M07 and R1 acceptance not established",

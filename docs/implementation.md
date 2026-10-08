@@ -90,6 +90,14 @@ T04 завершена в synthetic-only профиле. Developer qualification
 
 Отладка выявила три интеграционные ошибки: Dockerfile отсутствовал в allowlisted build context; digest из CRI inspection не был зарегистрирован как containerd image alias; тест путал admission Invalid с RBAC Forbidden и сначала использовал schema-invalid privileged fixture. Исправлены первопричины без отключения pin, policy или TLS. Негативные fixtures теперь требуют точную admission policy/reason. [Runbook](scoped-controllers.md) разделяет реальные и mocked проверки, а также предупреждает, что новые private SQL runs не входят в старый host backup.
 
+## Десятый increment: ordered prediction protocol
+
+[ADR 0011](decisions/0011-prediction-protocol.md) закрывает подтверждённый пробел consumer: неизвестная schema version и произвольный scan ранее попадали в evaluation report. Теперь общий helper фиксирует exact request bytes, fresh nonce и row IDs; consume одноразовый, malformed/reordered/replayed responses не доходят до signer и SQL writer. Наличие digest не доказывает правильность вычисления malicious worker, что отдельно записано в [runbook](prediction-protocol.md).
+
+164 unit/controlled integration checks прошли. Coverage одного protocol module: 71 statements, 28 branches, 100%; это не >=95% security coverage всей платформы. Native Docker suite сохранила три fresh-process обучения (74 checks), Kubernetes controllers прошли 136 checks с настоящими train/evaluate и независимой проверкой persisted signature. Signed report связывает 3 000 row predictions с request digest и отдельным `ml-eval` worker, не с процессом signer.
+
+Первая native regression выявила лишнее сравнение input image alias с actual image digest. Оно удалено: resolver по-прежнему проверяет source/image, а scorer сравнивает фактический digest execution с candidate. Постоянные tests проверяют и разрешённый alias, и отказ другого observed digest. Checks не заменялись на безусловный pass. Весь prediction path и golden verifiers обновлены вместе, без fallback на v1 или перезаписи старых artifacts.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

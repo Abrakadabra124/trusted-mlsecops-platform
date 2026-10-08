@@ -137,7 +137,8 @@ T03 и T04 завершены для synthetic-only профиля; осталь
 
 ## T26
 - [ ] Worker/controller boundary. Зависимости: T05, T06. Gate: M20.
-- [ADR 0010](../docs/decisions/0010-scoped-controllers.md) реализован как component: cross-namespace RBAC, native admission, projected controller tokens, bounded API transport и отдельные worker Jobs. Локально 133 checks прошли; полный ordered/replay-resistant output protocol и live access matrix M20 ещё не приняты.
+- [ADR 0010](../docs/decisions/0010-scoped-controllers.md) реализован как component: cross-namespace RBAC, native admission, projected controller tokens, bounded API transport и отдельные worker Jobs.
+- [Prediction protocol v2](../docs/prediction-protocol.md) прошёл 164 contract checks и 136 controller checks: одноразовый consume, row order и request/image binding до подписи. Полная live access matrix M20, включая `/proc` соседнего controller и все актуальные credential paths, ещё не принята. Это не persistent holdout budget M07.
 - Результат: изолированные training/prediction workers, publisher/scorer с отдельной identity, typed bounded prediction protocol. Контракт и компонентные fixtures готовы до T10; полная проверка с evaluator завершается в T10.
 - Проверка: попытки чтения labels/keys/DB/service-account token и /proc соседнего controller запрещены; malformed/replayed/oversized outputs не становятся подписанным результатом.
 

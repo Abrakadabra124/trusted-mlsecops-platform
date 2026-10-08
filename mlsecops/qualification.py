@@ -25,6 +25,7 @@ from mlsecops.contracts import (
 from mlsecops.datasets import generate, prepare, validate_approval, validate_rows, verify_dataset
 from mlsecops.inventory import collect, source_fingerprint
 from mlsecops.pipeline import evaluate_candidate, train_candidate, validate_scores
+from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.sandbox import run_worker
 from mlsecops.signing import encode64, pae, sign, verify
 from mlsecops.worker_transport import capture, unwrap
@@ -170,12 +171,7 @@ def qualify(root, state, image):
         target.rename(target.with_suffix(".missing"))
         rejected("dataset-missing-object", lambda: verify_dataset(scratch, dataset_id, policy))
     for index, payload in enumerate((b"not-onnx", b"\x80\x04pickle", b"")):
-        request = {
-            "action": "predict",
-            "model": encode64(payload),
-            "features": [[0.5] * 6],
-            "batch_id": "a" * 32,
-        }
+        request = PredictionBatch(payload, [[0.5] * 6]).request
         rejected(
             f"worker-invalid-model-{index}", lambda request=request: run_worker(image, request)
         )

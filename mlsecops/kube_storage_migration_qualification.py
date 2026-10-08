@@ -30,6 +30,7 @@ from mlsecops.kube_storage_qualification import probe
 from mlsecops.kube_storage_qualification import qualify as qualify_storage
 from mlsecops.kube_worker import load_image
 from mlsecops.pipeline import validate_scores
+from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.sandbox import resolve_image, run_worker
 from mlsecops.signing import decode64, sign, verify
 from mlsecops.storage_bootstrap import validate as validate_source
@@ -246,22 +247,14 @@ def qualify(root, state, image):
     golden = published["golden"]
     confirmed("golden-model-bytes", digest(decode64(golden["model"])) == inputs["model_digest"])
     expected_scores = validate_scores(golden["expected_scores"], 1000)
-    batch_id = uuid.uuid4().hex
-    predictions, execution = run_worker(
-        image,
-        {
-            "action": "predict",
-            "model": golden["model"],
-            "features": golden["features"],
-            "batch_id": batch_id,
-        },
-    )
-    observed_scores = validate_scores(predictions["scores"], 1000)
+    batch = PredictionBatch(decode64(golden["model"]), golden["features"])
+    predictions, execution = run_worker(image, batch.request)
+    observed_scores, _, proof = batch.consume(predictions)
     maximum_error = float(np.max(np.abs(expected_scores - observed_scores)))
     confirmed(
         "offline-golden-prediction-binding",
-        predictions["batch_id"] == batch_id
-        and predictions["model_digest"] == inputs["model_digest"]
+        proof["rows"] == 1000
+        and proof["model_digest"] == inputs["model_digest"]
         and execution["image_id"] == image_id,
     )
     confirmed("1000-migrated-golden-predictions", maximum_error <= policy["repeat_tolerance"])

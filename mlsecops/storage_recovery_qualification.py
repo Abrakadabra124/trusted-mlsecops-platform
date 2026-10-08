@@ -24,6 +24,7 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.pipeline import validate_scores
+from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.sandbox import run_worker
 from mlsecops.signing import decode64, encode64, sign, verify
 from mlsecops.storage_backup import read_backup
@@ -404,21 +405,13 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
             "saved-score-digest",
             digest(canonical(saved_scores.tolist())) == metadata["validation_probability_digest"],
         )
-        batch_id = uuid.uuid4().hex
-        predicted, execution = run_worker(
-            image,
-            {
-                "action": "predict",
-                "model": encode64(model),
-                "batch_id": batch_id,
-                "features": [row["features"] for row in splits["validation"][:1000]],
-            },
-        )
-        scores = validate_scores(predicted["scores"], 1000)
+        batch = PredictionBatch(model, [row["features"] for row in splits["validation"][:1000]])
+        predicted, execution = run_worker(image, batch.request)
+        scores, _, proof = batch.consume(predicted)
         confirmed(
             "golden-protocol-binding",
-            predicted["batch_id"] == batch_id
-            and predicted["model_digest"] == digest(model)
+            proof["rows"] == 1000
+            and proof["model_digest"] == digest(model)
             and execution["image_id"] == metadata["image_id"],
         )
         maximum_error = float(np.max(np.abs(scores - saved_scores[:1000])))

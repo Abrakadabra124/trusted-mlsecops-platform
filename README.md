@@ -31,7 +31,9 @@ Qualification запускает отрицательные сценарии и 
 
 [Подписанная migration](docs/cluster-storage-migration.md) переносит snapshot dataset/model/evaluation history в этот instance: maintenance barrier, атомарный import, продолжение после сбоя и реальные role readers с 1 000 golden predictions. Полная qualification запускается один раз на пустом target; она не сбрасывает существующие данные.
 
-[Scoped controllers](docs/scoped-controllers.md) запускают обучение и оценку из отдельных publisher/scorer Jobs с ограниченными Kubernetes и SQL identities. Model workers остаются без сети, токенов и ключей. Локально прошли 133 component checks, включая настоящие API/TLS отказы и сохранённый signed evaluation. Runbook содержит путь из clean checkout и безопасное обновление image profile; полные M04/M20 и R1 ещё не приняты.
+[Scoped controllers](docs/scoped-controllers.md) запускают обучение и оценку из отдельных publisher/scorer Jobs с ограниченными Kubernetes и SQL identities. Model workers остаются без сети, токенов и ключей. Qualification проверяет настоящие API/TLS отказы и сохранённый signed evaluation. Runbook содержит путь из clean checkout и безопасное обновление image profile; полные M04/M20 и R1 ещё не приняты.
+
+[Prediction protocol v2](docs/prediction-protocol.md) связывает каждую строку ответа с одноразовым запросом и проверяет version, порядок, размеры и probabilities до подписи. Локально прошли 164 contract checks и 136 controller checks; [точное evidence](STATUS.md). Это не гарантия правильных scores от malicious worker и не persistent holdout query budget.
 
 ## Данные и проверяемый intake
 
