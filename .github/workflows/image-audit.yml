@@ -30,7 +30,10 @@ jobs:
           uv run --locked coverage run --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_audit_qualification
           uv run --locked coverage run --append --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_archive_qualification
           uv run --locked coverage run --append --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_audit_runner_qualification
-          uv run --locked coverage report
+          uv run --locked coverage run --append --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_audit_flow_qualification
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .coverage.json
+          uv run --locked python -c "import json; totals=json.load(open('.coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
       - name: Audit exact worker and PostgreSQL images

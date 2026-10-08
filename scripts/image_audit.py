@@ -153,7 +153,9 @@ def scanner(run, name, image, arguments, mounts=(), network=False):
                 f"type=bind,source={source},target={target}" + ("" if writable else ",readonly"),
             ]
         )
-    return execute(command_line + [image, *arguments], output, 300, cidfile), output
+    return execute(
+        command_line + [image, *arguments], output, 600 if network else 300, cidfile
+    ), output
 
 
 def inspect_image(reference):
@@ -284,6 +286,7 @@ def audit(root):
         raise Rejected("image_audit_database_update_failed")
     db_files = snapshot(cache)
     report["database_files"] = db_files
+    write_json(safe_child(root, REPORT), report)
     exit_code, control_path = scanner(
         run,
         "detection-control",
@@ -292,6 +295,17 @@ def audit(root):
         [(cache, "/cache", False)],
     )
     control = decode(bounded_read(control_path, LIMIT), LIMIT)
+    descriptor = control.get("descriptor", {})
+    report["control_observation"] = {
+        "exit_code": exit_code,
+        "scanner_name": descriptor.get("name"),
+        "scanner_version": descriptor.get("version"),
+        "database": {
+            key: descriptor.get("db", {}).get(key) for key in ("schemaVersion", "built", "valid")
+        },
+        "database_error_present": bool(descriptor.get("db", {}).get("error")),
+    }
+    write_json(safe_child(root, REPORT), report)
     detection_control(control, exit_code)
     report["detection_control"] = "pass"
     report["detection_control_digest"] = file_hash(control_path)

@@ -17,6 +17,7 @@ uv sync --locked --python 3.12.15
 uv run --locked python -m scripts.image_audit_qualification
 uv run --locked python -m scripts.image_archive_qualification
 uv run --locked python -m scripts.image_audit_runner_qualification
+uv run --locked python -m scripts.image_audit_flow_qualification
 uv run --locked python -m mlsecops build
 uv run --locked python -m scripts.image_audit
 ```
@@ -36,13 +37,14 @@ uv run --locked python -m scripts.image_audit
 7. Проверяются Grype reports обоих images: version, valid свежая DB, тот же DB snapshot, config ID, distro, связь каждого finding с SBOM package. Непустые ignored matches и coverage alerts не скрываются. High/Critical блокируют независимо от доступности fix; Unknown не становится Low.
 8. Публикуются только выбранные поля findings, counts, hashes, версии и ограничения. Timeout/overflow останавливает CLI и удаляет только scanner по его собственному CID. Временные image archives удаляются после каталогизации; raw reports и DB остаются локально для разбора. Глобальные Docker prune и удаление чужих volumes не используются.
 
-Контейнеры scanner работают non-root, с read-only rootfs, без capabilities, с no-new-privileges, 2 CPU/2 GiB RAM, 256 PIDs и tmpfs 1 GiB. Wrapper проверяет stdout 64 MiB/stderr 2 MiB каждые 100 ms, поэтому возможен небольшой overshoot между проверками; это не filesystem quota. На операцию отведено 300 секунд. В host administrator trust boundary входит целостность локального Docker daemon и файлов run.
+Контейнеры scanner работают non-root, с read-only rootfs, без capabilities, с no-new-privileges, 2 CPU/2 GiB RAM, 256 PIDs и tmpfs 1 GiB. Wrapper проверяет stdout 64 MiB/stderr 2 MiB каждые 100 ms, поэтому возможен небольшой overshoot между проверками; это не filesystem quota. Offline операция ограничена 300 секундами, DB update - 600. Последний лимит увеличен после реального 300-second timeout при распаковке DB размером более 3 GiB на Windows bind mount; freshness/TLS/hash validation не изменены. В host administrator trust boundary входит целостность локального Docker daemon и файлов run.
 
 ## Проверка и evidence
 
-- Контрактные suites: 41 report/policy check, 15 archive checks и 11 runner checks. Включены malformed/stale/foreign reports, пустой inventory, отсутствие обязательного package, fake DB validity, exit/report disagreement, очистка старого pass, scoped cleanup и реальный child process с oversized output. Это controlled tests, не результаты vulnerability scan.
+- Контрактные suites: 43 report/policy checks, 15 archive checks, 25 runner checks и 16 controlled orchestration checks, всего 99. Включены malformed/stale/foreign reports, пустой inventory, отсутствие обязательного package, fake DB validity, exit/report disagreement, mutation DB/SBOM/source, очистка старого pass, scoped cleanup и реальные child processes с oversized output/deadline. Mocked flow не является native scanner test. CI отдельно требует >=95% combined и branch coverage именно трёх audit modules; это не полное coverage M18.
 - 2026-10-08 локальный native Syft каталогизировал worker (1 152 packages, Debian 13.7) и storage (151 package, Debian 12.15). Обязательные packages найдены. Exported archives и source/config IDs сохранены в ignored report.
-- Локальное обновление DB завершилось TLS handshake timeout. Итог `inconclusive`, число уязвимостей `null`, не 0. Положительный Grype control и native scan на этом хосте пока не подтверждены.
+- Локальные попытки DB update дали TLS handshake timeout и позднее 300-second timeout при распаковке. Итог `inconclusive`, число уязвимостей `null`, не 0. Положительный Grype control и native scan на этом хосте пока не подтверждены.
+- Первый [clean-checkout CI 37840696361](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37840696361) на `4c9e9da` подтвердил native SBOM обоих images, но отклонил DB metadata в detection control. Это проверенный failure, не успешный audit; добавлена allowlisted диагностика descriptor и сохранение DB snapshot digest до проверки control.
 - [Workflow](../.github/workflows/image-audit.yml) исполняет тот же код из clean checkout и публикует только summary в logs даже при failure. Его наличие не доказывает успешный run; проверенные run IDs и результаты фиксируются в [STATUS](../STATUS.md).
 - Изменение DB может менять findings для того же image. Повторяемы процедура, identity checks и решение для сохранённых inputs, но не обещается одинаковый сегодняшний вывод из постоянно обновляемой базы.
 

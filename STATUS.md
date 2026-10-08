@@ -6,7 +6,7 @@
 
 ## Реализовано в первом increment
 
-Текущий T01/T02 slice: [воспроизводимый container audit](docs/container-audit.md). 67 controlled checks прошли локально; Syft нашёл 1 152 packages worker и 151 PostgreSQL. Загрузка Grype DB локально завершилась TLS timeout: vulnerability audit `inconclusive`, count `null`. Добавлен clean-checkout workflow, его native результат пока не проверен. M01 и T01/T02 остаются открытыми; принятые M02/M03/M20 не являются допуском релиза.
+Текущий T01/T02 slice: [воспроизводимый container audit](docs/container-audit.md). 99 controlled checks прошли локально; Syft нашёл 1 152 packages worker и 151 PostgreSQL. Локальные DB attempts дали TLS/download timeout: audit `inconclusive`, count `null`. Первый clean-checkout CI `37840696361` на `4c9e9da` воспроизвёл SBOM, но отклонил DB metadata detection control; расследование и native verification продолжаются. M01 и T01/T02 остаются открытыми; принятые M02/M03/M20 не являются допуском релиза.
 
 - Frozen synthetic policy, locked Python dependencies, pinned base image и проверка соответствия image текущему source fingerprint.
 - Идемпотентный bootstrap с отдельными локальными ключами ролей, inventory и runner, возвращающий inconclusive для ещё не реализованных полных gates.

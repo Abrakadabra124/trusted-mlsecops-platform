@@ -68,6 +68,7 @@ def qualify():
         )
     for name, change in (
         ("empty-inventory", lambda inputs: inputs[0].update(artifacts=[])),
+        ("missing-inventory", lambda inputs: inputs[0].pop("artifacts")),
         ("missing-required-package", lambda inputs: inputs[0]["artifacts"].pop()),
         (
             "duplicate-package-id",
@@ -150,6 +151,7 @@ def qualify():
     confirmed("known-vulnerable-package-detected", True)
     for name, mutate in (
         ("no-matches", lambda value: value.update(matches=[])),
+        ("malformed-match", lambda value: value.update(matches=[{}])),
         (
             "wrong-vulnerability",
             lambda value: value["matches"][0]["vulnerability"].update(id="other"),
