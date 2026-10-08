@@ -4,6 +4,8 @@
 
 ## Порядок
 
+Текущий increment T01/T02: [container audit](container-audit.md), [ADR 0014](decisions/0014-container-audit.md). Код находится в host-only `scripts`, не включён в privileged scorer/worker image и не меняет их принятый source fingerprint. Не считать native catalogue доказательством отсутствия CVEs; статус остаётся inconclusive до успешного Grype DB/control/scan с теми же inputs.
+
 1. T01-T02: inventory, frozen policy, pinned dependency/image inputs, идемпотентный bootstrap и fail-closed acceptance runner.
 2. T03-T04: синтетические данные, passport, split, signed manifests и отрицательные проверки.
 3. T05-T10/T26: отдельные workers, обучение, ONNX export, воспроизводимость и независимый scorer.

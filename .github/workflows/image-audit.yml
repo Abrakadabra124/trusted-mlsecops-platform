@@ -1,0 +1,42 @@
+name: Worker and storage image audit
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: image-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  image-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked environment and negative audit contracts
+        run: |
+          uv sync --locked --python 3.12.15
+          uv run --locked ruff check scripts/image*.py
+          uv run --locked ruff format --check scripts/image*.py
+          uv run --locked coverage run --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_audit_qualification
+          uv run --locked coverage run --append --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_archive_qualification
+          uv run --locked coverage run --append --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit -m scripts.image_audit_runner_qualification
+          uv run --locked coverage report
+      - name: Build pinned Linux worker
+        run: uv run --locked python -m mlsecops build
+      - name: Audit exact worker and PostgreSQL images
+        run: uv run --locked python -m scripts.image_audit
+      - name: Publish sanitized result even on failure
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; path=Path('.runtime/evidence/image-audit.json'); print(canonical(read_json(path) if path.is_file() else {'status':'inconclusive','reason':'audit_not_executed'}).decode())"
+          echo 'Worker/storage package audit only. This is not full M01 or R1 acceptance.' >> "$GITHUB_STEP_SUMMARY"

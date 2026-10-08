@@ -9,7 +9,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T02
 - [ ] Foundation P0 и совместимые зависимости. Зависимость: T01. Gate: M01.
-- Прогресс: [storage snapshot/restore](../docs/storage-recovery.md) сохраняет ledger и восстанавливает отдельный экземпляр; image audit и полный P0-отчёт ещё не приняты.
+- Прогресс: [storage snapshot/restore](../docs/storage-recovery.md) сохраняет ledger; [image audit](../docs/container-audit.md) имеет executable wrapper, 67 controlled checks и native SBOM двух images. Локальный Grype DB TLS timeout сохраняет inconclusive. Полный image inventory, audit и P0-отчёт ещё не приняты.
 - Результат: pinned version matrix, отдельное окружение, проверка registry maintenance path, storage decision, идемпотентный bootstrap и rollback migration plan.
 - Проверка: два bootstrap, schema migration/restore smoke, отсутствие потери артефактов/ключей; lockfile и runtime соответствуют inventory.
 

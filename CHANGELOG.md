@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 worker/storage image audit - 2026-10-08
+
+Добавлены pinned Syft/Grype runner и CI, привязка SBOM к config digest свежего Docker archive, отрицательные проверки reports/archive/CLI и fail-closed policy. Native SBOM локально работает; Grype DB недоступна из-за TLS timeout, поэтому audit не объявляется пройденным. [Runbook](docs/container-audit.md). Runtime worker и private SQL этим host-only increment не меняются; M01/R1 остаются открытыми.
+
 ## R1 executable worker authority gate - 2026-10-08
 
 Добавлен исполняемый M20: свежий запуск isolation/protocol/controller/live-access suites и 21 реальный prediction Job в qualification scorer с действительными signer/SQL credentials. Девятнадцать повреждённых responses должны отказать до sign/write; два положительных контроля подписываются, сохраняются и перечитываются. Report связывает source/image/policy/dataset/candidate/model и hashes компонентов. CLI не оставляет старый pass при missing prerequisites или crash. [Воспроизведение и точное покрытие](docs/worker-authority-gate.md); результаты текущего source и CI фиксируются в STATUS. Полный R1 остаётся незавершённым.
