@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 native audit findings - 2026-10-09
+
+Проверен clean-checkout run `37842817452` на `19c618c`: native SBOM, свежая DB, positive detection control и оба image scans завершены. Исправлены реальные форматы Grype `db.status`/`v6.1.10`. 99 controlled checks прошли, branch coverage трёх audit modules 98,78%. Severity gate правильно вернул fail: 56 High matches worker, 7 Critical и 101 High matches storage. [Evidence и 69 triage groups](docs/evidence/container-audit-2026-10-08.md). Порог не ослаблен, working SQL и runtime не переключались, M01/R1 остаются открытыми.
+
 ## R1 worker/storage image audit - 2026-10-08
 
 Добавлены pinned Syft/Grype runner и CI, привязка SBOM к config digest свежего Docker archive, отрицательные проверки reports/archive/CLI и fail-closed policy. Native SBOM локально работает; Grype DB недоступна из-за TLS timeout, поэтому audit не объявляется пройденным. [Runbook](docs/container-audit.md). Runtime worker и private SQL этим host-only increment не меняются; M01/R1 остаются открытыми.

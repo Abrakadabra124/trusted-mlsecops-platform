@@ -1,6 +1,6 @@
 # ADR 0014: воспроизводимый container audit без Docker socket у scanner
 
-Дата: 2026-10-08. Статус: **Implemented slice, native vulnerability verification pending**. Относится к T01/T02 и M01, не заменяет полный gate. [Runbook](../container-audit.md).
+Дата: 2026-10-08. Статус: **Implemented and native-verified slice, severity gate failed**. Относится к T01/T02 и M01, не заменяет полный gate. [Runbook](../container-audit.md), [native evidence](../evidence/container-audit-2026-10-08.md).
 
 ## Проблема
 

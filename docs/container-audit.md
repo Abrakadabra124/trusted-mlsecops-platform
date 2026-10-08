@@ -2,6 +2,8 @@
 
 Срез T01/T02, не полный M01. Порог политики: найденные High/Critical дают `fail`; недоступность DB, неизвестная severity, неполное покрытие или ошибка дают `inconclusive`. Оба исхода возвращают ненулевой exit code и не разрешают выпуск. Даже `pass` этого компонента не означает `release_ready`: полный R1 требует остальных gates.
 
+Актуальная native проверка: **fail по findings** в clean-checkout CI на `19c618c`. Worker: 56 High matches; PostgreSQL: 7 Critical и 101 High. Detection control и проверка обоих reports завершены. [Полное summary, привязка inputs и triage](evidence/container-audit-2026-10-08.md). Это работающий блокирующий audit, не безопасный release.
+
 ## Что делают технологии
 
 Syft формирует SBOM (software bill of materials): перечень обнаруженных установленных пакетов и их версий. Grype сопоставляет этот перечень с базой известных уязвимостей. Это не malware scan модели, не доказательство отсутствия неизвестных уязвимостей и не оценка практической эксплуатируемости каждого finding.
@@ -45,6 +47,7 @@ uv run --locked python -m scripts.image_audit
 - 2026-10-08 локальный native Syft каталогизировал worker (1 152 packages, Debian 13.7) и storage (151 package, Debian 12.15). Обязательные packages найдены. Exported archives и source/config IDs сохранены в ignored report.
 - Локальные попытки DB update дали TLS handshake timeout и позднее 300-second timeout при распаковке. Итог `inconclusive`, число уязвимостей `null`, не 0. Положительный Grype control и native scan на этом хосте пока не подтверждены.
 - Первый [clean-checkout CI 37840696361](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37840696361) на `4c9e9da` подтвердил native SBOM обоих images, но отклонил DB metadata в detection control. Это проверенный failure, не успешный audit; добавлена allowlisted диагностика descriptor и сохранение DB snapshot digest до проверки control.
+- Последующие native runs установили точный формат `descriptor.db.status` и prefix `v6.1.10`. Fixtures исправлены через red/green checks, без ослабления freshness/validity. Run `37842817452` выполнил DB/control/оба scans: 173 worker и 436 storage advisory/package matches, всего 189 различных advisory IDs. Scan прошёл техническую верификацию, но severity policy дала fail. Контрактные suites на этом commit прошли и выполнили оба coverage thresholds; остальной R1 не объявлен принятым.
 - [Workflow](../.github/workflows/image-audit.yml) исполняет тот же код из clean checkout и публикует только summary в logs даже при failure. Его наличие не доказывает успешный run; проверенные run IDs и результаты фиксируются в [STATUS](../STATUS.md).
 - Изменение DB может менять findings для того же image. Повторяемы процедура, identity checks и решение для сохранённых inputs, но не обещается одинаковый сегодняшний вывод из постоянно обновляемой базы.
 

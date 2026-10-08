@@ -1,12 +1,12 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-08**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-09**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последний проверенный runtime commit `2831d6c`, полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
 
 ## Реализовано в первом increment
 
-Текущий T01/T02 slice: [воспроизводимый container audit](docs/container-audit.md). 99 controlled checks прошли локально; Syft нашёл 1 152 packages worker и 151 PostgreSQL. Локальные DB attempts дали TLS/download timeout: audit `inconclusive`, count `null`. Первый clean-checkout CI `37840696361` на `4c9e9da` воспроизвёл SBOM, но отклонил DB metadata detection control; расследование и native verification продолжаются. M01 и T01/T02 остаются открытыми; принятые M02/M03/M20 не являются допуском релиза.
+Текущий T01/T02 slice: [воспроизводимый container audit](docs/container-audit.md). 99 controlled checks прошли локально и в CI, audit modules имеют 81/82 covered branches (98,78%). Native scan на `19c618c`, run `37842817452`, завершился **fail по реальным findings**, а не инфраструктурной ошибке: worker 1 152 packages/56 High matches, PostgreSQL 151 package/7 Critical и 101 High matches. PURL detection control прошёл. [Evidence, hashes и 69 triage groups](docs/evidence/container-audit-2026-10-08.md). Локальная загрузка DB остаётся inconclusive из-за TLS/download timeout; CI-результат не переименован в локальный. M01 и T01/T02 открыты до remediation и полного inventory/P0. Принятые M02/M03/M20 не являются допуском релиза.
 
 - Frozen synthetic policy, locked Python dependencies, pinned base image и проверка соответствия image текущему source fingerprint.
 - Идемпотентный bootstrap с отдельными локальными ключами ролей, inventory и runner, возвращающий inconclusive для ещё не реализованных полных gates.

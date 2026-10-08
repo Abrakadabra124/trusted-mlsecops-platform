@@ -4,7 +4,7 @@
 
 ## Порядок
 
-Текущий increment T01/T02: [container audit](container-audit.md), [ADR 0014](decisions/0014-container-audit.md). Код находится в host-only `scripts`, не включён в privileged scorer/worker image и не меняет их принятый source fingerprint. Не считать native catalogue доказательством отсутствия CVEs; статус остаётся inconclusive до успешного Grype DB/control/scan с теми же inputs.
+Текущий increment T01/T02: [container audit](container-audit.md), [ADR 0014](decisions/0014-container-audit.md). Код находится в host-only `scripts`, не включён в privileged scorer/worker image и не меняет их принятый source fingerprint. Native CI DB/control/scan выполнены на `19c618c`; severity gate дал fail из-за High/Critical findings. [Evidence и remediation plan](evidence/container-audit-2026-10-08.md). Новая image qualification обязательна после исправления inputs; автоматические scanner exceptions запрещены.
 
 1. T01-T02: inventory, frozen policy, pinned dependency/image inputs, идемпотентный bootstrap и fail-closed acceptance runner.
 2. T03-T04: синтетические данные, passport, split, signed manifests и отрицательные проверки.
