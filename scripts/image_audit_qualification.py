@@ -22,7 +22,14 @@ def fixtures():
         "descriptor": {
             "name": "grype",
             "version": "0.120.1",
-            "db": {"valid": True, "schemaVersion": "6.1.10", "built": timestamp.isoformat()},
+            "db": {
+                "status": {
+                    "valid": True,
+                    "schemaVersion": "6.1.10",
+                    "built": timestamp.isoformat(),
+                },
+                "providers": {},
+            },
         },
         "source": {"type": "image", "target": {"imageID": image_id}},
         "distro": {"name": "debian", "version": "12"},
@@ -80,28 +87,42 @@ def qualify():
         ("wrong-report-image", lambda inputs: inputs[1]["source"]["target"].update(imageID="old")),
         ("missing-image", lambda inputs: inputs[1].pop("source")),
         ("wrong-grype-version", lambda inputs: inputs[1]["descriptor"].update(version="old")),
-        ("bad-db", lambda inputs: inputs[1]["descriptor"]["db"].update(valid=False)),
-        ("truthy-db-valid", lambda inputs: inputs[1]["descriptor"]["db"].update(valid="true")),
-        ("db-error", lambda inputs: inputs[1]["descriptor"]["db"].update(error="corrupted")),
+        ("bad-db", lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(valid=False)),
+        (
+            "truthy-db-valid",
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(valid="true"),
+        ),
+        (
+            "db-error",
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(error="corrupted"),
+        ),
         ("missing-db", lambda inputs: inputs[1]["descriptor"].pop("db")),
-        ("old-schema", lambda inputs: inputs[1]["descriptor"]["db"].update(schemaVersion="5")),
+        (
+            "old-schema",
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(schemaVersion="5"),
+        ),
         (
             "stale-db",
-            lambda inputs: inputs[1]["descriptor"]["db"].update(
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(
                 built=(timestamp - timedelta(hours=121)).isoformat()
             ),
         ),
         (
             "future-db",
-            lambda inputs: inputs[1]["descriptor"]["db"].update(
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(
                 built=(timestamp + timedelta(hours=1)).isoformat()
             ),
         ),
         (
             "naive-db-date",
-            lambda inputs: inputs[1]["descriptor"]["db"].update(built="2026-10-08T20:00:00"),
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(
+                built="2026-10-08T20:00:00"
+            ),
         ),
-        ("invalid-db-date", lambda inputs: inputs[1]["descriptor"]["db"].update(built="yesterday")),
+        (
+            "invalid-db-date",
+            lambda inputs: inputs[1]["descriptor"]["db"]["status"].update(built="yesterday"),
+        ),
         ("unsupported-distro", lambda inputs: inputs[0]["distro"].update(id="unknown")),
         ("wrong-distro", lambda inputs: inputs[1]["distro"].update(version="13")),
         ("ignored-matches", lambda inputs: inputs[1].update(ignoredMatches=[match])),

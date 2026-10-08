@@ -36,7 +36,7 @@ def qualify():
             (root / "scripts").mkdir()
             calls = []
             sbom, report, match, image_id, unused = fixtures()
-            report["descriptor"]["db"]["built"] = datetime.now(UTC).isoformat()
+            report["descriptor"]["db"]["status"]["built"] = datetime.now(UTC).isoformat()
             fingerprint = "f" * 64
             inspected = {
                 "Id": image_id,

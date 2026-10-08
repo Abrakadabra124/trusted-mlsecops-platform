@@ -12,7 +12,7 @@ SEVERITIES = ("Negligible", "Low", "Medium", "High", "Critical", "Unknown")
 def database(report, timestamp):
     try:
         descriptor = report["descriptor"]
-        status = descriptor["db"]
+        status = descriptor["db"]["status"]
         built = datetime.fromisoformat(status["built"].replace("Z", "+00:00"))
         if (
             descriptor["name"] != "grype"

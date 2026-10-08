@@ -301,9 +301,10 @@ def audit(root):
         "scanner_name": descriptor.get("name"),
         "scanner_version": descriptor.get("version"),
         "database": {
-            key: descriptor.get("db", {}).get(key) for key in ("schemaVersion", "built", "valid")
+            key: descriptor.get("db", {}).get("status", {}).get(key)
+            for key in ("schemaVersion", "built", "valid")
         },
-        "database_error_present": bool(descriptor.get("db", {}).get("error")),
+        "database_error_present": bool(descriptor.get("db", {}).get("status", {}).get("error")),
     }
     write_json(safe_child(root, REPORT), report)
     detection_control(control, exit_code)
