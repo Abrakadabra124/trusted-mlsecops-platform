@@ -25,7 +25,7 @@ def fixtures():
             "db": {
                 "status": {
                     "valid": True,
-                    "schemaVersion": "6.1.10",
+                    "schemaVersion": "v6.1.10",
                     "built": timestamp.isoformat(),
                 },
                 "providers": {},

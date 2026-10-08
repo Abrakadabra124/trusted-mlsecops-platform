@@ -19,7 +19,7 @@ def database(report, timestamp):
             or descriptor["version"] != GRYPE_VERSION
             or status["valid"] is not True
             or status.get("error")
-            or not re.fullmatch(r"6\.\d+\.\d+", status["schemaVersion"])
+            or not re.fullmatch(r"v6\.\d+\.\d+", status["schemaVersion"])
             or built.tzinfo is None
             or not timedelta(0) <= timestamp - built <= timedelta(hours=120)
         ):
