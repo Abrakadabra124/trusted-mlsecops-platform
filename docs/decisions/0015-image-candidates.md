@@ -1,6 +1,6 @@
 # ADR 0015: исправление images через отдельные candidates
 
-Дата: 2026-10-09. Статус: Proposed, implementation started. Scope: T01/T02, не завершение M01 и не переключение работающего SQL.
+Дата: 2026-10-09. Статус: Implemented for isolated comparison; runtime adoption not accepted. Scope: T01/T02, не завершение M01 и не переключение работающего SQL.
 
 ## Требование и критерий
 
@@ -15,6 +15,8 @@ Native audit обнаружил High/Critical matches в обоих runtime imag
 5. Проверить настоящие fresh-process training/ONNX predictions worker candidate в новом owned state. Storage candidate пока только build/inventory/audit; перенос текущей signed history требует следующего явно scoped restore-to-new-target increment. Toy SQL smoke не заменяет этот restore.
 
 ## Риски и ограничения
+
+Проверенный outcome: [локальный и clean-checkout CI experiment](../evidence/image-candidates-2026-10-09.md) завершены. Worker сохранил функциональность, fixed PCRE2 устранил один High match, storage уменьшил Critical 7 -> 1 и High 101 -> 79, но добавил четыре advisory IDs. Оба candidates fail. Решение допускает способ безопасного эксперимента, не эти images к deployment. Повтор сравнения не требует переноса работающей SQL-БД.
 
 Минимизация не гарантирует отсутствие CVEs. У baseline worker все High matches относятся к Debian packages, а не к Rust crates uv. Нельзя объявлять удаление build tools исправлением этих High findings. Вендор gosu указывает на необходимость проверки достижимости Go symbols; удаление действительно неиспользуемой утилиты не является доказательством её эксплуатируемости.
 

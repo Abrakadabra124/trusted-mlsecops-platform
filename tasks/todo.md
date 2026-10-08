@@ -9,7 +9,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T02
 - [ ] Foundation P0 и совместимые зависимости. Зависимость: T01. Gate: M01.
-- Прогресс: [storage snapshot/restore](../docs/storage-recovery.md) сохраняет ledger; baseline [image audit](../docs/container-audit.md) дал fail: worker 56 High, storage 7 Critical/101 High matches. [69 triage groups](../docs/evidence/container-audit-2026-10-08.md) сохранены. [Separate candidate images](../docs/image-candidates.md) собраны; worker прошёл 74 developer checks, audit/candidate contracts - 123 checks. Сравнение четырёх images на одной DB проверяется; storage restore-to-new-target и adoption не выполнены. Полный inventory и P0-отчёт ещё не приняты.
+- Прогресс: [storage snapshot/restore](../docs/storage-recovery.md) сохраняет ledger; baseline [image audit](../docs/container-audit.md) дал fail: worker 56 High, storage 7 Critical/101 High matches. [69 triage groups](../docs/evidence/container-audit-2026-10-08.md) сохранены. [Candidate experiment локально и в CI](../docs/evidence/image-candidates-2026-10-09.md) повторил 74 worker и 123 audit/candidate checks. Same-DB comparison: worker 55 High, storage 1 Critical/79 High и четыре новых advisory IDs; оба candidates fail. Далее: supported runtime remediation и scoped storage restore-to-new-target, без смены working SQL. Полный inventory, P0 и adoption ещё не приняты.
 - Результат: pinned version matrix, отдельное окружение, проверка registry maintenance path, storage decision, идемпотентный bootstrap и rollback migration plan.
 - Проверка: два bootstrap, schema migration/restore smoke, отсутствие потери артефактов/ключей; lockfile и runtime соответствуют inventory.
 

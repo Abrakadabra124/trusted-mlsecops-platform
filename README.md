@@ -10,7 +10,7 @@
 
 Дополнительная проверка среды: [аудит worker/PostgreSQL images](docs/container-audit.md). SBOM generation и vulnerability scan имеют отдельные результаты; недоступная база не даёт ложный pass.
 
-Исправления проверяются через [отдельные images-кандидаты](docs/image-candidates.md), без замены работающей БД или ослабления severity policy.
+Исправления проверяются через [отдельные images-кандидаты](docs/image-candidates.md), без замены работающей БД или ослабления severity policy. [Проверенное сравнение на `d4b5514`](docs/evidence/image-candidates-2026-10-09.md): часть findings устранена, но candidates тоже fail, есть новые storage advisories. Это не разрешённый release.
 
 Требуются Git, uv и Docker Engine с Linux x86_64 containers. Bootstrap требует Python 3.12, Docker с минимум 2 CPU/6 GiB общей памяти и 8 GiB свободного диска. Свободную RAM для worker с лимитом 4 GiB проверяйте отдельно: capacity не означает доступный headroom. На Windows подходит Docker Desktop/WSL2 (Windows Subsystem for Linux 2).
 

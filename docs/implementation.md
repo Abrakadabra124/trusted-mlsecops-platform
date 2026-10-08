@@ -118,6 +118,14 @@ Review усилил observed-spec guard: subset matching недостаточн�
 
 Отрицательные contract tests проверяют missing/failed/stale/mismatched component, пустые/повторные case IDs и stale CLI pass после missing prerequisites, Rejected, I/O error или unexpected crash. Пропущенная проверка не становится pass. [Runbook](worker-authority-gate.md) связывает каждое требование M20 с исполняемым доказательством; текущие measurements и CI находятся в STATUS. Это граница полномочий model worker, не semantic poison detector, независимый human review или готовый R1 release.
 
+## Тринадцатый increment: image audit и проверяемое remediation
+
+[Image audit](container-audit.md) связывает native SBOM с config digest свежего Docker export, проверяет frozen vulnerability DB и detection control, затем сохраняет реальные severity findings. [ADR 0014](decisions/0014-container-audit.md) фиксирует отказ при неполном результате. Успешная работа scanner не означает успешную security policy: baseline имеет High/Critical.
+
+[ADR 0015](decisions/0015-image-candidates.md) отделяет экспериментальные recipes от работающего runtime. Worker использует прежний pinned builder, отдельный Python runtime и fixed PCRE2; storage candidate использует pinned PostgreSQL trixie без unused gosu. Source fingerprint и recipe digest проверяются отдельно. Никакой кандидат не заменяет рабочую БД автоматически.
+
+[Native comparison на `d4b5514`](evidence/image-candidates-2026-10-09.md) воспроизведён локально и в CI на одних bytes vulnerability DB. Часть findings исчезла, но оба candidates fail; новые storage advisories сохранены. Worker прошёл 74 функциональные проверки, 123 controlled contracts имеют 98% branch coverage пяти modules. Старый pass инвалидируется до нового запуска, изменение candidate во время qualification отклоняется, scanner cleanup проверен по собственным CID. M01/M18 и adoption не приняты. Следующий шаг - поддерживаемый runtime и проверяемый restore-to-new-target, не ослабление severity policy.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

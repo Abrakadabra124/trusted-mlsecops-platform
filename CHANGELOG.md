@@ -2,7 +2,7 @@
 
 ## R1 isolated image candidates - 2026-10-09
 
-Добавлены multi-stage worker с исправленным PCRE2 и без uv в runtime, PostgreSQL 18.6-trixie candidate без unused gosu и old layers, source/recipe binding и four-image same-DB comparison. 123 controlled checks прошли, worker candidate локально прошёл 74 developer checks. [Runbook и границы](docs/image-candidates.md). Native severity comparison проверяется отдельно; working SQL не меняется.
+Добавлены multi-stage worker с исправленным PCRE2 и без uv в runtime, PostgreSQL 18.6-trixie candidate без unused gosu и old layers, source/recipe binding и four-image same-DB comparison. 123 controlled checks и 74 worker developer checks прошли локально и в clean-checkout CI. [Native evidence](docs/evidence/image-candidates-2026-10-09.md): worker High 56 -> 55, storage Critical 7 -> 1 и High 101 -> 79; четыре новых storage advisory IDs не скрыты. Оба candidates fail, working SQL не меняется. [Runbook и границы](docs/image-candidates.md).
 
 ## R1 native audit findings - 2026-10-09
 
