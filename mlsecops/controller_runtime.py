@@ -60,31 +60,10 @@ def signer(state):
         kube_storage.verify_resource(document, observed, observed["metadata"]["uid"])
 
 
-def invoke(root, state, request):
-    marker = verify_saved(state, read_json(state / "controllers/resources.json"))
-    if not marker.get("ready") or marker["profile"]["source_fingerprint"] != source_fingerprint(
-        root
-    ):
-        raise Rejected("controller_profile_not_ready_or_stale")
-    role = request["role"]
+def controller_spec(profile, role, name, arguments):
     if role not in TARGETS:
         raise Rejected("controller_role_invalid")
-    profile = marker["profile"]
-    request = {**request, "profile": profile, "schema_version": 1}
-    name = f"controller-run-{uuid.uuid4().hex}"
-    namespace = f"ml-{role}"
-    config = {
-        "apiVersion": "v1",
-        "kind": "ConfigMap",
-        "metadata": {"name": name, "namespace": namespace},
-        "immutable": True,
-        "data": {"request.json": canonical(request).decode()},
-    }
-    spec = mount_api(
-        client_pod_spec(
-            profile["image"], role, ["mlsecops.controller", "--request", "/request.json"]
-        )
-    )
+    spec = mount_api(client_pod_spec(profile["image"], role, arguments))
     spec["containers"][0]["resources"]["requests"]["memory"] = "512Mi"
     spec["containers"][0]["resources"]["limits"]["memory"] = "512Mi"
     spec["volumes"].append({"name": "request", "configMap": {"name": name, "defaultMode": 292}})
@@ -97,7 +76,6 @@ def invoke(root, state, request):
         }
     )
     if role == "scorer":
-        signer(state)
         spec["volumes"].extend(
             [
                 {
@@ -125,6 +103,34 @@ def invoke(root, state, request):
         spec["containers"][0]["volumeMounts"].append(
             {"name": "signer", "mountPath": "/signer", "readOnly": True}
         )
+    return spec
+
+
+def invoke(root, state, request):
+    marker = verify_saved(state, read_json(state / "controllers/resources.json"))
+    if not marker.get("ready") or marker["profile"]["source_fingerprint"] != source_fingerprint(
+        root
+    ):
+        raise Rejected("controller_profile_not_ready_or_stale")
+    role = request["role"]
+    if role not in TARGETS:
+        raise Rejected("controller_role_invalid")
+    profile = marker["profile"]
+    request = {**request, "profile": profile, "schema_version": 1}
+    name = f"controller-run-{uuid.uuid4().hex}"
+    namespace = f"ml-{role}"
+    config = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": name, "namespace": namespace},
+        "immutable": True,
+        "data": {"request.json": canonical(request).decode()},
+    }
+    spec = controller_spec(
+        profile, role, name, ["mlsecops.controller", "--request", "/request.json"]
+    )
+    if role == "scorer":
+        signer(state)
     document = job_document(name, namespace, spec, 720)
     created_config = created_job = False
     try:

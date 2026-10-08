@@ -35,6 +35,8 @@ Qualification запускает отрицательные сценарии и 
 
 [Prediction protocol v2](docs/prediction-protocol.md) связывает каждую строку ответа с одноразовым запросом и проверяет version, порядок, размеры и probabilities до подписи. Локально прошли 164 contract checks и 136 controller checks; [точное evidence](STATUS.md). Это не гарантия правильных scores от malicious worker и не persistent holdout query budget.
 
+[Live worker boundary](docs/live-worker-boundary.md) проверяет доступ обоих worker identities к одновременно работающему scorer: реальные SQL/API endpoints, keys/tokens, holdout fixture и `/proc` соседнего процесса. Локально прошли 137 checks с положительными контрольными запросами и сохранением SQL history. Это component evidence, не полный M20 или R1 release.
+
 ## Данные и проверяемый intake
 
 `--versioned-data` связывает source lock, подписанное разрешение snapshot, quarantine, curator approval и lineage с training run. Реализованы M02 и [M03 integrity gate](docs/integrity-gate.md) для synthetic-only профиля. [Source/intake: команды, 44 проверки и ограничения](docs/data-lifecycle.md). DVC исследован, но не включён из-за неисправленной транзитивной уязвимости: [ADR 0005](docs/decisions/0005-data-lineage.md). Порог аудита не ослаблен.

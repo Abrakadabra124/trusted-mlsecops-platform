@@ -55,6 +55,8 @@ jobs:
           uv run --locked python -m mlsecops.prediction_protocol_qualification
           uv run --locked python -m mlsecops.controller_bootstrap
           uv run --locked python -m mlsecops.controller_qualification
+      - name: Live worker access to running scorer witness
+        run: uv run --locked python -m mlsecops.boundary_qualification
       - name: Sanitized component evidence
         if: always()
         run: |
@@ -62,6 +64,7 @@ jobs:
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-storage-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Private storage qualification report not produced.')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-migration-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Migration qualification report not produced.')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/controller-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Controller qualification report not produced.')"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/boundary-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Live worker boundary report not produced.')"
           echo 'Kubernetes component evidence only. Full R1 acceptance remains inconclusive.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove owned disposable CI cluster
         if: always() && steps.bootstrap.outcome == 'success'

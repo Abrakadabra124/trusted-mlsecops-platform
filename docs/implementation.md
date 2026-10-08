@@ -98,6 +98,16 @@ T04 завершена в synthetic-only профиле. Developer qualification
 
 Первая native regression выявила лишнее сравнение input image alias с actual image digest. Оно удалено: resolver по-прежнему проверяет source/image, а scorer сравнивает фактический digest execution с candidate. Постоянные tests проверяют и разрешённый alias, и отказ другого observed digest. Checks не заменялись на безусловный pass. Весь prediction path и golden verifiers обновлены вместе, без fallback на v1 или перезаписи старых artifacts.
 
+## Одиннадцатый increment: live worker access matrix
+
+[ADR 0012](decisions/0012-live-worker-boundary.md) добавляет положительно контролируемую проверку доступа, а не только отсутствие файлов в пустом контейнере. Scorer witness использует тот же builder, SQL identity, API token и signer mounts, что настоящий scorer. Он держит проверенные synthetic labels в памяти и qualification-only tmpfs file. CRI inspection связывает node PID с конкретным running container/Pod; workers пробуют `/proc` этого процесса, современные credential paths и настоящие Service IP.
+
+Локально прошли 137 checks: 43 unit/controlled и 94 live/orchestration. Обе worker identities не прочитали ни один из 29 проверенных paths и не подключились к SQL/API. Scorer положительно проверил endpoints, identity, holdout и key до и после отрицательных probes; SQL ledger сохранился. Чужой UID не позволил удалить собственный temporary ConfigMap. Все созданные Jobs/Pods/ConfigMaps очищены, постоянные policies и permissions не расширены.
+
+Review усилил observed-spec guard: subset matching недостаточно для optional shared/host PID flags и неожиданного init/ephemeral container. Добавлены отдельные rejects и постоянные negative fixtures. Первое выполнение unit suite на Windows выявило использование OS-dependent разделителя в Linux probe path; исправлен POSIX path contract, не ослаблен ожидаемый deny. Missing prerequisites теперь инвалидируют прежний component report, а не оставляют stale pass. [Команды и ограничения](live-worker-boundary.md).
+
+Это конечная live проверка текущего access slice, но не full M20: нужны агрегированное subject binding и дополнительный native malformed-output сценарий до подписи. Общий host administrator, shared kernel, persistent evaluation budget и будущие metadata/serving services остаются вне этой локальной проверки.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

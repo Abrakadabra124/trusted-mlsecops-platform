@@ -52,4 +52,6 @@ uv run --locked python -m mlsecops.controller_qualification
 
 Recovery и migration golden verifiers используют тот же helper. Полную migration suite нельзя повторно запускать со сбросом populated target: новый verifier проверяется на чистом target в CI. После protocol change заново выполняются M03, storage recovery, controller suite и clean-checkout CI, а прежние зелёные reports сохраняются как история, не доказательство нового кода.
 
+Clean checkout на `3721775` подтвердил [native Kubernetes, protocol и migration](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37827457968), [developer и isolated protocol coverage](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37827457650), [M03 и recovery](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/37827457583). Точные counts, fingerprint и ограничения: [STATUS](../STATUS.md).
+
 Код: [protocol](../mlsecops/prediction_protocol.py), [negative suite](../mlsecops/prediction_protocol_qualification.py), [scorer](../mlsecops/pipeline.py), [worker](../mlsecops/worker.py).

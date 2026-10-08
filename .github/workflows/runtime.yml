@@ -34,6 +34,7 @@ jobs:
       - name: Verify frozen source and intake gate
         run: |
           uv run --locked python -m mlsecops bootstrap
+          uv run --locked python -m mlsecops.boundary_probe_qualification
           uv run --locked coverage run --source=mlsecops.prediction_protocol --data-file=.runtime/evidence/protocol.coverage -m mlsecops.prediction_protocol_qualification
           uv run --locked coverage report --data-file=.runtime/evidence/protocol.coverage --fail-under=100
           uv run --locked python -m mlsecops.data_source repro --fresh

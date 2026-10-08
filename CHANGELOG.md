@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 live worker boundary - 2026-10-08
+
+Добавлены scorer witness, worker access probes и UID-bound cleanup. Общий controller Pod builder сохраняет настоящие mounts/identities, witness подтверждает доступ к holdout/signer и SQL/API до/после двух worker Jobs. Локально прошли 137 checks: 43 unit/controlled checks и 94 live/orchestration checks. На каждую worker identity проверены 29 filesystem/proc paths и две network boundaries. [Runbook](docs/live-worker-boundary.md). Воркер не получает credentials или host privileges; полный M20 ещё не объявляется принятым.
+
 ## R1 prediction protocol v2 - 2026-10-08
 
 Исправлен приём неизвестной schema version и произвольного scan report. Добавлены одноразовый pending batch, точные row IDs/order, request/model binding и ограничения response до signer/SQL publication. Старый prediction v1 больше не исполняется, исторические signed evaluations не переписываются. Все callers, включая golden recovery/migration, используют общий helper. Локально прошли 164 protocol и 136 controller checks; [runbook и границы](docs/prediction-protocol.md). Полные M20/M21/M18 не объявляются закрытыми.
