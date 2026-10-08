@@ -22,7 +22,7 @@ from mlsecops.sandbox import run_worker
 from mlsecops.signing import sign, verify
 
 
-def train(client, reference, policy, image, trust, executor=run_worker):
+def train(client, reference, policy, image, trust, executor=run_worker, provenance=None):
     splits, manifest, statement = storage_dataset.read_dataset(
         client,
         reference,
@@ -32,7 +32,14 @@ def train(client, reference, policy, image, trust, executor=run_worker):
         ("train", "validation"),
     )
     metadata, model, scores = train_verified_dataset(
-        statement["dataset_id"], statement["lineage_id"], splits, manifest, policy, image, executor
+        statement["dataset_id"],
+        statement["lineage_id"],
+        splits,
+        manifest,
+        policy,
+        image,
+        executor,
+        provenance,
     )
     record = {
         "schema_version": 1,

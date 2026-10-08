@@ -1,6 +1,7 @@
 **
 !pyproject.toml
 !uv.lock
+!Dockerfile
 !mlsecops/
 !mlsecops/*.py
 !policies/

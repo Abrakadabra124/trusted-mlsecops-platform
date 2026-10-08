@@ -1,3 +1,4 @@
+import re
 import uuid
 from pathlib import Path
 
@@ -50,7 +51,23 @@ def train_candidate(state, dataset_id, policy, image, executor=run_worker, linea
     return metadata
 
 
-def train_verified_dataset(dataset_id, lineage_id, splits, manifest, policy, image, executor):
+def train_verified_dataset(
+    dataset_id, lineage_id, splits, manifest, policy, image, executor, provenance=None
+):
+    root = Path(__file__).resolve().parents[1]
+    fingerprint = source_fingerprint(root)
+    if provenance is None:
+        provenance = {
+            "source_fingerprint": fingerprint,
+            "source_revision": command(["git", "-C", str(root), "rev-parse", "HEAD"]),
+        }
+    require_fields(provenance, ("source_fingerprint", "source_revision"))
+    if (
+        provenance["source_fingerprint"] != fingerprint
+        or not isinstance(provenance["source_revision"], str)
+        or not re.fullmatch(r"[0-9a-f]{40}", provenance["source_revision"])
+    ):
+        raise Rejected("training_provenance_mismatch")
     request = {
         "action": "train",
         "train": splits["train"],
@@ -100,10 +117,7 @@ def train_verified_dataset(dataset_id, lineage_id, splits, manifest, policy, ima
         "validation_probability_digest": digest(canonical(output["onnx_scores"])),
         "materials": manifest["objects"],
         "status": "unapproved-candidate",
-        "source_fingerprint": source_fingerprint(Path(__file__).resolve().parents[1]),
-        "source_revision": command(
-            ["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "HEAD"]
-        ),
+        **provenance,
     }
     return metadata, content, output["onnx_scores"]
 

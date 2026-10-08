@@ -9,7 +9,7 @@ ENV UV_LINK_MODE=copy \
     MKL_NUM_THREADS=1 \
     ORT_DISABLE_TELEMETRY=1 \
     PATH="/app/.venv/bin:${PATH}"
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock Dockerfile ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY mlsecops ./mlsecops
 COPY policies ./policies
