@@ -13,7 +13,7 @@ uv run --locked python -m scripts.asset_graph_qualification
 uv run --locked python -m scripts.asset_graph_fixture
 ```
 
-Ожидание: 25 tests OK; fixture `synthetic_fixture=true`, 17 assets, 10 impacted assets, 3 blocked deployments и только `deployment-b` unaffected. Обязательно `full_M19=inconclusive`, `release_ready=false`. Exit 0 означает, что компонент прошёл свои проверки, не что release разрешён. Команды проверены локально; новый CI и его commit указаны в STATUS после завершения.
+Ожидание: 25 tests OK; fixture `synthetic_fixture=true`, 17 assets, 10 impacted assets, 3 blocked deployments и только `deployment-b` unaffected. Обязательно `full_M19=inconclusive`, `release_ready=false`. Exit 0 означает, что компонент прошёл свои проверки, не что release разрешён. Команды проверены локально и в [clean-checkout CI 38155172493](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38155172493) на `88b168f`; результат developer workflow - success.
 
 Сверить результат с явно заданным набором в [контракте](../asset-graph.md). Не заменять сравнение множеств проверкой только count=10. Не использовать fixture digests как hashes настоящих bytes и не выдавать synthetic snapshot за состояние кластера.
 

@@ -31,7 +31,7 @@ Graph имеет ровно `schema_version`, `assets`. Каждый asset:
 | release | Ровно 1 model, 1 runtime и 1 policy, последние совпадают с run модели |
 | deployment | Ровно 1 release |
 
-Удаление обязательных edges не превращает model или deployment в независимый root. Все cycles запрещены. Кahn traversal выполняется без рекурсивного обхода. Влияние отзыва вычисляется по reverse dependencies и content-equivalent aliases `(kind, sha256)`; каждую группу aliases раскрываем один раз.
+Удаление обязательных edges не превращает model или deployment в независимый root. Все cycles запрещены. Алгоритм Кана проверяет граф без рекурсивного обхода. Влияние отзыва вычисляется по reverse dependencies и content-equivalent aliases `(kind, sha256)`; каждую группу aliases раскрываем один раз.
 
 Snapshot имеет ровно `schema_version`, `environment`, `graph_sha256`, `deployments`. Каждый deployment observation содержит `asset_id`, `sha256`, `release_sha256`, `model_sha256`, `runtime_sha256`, `policy_sha256`. Должны присутствовать все и только deployments графа, ровно один раз. Каждый digest сверяется с соответствующим node, graph digest - с canonical graph. Перестановка массива меняет graph digest, поэтому snapshot нужно связать заново; impacted set от порядка не зависит.
 
@@ -69,7 +69,7 @@ run-a-previous
 
 Локально 2026-10-11: 25 unittest methods pass; 135/135 statements и 68/68 branches, 100%. Assertion expected set задан явно, не вычисляется проверяемым traversal. RED/GREEN: сначала отсутствие implementation; при review дополнительно воспроизведён raw `RecursionError` на 12 000 nested lists и исправлен на `inventory_document_nesting`. CI добавляет те же checks и replay перед native developer qualification. Фактический clean-checkout результат фиксируется в [STATUS](../STATUS.md), coverage не заменяет независимый review.
 
-Fixture graph SHA-256: `678124fabd2ea8249ab462f807aa706dd091e800f761e0885888850c6d70ec69`. Snapshot SHA-256: `60a549ddd241580262638f2eec43c461e07eaf1a4275972025786d772dd8a4d2`.
+Fixture graph SHA-256: `678124fabd2ea8249ab462f807aa706dd091e800f761e0885888850c6d70ec69`. Snapshot SHA-256: `60a549ddd241580262638f2eec43c461e07eaf1a4275972025786d772dd8a4d2`. [Clean-checkout CI 38155172493](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38155172493) на commit `88b168f` повторил 25 tests/100% coverage, fixture digests и 74 existing developer checks; terminal success. Coverage графа проверяется отдельной session, не общей developer session.
 
 ## Граница доверия и незавершённое
 
