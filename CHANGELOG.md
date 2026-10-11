@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 frozen evaluation и subject-bound read-back - 2026-10-11
+
+Добавлены code-bound evaluation policy, pass/fail/inconclusive, null для undefined metrics, TP/ratio consistency, paired IID 95% intervals и проверка report против expected candidate и persisted reservation. Scorer применяет правила до доступа к holdout; promoter читает только candidate/evaluation. 31 contracts и 24 native SQL/model checks; ранбуки PB-06/RB-11/12. Полный M07/T09/T10 пока не закрыт, production utility не заявляется.
+
 ## R1 persistent holdout budget - 2026-10-11
 
 В SQL/scoped-controller scorer добавлена atomic reservation до holdout read, append-only ledger с frozen synthetic cap 32 и binding receipt в подписанном report. Новый run/candidate и restart не сбрасывают бюджет; worker failure не даёт refund. Добавлены 16 controlled tests, native multi-process/restart qualification, read-only CLI и PB-05/RB-08/09/10. M20 history assertions различают reservation и signed evaluation; storage recovery проверяет сохранённый слот. Полный M07, защита от административного snapshot rollback и production readiness не объявляются завершёнными.

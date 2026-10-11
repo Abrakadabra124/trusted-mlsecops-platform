@@ -10,6 +10,8 @@ Training/prediction идут в отдельных короткоживущих 
 
 ## Проверенные числа
 
+Обновление 2026-10-11: [frozen evaluation](frozen-evaluation.md) добавляет explicit inconclusive, предопределённые slices/thresholds, paired IID intervals и subject-bound read-back подписанного report. Policy digest `860e08d18aab4c0f8ce9ada90ece8193d191ff9fdd319f39a50a4f645abaa9cb`. Численные point estimates на том же synthetic holdout не изменились. 95% diagnostic interval AP: [0.9218861146500273, 0.9421175400584901], gain: [0.5088475540872814, 0.5421550041037284], 1 000 valid resamples. Это не CI будущей бизнес-utility и не production approval.
+
 Локальная qualification 2026-10-07: три fresh-process обучения, один pinned image/source fingerprint. Holdout: 3 000 строк, 1 222 положительных labels.
 
 | Измерение | Результат |

@@ -2,12 +2,13 @@ import io
 import runpy
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 import psycopg
 
 from mlsecops import holdout_budget, storage, storage_pipeline
-from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.contracts import Rejected, canonical, digest, read_json
 
 
 class BudgetContracts(unittest.TestCase):
@@ -163,6 +164,7 @@ class InspectionCLI(unittest.TestCase):
 
 class ScorerOrdering(unittest.TestCase):
     def test_reservation_precedes_holdout_read_and_worker(self):
+        policy = read_json(Path(__file__).resolve().parents[1] / "policies/local-cpu.json")
         metadata = {"dataset_id": "d", "lineage_id": "l"}
         manifest = {"objects": {"holdout.json": {"sha256": "a" * 64}}}
         statement = {"dataset_id": "d", "lineage_id": "l"}
@@ -205,6 +207,7 @@ class ScorerOrdering(unittest.TestCase):
             patch.object(storage_pipeline, "verify", side_effect=lambda value, *args: value),
             patch.object(storage, "put", return_value="result"),
             patch.object(storage, "get") as get,
+            patch.object(storage_pipeline, "read_evaluation") as reader,
         ):
             bound = {
                 "schema_version": 1,
@@ -215,7 +218,8 @@ class ScorerOrdering(unittest.TestCase):
                 "report": {"status": "test"},
             }
             get.return_value = canonical(bound)
-            result = storage_pipeline.evaluate("client", "candidate", {}, "image", trust, "key")
+            reader.return_value = bound
+            result = storage_pipeline.evaluate("client", "candidate", policy, "image", trust, "key")
             self.assertEqual(events, ["reserve", "holdout", "worker"])
             self.assertEqual(result["evaluation"], bound)
             read_manifest.assert_called_once()
@@ -223,13 +227,13 @@ class ScorerOrdering(unittest.TestCase):
             read_dataset.reset_mock()
             worker.reset_mock()
             with self.assertRaisesRegex(Rejected, "holdout_budget_exhausted"):
-                storage_pipeline.evaluate("client", "new-candidate", {}, "image", trust, "key")
+                storage_pipeline.evaluate("client", "new-candidate", policy, "image", trust, "key")
             read_dataset.assert_not_called()
             worker.assert_not_called()
             reservation.reset_mock()
             metadata["dataset_id"] = "changed"
             with self.assertRaisesRegex(Rejected, "stored_candidate_dataset_binding_mismatch"):
-                storage_pipeline.evaluate("client", "candidate", {}, "image", trust, "key")
+                storage_pipeline.evaluate("client", "candidate", policy, "image", trust, "key")
             reservation.assert_not_called()
             read_dataset.assert_not_called()
 

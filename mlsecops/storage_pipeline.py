@@ -1,10 +1,11 @@
 import argparse
 import re
 import sys
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 
-from mlsecops import holdout_budget, storage, storage_dataset
+from mlsecops import evaluation_quality, holdout_budget, storage, storage_dataset
 from mlsecops.bootstrap import initialize
 from mlsecops.contracts import (
     Rejected,
@@ -18,6 +19,7 @@ from mlsecops.contracts import (
 from mlsecops.data_source import prepare_versioned, reproduce
 from mlsecops.datasets import source_approval
 from mlsecops.pipeline import evaluate_verified_candidate, train_verified_dataset
+from mlsecops.prediction_protocol import validate_scan
 from mlsecops.sandbox import run_worker
 from mlsecops.signing import sign, verify
 
@@ -114,7 +116,121 @@ def load_candidate(client, reference, policy):
     return record, metadata, model
 
 
+def read_evaluation(client, evaluation_reference, candidate_reference, policy, trust):
+    evaluation_quality.freeze(policy)
+    record, metadata, _ = load_candidate(client, candidate_reference, policy)
+    bound = verify(
+        decode(storage.get(client, "evaluations", evaluation_reference)),
+        "stored-evaluation",
+        trust["evaluator"],
+    )
+    require_fields(
+        bound,
+        (
+            "schema_version",
+            "candidate_reference",
+            "dataset_reference",
+            "lineage_id",
+            "holdout_access",
+            "report",
+        ),
+    )
+    if (
+        type(bound["schema_version"]) is not int
+        or bound["schema_version"] != 1
+        or bound["candidate_reference"] != candidate_reference
+        or bound["dataset_reference"] != record["dataset_reference"]
+        or bound["lineage_id"] != metadata["lineage_id"]
+    ):
+        raise Rejected("stored_evaluation_subject_mismatch")
+    report = bound["report"]
+    require_fields(
+        report,
+        (
+            "schema_version",
+            "run_id",
+            "created_at",
+            "model_digest",
+            "dataset_id",
+            "policy_digest",
+            "image_id",
+            "holdout_digest",
+            *evaluation_quality.SUMMARY_FIELDS,
+            "validation_parity_max_error",
+            "release_status",
+            "scan",
+            "prediction_protocol",
+            "prediction_execution",
+            "limitations",
+        ),
+    )
+    if (
+        type(report["schema_version"]) is not int
+        or report["schema_version"] != 1
+        or any(
+            report[name] != metadata[name]
+            for name in ("run_id", "model_digest", "dataset_id", "policy_digest", "image_id")
+        )
+        or report["policy_digest"] != digest(canonical(policy))
+    ):
+        raise Rejected("stored_evaluation_subject_mismatch")
+    if (
+        not evaluation_quality.number(
+            report["validation_parity_max_error"], 0, policy["parity_tolerance"]
+        )
+        or report["validation_parity_max_error"] != metadata["validation_parity_max_error"]
+        or report["release_status"] != "unapproved"
+    ):
+        raise Rejected("stored_evaluation_state_invalid")
+    try:
+        if datetime.fromisoformat(report["created_at"]).tzinfo is None:
+            raise ValueError
+    except (ValueError, TypeError):
+        raise Rejected("stored_evaluation_time_invalid") from None
+    evaluation_quality.validate_summary(
+        {name: report[name] for name in evaluation_quality.SUMMARY_FIELDS}
+    )
+    validate_scan(report["scan"])
+    proof = report["prediction_protocol"]
+    require_fields(
+        proof,
+        ("schema_version", "batch_id", "model_digest", "request_digest", "response_digest", "rows"),
+    )
+    for name in ("model_digest", "request_digest", "response_digest"):
+        storage.object_id(proof[name])
+    if (
+        type(proof["schema_version"]) is not int
+        or proof["schema_version"] != 2
+        or not isinstance(proof["batch_id"], str)
+        or not re.fullmatch(r"[0-9a-f]{32}", proof["batch_id"])
+        or type(proof["rows"]) is not int
+        or proof["rows"] != report["rows"]
+        or proof["model_digest"] != metadata["model_digest"]
+    ):
+        raise Rejected("stored_evaluation_protocol_mismatch")
+    execution = report["prediction_execution"]
+    if (
+        not isinstance(execution, dict)
+        or execution.get("image_id") != metadata["image_id"]
+        or ("input_digest" in execution and execution["input_digest"] != proof["request_digest"])
+    ):
+        raise Rejected("stored_evaluation_execution_mismatch")
+    access = bound["holdout_access"]
+    require_fields(access, ("holdout_digest", "slot", "reservation", "policy_digest"))
+    reserved = holdout_budget.reservation(report["holdout_digest"], access["slot"])
+    if (
+        access["holdout_digest"] != report["holdout_digest"]
+        or access["reservation"] != digest(reserved)
+        or access["policy_digest"] != digest(canonical(holdout_budget.policy()))
+    ):
+        raise Rejected("stored_evaluation_reservation_mismatch")
+    if storage.get(client, "evaluations", access["reservation"]) != reserved:
+        raise Rejected("stored_evaluation_reservation_missing")
+    return bound
+
+
 def evaluate(client, reference, policy, image, trust, signing_key, executor=run_worker):
+    evaluation_quality.freeze(policy)
     record, metadata, model = load_candidate(client, reference, policy)
     manifest, statement = storage_dataset.read_manifest(
         client,
@@ -152,8 +268,7 @@ def evaluate(client, reference, policy, image, trust, signing_key, executor=run_
     if verify(envelope, "stored-evaluation", trust["evaluator"]) != bound:
         raise Rejected("stored_evaluation_signer_mismatch")
     result = storage.put(client, "evaluations", canonical(envelope))
-    persisted = decode(storage.get(client, "evaluations", result))
-    if verify(persisted, "stored-evaluation", trust["evaluator"]) != bound:
+    if read_evaluation(client, result, reference, policy, trust) != bound:
         raise Rejected("stored_evaluation_persistence_mismatch")
     return {"evaluation_reference": result, "evaluation": bound}
 

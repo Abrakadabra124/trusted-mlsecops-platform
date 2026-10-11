@@ -4,6 +4,8 @@
 
 ## Порядок
 
+Increment 2026-10-11: [frozen evaluation и signed read-back](frozen-evaluation.md). Доверенный scorer замораживает правила до доступа к holdout, различает insufficient evidence и quality failure, сохраняет paired IID intervals. Reader сверяет signed claims с ожидаемым persisted candidate и budget receipt, не запрашивая labels. Native negative fixtures остаются отвергнутыми immutable объектами. Полный M07 gate ещё требует orchestration/evidence binding; хороший AP не закрывает остальные release blockers.
+
 Increment 2026-10-11: [holdout budget](operations/holdout-budget.md), [ADR 0018](decisions/0018-persistent-holdout-budget.md). SQL scorer получает новый atomic slot после проверки signed manifest, но до чтения labels и prediction worker. Ledger сохраняется при restart, candidate/run changes и входит в storage backup. Ранбуки различают исчерпание, неопределённый commit и старый restore; M07 пока не принят. Native M20 history assertions обновлены: расход reservation допустим при отказе, подписанный report недопустим.
 
 2026-10-11: [исполняемый M06 gate](reproducibility-gate.md) подключён к acceptance dispatcher. Он не принимает старый component JSON: создаёт новую campaign, восстанавливает training requests из signed splits, повторно сверяет model/vector/metadata и читает шесть tracking records. Добавлены explicit state, защита от reuse campaign, binding host scripts и stale-image negative. Локально 18 integration cases и 47 controlled contracts прошли; runtime fingerprint изменён, поэтому worker пересобран. T07/T08 целиком остаются открытыми; metadata-loss и serving alias ещё требуют реальной lifecycle-интеграции.

@@ -31,6 +31,8 @@ jobs:
           uv run --locked pip-audit --strict --progress-spinner off
           uv run --locked coverage run --source=mlsecops.holdout_budget -m scripts.holdout_budget_qualification
           uv run --locked coverage report --fail-under=95
+          uv run --locked coverage run --data-file=.coverage-evaluation --source=mlsecops.evaluation_quality -m unittest scripts.evaluation_quality_qualification scripts.evaluation_binding_qualification
+          uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
       - name: Fresh PostgreSQL bootstrap
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -41,6 +43,8 @@ jobs:
           uv run --locked python -m mlsecops.acceptance --gate M03 --output .runtime/evidence/M03.json
       - name: Consistent backup and independent storage recovery
         run: uv run --locked python -m mlsecops.storage_recovery_qualification
+      - name: Frozen quality policy and independent signed evaluation readback
+        run: uv run --locked python -m mlsecops.evaluation_qualification
       - name: Persistent holdout budget with independent process and database restart
         run: uv run --locked python -m mlsecops.holdout_budget_qualification
       - name: Sanitized storage evidence
@@ -49,4 +53,5 @@ jobs:
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/M03.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed M03 evidence')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-recovery-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage recovery evidence')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/holdout-budget.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed holdout budget evidence')"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/evaluation-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed evaluation evidence')"
           echo 'M03 plus storage recovery components. Controllers are checked separately; full M17 and full R1 remain pending.' >> "$GITHUB_STEP_SUMMARY"

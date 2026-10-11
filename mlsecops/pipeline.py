@@ -3,8 +3,8 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from sklearn.metrics import average_precision_score, recall_score
 
+from mlsecops import evaluation_quality
 from mlsecops.contracts import (
     Rejected,
     atomic_write,
@@ -155,31 +155,13 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
 
 
 def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, image, executor):
+    rules = evaluation_quality.freeze(policy)
     batch = PredictionBatch(content, [row["features"] for row in holdout])
     output, execution = executor(image, batch.request)
     if execution["image_id"] != metadata["image_id"]:
         raise Rejected("evaluation_protocol_mismatch")
     scores, scan, protocol = batch.consume(output)
-    labels = np.array([row["label"] for row in holdout])
-    positives = int(labels.sum())
-    auprc = float(average_precision_score(labels, scores))
-    dummy_auprc = float(labels.mean())
-    slices = {}
-    for name, selector in (
-        ("low-change", np.array([row["features"][0] < 0.5 for row in holdout])),
-        ("high-change", np.array([row["features"][0] >= 0.5 for row in holdout])),
-    ):
-        slices[name] = {
-            "rows": int(selector.sum()),
-            "positives": int(labels[selector].sum()),
-            "recall": float(recall_score(labels[selector], scores[selector] >= 0.5)),
-        }
-    quality = (
-        positives >= policy["minimum_positives"]
-        and auprc >= policy["minimum_auprc"]
-        and auprc - dummy_auprc >= policy["minimum_auprc_gain"]
-        and all(value["rows"] >= policy["minimum_slice_rows"] for value in slices.values())
-    )
+    quality = evaluation_quality.summarize(holdout, scores.tolist(), rules)
     report = {
         "schema_version": 1,
         "run_id": metadata["run_id"],
@@ -189,14 +171,8 @@ def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, im
         "policy_digest": digest(canonical(policy)),
         "image_id": execution["image_id"],
         "holdout_digest": manifest["objects"]["holdout.json"]["sha256"],
-        "rows": len(holdout),
-        "positives": positives,
-        "auprc": auprc,
-        "dummy_auprc": dummy_auprc,
-        "auprc_gain": auprc - dummy_auprc,
-        "slices": slices,
+        **quality,
         "validation_parity_max_error": metadata["validation_parity_max_error"],
-        "quality_component": "pass" if quality else "fail",
         "release_status": "unapproved",
         "scan": scan,
         "prediction_protocol": protocol,
@@ -204,7 +180,8 @@ def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, im
         "limitations": [
             "Synthetic utility only",
             "Full M07 and R1 acceptance not established",
-            "Full MLflow, holdout query budget and storage-role acceptance pending",
+            "Paired IID intervals are lab diagnostics, not business utility or temporal/group uncertainty",
+            "Persistent budget is enforced only by SQL/scoped-controller orchestration, not this file helper",
         ],
     }
     return report

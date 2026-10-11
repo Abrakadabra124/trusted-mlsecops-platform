@@ -6,6 +6,8 @@
 
 ## Запустить рабочий пример
 
+Качество и доверие к оценке: [frozen policy, интервалы и signed report](docs/frozen-evaluation.md). Недостаток данных теперь даёт `inconclusive`, а reader проверяет report против ожидаемого candidate. [PB-06/RB-11/12](docs/operations/evaluation-troubleshooting.md) описывают диагностику и повторную квалификацию.
+
 Независимая оценка: [постоянный holdout budget и PB-05](docs/operations/holdout-budget.md). SQL scorer ограничивает число попыток до чтения контрольных labels; новый run ID или перезапуск не обнуляют ledger. Это компонент M07, не общая приёмка release.
 
 Новое: [native reproducibility campaign](docs/reproducibility.md) с тремя повторениями, реальными seed/data/environment mutations и публикацией шести runs. [Ранбуки и плейбуки](docs/runbooks.md) описывают диагностику, встреченные проблемы и безопасное восстановление. Read-only tracking check: `uv run --locked python -m scripts.tracking_doctor`.

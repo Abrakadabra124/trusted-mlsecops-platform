@@ -58,11 +58,13 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 - [ ] Frozen evaluation policy. Зависимость: T08. Gate: M07.
 - Результат: model card, clean baseline, slice definitions, threshold/CI policy до final holdout, бизнес-dataset stop conditions.
 - Проверка: dummy comparison, sample counts, disjoint entities и label maturity; недостаток данных = inconclusive.
+- Increment 2026-10-11: [code-bound frozen lab policy](../docs/frozen-evaluation.md), explicit inconclusive, DummyClassifier AP equivalence, paired IID intervals и controlled train-only preprocessing. Полный M07 gate и зависимости T08 остаются открытыми.
 
 ## T10
 - [ ] Independent evaluator. Зависимости: T09, T26. Gate: M07.
 - Результат: trusted scorer вне prediction worker, holdout access budget, signed subject-bound evaluation reports. Labels и signing keys недоступны worker.
 - Проверка: report swap, попытка trainer прочесть holdout, missing metric, signature mismatch; deny self-approval.
+- Increment 2026-10-11: [read_evaluation](../mlsecops/storage_pipeline.py) сверяет expected candidate, signed metrics, execution/protocol и существующий reservation; native promoter read-back без labels. 24 native SQL/model checks, не общая M07-приёмка.
 - Increment 2026-10-11: [постоянный holdout budget](../docs/operations/holdout-budget.md) в SQL/scoped-controller scorer, atomic reservation до labels/worker, signed receipt, concurrent processes/restart/new-run negatives. Полный T10/M07 остаётся открыт; восстановление старого snapshot не имеет внешнего anti-rollback witness.
 
 ## T11
