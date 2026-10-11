@@ -42,13 +42,14 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T07
 - [ ] CPU pipeline и export. Зависимость: T06. Gate: M06.
+- Новый component 2026-10-11: [native reproducibility campaign](../docs/reproducibility.md), три fresh-process повтора и по одному actual seed/data/environment изменению. Локально 6 training/6 prediction/6 MLflow records, 33 controlled comparator cases; baseline difference 0.0, mutations не приняты как повторы. Полный gate/dispatcher не закрыт. Добавлены [ранбуки и read-only плейбук](../docs/runbooks.md).
 - Результат: preprocess/train DAG с seed/hyperparameters и machine-readable outputs; fit только на train.
 - Проверка: три fresh-process runs, сравнение входов и predictions; mutation inputs не маскируется cache hit.
 
 ## T08
 - [ ] MLflow tracking и lineage. Зависимость: T07. Gate: M06.
 - Новый local component: [PostgreSQL/TLS service и CI](../docs/tracking-service.md), отдельные DB identities, host publisher, persistence обеих services. Локально и в clean-checkout run `38131527513` на `40d26dc` прошли 54 native + 16 controlled checks и 74 worker checks. T08 остаётся открытой: Kubernetes publisher, metadata-loss/recovery и полный M06 ещё нужны.
-- Прогресс: [MLflow 3.17.0 spike и clean-checkout CI](../docs/tracking-spike.md): отдельный hashed lock, 91 package dependency audit без findings/skips локально; audit, три реальные training runs и 53 HTTP access/artifact/restart checks повторены в CI `a48a9dc`, run `38129646455` success. Это offline SQLite probe, не замена PostgreSQL/TLS или завершённая интеграция publisher; native mutation campaign ещё нужна.
+- Прогресс: [MLflow 3.17.0 spike и clean-checkout CI](../docs/tracking-spike.md): отдельный hashed lock, 91 package dependency audit без findings/skips локально; audit, три реальные training runs и 53 HTTP access/artifact/restart checks повторены в CI `a48a9dc`, run `38129646455` success. Это offline SQLite probe, не замена PostgreSQL/TLS или завершённая интеграция publisher; последующая native mutation campaign описана в T07.
 - Результат: защищённый MLflow, отдельная metadata DB, run-to-material binding и artifact access tests. Только внешний publisher получает право записи; training worker не получает его credentials.
 - Проверка: anonymous/чужая identity запрещены, потеря metadata не меняет runtime alias, повторное обучение сохраняет отдельные runs.
 

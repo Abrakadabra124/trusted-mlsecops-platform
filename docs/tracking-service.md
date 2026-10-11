@@ -102,13 +102,15 @@ Regression workflows того же `40d26dc` завершились success: [do
 
 ## Что ещё обязательно
 
-- Полный M06: native seed/data/environment mutation campaign, reconciliation с runtime lineage и проверка потери tracking metadata без изменения release. Три повтора сами по себе не закрывают этот gate.
+- Полный M06: reconciliation с runtime lineage, подключение acceptance dispatcher и проверка потери tracking metadata без изменения release. [Native seed/data/environment campaign](reproducibility.md) добавлена отдельным component; это не закрывает полный gate.
 - T08: Kubernetes scoped publisher integration и metadata recovery. Host publisher является рабочим local component, не новым привилегированным controller в кластере.
 - Отдельный полный OS image audit MLflow и publisher provenance. Известные High/Critical findings baseline PostgreSQL/worker не устранены; `release_ready=false` независимо от успешных функциональных проверок.
 - Basic auth MLflow отмечен upstream как experimental. EDIT позволяет изменять metrics/artifacts; это не WORM. Tested grants относятся к experiment/API routes, не ко всем функциям MLflow. Нельзя считать tracking источником разрешения выпуска.
 - Нет SSO, production secrets manager, rate limits, volume quotas/retention, многопользовательского hardening, HA, автоматической ротации и восстановления в новой среде. TLS/loopback и resource limits не подменяют эти механизмы.
 
 ## Основания решения
+
+Эксплуатация: [диагностический плейбук и ранбук](operations/tracking-troubleshooting.md) фиксируют реальные bootstrap-проблемы, ownership checks и безопасный restart. Проверенные команды отделены от ещё не реализованного disaster recovery.
 
 - [MLflow auth](https://mlflow.org/docs/latest/self-hosting/security/basic-http-auth/): явно выбранные permissions, отдельный auth store и современные grant APIs. API paths дополнительно проверены по installed 3.17.0 source.
 - [MLflow tracking server](https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/): tracking отделён от artifact storage. Метод запуска проверен по установленному `_run_server`, не угадан по старому tutorial.

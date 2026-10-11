@@ -6,6 +6,8 @@
 
 ## Запустить рабочий пример
 
+Новое: [native reproducibility campaign](docs/reproducibility.md) с тремя повторениями, реальными seed/data/environment mutations и публикацией шести runs. [Ранбуки и плейбуки](docs/runbooks.md) описывают диагностику, встреченные проблемы и безопасное восстановление. Read-only tracking check: `uv run --locked python -m scripts.tracking_doctor`.
+
 **Release заблокирован:** native audit на `19c618c` обнаружил High/Critical package findings. [Проверенные результаты и triage](docs/evidence/container-audit-2026-10-08.md). Рабочее обучение не означает безопасный выпуск; scanner exceptions не добавлены.
 
 Дополнительная проверка среды: [аудит worker/PostgreSQL images](docs/container-audit.md). SBOM generation и vulnerability scan имеют отдельные результаты; недоступная база не даёт ложный pass.

@@ -25,17 +25,22 @@ jobs:
       - name: Source, negative contracts and dependency audit
         run: |
           uv sync --locked --python 3.12.15
-          uv run --locked ruff check scripts/tracking*.py images/tracking/*.py
-          uv run --locked ruff format --check scripts/tracking*.py images/tracking/*.py
+          uv run --locked ruff check scripts/tracking*.py scripts/reproducibility*.py images/tracking/*.py
+          uv run --locked ruff format --check scripts/tracking*.py scripts/reproducibility*.py images/tracking/*.py
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m scripts.tracking_spike_qualification
           uv run --locked python -m scripts.tracking_config_qualification
           uv run --locked python -m scripts.tracking_client_qualification
+          uv run --locked python -m scripts.tracking_doctor_qualification
           uv run --locked coverage run --source=scripts.tracking_records -m scripts.tracking_records_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage.json
           uv run --locked python -c "import json; totals=json.load(open('.coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
           uv run --locked pip-audit -r images/tracking/requirements.lock --disable-pip --require-hashes --strict --progress-spinner off
+          uv run --locked coverage run --source=scripts.reproducibility -m scripts.reproducibility_qualification
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .coverage-reproducibility.json
+          uv run --locked python -c "import json; totals=json.load(open('.coverage-reproducibility.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
       - name: Build isolated locked images
         run: |
           uv run --locked python -m mlsecops build
@@ -44,6 +49,10 @@ jobs:
         run: uv run --locked python -m scripts.tracking_spike qualify
       - name: Persistent PostgreSQL, verified TLS and real publication
         run: uv run --locked python -m scripts.tracking_service_qualification
+      - name: Read-only tracking diagnostic playbook
+        run: uv run --locked python -m scripts.tracking_doctor
+      - name: Native seed, data and environment changes are not repetitions
+        run: uv run --locked python -m scripts.reproducibility_native
       - name: Stop only owned tracking services
         if: ${{ always() }}
         run: |

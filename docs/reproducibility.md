@@ -1,0 +1,45 @@
+# Native воспроизводимость и изменения inputs
+
+Компонент T07/T08, 2026-10-11. Это исполняемая проверка на synthetic local CPU профиле, не полный M06 и не разрешение release. [Ранбук повторения и устранения проблем](operations/reproducibility-troubleshooting.md).
+
+## Требование и реализация
+
+Проверить, что три свежих обучения на одинаковых inputs воспроизводят предсказания, а реальные изменения seed/data/environment не принимаются за повторение. Сравнение только accuracy или model filename не обнаруживает изменение происхождения модели.
+
+- [Comparator](../scripts/reproducibility.py) проверяет точную схему, три разных run IDs, шесть типов input digest, конечные вероятности, vector digest, длину golden set и численные допуски. Сначала сравниваются inputs, затем числа. Допуски M06 не изменены: probability <= `1e-6`, AUPRC <= `1e-4`.
+- [Native runner](../scripts/reproducibility_native.py) создаёт отдельный UUID-state и signed synthetic dataset: 14 000 train, 3 000 validation, 3 000 frozen holdout. `train_candidate` трижды запускает настоящий worker, каждый раз отдельно выполняется ONNX prediction. Новые IDs - дополнительная проверка; fresh execution обеспечен реальными вызовами без cache/reuse модели.
+- Шесть digest полей связывают request, signed dataset, policy, source revision/fingerprint, фактический image/versions/environment и common golden rows. Полные labels остаются на host, prediction worker получает features. Модель и векторы не загружаются в MLflow.
+- Seed 17 -> 18: training request/policy меняются, split bytes проверяются на точное равенство. Data: первый feature первой training row меняется на `1-value`; validation/holdout остаются прежними. Environment: отдельный image с `OMP_NUM_THREADS=2` вместо 1, actual value проверяется в network-none контейнере, исходный source fingerprint сохраняется.
+- Каждая mutation вызывает новое обучение и prediction, всего **шесть + шесть**. Comparator обязан отклонить смешанную тройку с конкретным `reproducibility_inputs_changed`, даже при одинаковых предсказаниях.
+- Внешний publisher записывает шесть очищенных records в private PostgreSQL/TLS MLflow. Reader сверяет params, metrics и artifact bytes. Каждый record связан с реальным training ID и immutable image ID, но имеет статус `unapproved-candidate`.
+
+Выбран отдельный host runner, а не новый orchestration framework: он использует уже проверенную sandbox boundary, не добавляет MLflow SDK/credentials в worker и позволяет независимо проверять численный comparator. Host/controller пока доверенный; это не доказательство независимого publisher в Kubernetes.
+
+## Проверенный локальный результат
+
+Последний native report: `2026-10-11T11:02:03.181911Z`, HEAD `89b42ec3a4fe1533a9632cbb5320fb06628fbfc8` + dirty host scripts, после исправления pairwise comparison. Runtime fingerprint `5c42a8f25bb59fde14446e9864b5c812a26893e9bf5527a2e3ae740c8e7f54e3`. Это локальная проверка до commit, не clean-checkout CI текущего increment.
+
+- Три baseline runs, 3 000 golden rows, max probability difference **0.0**, AUPRC difference **0.0**, AUPRC **0.9323007296445032**.
+- Model digest всех трёх: `09c48030c2a98d78d74d0a31d4fe18b081e4906abadf5be8a246ec4faa416b8f`.
+- Vector digest всех трёх: `faba956b15aa6a066c834a96eb10dc4b94c3fed6d629b6b5e654a999d8677a14`.
+- Seed mutation: changed dataset/policy/request, probability difference **0.0**, отклонена как повторение.
+- Data mutation: changed dataset/request, probability difference **0.00036460161209106445**, отклонена как повторение.
+- Environment mutation: changed environment, probability difference **0.0**, отклонена как повторение.
+- Шесть разных training IDs и шесть разных MLflow run IDs, каждый опубликован и прочитан обратно. Temporary derived image tag удалён только после проверки ownership label и immutable ID.
+- **33 controlled comparator tests**: missing/reused runs, changed inputs, invalid hashes/shapes, NaN/bool/huge/out-of-range значения, missing/mismatched vectors, численный drift и pairwise spread по всем трём повторам. Покрытие малого comparator: **25/25 statements, 14/14 branches**. Это не coverage всего runner/репозитория.
+
+Private authoritative reports: `.runtime/evidence/reproducibility.json` и `.runtime/reproducibility/<UUID>/evidence/reproducibility.json`. Статус до начала работы - inconclusive; после успеха - `native-input-mutations-and-tracking-not-full-M06`, `release_ready=false`. Не добавлять целиком `.runtime` в Git.
+
+## Границы результата
+
+`OMP_NUM_THREADS` и image metadata действительно меняются. Это **не** доказательство изменения фактической параллельности BLAS/ONNX и не cross-platform/GPU reproducibility. Seed может не влиять на детерминированный solver; нулевая разница не отменяет новое происхождение. UUID ownership label также меняет image identity; не приписывать все различия одному ENV.
+
+Численный контракт допускает разные model hashes при одинаковых inputs и прогнозах в допуске. Здесь hashes совпали, но bit-for-bit reproducible builds между машинами не обещаются. Синтетическая AUPRC не является business utility.
+
+Полный M06 ещё не интегрирован в acceptance dispatcher; reconciliation с общим lineage, scoped Kubernetes publisher и metadata-loss/recovery остаются открытыми. Known High/Critical image findings не устранены. Tracking mutable, не WORM и не источник approval. Foundation repository и рабочая model storage не менялись.
+
+## CI и эксплуатация
+
+[Workflow](../.github/workflows/tracking.yml) запускает controlled cases с порогом comparator coverage, native campaign после private tracking qualification и read-only [diagnostic playbook](../scripts/tracking_doctor.py), затем останавливает только owned CI tracking containers. Наличие workflow не считается результатом выполнения; подтверждённый run фиксируется отдельно после завершения.
+
+[Каталог ранбуков](runbooks.md) разделяет уже реализованные процедуры и будущую эксплуатацию полного продукта. Первый native отказ `invalid_json_value` и исправление преобразования NumPy массива описаны в RB-05, не скрыты повторным pass.
