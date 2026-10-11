@@ -98,6 +98,8 @@ uv run --locked python -m scripts.tracking_service up
 
 На том же commit [image audit 38131527429](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527429) завершился **fail по findings**: scanner positive control и четыре scans выполнены, worker 56 High, storage 11 Critical/118 High, worker candidate 55 High, storage candidate 3 Critical/88 High. Это worker/storage scope, не полный OS scan нового MLflow image. Functional green не снимает release block.
 
+Regression workflows того же `40d26dc` завершились success: [documentation](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527438), [developer runtime](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527523), [storage/TLS](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527611), [Kubernetes/M20](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527618). У Kubernetes подтверждены migration, M20 и cleanup steps; tracking не был интегрирован в этот кластер. Self-review не объявляется независимым человеческим review.
+
 ## Что ещё обязательно
 
 - Полный M06: native seed/data/environment mutation campaign, reconciliation с runtime lineage и проверка потери tracking metadata без изменения release. Три повтора сами по себе не закрывают этот gate.

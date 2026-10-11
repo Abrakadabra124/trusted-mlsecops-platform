@@ -2,7 +2,7 @@
 
 Дата текущей реализации: **2026-10-11**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
-Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последняя проверенная регрессия baseline runtime - commit `3b4aaa0`; отдельные image candidates security gate не прошли. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
+Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последняя проверенная регрессия baseline runtime - commit `40d26dc`; отдельные image candidates security gate не прошли. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
 
 ## Реализовано в первом increment
 
