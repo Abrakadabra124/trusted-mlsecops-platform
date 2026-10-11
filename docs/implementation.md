@@ -1,5 +1,7 @@
 # Реализация R1
 
+Increment 2026-10-11: [poisoning material reconciliation](poisoning-benchmark.md) и [RB-17](operations/poisoning-troubleshooting.md). Отдельный verifier восстанавливает train-only mutations/requests и prediction responses, пересчитывает метрики всех 35 cases, сверяет source/lock/image/version и не разрешает statistical failure превратиться в integrity-only pass. Отрицательные tests воспроизвели перезапись input report через output path; исправлена предварительная проверка безопасной области записи. Native/CI evidence публикуется отдельно в STATUS, M08/T11 пока не закрыты.
+
 Начата 2026-10-07 по прямому запросу владельца. Исследовательская цель R0 завершена; теперь реализуется R1. Этот файл фиксирует решения текущей итерации, не заменяет исходные 23 gates.
 
 ## Порядок

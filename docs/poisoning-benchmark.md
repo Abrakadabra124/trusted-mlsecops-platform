@@ -42,6 +42,22 @@ uv run --locked python -m scripts.poisoning_native
 
 ## Ранбуки и доказательства
 
+### Проверка первичных материалов
+
+[Verifier](../scripts/poisoning_evidence.py) повторно проверяет все 35 cases, а не доверяет полям `status` и summary counts. Восстанавливает train-only mutation и training request из source lock, сверяет model bytes, dataset/lineage/policy/input digests, versions, времена, worker image и заявленные ограничения execution. Из сохранённых scores восстанавливает prediction response и его digest, проверяет batch/row binding; затем заново считает все AP/ASR/CI и общий outcome. Все прочитанные 251 файла сверяются ещё раз перед возвратом результата. Это обнаруживает изменение во время чтения, но не исключает malicious host или transient replace-and-restore race.
+
+```text
+uv run --locked python -m scripts.poisoning_evidence
+```
+
+Команда не обучает модель, не загружает ONNX в host process, не запускает inference и не меняет SQL, сервисы или campaign. Docker используется только для inspect текущего source-bound image. Единственная запись - отдельный `.runtime/evidence/poisoning-reconciliation.json`; исходный report и директории campaign нельзя выбрать выходом. Input report по умолчанию `.runtime/evidence/poisoning.json`. Допустимая output location ограничена `evidence/` выбранного state.
+
+`evidence_integrity=pass` означает согласованность материалов, **не устойчивость модели**. Если заново вычисленные метрики дают `fail`, verifier сохраняет `status=fail` и exit 1. Insufficient evidence даёт inconclusive/exit 2; ошибка binding - integrity fail/exit 1. `release_ready=false` и `full_M08=inconclusive` сохраняются: связи с approved release candidate и независимых challenges пока нет. В CI verifier запускается и после statistical failure, без `continue-on-error`.
+
+Предположение: локальный controller/host доверен. Unsigned receipts нельзя считать защитой от полного согласованного подлога этим host; verifier не переизмеряет container isolation, parity или model predictions. Сохранённый ONNX здесь только хешируется, его scan receipt проверяется по схеме. Настоящие worker/format/isolation проверки выполняются другими компонентами. Старый commit или другая locked среда отвергаются как текущая приёмка, но историческое evidence не удаляется. Протокол, seeds, probes, бюджеты и thresholds ADR 0020 не изменены.
+
+См. [RB-17](operations/poisoning-troubleshooting.md) для расхождения evidence, безопасной повторной проверки и ограничений. Native результаты нового verifier фиксируются в STATUS только после фактического исполнения.
+
 Первый local native run `5b8dc6bf08934f6896c4184fd4bee8ee` завершён 2026-10-11T13:50:58Z: 35 trainings/predictions, 10 threshold failures, все при 5% poisoning. Label-flip ASR increase 0.10644-0.11578, backdoor 0.22345-0.23280; максимальный clean AP drop лишь 0.01063. Все 35 cases сохранены, minimum eligible 1 071, incomplete/inconclusive scenarios отсутствуют. Полный M08 остаётся непринятым; хороший общий AP не компенсирует targeted failures. Эти наблюдения получены после фиксации protocol, его thresholds/seeds не менялись.
 
 [Clean-checkout CI 38144935449](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38144935449) на `e1a1831` повторил 35 trainings и 35 predictions, 10 violations и status fail в 2026-10-11T13:57:05Z. Воспроизведены input/protocol/probe digests, 12 contract tests и 100% protocol statements/branches. Job failure вызван шагом native matrix после полного исполнения, а не отсутствующим Docker или ошибкой contracts. Seed 17 backdoor: AP 0.92613 при clean AP 0.93660, но targeted ASR 0.23195 и upper 0.25691; именно targeted policy блокирует такой результат.

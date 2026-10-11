@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 poisoning primary evidence reconciliation - 2026-10-11
+
+Добавлена отдельная сверка 35 research cases с source-locked данными, mutation receipts, ONNX bytes, training/prediction requests, scores и повторным вычислением AP/ASR/CI. Выявленный output-overwrites-input defect закрыт отрицательными tests; output ограничен evidence directory. CI проверяет материалы даже после statistical failure и сохраняет этот failure. Worker/model protocol и thresholds не меняются. RB-17 описывает расследование расхождений; это trusted-host component, не подписанный approval и не полный M08.
+
 ## R1 native poisoning matrix - 2026-10-11
 
 До запуска заморожен train-only protocol: 30 poisoned runs + 5 controls, отдельные security probes, paired bootstrap/Wilson bounds и unchanged M08 thresholds. Native offline workers выполнили всю матрицу; локально выявлены 10 targeted-ASR violations при 5% poisoning, результаты не исключены. Добавлены strict matrix contracts, CI с сохранением failure, отдельное evidence и PB-08/RB-15/16. Полный M08 не принят, M22/challenges и defence remediation остаются открытыми.

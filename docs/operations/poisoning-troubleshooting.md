@@ -1,4 +1,4 @@
-# PB-08 / RB-15/16: poisoning campaign
+# PB-08 / RB-15/16/17: poisoning campaign
 
 Ответственные: ML owner и security reviewer, для runtime failure также platform operator. Это лабораторное исследование, не production incident и не атака сторонних сервисов.
 
@@ -43,3 +43,17 @@ uv run --locked python -m scripts.poisoning_native
 ```
 
 Последняя команда создаёт новые models/evidence и выполняет полную нагрузку. Threshold fail остаётся fail. Команда не устанавливает новую policy, не очищает holdout budget и не выдаёт approval. CI сохранит неуспешный status и напечатает очищенное evidence; корректно выявленный риск не маскируется зелёной сборкой.
+
+## RB-17: summary не соответствует первичным артефактам
+
+**Симптом:** `poisoning_evidence_*`, `evidence_integrity=fail`, отсутствующий artifact или отказ проверки текущего commit/image. Ответственные: security reviewer и platform operator. Любой такой результат запрещает использовать campaign как новое release evidence; это не доказывает, что причиной была атака.
+
+1. Read-only проверить `git status --short`, `git rev-parse HEAD`, исходный report, его source revision и campaign ID. Не менять report на текущий SHA и не пересчитывать хеши для «исправления» противоречия.
+2. Запустить отдельную сверку: `uv run --locked python -m scripts.poisoning_evidence`. Она не обучает, не исполняет модель и не обращается к SQL; создаёт только отдельный diagnostic report. Хранить исходный report и campaign. Для другого input использовать `--report`, а output оставлять в `evidence/` state и отличным от input.
+3. `header/inputs/training_materials` - проверить commit, lock, image, версии, seed и dataset. `artifact_digest/mutation/prediction_binding/metrics` - несовпадение сохранённых байтов или вычислений: не использовать результат, выяснить источник изменения. `changed_during_read` - остановить совместную запись в эту campaign и повторить только verifier после проверки producer; второй training запуск вслепую не нужен.
+4. `evidence_integrity=pass, status=fail` - verifier исправен, метрики всё ещё нарушают исходный порог. Перейти к RB-15, не ослаблять policy. Integrity pass не означает, что модель безопасна.
+5. Если campaign действительно прервана или повреждена и оригинал не восстанавливается из доверенной копии, сохранить её для расследования и согласовать новый полный frozen run. Он создаст отдельную campaign. Старые результаты не удалять и не называть новую проверку независимым challenge.
+
+**Встреченный defect:** отрицательный test воспроизвёл перезапись input report при одинаковых `--report` и `--output`; также разрешалась запись внутрь campaign. Исправление проверяет output location до первой записи, запрещает совпадение с input, traversal и symlink paths через существующий safe-child helper. Tests проверяют неизменность input и отсутствие запрещённого output. Это дефект разработки, не production incident.
+
+**Проверка конечного состояния:** verifier сверил 35 cases/251 files, результат содержит source/image/protocol/report/materials/verifier digests; каждый scenario outcome заново рассчитан. Все нарушения остаются в итоговом status. Rollback runtime не требуется: команда не меняет deployed state. Эскалировать unexplained mutations, разные writers, согласованный подлог или сомнения в host: checksum reconciliation не заменяет независимые подписанные approvals и чистую доверенную среду.

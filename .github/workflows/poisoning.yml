@@ -30,10 +30,15 @@ jobs:
           uv run --locked python scripts/check_docs.py
           uv run --locked coverage run --data-file=.coverage-poisoning --source=scripts.poisoning -m unittest scripts.poisoning_qualification scripts.poisoning_native_qualification
           uv run --locked coverage report --data-file=.coverage-poisoning --fail-under=95
+          uv run --locked coverage run --data-file=.coverage-poisoning-evidence --source=scripts.poisoning_evidence -m unittest scripts.poisoning_evidence_qualification
+          uv run --locked coverage report --data-file=.coverage-poisoning-evidence --fail-under=95
       - name: Build current offline worker
         run: uv run --locked python -m mlsecops build
       - name: All 30 poisoned trainings and five matched clean controls
         run: uv run --locked python -m scripts.poisoning_native
+      - name: Reconcile primary materials and recompute every scenario metric
+        if: always()
+        run: uv run --locked python -m scripts.poisoning_evidence
       - name: Sanitized complete research outcomes including failures
         if: always()
         run: |
