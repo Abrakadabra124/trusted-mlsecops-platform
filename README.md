@@ -31,7 +31,7 @@ Qualification запускает отрицательные сценарии и 
 
 Постановка эксперимента: [dataset card](docs/dataset-card.md), [model card](docs/model-card.md). Метрики и ограничения должны читаться вместе.
 
-[Постоянный local MLflow](docs/tracking-service.md) принимает metadata трёх настоящих offline обучений через verified HTTPS, хранит metadata/auth в отдельных PostgreSQL databases с mTLS и проверяет публикацию после restart. Локально прошли 54 native checks, 16 controlled boundary cases и 74 worker checks. Полный M06 ещё открыт, tracking не одобряет releases. Предыдущий [SQLite spike и его CI](docs/tracking-spike.md) сохранены как отдельное compatibility evidence.
+[Постоянный local MLflow](docs/tracking-service.md) принимает metadata трёх настоящих offline обучений через verified HTTPS, хранит metadata/auth в отдельных PostgreSQL databases с mTLS и проверяет публикацию после restart. Локально и в clean-checkout CI прошли 54 native checks, 16 controlled boundary cases и 74 worker checks. Полный M06 ещё открыт, tracking не одобряет releases. Предыдущий [SQLite spike и его CI](docs/tracking-spike.md) сохранены как отдельное compatibility evidence.
 
 ## Kubernetes backend
 

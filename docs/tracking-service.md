@@ -85,7 +85,18 @@ uv run --locked python -m scripts.tracking_service up
 
 Две ранние bootstrap ошибки не скрыты: chmod после CHOWN без FOWNER был исправлен изменением порядка; internal-only network не дала фактический host port. После этого добавлена отдельная client network и negative test на отсутствие фактического binding. Удалялись только новые owned bootstrap resources без опубликованных experiments; никаких действующих ML datasets/SQL или чужих containers.
 
-[Tracking CI](../.github/workflows/tracking.yml) выполняет fresh build, hashed dependency audit, contracts, offline probe и PostgreSQL/TLS qualification. Результат нового clean-checkout run будет зафиксирован после завершения, не заранее.
+## Проверенный clean-checkout CI
+
+[Run 38131527513](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527513), job `114446677086`, commit `40d26dc09df7b8731f83e716e720cfd6ff995db2`: **success**. PostgreSQL/TLS qualification завершена `2026-10-11T10:22:34.863854+00:00`, `source_dirty=false`.
+
+- Повторены **70 component checks: 54 native + 16 controlled**, **74 worker checks**, три свежих training runs и **13 + 19 + 27 + 12 contracts**. Hashed dependency audit не сообщил известных vulnerabilities. Отдельный SQLite regression также прошёл 53 HTTP checks с собственными тремя обучениями.
+- AUPRC всех трёх PostgreSQL-published runs: 0.9323007296445032; max probability difference 0.0; ONNX parity error 2.086162567138672e-7.
+- CI tracking image: `sha256:cdbe66cbfda5b2ff7ddc3236589ba8fdfbd9c62e862f3cb03b033a2d40b1c50c`; CI worker: `sha256:8653aafff31cc421d7e88cfdb194e3606ca7fe85360564710453b71aafcf6992`.
+- Docker runtime PostgreSQL image ID в CI: `sha256:2e182ed2ff8f5d0835353864264437a26dffc542a9a6c677ec495aa54e491627`. Pinned pull reference остаётся `postgres:18.6-bookworm@sha256:9551dd5bf356409a21b31248f49b33bba9bb1877365f3a7e933aecd9af3cf52d`. Разные Docker image-store representations не скрываются; сравниваются фактические локальные IDs внутри каждого запуска, не заявляется bit-for-bit build identity между машинами.
+- Проверенные record hashes: `ef6afe430ba1f93fa3ebfdd0de7d01043cf869edb4a4cfaa82afb8f4141d93f1`, `1dcf277a657ad6b5f4b71042a6957bc3225fea68d87aab9c2b0d41a92200cfd5`, `b561ec94e5f4e7709e150958c486b984927b30ae0b7e77db47ba22cd0817d8fc`. Они включают конкретные run IDs/materials, поэтому не обязаны совпадать с независимым локальным запуском.
+- Остановка owned CI services завершилась success; проверено конечное stopped state без удаления volumes. На пользовательском компьютере local service оставлен работающим. [Workflow](../.github/workflows/tracking.yml).
+
+На том же commit [image audit 38131527429](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38131527429) завершился **fail по findings**: scanner positive control и четыре scans выполнены, worker 56 High, storage 11 Critical/118 High, worker candidate 55 High, storage candidate 3 Critical/88 High. Это worker/storage scope, не полный OS scan нового MLflow image. Functional green не снимает release block.
 
 ## Что ещё обязательно
 

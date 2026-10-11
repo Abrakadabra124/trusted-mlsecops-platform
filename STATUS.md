@@ -6,7 +6,7 @@
 
 ## Реализовано в первом increment
 
-T08 продолжен: [постоянный PostgreSQL/TLS tracking service](docs/tracking-service.md), отдельные DB roles и networks, verified HTTPS/mTLS, внешний host publisher, три настоящих обучения и restart без потери runs/artifacts. Локально 54 native + 16 controlled boundary checks и 74 worker checks прошли. Новый clean-checkout CI ещё не подтверждён. Полные T08/M06, scoped Kubernetes integration, metadata recovery и security image gate остаются открытыми.
+T08 продолжен: [постоянный PostgreSQL/TLS tracking service и CI evidence](docs/tracking-service.md), отдельные DB roles и networks, verified HTTPS/mTLS, внешний host publisher, три настоящих обучения и restart без потери runs/artifacts. Локально и в clean-checkout CI `38131527513` на `40d26dc` прошли 54 native + 16 controlled boundary checks и 74 worker checks. Повторены 13 configuration/19 client/27 projection/12 orchestration contracts и dependency audit. Полные T08/M06, scoped Kubernetes integration, metadata recovery и security image gate остаются открытыми; image audit того же commit завершился fail по findings.
 
 T07/T08: [изолированный MLflow spike и CI evidence](docs/tracking-spike.md). 91 pinned Python package прошёл локальный dependency audit без известных vulnerabilities/skips; 53 native HTTP auth/artifact/restart checks и три настоящих training runs прошли локально и в clean-checkout [run 38129646455](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38129646455) на `a48a9dc`. CI повторил dependency audit, 74 worker checks и 27 + 12 contracts. Это offline SQLite compatibility experiment, не целевой PostgreSQL/TLS service; T08/M06/M18 остаются открытыми. MLflow не получает release authority.
 
