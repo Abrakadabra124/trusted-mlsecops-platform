@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 asset dependency graph component - 2026-10-11
+
+Добавлены bounded schema v1, typed digest-bound references, owner/environment checks, cycle detection, complete deployment observation reconciliation и transitive revocation impact. Content aliases и previous rollback candidate не обходят impact calculation. Synthetic fixture и 25 tests выполняются также в developer CI. PB-09/RB-19 включает фактически воспроизведённый nested-input defect и проверку контролируемого отказа. Компонент не выдаёт approval, full M19 остаётся inconclusive; live collectors, persistence и serving integration ещё нужны.
+
 ## R1 observable image audit evidence - 2026-10-11
 
 Исправлена публикация image-audit JSON одной длинной строкой, которую обычный CI log viewer не показал. Bounded pretty JSON сохраняет все fields/findings/status, экранирует control characters и отклоняет oversized publication без усечения. Canonical report, scanner inputs и High/Critical gate не меняются. RB-18 содержит read-only диагностику, vendor triage и безопасный дальнейший remediation path; уязвимости не объявлены исправленными этим изменением.

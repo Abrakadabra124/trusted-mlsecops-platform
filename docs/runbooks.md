@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Asset dependency graph, PB-09/RB-19](operations/asset-graph-troubleshooting.md). Synthetic replay, missing/cyclic/digest-swapped references, неполные observations, контролируемый отказ глубоко вложенного input. Не live revocation и не полный M19.
 - [Image audit, RB-18](operations/image-audit-troubleshooting.md). Диагностика отсутствующих длинных CI log lines, полная публикация JSON без переоценки findings, vendor triage и запрет небезопасной замены runtime.
 
 Ранбук объясняет, как распознать проблему и выбрать безопасное действие. Плейбук задаёт конкретную последовательность; исполняемая версия автоматизирует только обозначенные действия. Наличие инструкции само по себе не доказывает успешное восстановление.

@@ -29,6 +29,13 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts/check_docs.py
           uv run --locked python scripts/check_docs.py
           uv run --locked pip-audit --strict --progress-spinner off
+      - name: Asset dependency graph contracts and synthetic replay
+        run: |
+          uv run --locked ruff check scripts/asset_graph_fixture.py scripts/asset_graph_qualification.py
+          uv run --locked ruff format --check scripts/asset_graph_fixture.py scripts/asset_graph_qualification.py
+          uv run --locked coverage run --source=mlsecops.asset_graph --data-file=.coverage-asset-graph -m scripts.asset_graph_qualification
+          uv run --locked coverage report --data-file=.coverage-asset-graph --fail-under=100
+          uv run --locked python -m scripts.asset_graph_fixture
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
       - name: Verify frozen source and intake gate

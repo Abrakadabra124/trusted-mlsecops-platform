@@ -4,7 +4,13 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Image audit publication: новый increment
+## Asset dependency graph: новый increment
+
+2026-10-11: [T25 component](docs/asset-graph.md), [ADR 0021](docs/decisions/0021-asset-graph.md), [PB-09/RB-19](docs/operations/asset-graph-troubleshooting.md). Versioned graph проверяет owners, environment, digest-bound typed dependencies, cycles, completeness и actual digest claims snapshot. Отзыв dataset-a на fixture из 17 nodes затрагивает точные 10 nodes и 3 deployments, включая rollback; deployment-b остаётся unaffected. Shared runtime/policy и content-alias negatives также проверены. Snapshot синтетический, не actual cluster observation.
+
+Локально прошли 25 tests; 135/135 statements, 68/68 branches нового модуля. Ruff check/format pass, pip-audit pinned host environment: no known vulnerabilities found. Это не clean image audit и не устранение существующих контейнерных findings. Deep nested input сначала дал raw RecursionError; regression test подтвердил исправление в controlled Rejected. Полный M19 сохраняет inconclusive, release_ready=false. CI result нового increment ещё не подтверждён в этом разделе; фиксируется после terminal run. T25 и общая цель остаются открытыми.
+
+## Image audit publication: предыдущий increment
 
 2026-10-11: [RB-18 и vendor triage](docs/operations/image-audit-troubleshooting.md). В `d44d1fe` run `38151770889` обычный `gh run view --log` не показал две длинные строки с audit summary. Прямой job-log API сохранил исходный report: 188 960 canonical bytes, 1 119 finding records, SHA-256 `3168dc919bb8b44d70f713a99cf7bce3f2ce8668c5f14b673d6fc7e80fcd9316`. Причина различия внутри CLI не объявляется доказанной; воспроизведено расхождение способов просмотра.
 
