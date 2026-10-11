@@ -45,12 +45,20 @@ jobs:
         run: |
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.storage_bootstrap
+      - name: Candidate material bundle contracts and diagnostic runner
+        run: |
+          uv run --locked coverage run --source=mlsecops.material_bundle --data-file=.coverage-material-bundle -m scripts.material_bundle_qualification
+          uv run --locked coverage report --data-file=.coverage-material-bundle --fail-under=100
+          uv run --locked coverage run --source=scripts.material_bundle_native --data-file=.coverage-bundle-native -m scripts.material_bundle_native_qualification
+          uv run --locked coverage report --data-file=.coverage-bundle-native --fail-under=100
       - name: M03 integrity, actual SQL roles and training/evaluation
         run: |
           uv run --locked python -m mlsecops build
           uv run --locked python -m mlsecops.acceptance --gate M03 --output .runtime/evidence/M03.json
       - name: Read-only lineage from actual signed SQL materials
         run: uv run --locked python -m scripts.candidate_lineage_native --state .runtime
+      - name: Unapproved material bundle and serving-role verified readback
+        run: uv run --locked python -m scripts.material_bundle_native --state .runtime
       - name: Consistent backup and independent storage recovery
         run: uv run --locked python -m mlsecops.storage_recovery_qualification
       - name: M07 fresh evaluation, signed readback, leakage contracts and durable budget

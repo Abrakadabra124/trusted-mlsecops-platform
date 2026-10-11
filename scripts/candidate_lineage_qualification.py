@@ -392,6 +392,32 @@ class CandidateLineageContracts(unittest.TestCase):
         self.assertEqual(result["candidate_state"], "unapproved-candidate")
         self.assertFalse(result["release_ready"])
 
+    def test_material_sink_gets_exact_verified_read_closure(self):
+        objects = {}
+        self.collect(
+            material_sink=lambda table, reference, content: objects.__setitem__(
+                (table, reference), content
+            )
+        )
+        self.assertEqual(len(objects), 9)
+        self.assertTrue(all(digest(content) == key[1] for key, content in objects.items()))
+        self.assertEqual(
+            {key[0] for key in objects}, {"manifests", "lineage", "candidates", "evaluations"}
+        )
+
+    def test_reader_scope_rejects_labels_and_unknown_role(self):
+        for role, table in (("metadata", "holdout"), ("scorer", "evaluations")):
+
+            def access(read, **context):
+                return read(role, table, "0" * 64)
+
+            with patch.object(candidate_lineage, "reconcile", side_effect=access):
+                with (
+                    self.subTest(role=role),
+                    self.assertRaisesRegex(Rejected, "inventory_reader_scope"),
+                ):
+                    self.collect()
+
     def test_signed_but_expired_source_approval_is_rejected(self):
         self.approval["expires_at"] = "2000-01-01T00:00:00+00:00"
         self.statement["approval_object"] = self.signed(

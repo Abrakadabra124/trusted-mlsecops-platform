@@ -73,8 +73,11 @@ def publish(state, dataset_id, lineage_id, policy):
     }
 
 
-def read_manifest(client, reference, policy, curator_public, expected_approval_digest):
-    envelope = decode(storage.get(client, "manifests", reference))
+def read_manifest(
+    client, reference, policy, curator_public, expected_approval_digest, *, reader=None
+):
+    read = storage.get if reader is None else reader
+    envelope = decode(read(client, "manifests", reference))
     statement = verify(envelope, "stored-dataset", curator_public)
     require_fields(
         statement,
@@ -100,9 +103,9 @@ def read_manifest(client, reference, policy, curator_public, expected_approval_d
         or statement["source_approval_digest"] != expected_approval_digest
     ):
         raise Rejected("storage_dataset_policy_or_source_stale")
-    approval = decode(storage.get(client, "manifests", statement["approval_object"]))
+    approval = decode(read(client, "manifests", statement["approval_object"]))
     manifest = verify_manifest(
-        decode(storage.get(client, "manifests", statement["manifest_object"])),
+        decode(read(client, "manifests", statement["manifest_object"])),
         statement["dataset_id"],
         policy,
         approval,
@@ -111,7 +114,7 @@ def read_manifest(client, reference, policy, curator_public, expected_approval_d
     if manifest["source_approval_digest"] != expected_approval_digest:
         raise Rejected("storage_dataset_source_mismatch")
     lineage = verify_lineage_statement(
-        decode(storage.get(client, "lineage", statement["lineage_object"])),
+        decode(read(client, "lineage", statement["lineage_object"])),
         statement["lineage_id"],
         statement["dataset_id"],
         policy,

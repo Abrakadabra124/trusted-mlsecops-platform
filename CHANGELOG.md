@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 signed candidate material bundle - 2026-10-11
+
+Добавлено замыкание проверяемых candidate materials: отдельный DSSE index, 9 immutable objects, offline semantic verification, idempotent SQL publication и serving-role readback. SQL и capsule используют одинаковые existing signature readers через explicit callback. Полный ModelReleaseBundle/approval не подменяются: capsule остаётся unapproved, M10 inconclusive. Controlled suites и fresh native SQL проверяют tamper, scope, nested signatures, partial writes и отсутствие новых holdout queries. PB-11/RB-22/RB-23 описывают диагностику, последствия publication и безопасный повтор.
+
 ## R1 verified candidate lineage - 2026-10-11
 
 Добавлен read-only collector signed dataset/candidate/evaluation metadata в asset graph. Проверяет independent expected build pins, material/holdout bindings, timestamps и SQL client identities. Одинаковые model bytes сохраняют разные provenance nodes; quality failure остаётся failure, approval не выдаётся. 18 collector и 8 runner tests с полным coverage, native SQL qualification и RB-20/21 для metadata collisions и ошибок diagnostic output. Изменений grants или ledger reset нет; full M19 пока inconclusive.

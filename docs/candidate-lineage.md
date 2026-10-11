@@ -12,6 +12,8 @@ Lineage - происхождение артефакта и связи с исп�
 
 ## Как работает
 
+`reconcile(read, ...)` содержит общий semantic verifier. `collect(...)` остаётся SQL adapter и может передать exact read closure через `material_sink`; [candidate material bundle](material-bundle.md) использует тот же verifier с закрытым источником bytes. Default поведение существующих SQL readers сохранено. Runtime callback явно передаётся, глобальной подмены storage нет.
+
 1. Проверяет синтаксис candidate/evaluation references, ожидаемых build pins и mapping owners. Curator/evaluator должны быть разными trust roots; identities клиентов - publisher/promoter.
 2. Повторно читает candidate через существующий `load_candidate`: проверяются immutable object digests, schema, model bytes/digest/size, policy и unapproved state. Модель не исполняется.
 3. Через `read_manifest` проверяет curator-signed dataset index, manifest, source approval и lineage. Approval должен быть актуальным по существующей policy. Metadata candidate должна ссылаться на те же dataset/lineage и exact split digest/bytes/rows metadata.

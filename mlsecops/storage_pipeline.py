@@ -55,8 +55,9 @@ def train(client, reference, policy, image, trust, executor=run_worker, provenan
     return {"candidate_reference": candidate, "metadata": metadata}
 
 
-def load_candidate(client, reference, policy):
-    record = decode(storage.get(client, "candidates", reference))
+def load_candidate(client, reference, policy, *, reader=None):
+    read = storage.get if reader is None else reader
+    record = decode(read(client, "candidates", reference))
     require_fields(
         record,
         ("schema_version", "dataset_reference", "model_object", "metadata_object", "scores_object"),
@@ -66,8 +67,8 @@ def load_candidate(client, reference, policy):
     for name, value in record.items():
         if name != "schema_version":
             storage.object_id(value)
-    metadata = decode(storage.get(client, "candidates", record["metadata_object"]))
-    model = storage.get(client, "candidates", record["model_object"])
+    metadata = decode(read(client, "candidates", record["metadata_object"]))
+    model = read(client, "candidates", record["model_object"])
     require_fields(
         metadata,
         (
@@ -116,11 +117,14 @@ def load_candidate(client, reference, policy):
     return record, metadata, model
 
 
-def read_evaluation(client, evaluation_reference, candidate_reference, policy, trust):
+def read_evaluation(
+    client, evaluation_reference, candidate_reference, policy, trust, *, reader=None
+):
+    read = storage.get if reader is None else reader
     evaluation_quality.freeze(policy)
-    record, metadata, _ = load_candidate(client, candidate_reference, policy)
+    record, metadata, _ = load_candidate(client, candidate_reference, policy, reader=read)
     bound = verify(
-        decode(storage.get(client, "evaluations", evaluation_reference)),
+        decode(read(client, "evaluations", evaluation_reference)),
         "stored-evaluation",
         trust["evaluator"],
     )
@@ -224,7 +228,7 @@ def read_evaluation(client, evaluation_reference, candidate_reference, policy, t
         or access["policy_digest"] != digest(canonical(holdout_budget.policy()))
     ):
         raise Rejected("stored_evaluation_reservation_mismatch")
-    if storage.get(client, "evaluations", access["reservation"]) != reserved:
+    if read(client, "evaluations", access["reservation"]) != reserved:
         raise Rejected("stored_evaluation_reservation_missing")
     return bound
 

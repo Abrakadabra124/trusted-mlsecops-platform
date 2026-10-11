@@ -4,7 +4,17 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Verified candidate lineage: новый increment
+## Signed candidate material bundle: новый increment
+
+2026-10-11: [контракт foundation T13](docs/material-bundle.md), [ADR 0022](docs/decisions/0022-candidate-material-bundle.md), [PB-11/RB-22/RB-23](docs/operations/material-bundle-troubleshooting.md). Подписанный index связывает 9 immutable objects: curator metadata, candidate/model и evaluator report/receipt. Serving читает только releases, общий verifier повторяет вложенные signatures/semantic checks offline без labels, SQL или model execution. External context остаётся независимым; capsule всегда unapproved. Это не полный ModelReleaseBundle или promotion, M10/T13 остаются открытыми.
+
+Controlled qualification: 20 material-bundle tests, 108/108 statements и 42/42 branches; 20 lineage tests после explicit reader refactor, 61/61 statements и 26/26 branches; 9 native runner tests, 96/96 statements и 24/24 branches. Проверяются nested signatures, wrong type/context, missing/extra/oversized objects, role separation, interrupted publication, SQL receipt/readback failure и безопасная запись diagnostic output. Coverage относится к этим отдельным компонентам, не всей платформе.
+
+Fresh native SQL завершён `2026-10-11T17:34:41.944418Z`: actual CPU training/evaluation, затем **12 checks pass**, 9 materials плюс envelope, idempotent repeat и serving-role readback тех же model bytes. SELECT manifests/candidates/holdout и INSERT releases для serving получили ожидаемый 42501. Metadata sets до/после неизменны: manifests=3, lineage=1, candidates=4, evaluations=2; bundle не резервировал новый holdout slot. Один slot использовала предшествующая independent evaluation. Отдельный owned SQL container остановлен, volume/evidence сохранены; рабочие сервисы/кластеры не менялись.
+
+Local source revision `486cdaa9d619ae6dd769ceb774f99d0efbbc1f4e` с uncommitted implementation, fingerprint `15bd63583773267b724ad02a926d2e5cb94e2c93bf6ec234f8ba9649082ec848`, worker `sha256:07b171cc81ba146b2a840be1a9f1fff34a622be9c8b454444316fbfe49234da0`. Bundle reference `e738cf05a2a045ec5826a20acc9f5400a8e8b488d14c44a84687f908e0a54de0`, model SHA-256 `09c48030c2a98d78d74d0a31d4fe18b081e4906abadf5be8a246ec4faa416b8f`, projection `4759d18c55c0050d90a5d963fcc0e64e77f2f71ca54aaf540f72e06e731de229`. Native evidence file SHA-256 `814f07b30b9961560fea02acce73bfa22702ee8c5a6a08848b1a9088e7a0d2ba`, runner `ac93d8790596e4fc0fe5beed2cadc2ef317fa76f5048aa5ab7e665399067693e`. Это не clean-checkout CI; CI результат фиксируется отдельно после публикации. Full_M10 inconclusive и release_ready false сохраняются. Image audit/poisoning blockers не исправлены упаковкой материалов.
+
+## Verified candidate lineage: предыдущий increment
 
 2026-10-11: [collector T25](docs/candidate-lineage.md) и [PB-10/RB-20/RB-21](docs/operations/candidate-lineage-troubleshooting.md). Projection теперь строится из настоящих подписанных SQL материалов, не только fixture. Проверяются curator dataset/lineage, actual model bytes/digest, evaluator report/reservation и independent expected source/image pins. Labels и signing keys collector не читает, SQL grants не расширяет, нового holdout slot не резервирует. Разные candidates с одинаковой моделью сохраняют отдельные provenance nodes.
 
