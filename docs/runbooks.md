@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Qualification и ресурсы стенда, PB-13/RB-27/RB-28](operations/qualification-environment-troubleshooting.md). Сохранение failed CI attempt, один диагностический rerun без reset budget; установленное исчерпание Docker subnet pool. Recovery действий над networks здесь не проводилось.
 - [Контракт ONNX, PB-12/RB-25/RB-26](operations/model-contract-troubleshooting.md). Диагностика export/graph/labels, неизвестных protobuf-полей и runtime outputs; безопасная свежая qualification без обхода policy или reset рабочего holdout.
 - [Подписанные материалы candidate, PB-11/RB-22/RB-23/RB-24](operations/material-bundle-troubleshooting.md). Сначала read-only lineage, затем явно изменяющая publication в owned lab; отказ на tamper/subject, безопасный повтор interrupted writes, SQL serving readback без approval и исправление сравнения эквивалентных ключей.
 - [Candidate lineage, PB-10/RB-20/RB-21](operations/candidate-lineage-troubleshooting.md). Read-only сверка настоящих подписанных SQL материалов, нерасширенные роли, сохранение разных runs при одинаковых model bytes и контролируемая ошибка записи evidence.

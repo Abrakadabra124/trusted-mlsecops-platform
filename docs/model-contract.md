@@ -40,6 +40,8 @@ Runtime-error/output-error случаи инъецированы контрол�
 
 `prediction_protocol.validate_scan` требует v2 и ровно два inspected nodes. Старые подписанные v1 reports не редактируются и не признаются свежими v2 reports. После source change нужно пересобрать worker и штатно получить новый candidate/evaluation. Нельзя переподписывать старый JSON вручную ради pass.
 
+При regression CI обнаружен отдельный M07 concurrency failure с неполной диагностикой, а дополнительный локальный M07 упёрся в исчерпание Docker subnet pool. [PB-13/RB-27/RB-28](operations/qualification-environment-troubleshooting.md) сохраняет первый отказ, отличает неизвестную причину CI от установленного локального ограничения и запрещает слепую очистку/повтор до pass. Это не отменяет успешные ONNX/developer checks и не даёт объявить всю платформу готовой.
+
 ## Что остаётся незавершённым
 
 - Full M09: отдельная frozen evasion campaign, заданный budget и recall-drop threshold, OOD/abstain и полная gate orchestration.

@@ -2,6 +2,8 @@
 
 ## R1 explicit ONNX model contract - 2026-10-11
 
+CI подтвердил model/developer checks. Встреченные qualification-проблемы вынесены в PB-13/RB-27/RB-28: первоначальный M07 concurrency failure с неизвестной причиной, успешный одиночный rerun и отдельное установленное исчерпание локальных Docker subnets. Причина первого CI failure не объявляется исправленной; unsafe cleanup и waiver не применялись.
+
 Вместо operator-name allowlist добавлен versioned two-node baseline contract: topology, shapes/types, finite bounded parameters, binary labels/transform и запрет неизвестных protobuf-полей. Проверяются оба runtime outputs, normalization и label/score consistency; ошибки runtime возвращают fixed reason. 18 methods включают настоящий sklearn export и 1000-row CPU parity; model.py имеет 100% statement/branch coverage. Fixtures и scan receipt обновлены до v2 без редактирования исторических reports. PB-12/RB-25/RB-26 описывают диагностику и безопасную повторную проверку. Полные M09/M21 и release approval не заявляются.
 
 ## R1 signer identity encoding fix - 2026-10-11
