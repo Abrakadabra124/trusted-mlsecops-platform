@@ -31,12 +31,24 @@ jobs:
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage.json
           uv run --locked python -c "import json; totals=json.load(open('.coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
+      - name: Negative storage candidate contracts
+        run: |
+          uv run --locked ruff check scripts/storage*.py
+          uv run --locked ruff format --check scripts/storage*.py
+          uv run --locked python -m scripts.storage_image_qualification
+          uv run --locked coverage run --source=scripts.storage_candidate -m scripts.storage_candidate_qualification
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
       - name: Build separate candidate images
         run: uv run --locked python -m scripts.image_candidates build
       - name: Qualify candidate training and prediction compatibility
         run: uv run --locked python -m scripts.image_candidates qualify-worker
+      - name: Signed storage restore into a separate candidate target
+        run: |
+          uv run --locked coverage run --append --source=scripts.storage_candidate -m scripts.storage_candidate
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .runtime/evidence/storage-candidate-coverage.json
+          uv run --locked python -c "import json; totals=json.load(open('.runtime/evidence/storage-candidate-coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
       - name: Audit exact worker and PostgreSQL images
         run: uv run --locked python -m scripts.image_audit --compare-candidates
       - name: Publish sanitized result even on failure

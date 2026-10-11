@@ -1,14 +1,16 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-09**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-11**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последняя проверенная регрессия baseline runtime - commit `d4b5514`; отдельные image candidates security gate не прошли. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
 
 ## Реализовано в первом increment
 
+Новый T02 slice: [signed restore в candidate PostgreSQL](docs/storage-candidate.md), отдельные свежие source/target, без смены working SQL. Локальный native run прошёл 434 checks и 1 000 golden predictions/error 0.0; 33 image contracts и 14 runner contracts прошли отдельно. Повторный run отказал на image pull и сохранил inconclusive, не старый pass. Результат clean-checkout CI этого increment ещё не проверен. High/Critical и полные M01/M17/M18 остаются открытыми.
+
 Продолжение remediation: [отдельные image candidates](docs/image-candidates.md) собраны без смены baseline tags/SQL. На `d4b5514` worker candidate прошёл 74 developer checks; 123 controlled image checks имеют 98% branch coverage пяти modules. [Native comparison локально и в CI](docs/evidence/image-candidates-2026-10-09.md) дал одинаковый fail: worker High 56 -> 55, storage Critical 7 -> 1 и High 101 -> 79. У storage появились четыре новых advisory IDs; улучшение части counts не разрешает adoption. T01/T02 и M01 остаются открытыми.
 
-На том же commit проверены success documentation/developer/storage/Kubernetes workflows: M03 431 cases, recovery 430 с 1 000 golden predictions/error 0.0, private storage 436, migration 497 и M20 722 cases. [Run IDs и границы](docs/evidence/image-candidates-2026-10-09.md). Это baseline regression; новый storage не восстанавливался и не принят автоматически.
+На том же commit проверены success documentation/developer/storage/Kubernetes workflows: M03 431 cases, recovery 430 с 1 000 golden predictions/error 0.0, private storage 436, migration 497 и M20 722 cases. [Run IDs и границы](docs/evidence/image-candidates-2026-10-09.md). Это историческая baseline regression; candidate restore проверен позже отдельным slice и не означает adoption.
 
 Предшествующий T01/T02 slice: [воспроизводимый container audit](docs/container-audit.md). 99 controlled checks прошли локально и в CI, audit modules имели 81/82 covered branches (98,78%). Native scan на `19c618c`, run `37842817452`, завершился **fail по реальным findings**, а не инфраструктурной ошибке: worker 1 152 packages/56 High matches, PostgreSQL 151 package/7 Critical и 101 High matches. PURL detection control прошёл. [Evidence, hashes и 69 triage groups](docs/evidence/container-audit-2026-10-08.md). Ранние локальные загрузки DB были inconclusive из-за TLS/download timeout; последующий four-image run завершён отдельно и не переписывает их историю. Принятые M02/M03/M20 не являются допуском релиза.
 

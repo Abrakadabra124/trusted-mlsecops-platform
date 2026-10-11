@@ -196,7 +196,20 @@ def backup_negatives(root, state, directory):
     return cases
 
 
-def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
+def database_profile(name):
+    return decode(
+        admin(
+            name,
+            "SELECT json_build_object('encoding',pg_encoding_to_char(encoding),"
+            "'provider',datlocprovider,'collate',datcollate,'ctype',datctype,"
+            "'recorded_version',datcollversion,"
+            "'actual_version',pg_database_collation_actual_version(oid)) "
+            "FROM pg_database WHERE datname='mlsecops';",
+        ).encode()
+    )
+
+
+def qualify(root, state, image="trusted-mlsecops:dev", port=15441, *, experimental_image_id=None):
     root, state = Path(root).resolve(), Path(state).resolve()
     source_marker = validate(state)
     demo = storage_pipeline.demo(root, state, image)
@@ -349,8 +362,10 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
     receipt = None
     started = time.monotonic()
     try:
-        receipt = storage_restore.restore(root, directory, target, public, port)
-        target_marker = validate(target)
+        receipt = storage_restore.restore(
+            root, directory, target, public, port, experimental_image_id=experimental_image_id
+        )
+        target_marker = validate(target, experimental_image_id=experimental_image_id)
         certificates = read_json(target / "storage-pki/identity.json")
         confirmed(
             "fresh-workspace-and-storage",
@@ -359,13 +374,36 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
             and target_marker["container_id"] != source_marker["container_id"],
         )
         confirmed("all-nine-table-ledgers-restored", receipt["tables"] == before)
+        source_profile = database_profile(source_marker["name"])
+        target_profile = database_profile(target_marker["name"])
+        confirmed(
+            "source-target-encoding-and-collation-contract",
+            all(
+                profile["encoding"] == "UTF8"
+                and profile["provider"] == "c"
+                and profile["collate"] == "C.UTF-8"
+                and profile["ctype"] == "C.UTF-8"
+                and profile["recorded_version"] == profile["actual_version"]
+                for profile in (source_profile, target_profile)
+            ),
+        )
+        order_query = (
+            "SELECT json_agg(value ORDER BY value) FROM unnest("
+            "ARRAY['a','A','я','е','ё','é','é','中','0','10','😀','Ω']::text[]) AS value;"
+        )
+        confirmed(
+            "limited-unicode-order-sample",
+            admin(source_marker["name"], order_query) == admin(target_marker["name"], order_query),
+        )
         confirmed(
             "no-private-signing-key-clone",
             read_json(target / "trusted-keys.json") != public
             and read_json(target / "recovered-public-keys.json") == public,
         )
         confirmed("restore-is-not-release-ready", receipt["release_ready"] is False)
-        repeated = storage_restore.restore(root, directory, target, public, port)
+        repeated = storage_restore.restore(
+            root, directory, target, public, port, experimental_image_id=experimental_image_id
+        )
         confirmed(
             "repeat-preserves-container-and-certificates",
             repeated["reused"]
@@ -430,14 +468,39 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
         confirmed("evaluation-signature-and-binding-restored", evaluation == demo["evaluation"])
         application_seconds = round(time.monotonic() - started, 6)
         confirmed("component-recovery-within-15-minutes", application_seconds <= 900)
-        acl = qualify_storage(target)
+        if experimental_image_id is not None:
+            rejected(
+                "default-restore-cannot-adopt-candidate-target",
+                lambda: storage_restore.restore(root, directory, target, public, port),
+                "storage_identity_changed",
+            )
+            rejected(
+                "another-image-cannot-replay-target-receipt",
+                lambda: storage_restore.restore(
+                    root,
+                    directory,
+                    target,
+                    public,
+                    port,
+                    experimental_image_id="sha256:" + "0" * 64,
+                ),
+                "storage_identity_changed",
+            )
+        acl = qualify_storage(target, experimental_image_id=experimental_image_id)
         cases.extend({**case, "id": f"restored-storage:{case['id']}"} for case in acl["cases"])
         changed = canonical({"scope": "restore-must-not-erase-later-data", "id": uuid.uuid4().hex})
         changed_id = storage.put(target / "storage-clients/ingestor", "quarantine", changed)
         try:
             rejected(
                 "repeat-does-not-overwrite-changed-target",
-                lambda: storage_restore.restore(root, directory, target, public, port),
+                lambda: storage_restore.restore(
+                    root,
+                    directory,
+                    target,
+                    public,
+                    port,
+                    experimental_image_id=experimental_image_id,
+                ),
                 "restore_existing_target_changed",
             )
             confirmed(
@@ -461,7 +524,7 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
         )
     finally:
         if receipt is not None:
-            marker = validate(target)
+            marker = validate(target, experimental_image_id=experimental_image_id)
             if (
                 marker["container_id"] != receipt["container_id"]
                 or marker["workspace_id"] != receipt["target_workspace"]
@@ -477,11 +540,15 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441):
     return {
         "schema_version": 1,
         "status": "pass",
+        "release_ready": False,
         "scope": "storage-recovery-component-not-full-M17",
         "observed_at": now(),
         "cases": cases,
         "checks": len(cases),
         "backup_id": backup["backup_id"],
+        "source_image": source_marker["image"],
+        "target_image": target_marker["image"],
+        "database_profiles": {"source": source_profile, "target": target_profile},
         "archive_bytes": backup["bytes"],
         "database_rows": sum(entry["rows"] for entry in before.values()),
         "database_bytes": sum(entry["bytes"] for entry in before.values()),

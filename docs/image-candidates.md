@@ -20,6 +20,7 @@ uv run --locked python -m scripts.image_suite_qualification
 uv run --locked python -m mlsecops build
 uv run --locked python -m scripts.image_candidates build
 uv run --locked python -m scripts.image_candidates qualify-worker
+uv run --locked python -m scripts.storage_candidate
 uv run --locked python -m scripts.image_audit --compare-candidates
 ```
 
@@ -43,7 +44,7 @@ Build создаёт только `trusted-mlsecops:worker-candidate` и `truste
 ## Что остаётся до adoption
 
 1. Исправить или доказательно исследовать остаточные High/Critical, включая Critical libxml2 и новые GnuPG findings. Native comparison завершён, security gate не пройден. Не создавать исключения только по vendor marketing или названию hardened image.
-2. Для storage выполнить подписанный backup/restore в отдельный новый target с новым image: identities, TLS, schema, ledger, разрешения, golden predictions и повторный restore. C.UTF-8/collation и ABI могут измениться при смене Debian, даже если PostgreSQL major тот же.
+2. [Signed backup/restore rehearsal](storage-candidate.md) выполнен 2026-10-11 на fresh synthetic source: 434 проверки, 1 000 golden predictions/error 0.0. Это не перенос рабочей истории; sample collation check не доказывает полную ABI/locale эквивалентность. Для adoption остаётся scoped migration актуальной истории.
 3. Включить новый image в проверяемый bootstrap/migration policy, подготовить rollback и лишь затем менять deployed reference. К текущему volume candidate не подключать до этих проверок.
 4. После adoption повторить затронутые M02/M03/M20 и связать все gates с одним candidate в M18. Старые source-compatible pass не являются доказательством безопасности нового runtime.
 

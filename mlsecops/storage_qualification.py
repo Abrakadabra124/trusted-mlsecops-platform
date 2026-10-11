@@ -44,9 +44,9 @@ def expired_client(state, directory):
     storage_pki.write_pair(directory, "expired", key, builder.sign(authority_key, hashes.SHA256()))
 
 
-def qualify(state):
+def qualify(state, *, experimental_image_id=None):
     state = Path(state).resolve()
-    marker = validate(state)
+    marker = validate(state, experimental_image_id=experimental_image_id)
     cases = []
 
     def confirmed(identifier, condition):
@@ -88,7 +88,7 @@ def qualify(state):
 
     clients = state / "storage-clients"
     before = read_json(state / "storage-pki/identity.json")
-    repeated = bootstrap(state, marker["port"])
+    repeated = bootstrap(state, marker["port"], experimental_image_id=experimental_image_id)
     confirmed("bootstrap-preserves-container", repeated["container_id"] == marker["container_id"])
     confirmed(
         "bootstrap-preserves-certificates", before == read_json(state / "storage-pki/identity.json")

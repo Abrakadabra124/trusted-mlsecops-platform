@@ -1,5 +1,6 @@
 import argparse
 import io
+import re
 import shutil
 import socket
 import subprocess
@@ -117,7 +118,18 @@ def configuration():
     return {"postgresql.conf": config, "pg_hba.conf": hba}
 
 
-def specification(state, port):
+def image_reference(experimental_image_id):
+    if experimental_image_id is None:
+        return IMAGE
+    if not isinstance(experimental_image_id, str) or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", experimental_image_id
+    ):
+        raise Rejected("storage_experimental_image_invalid")
+    return experimental_image_id
+
+
+def specification(state, port, *, experimental_image_id=None):
+    image = image_reference(experimental_image_id)
     identity = storage_pki.workspace_id(state)
     pki = storage_pki.validate(state)
     if type(port) is not int or not 1024 <= port <= 65535:
@@ -128,7 +140,7 @@ def specification(state, port):
     fingerprint = digest(
         canonical(
             {
-                "image": IMAGE,
+                "image": image,
                 "port": port,
                 "configuration": {
                     name: digest(content) for name, content in configuration().items()
@@ -145,7 +157,7 @@ def specification(state, port):
         "name": name,
         "volume": f"{name}-data",
         "network": f"{name}-net",
-        "image": IMAGE,
+        "image": image,
         "port": port,
     }, files
 
@@ -161,9 +173,9 @@ def owned(observed, spec, kind):
         raise Rejected(f"storage_ownership_or_config_mismatch:{kind}")
 
 
-def validate(state):
+def validate(state, *, experimental_image_id=None):
     marker = read_json(safe_child(state, "storage.json"))
-    spec, _ = specification(state, marker.get("port"))
+    spec, _ = specification(state, marker.get("port"), experimental_image_id=experimental_image_id)
     if any(marker.get(key) != value for key, value in spec.items()):
         raise Rejected("storage_identity_changed")
     container = inspect("container", spec["name"])
@@ -176,7 +188,8 @@ def validate(state):
         container["Id"] != marker.get("container_id")
         or network["Id"] != marker.get("network_id")
         or volume["CreatedAt"] != marker.get("volume_created_at")
-        or container["Config"]["Image"] != IMAGE
+        or container["Config"]["Image"] != spec["image"]
+        or (experimental_image_id is not None and container["Image"] != experimental_image_id)
         or container["Config"]["User"] != "999:999"
         or network["Internal"]
         or network["Driver"] != "bridge"
@@ -289,8 +302,12 @@ def export_clients(state, port, host="127.0.0.1"):
                 atomic_write(path, content)
 
 
-def verify_configuration(state, name):
-    _, files = specification(state, read_json(safe_child(state, "storage.json"))["port"])
+def verify_configuration(state, name, *, experimental_image_id=None):
+    _, files = specification(
+        state,
+        read_json(safe_child(state, "storage.json"))["port"],
+        experimental_image_id=experimental_image_id,
+    )
     for filename, content in files.items():
         observed = (
             docker(["exec", "--user", "999:999", name, "sha256sum", f"{MOUNT}/tls/{filename}"])
@@ -309,15 +326,16 @@ def verify_configuration(state, name):
         raise Rejected("storage_hba_invalid")
 
 
-def bootstrap(state, port=15439):
+def bootstrap(state, port=15439, *, experimental_image_id=None):
+    image = image_reference(experimental_image_id)
     state = Path(state).resolve()
     if shutil.disk_usage(state).free < 8 * 1024**3:
         raise Rejected("storage_disk_headroom_insufficient")
     storage_pki.initialize(state)
-    spec, files = specification(state, port)
+    spec, files = specification(state, port, experimental_image_id=experimental_image_id)
     marker_path = safe_child(state, "storage.json")
     if marker_path.exists():
-        marker = validate(state)
+        marker = validate(state, experimental_image_id=experimental_image_id)
         if marker["port"] != port:
             raise Rejected("storage_port_change_requires_migration")
         docker(["start", spec["name"]])
@@ -332,7 +350,16 @@ def bootstrap(state, port=15439):
             for kind, key in (("container", "name"), ("volume", "volume"), ("network", "network"))
         ):
             raise Rejected("storage_partial_or_unowned_resources_require_recovery")
-        docker(["pull", IMAGE], timeout=300)
+        if experimental_image_id is None:
+            docker(["pull", image], timeout=300)
+        else:
+            details = inspect("image", image)
+            if (
+                details.get("Id") != image
+                or details.get("Os") != "linux"
+                or details.get("Architecture") != "amd64"
+            ):
+                raise Rejected("storage_experimental_image_identity_invalid")
         labels = [
             "--label",
             f"{WORKSPACE_LABEL}={spec['workspace_id']}",
@@ -362,7 +389,7 @@ def bootstrap(state, port=15439):
                 *mount,
                 "--entrypoint",
                 "sh",
-                IMAGE,
+                image,
                 "-eu",
                 "-c",
                 f"umask 077; mkdir -p {MOUNT}/18; tar --no-same-owner -xf - -C {MOUNT}; chown -R 999:999 {MOUNT}",
@@ -382,7 +409,7 @@ def bootstrap(state, port=15439):
                 *mount,
                 "--entrypoint",
                 "initdb",
-                IMAGE,
+                image,
                 "-D",
                 PGDATA,
                 "--auth-local=peer",
@@ -413,7 +440,7 @@ def bootstrap(state, port=15439):
                 "max-file=2",
                 "--entrypoint",
                 "postgres",
-                IMAGE,
+                image,
                 "-D",
                 PGDATA,
                 "-c",
@@ -438,8 +465,8 @@ def bootstrap(state, port=15439):
                 raise Rejected("storage_startup_deadline") from None
         time.sleep(0.25)
     migration = migrate(spec["name"])
-    validate(state)
-    verify_configuration(state, spec["name"])
+    validate(state, experimental_image_id=experimental_image_id)
+    verify_configuration(state, spec["name"], experimental_image_id=experimental_image_id)
     export_clients(state, port)
     from mlsecops.storage import connect
 
@@ -449,7 +476,7 @@ def bootstrap(state, port=15439):
     return {
         "observed_at": now(),
         "container_id": marker["container_id"],
-        "image": IMAGE,
+        "image": image,
         "port": port,
         "migration": migration,
         "status": "ready",

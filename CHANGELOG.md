@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 isolated candidate storage restore - 2026-10-11
+
+Добавлен explicit immutable image binding для внутреннего экспериментального restore, без изменения default image/receipt policy. Новый runner проверяет подписанный backup в свежем candidate target, TLS/SQL роли, ledger, collation sample и golden predictions. Локально 434 native checks и 47 controlled contracts прошли; повторный image pull отказал с inconclusive. [Runbook, evidence и ограничения](docs/storage-candidate.md). CI дополнен реальным rehearsal, security findings не исключаются. Рабочая история и deployment не переключались.
+
 ## R1 isolated image candidates - 2026-10-09
 
 Добавлены multi-stage worker с исправленным PCRE2 и без uv в runtime, PostgreSQL 18.6-trixie candidate без unused gosu и old layers, source/recipe binding и four-image same-DB comparison. 123 controlled checks и 74 worker developer checks прошли локально и в clean-checkout CI. [Native evidence](docs/evidence/image-candidates-2026-10-09.md): worker High 56 -> 55, storage Critical 7 -> 1 и High 101 -> 79; четыре новых storage advisory IDs не скрыты. Оба candidates fail, working SQL не меняется. [Runbook и границы](docs/image-candidates.md).

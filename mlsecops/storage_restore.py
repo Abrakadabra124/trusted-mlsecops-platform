@@ -16,7 +16,13 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.storage_backup import read_backup, trusted_keys
-from mlsecops.storage_bootstrap import admin, bootstrap, validate, verify_configuration
+from mlsecops.storage_bootstrap import (
+    admin,
+    bootstrap,
+    image_reference,
+    validate,
+    verify_configuration,
+)
 from mlsecops.storage_schema import DATABASE, TABLES
 from mlsecops.storage_snapshot import binary_command, ledger_sql, validate_ledger
 
@@ -42,8 +48,9 @@ def validate_toc(content):
         raise Rejected("restore_archive_table_scope_invalid")
 
 
-def restore(root, directory, target, public, port=15440):
+def restore(root, directory, target, public, port=15440, *, experimental_image_id=None):
     started = time.monotonic()
+    image_reference(experimental_image_id)
     root, target = Path(root), Path(target)
     if target.is_symlink() or target.parent.is_symlink():
         raise Rejected("restore_target_symlink")
@@ -73,7 +80,7 @@ def restore(root, directory, target, public, port=15440):
                 "release_ready",
             ),
         )
-        marker = validate(target)
+        marker = validate(target, experimental_image_id=experimental_image_id)
         if (
             type(receipt["schema_version"]) is not int
             or receipt["schema_version"] != 1
@@ -89,7 +96,7 @@ def restore(root, directory, target, public, port=15440):
             or receipt["tables"] != statement["tables"]
         ):
             raise Rejected("restore_receipt_identity_mismatch")
-        verify_configuration(target, marker["name"])
+        verify_configuration(target, marker["name"], experimental_image_id=experimental_image_id)
         if (
             ledger(marker["name"]) != statement["tables"]
             or read_json(target / "recovered-public-keys.json") != public
@@ -97,8 +104,8 @@ def restore(root, directory, target, public, port=15440):
             raise Rejected("restore_existing_target_changed")
         return {**receipt, "reused": True}
     initialize(root, target)
-    bootstrap(target, port)
-    marker = validate(target)
+    bootstrap(target, port, experimental_image_id=experimental_image_id)
+    marker = validate(target, experimental_image_id=experimental_image_id)
     if marker["workspace_id"] == statement["source_workspace"]:
         raise Rejected("restore_source_target_identity_collision")
     if any(entry["rows"] for entry in ledger(marker["name"]).values()):
@@ -123,7 +130,7 @@ def restore(root, directory, target, public, port=15440):
     observed = ledger(marker["name"])
     if observed != statement["tables"]:
         raise Rejected("restore_ledger_mismatch")
-    verify_configuration(target, marker["name"])
+    verify_configuration(target, marker["name"], experimental_image_id=experimental_image_id)
     write_json(target / "recovered-public-keys.json", public)
     receipt = {
         "schema_version": 1,
