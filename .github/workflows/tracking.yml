@@ -1,0 +1,45 @@
+name: Isolated MLflow tracking spike
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tracking-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  tracking-spike:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Source, negative contracts and dependency audit
+        run: |
+          uv sync --locked --python 3.12.15
+          uv run --locked ruff check scripts/tracking*.py images/tracking/probe.py
+          uv run --locked ruff format --check scripts/tracking*.py images/tracking/probe.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m scripts.tracking_spike_qualification
+          uv run --locked coverage run --source=scripts.tracking_records -m scripts.tracking_records_qualification
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .coverage.json
+          uv run --locked python -c "import json; totals=json.load(open('.coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
+          uv run --locked pip-audit -r images/tracking/requirements.lock --disable-pip --require-hashes --strict --progress-spinner off
+      - name: Build isolated locked images
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m scripts.tracking_spike build
+      - name: Three real trainings and offline MLflow authorization
+        run: uv run --locked python -m scripts.tracking_spike qualify
+      - name: Scope reminder
+        if: ${{ !cancelled() }}
+        run: echo 'Offline SQLite API/auth spike only. PostgreSQL/TLS integration, OS image audit and full T08/M06 are not accepted.' >> "$GITHUB_STEP_SUMMARY"

@@ -4,6 +4,8 @@
 
 ## Порядок
 
+2026-10-11: независимый от неустранённых image CVEs slice T07/T08 - [MLflow compatibility/auth spike](tracking-spike.md), [ADR 0017](decisions/0017-experiment-tracking.md). Он не ослабляет release gate: проверяет будущий tracking API в offline disposable container, не изменяя working SQL/worker environment. Целевые PostgreSQL/TLS и native input mutations остаются следующими обязательными шагами.
+
 2026-10-11: T02 [candidate storage rehearsal](storage-candidate.md), [ADR 0016](decisions/0016-candidate-storage-restore.md). В отличие от предыдущего host-only image audit, этот increment меняет внутренние storage Python interfaces, поэтому меняет runtime source fingerprint и требует новых builds/regression CI. Default image и доверие к source backup не расширены. Native fresh source-to-target restore прошёл 434 проверки; controlled contracts 33 + 14. Это compatibility evidence, не исправление CVEs, не перенос рабочей истории и не завершённый R1.
 
 Текущий increment T01/T02: [container audit](container-audit.md), [ADR 0014](decisions/0014-container-audit.md). Код находится в host-only `scripts`, не включён в privileged scorer/worker image и не меняет их принятый source fingerprint. Native CI DB/control/scan выполнены на `19c618c`; severity gate дал fail из-за High/Critical findings. [Evidence и remediation plan](evidence/container-audit-2026-10-08.md). Новая image qualification обязательна после исправления inputs; автоматические scanner exceptions запрещены.

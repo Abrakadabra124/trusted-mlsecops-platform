@@ -203,7 +203,13 @@ def main():
                 ".python-version",
                 "Dockerfile",
             }
-            and relative.as_posix() not in {DECISION_FILE, "policies/local-cpu.json"}
+            and relative.as_posix()
+            not in {
+                DECISION_FILE,
+                "policies/local-cpu.json",
+                "images/tracking/Dockerfile.dockerignore",
+                "images/tracking/requirements.in",
+            }
         ):
             fail(f"unexpected publication file: {relative}")
         content = path.read_text(encoding="utf-8")

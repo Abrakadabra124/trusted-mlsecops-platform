@@ -47,6 +47,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T08
 - [ ] MLflow tracking и lineage. Зависимость: T07. Gate: M06.
+- Прогресс: [MLflow 3.17.0 spike](../docs/tracking-spike.md): отдельный hashed lock, 91 package dependency audit без findings/skips, три реальные training runs и 53 HTTP access/artifact/restart checks локально. Это offline SQLite probe, не замена PostgreSQL/TLS или завершённая интеграция publisher; native mutation campaign ещё нужна.
 - Результат: защищённый MLflow, отдельная metadata DB, run-to-material binding и artifact access tests. Только внешний publisher получает право записи; training worker не получает его credentials.
 - Проверка: anonymous/чужая identity запрещены, потеря metadata не меняет runtime alias, повторное обучение сохраняет отдельные runs.
 

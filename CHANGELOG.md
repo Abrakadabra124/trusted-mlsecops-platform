@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 MLflow compatibility and authorization spike - 2026-10-11
+
+Добавлен [отдельный MLflow 3.17.0 image и offline probe](docs/tracking-spike.md): hashed dependencies, проверка model-run projections, реальные grants/denials и restart с тремя fresh training runs. 91 dependency без известных vulnerabilities/skips, 53 native HTTP checks, 27 projection и 12 orchestration contracts прошли локально. Worker dependencies, SQL и release authority не изменены. PostgreSQL/TLS deployment, image OS audit и полные T08/M06 не приняты.
+
 ## R1 isolated candidate storage restore - 2026-10-11
 
 Добавлен explicit immutable image binding для внутреннего экспериментального restore, без изменения default image/receipt policy. Новый runner проверяет подписанный backup в свежем candidate target, TLS/SQL роли, ledger, collation sample и golden predictions. Локально и в CI 434 native checks и 47 controlled contracts прошли; отдельный локальный image pull отказал с inconclusive. [Runbook](docs/storage-candidate.md), [CI evidence и новая scan DB](docs/evidence/storage-candidate-2026-10-11.md): 100% branches малого runner, candidate storage 3 Critical/88 High, worker 55 High. Security gate fail, рабочая история и deployment не переключались.

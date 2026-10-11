@@ -1,0 +1,2 @@
+mlflow[auth]==3.17.0
+psycopg[binary]==3.3.6
