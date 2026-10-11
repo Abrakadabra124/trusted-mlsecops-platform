@@ -61,6 +61,8 @@ Evidence: `.runtime/evidence/M07.json`, `.runtime/evidence/evaluation-gate.json`
 
 Rollback к прошлому коду не переносит прошлый pass на новые материалы. При изменении identity/source во время проверки результат недействителен, требуется review и повтор. Не применять rollback database snapshot для возврата budget.
 
+В developer regression выявлен `qualification_failed:acceptance-dispatch-M07`: старый тест ожидал inconclusive от ещё не реализованного M07, но теперь запускал настоящую campaign. Исправлен выбор explicit missing-prerequisites state для M07, как для M03/M06/M20. Это проверка безопасного отказа dispatcher, не замена полного M07 на inconclusive: Storage CI по-прежнему обязан отдельно выполнить настоящий gate. Диагностика: сверить имя отказа и выбранный state; после исправления повторить developer suite и полный M07. Не менять ожидаемый статус всех gates на pass и не вырезать native campaign.
+
 ## RB-14: компонент зелёный, M07 не принимается
 
 **Симптом:** `M07_component_cases_invalid`, `M07_material_binding_invalid`, `M07_stale_or_future_evidence`, budget/scope mismatch. При разработке negative tests выявили первоначальное принятие старого budget report и подменённого набора contract IDs; проверки ужесточены, отрицательные тесты проходят.
