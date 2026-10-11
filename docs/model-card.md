@@ -24,6 +24,6 @@ AUPRC - площадь под precision-recall кривой. Constant-score base
 
 ## Ограничения и неподходящие применения
 
-Нет реального бизнес-dataset, калибровки вероятностей на настоящих релизах, доказанной fairness/privacy, adversarial campaign или независимого человеческого review. Пока нет holdout query budget и всей инфраструктуры M07. Повторы подтверждают численную повторяемость в фиксированном профиле, не bit-for-bit гарантию для произвольной платформы.
+Нет реального бизнес-dataset, калибровки вероятностей на настоящих релизах, доказанной fairness/privacy, adversarial campaign или независимого человеческого review. С 2026-10-11 SQL/scoped-controller scorer использует [постоянный holdout budget](operations/holdout-budget.md); host/file developer helper не имеет этого контроля и не является trusted release path. Полная инфраструктура и приёмка M07 ещё не готовы. Повторы подтверждают численную повторяемость в фиксированном профиле, не bit-for-bit гарантию для произвольной платформы.
 
 Запрещено использовать модель для финансовых, медицинских, кадровых решений и автоматического обхода security policy. Подписанный evaluation report не заменяет promotion approval. Полная приёмка M01-M23 остаётся inconclusive.
