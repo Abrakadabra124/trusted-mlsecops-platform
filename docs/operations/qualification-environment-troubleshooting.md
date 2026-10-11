@@ -70,6 +70,8 @@ uv run --locked python -c "from mlsecops.contracts import read_json,canonical; r
 
 **Rollback:** при ошибке нового formatter оставить gate fail/inconclusive, сохранить private evidence и исправить formatter отдельным reviewed patch. Не заменять безопасный report печатью raw receipts и не отключать check_claims. Политика budget и роли БД в этом increment не мигрируют.
 
+В ходе расширения suite один test fixture всё ещё объявлял checks=48 при уже расширенном списке IDs. Строгий runner корректно отверг несогласованный fixture. Исправлен только test count на фактическое `len(case_ids())`; проверки точного набора IDs и полноты не ослаблены. На `21bd9c8` native [M07 CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38165607900) прошёл 97 cases с первой попытки и опубликовал новый diagnostic field. Это проверка интеграции, не ретроспективный root-cause fix первого failure на `36fa443`.
+
 ## RB-28: Docker address pool exhausted / неверный порядок bootstrap
 
 Локальная попытка M07 на `36fa443` остановилась с `storage_docker_failed:network`. Адресная диагностика именно нового owned budget state воспроизвела ответ daemon: `all predefined address pools have been fully subnetted`. Это установленная локальная ресурсная причина, **не объяснение remote CI failure**. Quality-stage container после ownership-проверки остановлен штатным finally; данные, network и volume сохранены. На budget-stage volume мог быть создан до отказа network; это partial state, не готовая БД.
