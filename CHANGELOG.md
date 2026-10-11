@@ -2,7 +2,7 @@
 
 ## R1 MLflow compatibility and authorization spike - 2026-10-11
 
-Добавлен [отдельный MLflow 3.17.0 image и offline probe](docs/tracking-spike.md): hashed dependencies, проверка model-run projections, реальные grants/denials и restart с тремя fresh training runs. 91 dependency без известных vulnerabilities/skips, 53 native HTTP checks, 27 projection и 12 orchestration contracts прошли локально. Worker dependencies, SQL и release authority не изменены. PostgreSQL/TLS deployment, image OS audit и полные T08/M06 не приняты.
+Добавлен [отдельный MLflow 3.17.0 image и offline probe](docs/tracking-spike.md): hashed dependencies, проверка model-run projections, реальные grants/denials и restart с тремя fresh training runs. Локальный audit 91 dependency без известных vulnerabilities/skips; audit, 53 native HTTP checks, 27 projection и 12 orchestration contracts повторены в clean-checkout CI `38129646455` на `a48a9dc`, success. Worker dependencies, SQL и release authority не изменены. PostgreSQL/TLS deployment, image OS audit и полные T08/M06 не приняты.
 
 ## R1 isolated candidate storage restore - 2026-10-11
 

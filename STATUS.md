@@ -6,7 +6,7 @@
 
 ## Реализовано в первом increment
 
-T07/T08: [изолированный MLflow spike](docs/tracking-spike.md). 91 pinned Python package прошёл dependency audit без известных vulnerabilities/skips; 53 native HTTP auth/artifact/restart checks и три настоящих training runs прошли локально. Projection/ownership contracts: 27 + 12. Это offline SQLite compatibility experiment, не целевой PostgreSQL/TLS service; T08/M06/M18 остаются открытыми. MLflow не получает release authority.
+T07/T08: [изолированный MLflow spike и CI evidence](docs/tracking-spike.md). 91 pinned Python package прошёл локальный dependency audit без известных vulnerabilities/skips; 53 native HTTP auth/artifact/restart checks и три настоящих training runs прошли локально и в clean-checkout [run 38129646455](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38129646455) на `a48a9dc`. CI повторил dependency audit, 74 worker checks и 27 + 12 contracts. Это offline SQLite compatibility experiment, не целевой PostgreSQL/TLS service; T08/M06/M18 остаются открытыми. MLflow не получает release authority.
 
 Новый T02 slice: [signed restore в candidate PostgreSQL](docs/storage-candidate.md), отдельные свежие source/target, без смены working SQL. Локально и в [clean-checkout CI 3b4aaa0](docs/evidence/storage-candidate-2026-10-11.md) прошли 434 checks и 1 000 golden predictions/error 0.0; 33 image contracts, 14 runner contracts и 74 worker checks. Runner в CI имеет 10/10 covered branches, не весь проект. Отдельный локальный pull failure остаётся inconclusive. Новая scan DB дала candidate storage 3 Critical/88 High, worker 55 High: adoption и полные M01/M17/M18 остаются открытыми.
 

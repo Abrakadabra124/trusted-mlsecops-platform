@@ -31,6 +31,8 @@ Qualification запускает отрицательные сценарии и 
 
 Постановка эксперимента: [dataset card](docs/dataset-card.md), [model card](docs/model-card.md). Метрики и ограничения должны читаться вместе.
 
+[Изолированный MLflow spike](docs/tracking-spike.md) экспортирует только digest-bound metadata трёх реальных обучений, проверяет роли publisher/reader/foreign, доступ к artifacts и restart. Clean-checkout CI прошёл 53 HTTP checks. Это ещё не постоянный PostgreSQL/TLS tracking service, и он не одобряет releases.
+
 ## Kubernetes backend
 
 Добавлен отдельный local cluster с Jobs, Cilium deny policies, admission restrictions и реальными identity/resource probes. Инструкции, требования к памяти, 52 локальные проверки и честные ограничения: [Kubernetes lab](docs/kubernetes-lab.md). Это следующий component increment, не завершённая M01-M23 приёмка.

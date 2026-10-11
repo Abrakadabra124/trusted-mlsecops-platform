@@ -58,7 +58,20 @@ Reports находятся в ignored `.runtime/evidence/tracking-spike.json` и
 - 27 projection contracts прошли; `scripts/tracking_records.py` имеет 32/32 covered lines и 16/16 branches. Дополнительно 12 image/cleanup orchestration contracts. Это не coverage всей платформы, probe или runner; M18 не закрыт.
 - Исходный test запуск projection был RED из-за отсутствующего implementation module. После реализации стал GREEN. Первая build попытка выявила запрещённый root Docker context; добавлен узкий Docker-specific ignore, не широкое включение workspace.
 
-[CI workflow](../.github/workflows/tracking.yml) повторяет dependency audit, contracts, build, обучение и native probe из чистого checkout. Проверенный run ID добавляется после получения результата, не на основании наличия workflow.
+[CI workflow](../.github/workflows/tracking.yml) повторяет dependency audit, contracts, build, обучение и native probe из чистого checkout.
+
+## Проверенный clean-checkout CI
+
+[Run 38129646455](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38129646455), job `114441125148`, commit `a48a9dc970f6ffc0b16a6cbeb007326dec0bb101`: **success**. Native probe завершён `2026-10-11T09:50:46.167720+00:00`, `source_dirty=false`.
+
+- Повторены **53 HTTP checks**, **74 worker checks**, три fresh training runs, **27 + 12 contracts** и dependency audit без известных vulnerabilities. Max probability difference 0.0, AUPRC всех runs 0.9323007296445032.
+- Projection coverage: **32/32 executable lines, 16/16 branches**. Это узкий module coverage, не runner/probe/M18.
+- Hashed lock SHA-256: `1022d73ac8bf084d0f23474dbe594060d85e3481314fde6cd11a7d872c171adf`; recipe materials digest совпал с локальным `a4c25aebbd77160ba2f5db04e699a014930e9f068610535c73cdf18fc6130eff`.
+- Tracking image: `sha256:5ea5ed6f343479a888d957d1db127bd245f65bfa91e856833065aa1d35e0dc7c`; worker: `sha256:e8aad63e9097673f6f74bfb8302e7e8898652b13cf45d29db6c90d3ccec11e73`. Другие image IDs относительно локальной сборки не скрываются; bit-for-bit image воспроизводимость не доказана.
+- Принятые tracking artifact digests: `2ba028aee9620171b59ac5c474be3ac97683e00a2d74fd4fbcfc21b10df4577c`, `8d1e27b1f559b3c197616085a2097b81d122f013edd3edc5ceebceb5b6b8773b`, `16d9860a7e17be5fc58367dd53db9967782c3226ec807a34aa0da366f924deb0`. Run IDs и images входят в records, поэтому hashes не обязаны совпадать между отдельными CI builds.
+- Cleanup завершён с проверкой отсутствия своего container ID. Новый сервис не оставлен доступным на хосте, рабочий SQL не переключался.
+
+Это самостоятельный tracking compatibility report, не перенос green status на PostgreSQL/TLS deployment или image OS security gate.
 
 ## До полного T08/M06
 
