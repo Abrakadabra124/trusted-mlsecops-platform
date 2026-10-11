@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 observable image audit evidence - 2026-10-11
+
+Исправлена публикация image-audit JSON одной длинной строкой, которую обычный CI log viewer не показал. Bounded pretty JSON сохраняет все fields/findings/status, экранирует control characters и отклоняет oversized publication без усечения. Canonical report, scanner inputs и High/Critical gate не меняются. RB-18 содержит read-only диагностику, vendor triage и безопасный дальнейший remediation path; уязвимости не объявлены исправленными этим изменением.
+
 ## R1 poisoning primary evidence reconciliation - 2026-10-11
 
 Добавлена отдельная сверка 35 research cases с source-locked данными, mutation receipts, ONNX bytes, training/prediction requests, scores и повторным вычислением AP/ASR/CI. Выявленный output-overwrites-input defect закрыт отрицательными tests; output ограничен evidence directory. CI проверяет материалы даже после statistical failure и сохраняет этот failure. Worker/model protocol и thresholds не меняются. RB-17 описывает расследование расхождений; это trusted-host component, не подписанный approval и не полный M08.

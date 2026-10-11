@@ -26,6 +26,7 @@ from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import image_candidates
 from scripts.image_archive import identity
 from scripts.image_audit_contract import assess, database, detection_control, inventory
+from scripts.image_audit_publication import render
 from scripts.image_comparison import compare
 
 SYFT_IMAGE = (
@@ -405,7 +406,7 @@ def main(root=None, include_candidates=False):
             reason=str(error) if isinstance(error, Rejected) else "image_audit_internal_error",
         )
     write_json(output, report)
-    print(canonical(report).decode())
+    print(render(report))
     return 0 if report["status"] == "pass" else 1 if report["status"] == "fail" else 2
 
 

@@ -1,5 +1,7 @@
 # Реализация R1
 
+Increment 2026-10-11: [RB-18 и bounded image audit publication](operations/image-audit-troubleshooting.md). Исследование текущих findings не подтвердило безопасный простой upgrade всех stable packages; runtime оставлен неизменным. Реально воспроизведён отдельный operational defect: длинные audit JSON отсутствуют в обычном log viewer, хотя сохранены в job-log API. Новый formatter сохраняет исходный JSON и blocking status, добавляет bounds/escaping и тесты, а CI отдельно проверяет publication. Security failures не waived; фактический результат нового CI фиксируется в STATUS.
+
 Increment 2026-10-11: [poisoning material reconciliation](poisoning-benchmark.md) и [RB-17](operations/poisoning-troubleshooting.md). Отдельный verifier восстанавливает train-only mutations/requests и prediction responses, пересчитывает метрики всех 35 cases, сверяет source/lock/image/version и не разрешает statistical failure превратиться в integrity-only pass. Отрицательные tests воспроизвели перезапись input report через output path; исправлена предварительная проверка безопасной области записи. Native/CI evidence публикуется отдельно в STATUS, M08/T11 пока не закрыты.
 
 Начата 2026-10-07 по прямому запросу владельца. Исследовательская цель R0 завершена; теперь реализуется R1. Этот файл фиксирует решения текущей итерации, не заменяет исходные 23 gates.

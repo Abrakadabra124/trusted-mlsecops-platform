@@ -31,6 +31,8 @@ jobs:
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage.json
           uv run --locked python -c "import json; totals=json.load(open('.coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
+          uv run --locked coverage run --data-file=.coverage-image-publication --source=scripts.image_audit_publication -m unittest scripts.image_audit_publication_qualification
+          uv run --locked coverage report --data-file=.coverage-image-publication --fail-under=95
       - name: Negative storage candidate contracts
         run: |
           uv run --locked ruff check scripts/storage*.py
@@ -54,5 +56,5 @@ jobs:
       - name: Publish sanitized result even on failure
         if: ${{ !cancelled() }}
         run: |
-          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; path=Path('.runtime/evidence/image-audit.json'); print(canonical(read_json(path) if path.is_file() else {'status':'inconclusive','reason':'audit_not_executed'}).decode())"
+          uv run --locked python -m scripts.image_audit_publication
           echo 'Worker/storage package audit only. This is not full M01 or R1 acceptance.' >> "$GITHUB_STEP_SUMMARY"

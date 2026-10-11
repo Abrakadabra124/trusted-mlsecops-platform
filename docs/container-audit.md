@@ -45,6 +45,8 @@ uv run --locked python -m scripts.image_audit
 
 ## Проверка и evidence
 
+2026-10-11: [RB-18](operations/image-audit-troubleshooting.md) фиксирует потерю длинных JSON-строк в обычном просмотре CI и сравнение с raw job API. Audit и отдельный publisher теперь выводят bounded pretty JSON вместо одной строки; canonical report на диске и severity policy не меняются. Семь publication tests проверяют полный round trip и safe failure; formatter не является новым scanner или redactor и не разрешает release.
+
 - Контрактные suites: 43 report/policy checks, 15 archive checks, 25 runner checks, 18 controlled orchestration, 16 candidate binding и 6 comparison checks, всего 123 на `d4b5514`. Включены malformed/stale/foreign reports, пустой inventory, отсутствие обязательного package, fake DB validity, exit/report disagreement, mutation DB/SBOM/source, очистка старого pass, scoped cleanup и реальные child processes с oversized output/deadline. Mocked flow не является native scanner test. CI отдельно требует >=95% combined и branch coverage пяти audit/candidate modules; проверено 98/100 branches. Это не полное coverage M18.
 - 2026-10-08 локальный native Syft каталогизировал worker (1 152 packages, Debian 13.7) и storage (151 package, Debian 12.15). Обязательные packages найдены. Exported archives и source/config IDs сохранены в ignored report.
 - Ранние локальные попытки DB update дали TLS handshake timeout и позднее 300-second timeout при распаковке. Их итог `inconclusive`, число уязвимостей `null`, не 0. Последующий four-image run `653dbcbaaa934d8aa34527fdc9a2bd1c` завершил DB/control/scans: fail, с теми же counts/deltas, что CI. Старые результаты не переписаны в pass.

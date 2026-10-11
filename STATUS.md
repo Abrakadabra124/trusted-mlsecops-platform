@@ -4,7 +4,15 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Poisoning benchmark: новый increment
+## Image audit publication: новый increment
+
+2026-10-11: [RB-18 и vendor triage](docs/operations/image-audit-troubleshooting.md). В `d44d1fe` run `38151770889` обычный `gh run view --log` не показал две длинные строки с audit summary. Прямой job-log API сохранил исходный report: 188 960 canonical bytes, 1 119 finding records, SHA-256 `3168dc919bb8b44d70f713a99cf7bce3f2ce8668c5f14b673d6fc7e80fcd9316`. Причина различия внутри CLI не объявляется доказанной; воспроизведено расхождение способов просмотра.
+
+Добавлен bounded pretty-JSON publisher: на этом настоящем report проверено точное восстановление исходного JSON, все 1 119 findings, 13 830 строк с максимумом 110 bytes/line. Canonical файл и scanner policy не меняются. Локально прошли 7 publication tests, 21/21 statements и 6/6 branches; существующие 123 audit/candidate contracts также pass. Clean-checkout проверка нового publisher ещё предстоит. Это исправление наблюдаемости, не устранение CVEs или завершение M01.
+
+Текущие подтверждённые counts из raw CI `d44d1fe`: worker 0 Critical/56 High, storage 11/118, worker candidate 0/55, storage candidate 3/88 и 1 Unknown. Vendor checks и фактические package versions не дали безопасного простого stable upgrade для всех findings: fixed glibc уже установлен в candidates, libxml2/GnuTLS/GCC blockers остаются. Источники и неопределённость по CVE-2026-95210 сохранены в RB-18. Runtime adoption, scanner exceptions и смешивание stable/sid не выполнялись.
+
+## Poisoning benchmark: предыдущий increment
 
 ### Сверка первичных материалов
 
