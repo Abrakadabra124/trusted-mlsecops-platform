@@ -74,3 +74,5 @@ Rollback к прошлому коду не переносит прошлый pas
 ## Проверенные результаты
 
 Локальное evidence и clean-checkout CI публикуются в [STATUS](../STATUS.md). Coverage относится к модулю gate, не ко всей платформе и не является самостоятельным доказательством отсутствия уязвимостей.
+
+На `51ddfef` [Storage CI 38142949998](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38142949998) воспроизвёл 86 M07 cases и 13 runner tests, 120/120 statements и 30/30 branches gate. [Developer CI 38142950002](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38142950002) подтвердил исправление старого dispatcher expectation. Локально после исправления повторены все 74 developer checks и M07, завершённый 2026-10-11T13:22:40Z. Source fingerprint `c133afe44dbb4706cf0b89ba27b0c781226e32635417fe5d5d22f8bfb22a3a86` совпал с CI. Это проверка поведения из clean checkout, не обещание одинаковых image digests или production readiness.
