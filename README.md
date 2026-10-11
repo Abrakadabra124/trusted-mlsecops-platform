@@ -12,6 +12,8 @@
 
 Исправления проверяются через [отдельные images-кандидаты](docs/image-candidates.md), без замены работающей БД или ослабления severity policy. [Проверенное сравнение на `d4b5514`](docs/evidence/image-candidates-2026-10-09.md): часть findings устранена, но candidates тоже fail, есть новые storage advisories. Это не разрешённый release.
 
+[Candidate restore на `3b4aaa0`](docs/evidence/storage-candidate-2026-10-11.md) воспроизведён в чистом CI: 434 проверки, 1 000 golden predictions/error 0.0; baseline storage/developer regression прошла. [Инструкция самостоятельного повторения](docs/storage-candidate.md). Новый scan по свежей базе по-прежнему блокирует выпуск: candidate storage 3 Critical/88 High, worker 55 High. Совместимость не равна безопасности.
+
 Требуются Git, uv и Docker Engine с Linux x86_64 containers. Bootstrap требует Python 3.12, Docker с минимум 2 CPU/6 GiB общей памяти и 8 GiB свободного диска. Свободную RAM для worker с лимитом 4 GiB проверяйте отдельно: capacity не означает доступный headroom. На Windows подходит Docker Desktop/WSL2 (Windows Subsystem for Linux 2).
 
 ```bash

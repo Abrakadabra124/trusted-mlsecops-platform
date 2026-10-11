@@ -128,6 +128,12 @@ Review усилил observed-spec guard: subset matching недостаточн�
 
 [Native comparison на `d4b5514`](evidence/image-candidates-2026-10-09.md) воспроизведён локально и в CI на одних bytes vulnerability DB. Часть findings исчезла, но оба candidates fail; новые storage advisories сохранены. Worker прошёл 74 функциональные проверки, 123 controlled contracts имеют 98% branch coverage пяти modules. Старый pass инвалидируется до нового запуска, изменение candidate во время qualification отклоняется, scanner cleanup проверен по собственным CID. M01/M18 и adoption не приняты. Следующий шаг - поддерживаемый runtime и проверяемый restore-to-new-target, не ослабление severity policy.
 
+## Четырнадцатый increment: signed restore в candidate storage
+
+[ADR 0016](decisions/0016-candidate-storage-restore.md) сохраняет default image и backup trust policy, добавляя только explicit local image ID для внутреннего экспериментального target. [Runner](storage-candidate.md) проверяет recipe/source binding, создаёт собственные свежие source/target и использует настоящий recovery path. После восстановления проверяются SQL roles/TLS, девять ledgers, подписи model/evaluation, golden predictions, collation sample и повтор без потери поздних записей.
+
+[CI evidence на 3b4aaa0](evidence/storage-candidate-2026-10-11.md) подтверждает 434 checks и error 0.0 на 1 000 predictions. 47 controlled contracts и native entrypoint дают 10/10 covered branches только нового runner. Baseline recovery прошёл 432 checks. Source/target очистка ограничена ownership; failure не сохраняет старый pass. Отдельная локальная попытка остановилась на Docker Hub TLS timeout и остаётся inconclusive. CVEs, рабочая migration, полный M17/M18 и R1 этим не закрываются.
+
 ## Проверенные технические основания реализации
 
 - [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/): image и dependencies фиксируются, установка не происходит внутри training worker.

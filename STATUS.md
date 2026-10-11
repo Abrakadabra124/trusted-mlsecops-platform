@@ -2,11 +2,13 @@
 
 Дата текущей реализации: **2026-10-11**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
-Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последняя проверенная регрессия baseline runtime - commit `d4b5514`; отдельные image candidates security gate не прошли. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
+Текущая приёмка synthetic local scope: **M02, M03, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Последняя проверенная регрессия baseline runtime - commit `3b4aaa0`; отдельные image candidates security gate не прошли. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments; старое указание M20 inconclusive не отменяет более позднюю проверку.
 
 ## Реализовано в первом increment
 
-Новый T02 slice: [signed restore в candidate PostgreSQL](docs/storage-candidate.md), отдельные свежие source/target, без смены working SQL. Локальный native run прошёл 434 checks и 1 000 golden predictions/error 0.0; 33 image contracts и 14 runner contracts прошли отдельно. Повторный run отказал на image pull и сохранил inconclusive, не старый pass. Результат clean-checkout CI этого increment ещё не проверен. High/Critical и полные M01/M17/M18 остаются открытыми.
+Новый T02 slice: [signed restore в candidate PostgreSQL](docs/storage-candidate.md), отдельные свежие source/target, без смены working SQL. Локально и в [clean-checkout CI 3b4aaa0](docs/evidence/storage-candidate-2026-10-11.md) прошли 434 checks и 1 000 golden predictions/error 0.0; 33 image contracts, 14 runner contracts и 74 worker checks. Runner в CI имеет 10/10 covered branches, не весь проект. Отдельный локальный pull failure остаётся inconclusive. Новая scan DB дала candidate storage 3 Critical/88 High, worker 55 High: adoption и полные M01/M17/M18 остаются открытыми.
+
+На `3b4aaa0` documentation/developer/storage/Kubernetes workflows завершились success. M03: 431 checks; baseline recovery: 432 checks и 1 000 predictions/error 0.0; signed migration: 497; M20: 722. [Run IDs, image bindings и ограничения](docs/evidence/storage-candidate-2026-10-11.md). Native image audit завершился fail по findings, не из-за restore или пропущенного scan.
 
 Продолжение remediation: [отдельные image candidates](docs/image-candidates.md) собраны без смены baseline tags/SQL. На `d4b5514` worker candidate прошёл 74 developer checks; 123 controlled image checks имеют 98% branch coverage пяти modules. [Native comparison локально и в CI](docs/evidence/image-candidates-2026-10-09.md) дал одинаковый fail: worker High 56 -> 55, storage Critical 7 -> 1 и High 101 -> 79. У storage появились четыре новых advisory IDs; улучшение части counts не разрешает adoption. T01/T02 и M01 остаются открытыми.
 

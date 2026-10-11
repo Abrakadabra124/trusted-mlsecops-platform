@@ -51,7 +51,7 @@ Runner summary: `.runtime/evidence/storage-candidate.json`. Полный private
 - **33 controlled image contracts** и **14 runner contracts** прошли отдельно от native SQL. Только contracts покрывают 9/10 ветвей runner: entrypoint дополнительно проверяется native запуском. Coverage этого малого runner нельзя переносить на весь recovery/bootstrap или M18.
 - Повторный запуск под coverage завершился `2026-10-11T09:08:40.155845+00:00` как **inconclusive**, `storage_docker_failed:pull`. Он не оставил старый pass; первый успешный результат сохраняется как историческое evidence, не outcome этой попытки.
 
-[CI workflow](../.github/workflows/image-audit.yml) запускает этот rehearsal до vulnerability scan. Clean-checkout outcome фиксируется отдельно после проверки run; наличие workflow не доказывает success. Общий image audit не обязан быть green: compatibility pass не снимает High/Critical findings.
+[CI workflow](../.github/workflows/image-audit.yml) запускает этот rehearsal до vulnerability scan. [Clean-checkout evidence 3b4aaa0](evidence/storage-candidate-2026-10-11.md): native restore success, 434 checks, 1 000 predictions/error 0.0, runner 10/10 covered branches. Общий image audit fail: compatibility pass не снимает High/Critical findings. В новой DB candidate storage имеет 3 Critical/88 High matches, worker 55 High.
 
 ## Что ещё требуется
 

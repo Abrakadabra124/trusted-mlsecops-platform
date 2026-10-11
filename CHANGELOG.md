@@ -2,7 +2,7 @@
 
 ## R1 isolated candidate storage restore - 2026-10-11
 
-Добавлен explicit immutable image binding для внутреннего экспериментального restore, без изменения default image/receipt policy. Новый runner проверяет подписанный backup в свежем candidate target, TLS/SQL роли, ledger, collation sample и golden predictions. Локально 434 native checks и 47 controlled contracts прошли; повторный image pull отказал с inconclusive. [Runbook, evidence и ограничения](docs/storage-candidate.md). CI дополнен реальным rehearsal, security findings не исключаются. Рабочая история и deployment не переключались.
+Добавлен explicit immutable image binding для внутреннего экспериментального restore, без изменения default image/receipt policy. Новый runner проверяет подписанный backup в свежем candidate target, TLS/SQL роли, ledger, collation sample и golden predictions. Локально и в CI 434 native checks и 47 controlled contracts прошли; отдельный локальный image pull отказал с inconclusive. [Runbook](docs/storage-candidate.md), [CI evidence и новая scan DB](docs/evidence/storage-candidate-2026-10-11.md): 100% branches малого runner, candidate storage 3 Critical/88 High, worker 55 High. Security gate fail, рабочая история и deployment не переключались.
 
 ## R1 isolated image candidates - 2026-10-09
 
