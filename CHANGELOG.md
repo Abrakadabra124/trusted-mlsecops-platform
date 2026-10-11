@@ -4,6 +4,8 @@
 
 [M06](docs/reproducibility-gate.md) теперь запускается общим CLI: свежая native campaign, восстановление input bindings из signed datasets, сверка модели и векторов, повторный MLflow read-back. Поддержан explicit state без fallback, захвачен host scripts digest и dirty flag, старые evidence не принимаются. Локально 18 integration cases, 47 controlled contracts, 100% statements/branches gate module; stale worker даёт inconclusive до rebuild. Полные T07/T08, остальные gates и release blockers сохранены. Добавлен ранбук PB-04.
 
+[CI 38136658929](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658929) на `c9e672f` завершился success: M06 18 cases, 47 contracts, source_dirty=false, шесть trainings/predictions/tracking records, baseline differences 0.0. M06 принят в заданном synthetic local scope, не весь T07/T08 или R1. Документационный follow-up не меняет исполняемый код, проверен локально и не запрашивает повторный CI.
+
 ## R1 native reproducibility and operational playbooks - 2026-10-11
 
 Добавлены три baseline обучения и настоящие seed/data/environment mutations с шестью MLflow публикациями/read-back. Локально comparator прошёл 33 cases, baseline difference 0.0; полный M06 ещё не принят. При review исправлен pairwise tolerance bypass с negative regression. [Описание и evidence](docs/reproducibility.md).

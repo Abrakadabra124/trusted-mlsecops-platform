@@ -102,7 +102,7 @@ Regression workflows того же `40d26dc` завершились success: [do
 
 ## Что ещё обязательно
 
-- Полный M06: reconciliation с runtime lineage, подключение acceptance dispatcher и проверка потери tracking metadata без изменения release. [Native seed/data/environment campaign](reproducibility.md) добавлена отдельным component; это не закрывает полный gate.
+- [M06 dispatcher с native campaign и material reconciliation](reproducibility-gate.md) подключён и проверен по исходному численному контракту. Полная lifecycle lineage и проверка потери tracking metadata без изменения реального release остаются обязательной незавершённой частью T07/T08; pass M06 её не заменяет.
 - T08: Kubernetes scoped publisher integration и metadata recovery. Host publisher является рабочим local component, не новым привилегированным controller в кластере.
 - Отдельный полный OS image audit MLflow и publisher provenance. Известные High/Critical findings baseline PostgreSQL/worker не устранены; `release_ready=false` независимо от успешных функциональных проверок.
 - Basic auth MLflow отмечен upstream как experimental. EDIT позволяет изменять metrics/artifacts; это не WORM. Tested grants относятся к experiment/API routes, не ко всем функциям MLflow. Нельзя считать tracking источником разрешения выпуска.

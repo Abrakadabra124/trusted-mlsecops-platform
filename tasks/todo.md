@@ -1,6 +1,6 @@
 # Backlog реализации
 
-T03, T04 и T26 завершены для synthetic-only профиля; остальные **26 задач открыты**, реализация начата 2026-10-07. Промежуточные increments закрывают части других задач, но не их полные gates; результаты в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, M03 и M20, а неподключённые полные проверки возвращают inconclusive. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
+T03, T04 и T26 завершены для synthetic-only профиля; остальные **26 задач открыты**, реализация начата 2026-10-07. Результаты и границы каждой приёмки в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, M03, M06 и M20, а неподключённые полные проверки возвращают inconclusive. M06 подтверждает численную воспроизводимость, но не закрывает автоматически весь более широкий T07/T08 lifecycle. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01
 - [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
@@ -42,7 +42,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T07
 - [ ] CPU pipeline и export. Зависимость: T06. Gate: M06.
-- Интеграция 2026-10-11: [общий M06 dispatcher](../docs/reproducibility-gate.md) заново запускает campaign и сверяет файлы/requests/digests/MLflow. Локально 18 cases pass и 47 controlled contracts; новый clean-checkout CI ожидает подтверждения. Это численная приёмка, не автоматическое завершение всего T07/T08 lifecycle.
+- Интеграция 2026-10-11: [общий M06 dispatcher и CI evidence](../docs/reproducibility-gate.md) заново запускает campaign и сверяет файлы/requests/digests/MLflow. Локально и в clean-checkout run `38136658929` на `c9e672f` прошли 18 cases и 47 controlled contracts. Это численная приёмка, не автоматическое завершение всего T07/T08 lifecycle.
 - Новый component 2026-10-11: [native reproducibility campaign](../docs/reproducibility.md), три fresh-process повтора и по одному actual seed/data/environment изменению. Локально 6 training/6 prediction/6 MLflow records, 33 controlled comparator cases; baseline difference 0.0, mutations не приняты как повторы. Полный gate/dispatcher не закрыт. Добавлены [ранбуки и read-only плейбук](../docs/runbooks.md).
 - Результат: preprocess/train DAG с seed/hyperparameters и machine-readable outputs; fit только на train.
 - Проверка: три fresh-process runs, сравнение входов и predictions; mutation inputs не маскируется cache hit.

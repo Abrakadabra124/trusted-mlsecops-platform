@@ -39,6 +39,19 @@ Gate даёт **18 интеграционных cases**: 6 material reconciliati
 
 Private evidence: `.runtime/evidence/M06.json`, `.runtime/evidence/reproducibility-qualification.json` и отдельный UUID-state `.runtime/reproducibility/<UUID>/`. CI нового increment до отдельного подтверждения не объявляется успешным.
 
+## Подтверждённый clean-checkout CI
+
+[Run 38136658929](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658929), job `114461807391`, commit `c9e672fbf3dc4829e591ee92b4ed7b5cfcb5d118`: **success**, 4m13s. Gate завершён `2026-10-11T11:48:33.055179Z`, **source_dirty=false**, exit 0. Повторены 47 contract tests; M06 содержит 18 integration cases, шесть training/prediction/tracking runs и 3 000 golden rows. Разброс baseline probability/AUPRC **0.0**, baseline AUPRC **0.9323007296445032**.
+
+- Runtime/host scripts fingerprints совпали с приведённым локальным результатом. Это совпадение исходников, не доказательство bit-for-bit image build.
+- CI worker: `sha256:2fdedf27c8d8a78a30e5354d3cfbe6ba730dc365d9f7e82467ddb275b6481246`.
+- CI environment mutation: `sha256:bb7093e9d0c628e93b55b64a0824b97f6a643e5c67a4a8aa25e0d7720291c9c5`.
+- Qualification report hash: `a400246748d1123a1efaad1c06362471cd966e0c964b8ba40eab75c20cb5a4c6`; native report hash: `6394f214bd0a6e65eef6a8fbcac42dea5027f9298895df7549db85ebd737be54`.
+- Seed и environment mutations дали probability difference 0.0, data mutation - **0.00036472082138061523**; все три отвергнуты как повторение. Значения отдельной mutated campaign не обязаны побитово совпадать между локальным host и CI.
+- Проверены terminal success у M06, вывода sanitized evidence и остановки owned tracking services. Отдельные [documentation](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658886), [developer runtime](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658959) и [storage/TLS](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658877) этого commit завершились success.
+
+[Image audit](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658926) завершился failure, [Kubernetes regression](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38136658891) на момент записи ещё выполняется. Это не общий зелёный release. Документационный follow-up фиксирует результаты code commit, проверяется локальным docs checker и не запускает неизменённый runtime повторно.
+
 ## Плейбук PB-04
 
 Ответственный - platform/ML engineer. Запускать из корня checkout на разрешённой CPU-лаборатории. Требуются locked Python 3.12 environment, Docker Linux amd64, место для новой campaign и уже настроенный private tracking service. Не запускать параллельно с изменением исходников, квалификацией tracking/restart или migration.
