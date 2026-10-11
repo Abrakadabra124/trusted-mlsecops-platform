@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 bounded holdout failure diagnostics - 2026-10-11
+
+После реального CI failure добавлены безопасные diagnostic reason codes, claimed-slot summary и propagation через native runner/CLI/M07. Exact receipts связываются с holdout, slot и policy; foreign digest/duplicate slot отвергаются. 11 новых controlled tests проверяют bounds, redaction и сохранение fail. SQL grants, timeouts, LIMIT и thresholds не меняются. RB-27 обновлён; причина первого исторического failure остаётся неизвестной.
+
 ## R1 explicit ONNX model contract - 2026-10-11
 
 CI подтвердил model/developer checks. Встреченные qualification-проблемы вынесены в PB-13/RB-27/RB-28: первоначальный M07 concurrency failure с неизвестной причиной, успешный одиночный rerun и отдельное установленное исчерпание локальных Docker subnets. Причина первого CI failure не объявляется исправленной; unsafe cleanup и waiver не применялись.

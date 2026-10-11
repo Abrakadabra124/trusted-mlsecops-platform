@@ -35,6 +35,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Holdout claim diagnostics and redaction contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-holdout-diagnostics --source=mlsecops.holdout_diagnostics -m unittest scripts.holdout_budget_qualification.BudgetDiagnosticContracts
+          uv run --locked coverage report --data-file=.coverage-holdout-diagnostics --fail-under=100
       - name: Candidate lineage contracts and diagnostic runner
         run: |
           uv run --locked coverage run --source=mlsecops.candidate_lineage --data-file=.coverage-candidate-lineage -m scripts.candidate_lineage_qualification

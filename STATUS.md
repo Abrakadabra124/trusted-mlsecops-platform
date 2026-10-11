@@ -4,7 +4,15 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## ONNX contract v2: новый increment
+## Holdout concurrency diagnostics: новый increment
+
+Устранён диагностический пробел, выявленный в первом storage CI на `36fa443`: [bounded observation](mlsecops/holdout_diagnostics.py) сохраняет номера заявленных slots и количества allowlisted reason codes. Foreign context/digest, malformed и duplicate receipts отвергаются, M07/CLI передают очищенный summary при отказе. Budget, SQL timeouts/roles и смысл exhaustion не ослаблены. [RB-27](docs/operations/qualification-environment-troubleshooting.md) разделяет наблюдение и root cause; старую утраченную причину новый код не восстанавливает.
+
+Локально: **11 новых controlled tests**, diagnostic module **31/31 statements, 10/10 branches, 100%**; 59 evaluation contracts pass, 13 M07 runner methods pass с 120/120 statements и 30/30 branches. Текущий полный состав M07 - 97 cases; новый native gate ещё проверяется через CI. Контрольные fault injections подтверждают отсутствие private strings и сохранение fail, но не воспроизводят неизвестный исторический SQL fault.
+
+Worker пересобран: source fingerprint `786ad50bc13ea4be2344c66e7319971ec1c5dee311add3cafd80f3e01364c423`, image `sha256:24eb7f7f0ac75a5356f3cc3cda5170bb4db70b11bc9c9b2df989e1bd99d1fe84`. Dirty local checkout на базе `87932a0`, fresh `.runtime/holdout-diagnostics-developer-20261011`: **74 developer checks pass**, 3 runs, probability difference 0.0, max parity error 2.086162567138672e-07. Локальный Docker pool не очищался, новая M07 SQL campaign на заведомо исчерпанном pool не запускалась; native SQL ждёт clean-checkout CI. Цель R1/M18 остаётся активной, прежние image/poisoning blockers не сняты.
+
+## ONNX contract v2: предыдущий increment
 
 [Контракт](docs/model-contract.md), [ADR 0023](docs/decisions/0023-linear-onnx-contract.md), [PB-12/RB-25/RB-26](docs/operations/model-contract-troubleshooting.md). Вместо проверки только operator names теперь проверяются связность выбранного двухузлового baseline, input/output types, labels, bounded finite parameters и неизвестные protobuf-поля; после исполнения проверяются оба outputs. Scan receipt требует v2/2 nodes, старые signed reports не переписываются.
 

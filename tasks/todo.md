@@ -63,7 +63,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T10
 - [ ] Independent evaluator. Зависимости: T09, T26. Gate: M07.
-- Follow-up 2026-10-11: [RB-27](../docs/operations/qualification-environment-troubleshooting.md) сохраняет M07 concurrent-denial failure на первом CI attempt и success одного повторного запуска без изменения кода. Причина первого отказа unknown; добавить bounded actual-receipt diagnostics с redaction tests, не ослабляя budget или assertion.
+- Follow-up 2026-10-11: [RB-27](../docs/operations/qualification-environment-troubleshooting.md) сохраняет M07 concurrent-denial failure на первом CI attempt и success одного повторного запуска без изменения кода. Bounded receipt diagnostics реализована с 11 redaction/propagation tests и exact receipt binding, без ослабления budget/assertion. Причина старого отказа остаётся unknown, а не исправленной задним числом; новые CI outcomes в STATUS.
 - Increment 2026-10-11: M07 dispatcher связывает signed report с первичными SQL materials, проверяет budget во второй owned БД, отвергает stale/partial evidence. 13 runner tests, 100% gate statements/branches локально. Это не завершение всего T10 и не разрешение release.
 - Результат: trusted scorer вне prediction worker, holdout access budget, signed subject-bound evaluation reports. Labels и signing keys недоступны worker.
 - Проверка: report swap, попытка trainer прочесть holdout, missing metric, signature mismatch; deny self-approval.

@@ -1,5 +1,7 @@
+import copy
 import io
 import runpy
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -8,7 +10,7 @@ from unittest.mock import patch
 import psycopg
 
 from mlsecops import holdout_budget, storage, storage_pipeline
-from mlsecops.contracts import Rejected, canonical, digest, read_json
+from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 
 
 class BudgetContracts(unittest.TestCase):
@@ -160,6 +162,214 @@ class InspectionCLI(unittest.TestCase):
         ):
             runpy.run_module("mlsecops.holdout_budget", run_name="__main__")
         self.assertEqual(result.exception.code, 0)
+
+
+class BudgetDiagnosticContracts(unittest.TestCase):
+    @staticmethod
+    def receipts():
+        return [
+            {
+                "holdout_digest": "a" * 64,
+                "slot": slot,
+                "reservation": digest(holdout_budget.reservation("a" * 64, slot)),
+                "policy_digest": digest(canonical(holdout_budget.policy())),
+            }
+            for slot in range(2, holdout_budget.LIMIT + 1)
+        ] + [{"rejected": "holdout_budget_exhausted"}]
+
+    def test_exact_exhaustion_retains_bounded_diagnostic_not_authorization(self):
+        from mlsecops.holdout_diagnostics import check_claims
+
+        observed = check_claims(self.receipts(), "a" * 64)
+        self.assertEqual(observed["claimed_slots"], list(range(2, 33)))
+        self.assertEqual(observed["rejection_codes"], {"holdout_budget_exhausted": 1})
+        self.assertEqual(observed["attempts"], 32)
+        self.assertEqual(observed["invalid_receipts"], 0)
+        self.assertTrue(observed["diagnostic_only"])
+        self.assertNotIn("pass", canonical(observed).decode())
+
+    def test_sql_reasons_survive_without_becoming_expected_exhaustion(self):
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        for reason in (
+            "storage_claim_rejected:55P03",
+            "storage_claim_rejected:57014",
+            "storage_claim_rejected:40001",
+            "storage_claim_rejected:unavailable",
+            "storage_connection_rejected",
+            "storage_claim_verification_failed",
+        ):
+            receipts = self.receipts()
+            receipts[-1] = {"rejected": reason}
+            with self.subTest(reason=reason), self.assertRaises(ClaimFailure) as result:
+                check_claims(receipts, "a" * 64)
+            self.assertEqual(
+                str(result.exception), "holdout_qualification_failed:concurrent-over-budget-denied"
+            )
+            self.assertEqual(result.exception.diagnostics["rejection_codes"], {reason: 1})
+
+    def test_unknown_private_and_oversized_reasons_never_appear(self):
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        for reason in (
+            "postgresql://private-password@internal/path",
+            "storage_claim_rejected:55P03\nprivate-password",
+            "private-password" * 10000,
+            {"private-password": "secret"},
+            None,
+        ):
+            receipts = self.receipts()
+            receipts[-1] = {"rejected": reason}
+            with self.subTest(kind=type(reason)), self.assertRaises(ClaimFailure) as result:
+                check_claims(receipts, "a" * 64)
+            encoded = canonical(result.exception.diagnostics)
+            self.assertNotIn(b"private-password", encoded)
+            self.assertLess(len(encoded), 2048)
+            self.assertEqual(
+                result.exception.diagnostics["rejection_codes"], {"unclassified_rejection": 1}
+            )
+
+    def test_malformed_and_excess_attempts_are_bounded_failures(self):
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        for receipts in (None, {}, [], self.receipts()[:31], self.receipts() * 1000):
+            with self.subTest(kind=type(receipts)), self.assertRaises(ClaimFailure) as result:
+                check_claims(receipts, "a" * 64)
+            self.assertLess(len(canonical(result.exception.diagnostics)), 2048)
+            self.assertFalse(result.exception.diagnostics["complete"])
+
+    def test_wrong_receipt_shape_is_redacted_not_silently_accepted(self):
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        for replacement in (
+            None,
+            True,
+            "private-password",
+            {"reservation": "private-password", "slot": True},
+            {**self.receipts()[0], "extra": "private-password"},
+            {**self.receipts()[0], "slot": "private-password"},
+            {**self.receipts()[0], "slot": True},
+            {**self.receipts()[0], "slot": 1000000},
+        ):
+            receipts = self.receipts()
+            receipts[0] = replacement
+            with self.subTest(kind=type(replacement)), self.assertRaises(ClaimFailure) as result:
+                check_claims(receipts, "a" * 64)
+            self.assertEqual(result.exception.diagnostics["invalid_receipts"], 1)
+            self.assertNotIn(b"private-password", canonical(result.exception.diagnostics))
+
+    def test_context_digest_and_slot_cannot_be_swapped(self):
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        for field, value in (
+            ("holdout_digest", "b" * 64),
+            ("policy_digest", "b" * 64),
+            ("reservation", "b" * 64),
+            ("slot", 1),
+        ):
+            receipts = self.receipts()
+            receipts[0][field] = value
+            with self.subTest(field=field), self.assertRaises(ClaimFailure):
+                check_claims(receipts, "a" * 64)
+        receipts = self.receipts()
+        receipts[0] = copy.deepcopy(receipts[1])
+        with self.assertRaises(ClaimFailure):
+            check_claims(receipts, "a" * 64)
+
+    def test_maximum_reason_diversity_still_has_small_safe_output(self):
+        from mlsecops.holdout_diagnostics import REJECTION_CODES, ClaimFailure, check_claims
+
+        codes = sorted(REJECTION_CODES)
+        receipts = [{"rejected": codes[index % len(codes)]} for index in range(32)]
+        with self.assertRaises(ClaimFailure) as rejected:
+            check_claims(receipts, "a" * 64)
+        observed = rejected.exception.diagnostics
+        self.assertEqual(sum(observed["rejection_codes"].values()), 32)
+        self.assertLess(len(canonical(observed)), 2048)
+
+    def test_diagnostic_does_not_reserve_or_read_holdout(self):
+        from mlsecops.holdout_diagnostics import check_claims
+
+        with patch.object(storage, "claim") as claim, patch.object(storage, "get") as read:
+            check_claims(self.receipts(), "a" * 64)
+        claim.assert_not_called()
+        read.assert_not_called()
+
+    def test_native_failure_carries_diagnostics_and_stops_only_owned_container(self):
+        from mlsecops import holdout_budget_qualification as native
+        from mlsecops.holdout_diagnostics import ClaimFailure
+
+        receipts = self.receipts()
+        receipts[-1] = {"rejected": "storage_claim_rejected:55P03"}
+        result = {
+            "evaluation": {
+                "holdout_access": {"holdout_digest": "a" * 64, "slot": 1, "reservation": "b" * 64},
+                "report": {"quality_component": "pass"},
+            }
+        }
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(native, "initialize"),
+            patch.object(native, "bootstrap"),
+            patch.object(native, "validate", return_value={"container_id": "owned-container"}),
+            patch.object(native.storage_pipeline, "demo", return_value=result),
+            patch.object(
+                native.storage, "get", return_value=holdout_budget.reservation("a" * 64, 1)
+            ),
+            patch.object(native, "ProcessPoolExecutor") as pool,
+            patch.object(native, "docker") as docker,
+        ):
+            pool.return_value.__enter__.return_value.map.return_value = receipts
+            with self.assertRaises(ClaimFailure) as rejected:
+                native.qualify(Path(temporary), Path(temporary) / "new-state", "image", 15452)
+            self.assertEqual(
+                rejected.exception.diagnostics["rejection_codes"],
+                {"storage_claim_rejected:55P03": 1},
+            )
+            docker.assert_called_once_with(["stop", "owned-container"], timeout=60)
+
+    def test_M07_failure_report_preserves_reason_without_private_material(self):
+        from mlsecops import acceptance, evaluation_gate
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        receipts = self.receipts()
+        receipts[-1] = {"rejected": "private-password"}
+        with self.assertRaises(ClaimFailure) as rejected:
+            check_claims(receipts, "a" * 64)
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            write_json(state / "workspace.json", {})
+            with patch.object(evaluation_gate, "qualify", side_effect=rejected.exception):
+                report = acceptance.report(
+                    "M07", "local-cpu", Path(__file__).resolve().parents[1], state
+                )
+        self.assertEqual((report["status"], report["exit_code"]), ("fail", 1))
+        self.assertEqual(
+            report["diagnostics"]["holdout_concurrency"], rejected.exception.diagnostics
+        )
+        self.assertNotIn(b"private-password", canonical(report))
+
+    def test_native_cli_records_sanitized_failure_not_false_pass(self):
+        from mlsecops import holdout_budget_qualification as native
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+
+        receipts = self.receipts()
+        receipts[-1] = {"rejected": "private-password"}
+        with self.assertRaises(ClaimFailure) as rejected:
+            check_claims(receipts, "a" * 64)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "diagnostic.json"
+            with (
+                patch("sys.argv", ["budget", "--output", str(output)]),
+                patch.object(native, "qualify", side_effect=rejected.exception),
+                redirect_stderr(io.StringIO()) as stderr,
+            ):
+                self.assertEqual(native.main(), 1)
+            report = read_json(output)
+            self.assertEqual(
+                report["diagnostics"]["holdout_concurrency"], rejected.exception.diagnostics
+            )
+            self.assertNotIn("private-password", stderr.getvalue() + canonical(report).decode())
 
 
 class ScorerOrdering(unittest.TestCase):

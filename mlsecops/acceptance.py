@@ -148,6 +148,7 @@ def report(gate, profile, root, state=None):
             ]
             return result
         from mlsecops.evaluation_gate import qualify
+        from mlsecops.holdout_diagnostics import ClaimFailure
 
         try:
             evidence = qualify(root, state)
@@ -158,6 +159,7 @@ def report(gate, profile, root, state=None):
                 exit_code={"pass": 0, "fail": 1, "inconclusive": 2}[evidence["status"]],
                 metrics={"checks": evidence["checks"], **evidence["metrics"]},
                 residual_risks=evidence["limitations"],
+                diagnostics=evidence["diagnostics"],
                 artifact_hashes={
                     **evidence["artifact_hashes"],
                     "evaluation_gate": digest(
@@ -188,6 +190,8 @@ def report(gate, profile, root, state=None):
                     str(error) if isinstance(error, Rejected) else "M07 runtime unavailable"
                 ],
             )
+            if isinstance(error, ClaimFailure):
+                result["diagnostics"] = {"holdout_concurrency": error.diagnostics}
         result["finished_at"] = now()
     elif gate == "M20":
         required = (

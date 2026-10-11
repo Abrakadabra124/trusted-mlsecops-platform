@@ -302,6 +302,7 @@ def qualify(root, state):
             schema_version=1,
             scope="M07-synthetic-local-cpu-independent-evaluation",
             release_ready=False,
+            diagnostics={"holdout_concurrency": budget["concurrent_claims"]},
             started_at=started,
             campaign_id=campaign_id,
             cases=cases,

@@ -10,6 +10,7 @@ import psycopg
 from mlsecops import holdout_budget, storage, storage_pipeline
 from mlsecops.bootstrap import initialize
 from mlsecops.contracts import Rejected, canonical, digest, now, read_json, write_json
+from mlsecops.holdout_diagnostics import CLAIM_CASES, ClaimFailure, check_claims
 from mlsecops.inventory import source_fingerprint
 from mlsecops.storage_bootstrap import bootstrap, docker, validate
 
@@ -56,17 +57,8 @@ def qualify(root, state, image, port):
             receipts = list(
                 pool.map(attempt, [(str(scorer), holdout_digest)] * holdout_budget.LIMIT)
             )
-        accepted = [item for item in receipts if "reservation" in item]
-        refused = [item for item in receipts if "rejected" in item]
-        confirmed(
-            "four-process-unique-atomic-claims",
-            len(accepted) == holdout_budget.LIMIT - 1
-            and {item["slot"] for item in accepted} == set(range(2, holdout_budget.LIMIT + 1))
-            and len({item["reservation"] for item in accepted}) == len(accepted),
-        )
-        confirmed(
-            "concurrent-over-budget-denied", refused == [{"rejected": "holdout_budget_exhausted"}]
-        )
+        concurrent_claims = check_claims(receipts, holdout_digest)
+        cases.extend(CLAIM_CASES)
         observed = holdout_budget.inspect(scorer, holdout_digest)
         confirmed("read-only-ledger-exhausted", observed["remaining_upper_bound"] == 0)
         content = holdout_budget.reservation("a" * 64, 1)
@@ -156,6 +148,7 @@ def qualify(root, state, image, port):
             "checks": len(cases),
             "cases": cases,
             "consumed": holdout_budget.LIMIT,
+            "concurrent_claims": concurrent_claims,
             "limitations": [
                 "Trusted scorer/admin can bypass application policy; workers cannot",
                 "One authoritative database; independent replicas can fork the budget",
@@ -185,7 +178,10 @@ def main():
             Path(__file__).resolve().parents[1], arguments.state, arguments.image, arguments.port
         )
     except (Rejected, OSError) as error:
-        write_json(arguments.output, {"status": "fail", "observed_at": now(), "reason": str(error)})
+        result = {"status": "fail", "observed_at": now(), "reason": str(error)}
+        if isinstance(error, ClaimFailure):
+            result["diagnostics"] = {"holdout_concurrency": error.diagnostics}
+        write_json(arguments.output, result)
         print(f"Holdout budget qualification rejected: {error}", file=sys.stderr)
         return 1
     write_json(arguments.output, result)

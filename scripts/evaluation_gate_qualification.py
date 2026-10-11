@@ -200,7 +200,7 @@ class EvaluationGateContracts(unittest.TestCase):
         good = {
             "status": "pass",
             "scope": SCOPE,
-            "checks": 48,
+            "checks": len(case_ids()),
             "cases": [{"id": name, "status": "pass"} for name in case_ids()],
         }
         for status, content, expected in (
@@ -257,6 +257,15 @@ class EvaluationGateContracts(unittest.TestCase):
             "budget_policy": evaluation_gate.holdout_budget.policy(),
             "budget_policy_digest": digest(canonical(evaluation_gate.holdout_budget.policy())),
             "consumed": 32,
+            "concurrent_claims": {
+                "schema_version": 1,
+                "diagnostic_only": True,
+                "complete": True,
+                "attempts": 32,
+                "claimed_slots": list(range(2, 33)),
+                "rejection_codes": {"holdout_budget_exhausted": 1},
+                "invalid_receipts": 0,
+            },
         }
         if budget_mutation:
             budget.update(budget_mutation)
@@ -371,6 +380,10 @@ class EvaluationGateContracts(unittest.TestCase):
                 ):
                     report = acceptance.report("M07", "local-cpu", ROOT, state)
                     self.assertEqual((report["status"], report["exit_code"]), (status, code))
+                    self.assertEqual(
+                        report["diagnostics"]["holdout_concurrency"]["rejection_codes"],
+                        {"holdout_budget_exhausted": 1},
+                    )
             for error, status in (
                 (Rejected("M07_material_binding_invalid"), "fail"),
                 (Rejected("evaluation_quality_inconclusive"), "inconclusive"),
