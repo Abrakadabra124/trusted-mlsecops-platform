@@ -52,3 +52,5 @@ gh api repos/Abrakadabra124/trusted-mlsecops-platform/actions/jobs/114506519932/
 ## Проверка восстановления наблюдаемости
 
 Unit suite: large-report round trip, сохранение всех outcomes/полей, escaping, size limits, отсутствие изменения input, generic failure на malformed/missing evidence и module entrypoint. Native критерий: из обычного `gh run view --log` нового completed run извлечён полный publication JSON, его fields/counts/DB/images доступны, audit всё ещё failure при прежних findings. Unit success сам по себе этот CI-критерий не доказывает. Ссылки на завершённые runs фиксируются в STATUS.
+
+Критерий подтверждён в [clean-checkout CI 38153385533](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38153385533) на `57cfee7`: direct audit JSON и опубликованный JSON получены обычным CLI и совпали после canonical normalization, digest `cd3ce2c2d9180ae059ce0dbb827c9e5102cbae16e3046e5ad8f13a420be2edc3`. Все 1 119 finding records сохранены, maximum line 115 bytes. Семь tests и 21/21 statements/6/6 branches publisher прошли; audit завершился fail из-за оставшихся High/Critical. Publication success не замаскировал failure.
