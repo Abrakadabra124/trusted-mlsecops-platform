@@ -31,6 +31,14 @@ def examples(count=400):
 
 
 class QualityContracts(unittest.TestCase):
+    def test_paired_baseline_bootstrap_has_exactly_zero_gain(self):
+        rows, _ = examples()
+        report = evaluation_quality.summarize(
+            rows, [0.5] * len(rows), evaluation_quality.freeze(profile())
+        )
+        self.assertEqual(report["confidence_intervals"]["auprc_gain"], [0.0, 0.0])
+        self.assertEqual(report["quality_component"], "fail")
+
     def test_validator_preserves_degenerate_and_insufficient_states(self):
         for count, single_class in ((398, False), (400, True)):
             rows, scores = examples(count)

@@ -55,4 +55,4 @@ Low-change: 1 533 rows/306 positives, precision 0.7971014492753623, recall 0.718
 
 ## Что остаётся для полной приёмки
 
-Нужен executable M07 gate, который запускает и связывает все обязательные проверки с текущими inputs, не принимает старый component report за итоговый pass и корректно обрабатывает недоступную среду. T09/T10 также сохраняют зависимости от полного T08 lifecycle. Реальный пилот отдельно требует утверждённых labels/horizon, temporal/group split, cost/precision/recall target, бизнес-baseline и соответствующих confidence intervals. Полный release/M18, protected audit и scanner blockers не закрываются хорошим AP.
+Следующий increment подключил [executable M07](evaluation-gate.md): свежая campaign связывает проверки с текущими inputs и не принимает старый component report за итоговый pass. Проверенные результаты находятся в STATUS. T09/T10 сохраняют зависимости от полного T08 lifecycle. Реальный пилот отдельно требует утверждённых labels/horizon, temporal/group split, cost/precision/recall target, бизнес-baseline и соответствующих confidence intervals. Полный release/M18, protected audit и scanner blockers не закрываются хорошим AP.

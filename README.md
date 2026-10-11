@@ -6,6 +6,8 @@
 
 ## Запустить рабочий пример
 
+Приёмка оценки: [M07, PB-07 и RB-13/14](docs/evaluation-gate.md). Единая свежая campaign проверяет leakage, signed material binding и постоянный бюджет holdout в отдельных owned SQL-лабораториях. Не заменяет остальные gates и не разрешает production release.
+
 Качество и доверие к оценке: [frozen policy, интервалы и signed report](docs/frozen-evaluation.md). Недостаток данных теперь даёт `inconclusive`, а reader проверяет report против ожидаемого candidate. [PB-06/RB-11/12](docs/operations/evaluation-troubleshooting.md) описывают диагностику и повторную квалификацию.
 
 Независимая оценка: [постоянный holdout budget и PB-05](docs/operations/holdout-budget.md). SQL scorer ограничивает число попыток до чтения контрольных labels; новый run ID или перезапуск не обнуляют ledger. Это компонент M07, не общая приёмка release.

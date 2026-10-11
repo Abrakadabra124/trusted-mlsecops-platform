@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 executable M07 acceptance - 2026-10-11
+
+Общий runner теперь запускает fresh evaluation campaign, сверяет первичные подписанные материалы и training inputs, выполняет 48 controlled contracts и native evaluation/budget suites. Добавлены source/time/scope/case binding, отдельные owned SQL states и безопасная остановка. Старый pass не переиспользуется, условия M01-M23 не ослаблены. Ранбуки PB-07/RB-13/14 описывают диагностику и восстановление после встреченных отказов. Проверенные результаты и CI фиксируются в STATUS.
+
 ## R1 frozen evaluation и subject-bound read-back - 2026-10-11
 
 Добавлены code-bound evaluation policy, pass/fail/inconclusive, null для undefined metrics, TP/ratio consistency, paired IID 95% intervals и проверка report против expected candidate и persisted reservation. Scorer применяет правила до доступа к holdout; promoter читает только candidate/evaluation. 31 contracts и 24 native SQL/model checks; ранбуки PB-06/RB-11/12. Полный M07/T09/T10 пока не закрыт, production utility не заявляется.

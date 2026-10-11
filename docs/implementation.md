@@ -4,6 +4,8 @@
 
 ## Порядок
 
+Increment 2026-10-11: [единый M07 и PB-07/RB-13/14](evaluation-gate.md). Добавлены fresh controlled/native campaigns, повторная проверка подписанного candidate/evaluation и training request, собственные SQL states без reset рабочей БД, binding source/host contracts/data.lock/image и fail-closed dispatcher. Старый report, подмена contract IDs или частичный результат не дают pass. M07 проверяет synthetic acceptance; T08 lifecycle, остальные gates и security image blockers сохраняются.
+
 Increment 2026-10-11: [frozen evaluation и signed read-back](frozen-evaluation.md). Доверенный scorer замораживает правила до доступа к holdout, различает insufficient evidence и quality failure, сохраняет paired IID intervals. Reader сверяет signed claims с ожидаемым persisted candidate и budget receipt, не запрашивая labels. Native negative fixtures остаются отвергнутыми immutable объектами. Полный M07 gate ещё требует orchestration/evidence binding; хороший AP не закрывает остальные release blockers.
 
 Increment 2026-10-11: [holdout budget](operations/holdout-budget.md), [ADR 0018](decisions/0018-persistent-holdout-budget.md). SQL scorer получает новый atomic slot после проверки signed manifest, но до чтения labels и prediction worker. Ledger сохраняется при restart, candidate/run changes и входит в storage backup. Ранбуки различают исчерпание, неопределённый commit и старый restore; M07 пока не принят. Native M20 history assertions обновлены: расход reservation допустим при отказе, подписанный report недопустим.

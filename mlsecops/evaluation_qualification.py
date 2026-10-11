@@ -42,6 +42,8 @@ def qualify(root, state, image):
     publisher = state / "storage-clients/publisher"
     bound = storage_pipeline.read_evaluation(promoter, reference, candidate, policy, trust)
     report = bound["report"]
+    if report["quality_component"] == "inconclusive":
+        raise Rejected("evaluation_quality_inconclusive")
     confirmed(
         "native-signed-quality-report",
         bound == result["evaluation"] and report["quality_component"] == "pass",

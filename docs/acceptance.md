@@ -1,6 +1,6 @@
 # Измеримая приёмка будущей платформы
 
-**M02, M03 и M20 реализованы и проверяются executable runner; остальные gates пока не приняты полностью.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
+**M02, M03, M06 и M20 проверены executable runner; M07 добавлен и проверен локально, clean-checkout CI нового gate фиксируется отдельно в STATUS.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
 
 ## Единый формат проверки
 
@@ -39,6 +39,8 @@ CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 
 
 ## M07
 **Независимая оценка и отсутствие leakage.** Preprocessing fit только на train, нет пересечений entity IDs, real profile использует temporal/group split. Для lab: AUPRC >= 0.80 и прирост >= 0.10 к DummyClassifier на frozen holdout; >= 200 positive labels в общей оценке, >= 100 размеченных примеров на заявленный slice. Недостаточный объём = inconclusive. Для пилота эти synthetic thresholds не переносятся: нужен предварительно утверждённый cost/precision/recall target и 95% CI выигрыша против бизнес-правила. Negative: test leakage, незрелые labels, подмена evaluator report. T09, T10.
+
+Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaigns, controlled preprocessing contracts, actual SQL/model checks и signed-material reconciliation; неподдерживаемый real profile не выдаётся за прошедший temporal/group pilot.
 
 ## M08
 **Poisoning benchmark и честные пределы защиты.** Выполнены 30 poisoned runs + 5 clean controls по [протоколу](threat-model.md). Для release candidate относительно matched clean control: падение clean AUPRC <= 0.03; верхняя граница 95% CI прироста targeted ASR <= 0.10 на заранее выбранных probes, denominator >= 500. Эти пределы только для оговорённых атак. Known-violation fixtures с нарушением порога блокируются все; challenge bypass и false positives публикуются независимо от результата. Нельзя требовать «любая атака должна обнаруживаться» и подбирать fixtures под желаемый ответ. T11.

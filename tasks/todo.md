@@ -56,12 +56,14 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T09
 - [ ] Frozen evaluation policy. Зависимость: T08. Gate: M07.
+- Increment 2026-10-11: [единый M07](../docs/evaluation-gate.md) заново исполняет controlled/native checks и сверяет source/policy/data/request/evaluation. Локально 86 cases; clean-checkout CI фиксируется в STATUS. Более широкая зависимость T08 сохраняется.
 - Результат: model card, clean baseline, slice definitions, threshold/CI policy до final holdout, бизнес-dataset stop conditions.
 - Проверка: dummy comparison, sample counts, disjoint entities и label maturity; недостаток данных = inconclusive.
 - Increment 2026-10-11: [code-bound frozen lab policy](../docs/frozen-evaluation.md), explicit inconclusive, DummyClassifier AP equivalence, paired IID intervals и controlled train-only preprocessing. Полный M07 gate и зависимости T08 остаются открытыми.
 
 ## T10
 - [ ] Independent evaluator. Зависимости: T09, T26. Gate: M07.
+- Increment 2026-10-11: M07 dispatcher связывает signed report с первичными SQL materials, проверяет budget во второй owned БД, отвергает stale/partial evidence. 13 runner tests, 100% gate statements/branches локально. Это не завершение всего T10 и не разрешение release.
 - Результат: trusted scorer вне prediction worker, holdout access budget, signed subject-bound evaluation reports. Labels и signing keys недоступны worker.
 - Проверка: report swap, попытка trainer прочесть holdout, missing metric, signature mismatch; deny self-approval.
 - Increment 2026-10-11: [read_evaluation](../mlsecops/storage_pipeline.py) сверяет expected candidate, signed metrics, execution/protocol и существующий reservation; native promoter read-back без labels. 24 native SQL/model checks, не общая M07-приёмка.
