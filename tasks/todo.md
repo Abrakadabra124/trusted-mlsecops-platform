@@ -71,6 +71,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T11
 - [ ] Poisoning benchmark. Зависимость: T10. Gate: M08.
+- Increment 2026-10-11: [native 30+5 matrix](../docs/poisoning-benchmark.md), protocol frozen до запуска. Локально 35 trainings/35 predictions; 10 targeted-ASR violations при 5% poisoning. M08/T11 не закрыты: failure не waived, нужна общая gate/material integration и последующее обоснованное устранение риска. Independent M22 challenges не выполнены.
 - Результат: clean controls + label-flip/backdoor matrix, ASR/CIs/utility deltas и полный отчёт failures/bypasses.
 - Проверка: known-violation fixtures блокируются, challenge outcomes не скрываются, train-only attacker budget соблюдён.
 

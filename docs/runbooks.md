@@ -11,6 +11,7 @@
 - [Holdout budget, PB-05 и RB-08/09/10](operations/holdout-budget.md). Read-only ledger, исчерпание попыток, неопределённый commit, restore без ложного refund и проверка отказа до labels/worker.
 - [Независимая оценка, PB-06 и RB-11/12](operations/evaluation-troubleshooting.md). Недостаток labels, undefined metrics, противоречивый signed report, подмена subject и безопасная проверка исправления.
 - [Единый M07, PB-07 и RB-13/14](evaluation-gate.md). Свежая campaign, stale image/report, неполные contract results, ownership-safe cleanup и повтор без reset рабочего holdout budget.
+- [Poisoning campaign, PB-08 и RB-15/16](operations/poisoning-troubleshooting.md). Различение statistical violation и runtime failure, проверка полной матрицы, сохранение отрицательных результатов и повтор без ослабления policy.
 
 Для каждого нового существенного сбоя обновлять этот каталог и соответствующий ранбук одновременно с исправлением. Ошибки разработки и controlled negative tests не называются production-инцидентами.
 

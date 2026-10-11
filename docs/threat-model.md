@@ -1,6 +1,6 @@
 # Модель угроз v0.2
 
-Статус: проектная модель, без выполненного red-team тестирования. Объект - Release Risk Advisor и его ML delivery chain. Основания: [NIST AML](sources.md#s05), [MITRE ATLAS](sources.md#s07), [OWASP AI Exchange](sources.md#s08). Internal IDs `THxx` не являются идентификаторами стандартов.
+Статус: проектная модель, дополненная [native poisoning research 30+5](poisoning-benchmark.md); независимое red-team/challenge тестирование ещё не выполнено. Объект - Release Risk Advisor и его ML delivery chain. Основания: [NIST AML](sources.md#s05), [MITRE ATLAS](sources.md#s07), [OWASP AI Exchange](sources.md#s08). Internal IDs `THxx` не являются идентификаторами стандартов.
 
 ## Активы и противники
 
@@ -41,7 +41,7 @@ ATLAS mapping на проверенном snapshot: TH02/TH03 относятся
 1. Работать только на синтетических/разрешённых данных в отдельном lab, не атаковать сторонние сервисы.
 2. До запуска фиксировать capabilities: attacker изменяет только train, не holdout, не signer; список изменяемых features/labels, бюджет, seed, цель и знания.
 3. Сохранить clean control для каждого seed; не выбирать только удачные попытки.
-4. Для label flipping и backdoor провести 3 бюджета x 5 seeds = 15 опытов на семейство; всего 30 poisoned runs плюс 5 clean controls. Это будущий ограниченный benchmark, не выполненный результат.
+4. Для label flipping и backdoor провести 3 бюджета x 5 seeds = 15 опытов на семейство; всего 30 poisoned runs плюс 5 clean controls. Первый ограниченный native benchmark выполнен 2026-10-11 и выявил violations; точные результаты и пределы в [отчёте](poisoning-benchmark.md). Полная M08-приёмка ещё не пройдена.
 5. Отдельно измерить clean AUPRC, slice recall, долю targeted ошибок (ASR), разницу к matched clean control, время и причину gate decision.
 6. Обязательно иметь known-violation fixtures для проверки enforcement и challenge cases для исследования неизвестного поведения. Успех первого не выдавать за успех второго.
 7. В отчёте публиковать и пропущенные challenge-атаки, и false alarms на clean controls. Никакого удаления неудачных результатов ради «100 из 100».

@@ -4,7 +4,15 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Единый M07: новый increment
+## Poisoning benchmark: новый increment
+
+[ADR 0020](docs/decisions/0020-poisoning-benchmark.md), [native matrix](docs/poisoning-benchmark.md) и [PB-08/RB-15/16](docs/operations/poisoning-troubleshooting.md). Protocol заморожен в `ad71967` до первого native результата; runner сохранён в `b525362` до запуска. Локально выполнены **35 настоящих обучений + 35 predictions: 30 poisoned runs и 5 matched clean controls**. Итог честно **fail**: 10/30 poisoned scenarios нарушают targeted ASR threshold, все при бюджете 700/14 000 строк (5%). Остальные 20 poisoned scenarios и 5 self-controls не нарушили frozen thresholds; это не означает обнаружение всех атак. Inconclusive cases: 0, минимум eligible probes: 1 071.
+
+У failing label-flip cases targeted ASR increase 0.10644-0.11578; у backdoor cases 0.22345-0.23280. Даже максимум clean AP drop **0.01063** ниже разрешённых 0.03: общая AP скрывает ухудшение целевого slice. CI upper bounds также превышают 0.10. Эти результаты нельзя исправить переименованием failure в pass или подбором seeds. Final holdout SQL cap 32, data.lock, worker source, foundation и рабочие services не менялись.
+
+Campaign `5b8dc6bf08934f6896c4184fd4bee8ee`, 2026-10-11T13:47:21Z - 13:50:58Z; local image `sha256:8409355e976fb3c978b6eac38ac485ea66599b7475e333c8677d13c046687b1c`, runtime fingerprint `c133afe44dbb4706cf0b89ba27b0c781226e32635417fe5d5d22f8bfb22a3a86`, protocol digest `c0d8e4ddb09e61be87e2a20ec747eb0bf48082ea89bbeac6278f3022181fce1a`, report digest `2b14cf6da0988ba6c407f242483faef80199896de8c349dbb2b2c1365573029b`. Dirty state относится к документации, готовившейся во время campaign; runtime/host scripts/data.lock/revision сверены неизменными. Protocol contracts: 9 unittest methods, 76/76 statements и 24/24 branches; ещё 3 tests проверяют native matrix shape и pinned materials. Clean-checkout CI нового benchmark ещё не подтверждён. **M08/T11 не приняты:** остаются measured robustness failure, общая gate reconciliation и независимые challenges M22.
+
+## Единый M07: предыдущий increment
 
 [Контракт, воспроизведение и PB-07/RB-13/14](docs/evaluation-gate.md). Локально 2026-10-11T13:14:28Z завершилась первая campaign: **M07 pass, 86 уникальных cases** (48 controlled, 24 native evaluation, 13 native budget, 1 material reconciliation). Сам gate проверен 13 unittest methods с отрицательными subcases; coverage 120/120 statements и 30/30 branches. До rebuild реально получен stale-image inconclusive/exit 2. Tests воспроизвели принятие старого budget report и другого набора contract IDs, после исправления оба отказа проверены. Последующая CI-проверка и исправление regression test описаны в этом разделе отдельно.
 

@@ -1,0 +1,41 @@
+name: Frozen poisoning research matrix
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: poisoning-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  poisoning-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked sources and negative poisoning contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check scripts/poisoning*.py
+          uv run --locked ruff format --check scripts/poisoning*.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --data-file=.coverage-poisoning --source=scripts.poisoning -m unittest scripts.poisoning_qualification scripts.poisoning_native_qualification
+          uv run --locked coverage report --data-file=.coverage-poisoning --fail-under=95
+      - name: Build current offline worker
+        run: uv run --locked python -m mlsecops build
+      - name: All 30 poisoned trainings and five matched clean controls
+        run: uv run --locked python -m scripts.poisoning_native
+      - name: Sanitized complete research outcomes including failures
+        if: always()
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; path=Path('.runtime/evidence/poisoning.json'); report=read_json(path) if path.exists() else {'status':'inconclusive','reason':'missing-evidence'}; print(canonical({key:value for key,value in report.items() if key != 'cases'}).decode()); [print(canonical(case).decode()) for case in report.get('cases',[])]"
+          echo 'Frozen synthetic research only. Failed robustness thresholds remain failure; no release or full M08 acceptance.' >> "$GITHUB_STEP_SUMMARY"

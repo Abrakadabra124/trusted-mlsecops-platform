@@ -4,6 +4,8 @@
 
 ## Порядок
 
+Increment 2026-10-11: [native poisoning matrix](poisoning-benchmark.md), [ADR 0020](decisions/0020-poisoning-benchmark.md). Host-only research runner не меняет worker runtime, обучает все 30 poisoned + 5 matched controls и не читает final holdout для metrics. Протокол принят до эксперимента; первый полный local run выявил 10 targeted-ASR threshold violations при 5% corruption. Отклонения сохраняются как fail, M08 не принят. История, отрицательные contracts и восстановление частичной campaign описаны в PB-08/RB-15/16.
+
 Increment 2026-10-11: [единый M07 и PB-07/RB-13/14](evaluation-gate.md). Добавлены fresh controlled/native campaigns, повторная проверка подписанного candidate/evaluation и training request, собственные SQL states без reset рабочей БД, binding source/host contracts/data.lock/image и fail-closed dispatcher. Старый report, подмена contract IDs или частичный результат не дают pass. M07 проверяет synthetic acceptance; T08 lifecycle, остальные gates и security image blockers сохраняются.
 
 Increment 2026-10-11: [frozen evaluation и signed read-back](frozen-evaluation.md). Доверенный scorer замораживает правила до доступа к holdout, различает insufficient evidence и quality failure, сохраняет paired IID intervals. Reader сверяет signed claims с ожидаемым persisted candidate и budget receipt, не запрашивая labels. Native negative fixtures остаются отвергнутыми immutable объектами. Полный M07 gate ещё требует orchestration/evidence binding; хороший AP не закрывает остальные release blockers.

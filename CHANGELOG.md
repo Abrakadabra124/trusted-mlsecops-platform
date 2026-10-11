@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 native poisoning matrix - 2026-10-11
+
+До запуска заморожен train-only protocol: 30 poisoned runs + 5 controls, отдельные security probes, paired bootstrap/Wilson bounds и unchanged M08 thresholds. Native offline workers выполнили всю матрицу; локально выявлены 10 targeted-ASR violations при 5% poisoning, результаты не исключены. Добавлены strict matrix contracts, CI с сохранением failure, отдельное evidence и PB-08/RB-15/16. Полный M08 не принят, M22/challenges и defence remediation остаются открытыми.
+
 ## R1 executable M07 acceptance - 2026-10-11
 
 Общий runner теперь запускает fresh evaluation campaign, сверяет первичные подписанные материалы и training inputs, выполняет 48 controlled contracts и native evaluation/budget suites. Добавлены source/time/scope/case binding, отдельные owned SQL states и безопасная остановка. Старый pass не переиспользуется, условия M01-M23 не ослаблены. Ранбуки PB-07/RB-13/14 описывают диагностику и восстановление после встреченных отказов. Проверенные результаты и CI фиксируются в STATUS.
