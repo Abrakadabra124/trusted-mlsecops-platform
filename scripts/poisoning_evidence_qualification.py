@@ -273,6 +273,37 @@ class CampaignContracts(unittest.TestCase):
 
 
 class OutputContracts(unittest.TestCase):
+    def test_linked_state_is_rejected_before_writing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            report = state / "evidence/poisoning.json"
+            output = state / "evidence/reconciliation.json"
+            write_json(report, {"campaign_id": "a" * 32})
+            write_json(output, {"preserve": True})
+            original = output.read_bytes()
+            actual_is_symlink = Path.is_symlink
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "poisoning-evidence",
+                        "--state",
+                        str(state),
+                        "--report",
+                        str(report),
+                        "--output",
+                        str(output),
+                    ],
+                ),
+                patch.object(
+                    Path, "is_symlink", lambda path: path == state or actual_is_symlink(path)
+                ),
+                patch.object(poisoning_evidence, "resolve_image", return_value=IMAGE),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(poisoning_evidence.main(), 1)
+            self.assertEqual(output.read_bytes(), original)
+
     def test_cli_records_integrity_error_without_stale_success(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary)

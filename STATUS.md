@@ -6,6 +6,14 @@
 
 ## Poisoning benchmark: новый increment
 
+### Сверка первичных материалов
+
+2026-10-11: [verifier и ограничения](docs/poisoning-benchmark.md), [RB-17](docs/operations/poisoning-troubleshooting.md). Новая local campaign `e5668d1d6336483fa3840f812c3d5660` на `ca8b572` выполнила 35 trainings/35 predictions. В 15:32:40Z verifier подтвердил **35 cases и 251 файл**, `evidence_integrity=pass`, но **status=fail, 10 violations**, оба CLI вернули exit 1. Он заново вычислил AP/ASR/CI и сохранил отрицательный результат; это не M08 pass и не approval.
+
+Report digest `1003cc540b57e3fffdbf4ac7357627e18369ef4ec448776dfa143d31fcac1cc8`, materials digest `7cde90edd2dedfb2c2de749d82f986f569233bfde79fc959cd5f5f0a729f6fe7`, verifier digest `2483838fd097a0ae0bbaf199565f982624e311b892f7eb6c796a356b7b7bfe04`. Image и source/protocol/probe digests совпадают с первым local run ниже. Во время обучения исправлялся только host verifier/test/runbook после review; training worker, native runner, протокол, source lock и revision не менялись. Поэтому local checkout dirty, окончательный clean-checkout CI ещё предстоит.
+
+Локально прошли **17 verifier unittest methods**, 157/159 statements и 32/34 branches (combined coverage 98%), плюс прежние 12 poisoning contracts. Tests сначала воспроизвели перезапись input и запись через symlink state; после исправления существующие файлы сохраняются. Старый native report отвергнут как текущая приёмка с `poisoning_evidence_header`. Отдельный AI review проверил `ca8b572` и выявил symlink defect; это не человеческий independent review T23. Цель R1, full M08/T11 и остальные blockers остаются открытыми.
+
 [ADR 0020](docs/decisions/0020-poisoning-benchmark.md), [native matrix](docs/poisoning-benchmark.md) и [PB-08/RB-15/16](docs/operations/poisoning-troubleshooting.md). Protocol заморожен в `ad71967` до первого native результата; runner сохранён в `b525362` до запуска. Локально выполнены **35 настоящих обучений + 35 predictions: 30 poisoned runs и 5 matched clean controls**. Итог честно **fail**: 10/30 poisoned scenarios нарушают targeted ASR threshold, все при бюджете 700/14 000 строк (5%). Остальные 20 poisoned scenarios и 5 self-controls не нарушили frozen thresholds; это не означает обнаружение всех атак. Inconclusive cases: 0, минимум eligible probes: 1 071.
 
 У failing label-flip cases targeted ASR increase 0.10644-0.11578; у backdoor cases 0.22345-0.23280. Даже максимум clean AP drop **0.01063** ниже разрешённых 0.03: общая AP скрывает ухудшение целевого slice. CI upper bounds также превышают 0.10. Эти результаты нельзя исправить переименованием failure в pass или подбором seeds. Final holdout SQL cap 32, data.lock, worker source, foundation и рабочие services не менялись.

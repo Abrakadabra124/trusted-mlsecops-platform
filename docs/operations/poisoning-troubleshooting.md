@@ -56,4 +56,6 @@ uv run --locked python -m scripts.poisoning_native
 
 **Встреченный defect:** отрицательный test воспроизвёл перезапись input report при одинаковых `--report` и `--output`; также разрешалась запись внутрь campaign. Исправление проверяет output location до первой записи, запрещает совпадение с input, traversal и symlink paths через существующий safe-child helper. Tests проверяют неизменность input и отсутствие запрещённого output. Это дефект разработки, не production incident.
 
+Отдельное read-only code review выявило пропущенную проверку, когда сам `state` является symlink. Controlled test воспроизвёл перезапись диагностического файла до позднего `symlink_rejected`. Исправление проверяет весь путь начиная с `state`, а не только вложенный `evidence`; тест подтверждает неизменность существующего файла. Review выполнено другим AI agent, не независимым человеком и не закрывает T23.
+
 **Проверка конечного состояния:** verifier сверил 35 cases/251 files, результат содержит source/image/protocol/report/materials/verifier digests; каждый scenario outcome заново рассчитан. Все нарушения остаются в итоговом status. Rollback runtime не требуется: команда не меняет deployed state. Эскалировать unexplained mutations, разные writers, согласованный подлог или сомнения в host: checksum reconciliation не заменяет независимые подписанные approvals и чистую доверенную среду.

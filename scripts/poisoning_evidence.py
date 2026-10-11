@@ -401,7 +401,7 @@ def main():
     try:
         evidence = arguments.state.absolute() / "evidence"
         relative = arguments.output.absolute().relative_to(evidence).as_posix()
-        output = safe_child(evidence, relative)
+        output = safe_child(arguments.state, "evidence/" + relative)
         if output.resolve() == arguments.report.resolve():
             raise Rejected("poisoning_evidence_output_is_input")
     except (Rejected, ValueError, OSError):
