@@ -6,6 +6,8 @@
 
 По запросу владельца AGENTS.md требует писать ранбуки вместе с исправлениями. Добавлены [каталог процедур](docs/runbooks.md), incident template, разбор chmod/CHOWN, actual port binding, partial bootstrap, TLS, NumPy/JSON и CI observation failures. Новый read-only tracking doctor проверяет ownership/configuration и HTTPS, не меняет сервисы и не даёт release approval. Изменяющие qualification/restart действия явно отделены.
 
+[Clean-checkout CI на 44deac9](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38134212049) подтвердил 33 comparator/26 doctor tests, native campaign с шестью runs и live doctor; success. Отдельный image audit по-прежнему failure. Документационный follow-up записывает evidence без изменения кода и без повторного CI; локальный docs checker обязателен.
+
 ## R1 persistent private tracking - 2026-10-11
 
 Реализован [постоянный local MLflow и проверен clean-checkout CI](docs/tracking-service.md): separate metadata/auth PostgreSQL databases, certificate identities, HTTPS/mTLS, private backend network, loopback endpoint и внешний host publisher. Локально и в run `38131527513` на `40d26dc` прошли 54 native + 16 controlled boundary checks, 74 worker checks, 13 configuration и 19 client contracts. Три настоящих обучения и artifacts сохранились после остановки/старта PostgreSQL и MLflow. Полные M06/T08, recovery, Kubernetes integration и image OS security не приняты.
