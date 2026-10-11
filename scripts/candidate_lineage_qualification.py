@@ -30,6 +30,11 @@ OWNERS = {
 KNOWN_OWNERS = ["data-owner", "ml-owner", "platform-owner"]
 
 
+def alternate_public_encoding(public):
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    return public[:-2] + alphabet[alphabet.index(public[-2]) + 1] + "="
+
+
 class CandidateLineageContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -417,6 +422,12 @@ class CandidateLineageContracts(unittest.TestCase):
                     self.assertRaisesRegex(Rejected, "inventory_reader_scope"),
                 ):
                     self.collect()
+
+    def test_equivalent_public_key_encodings_cannot_split_signer_roles(self):
+        self.evaluation_ref = self.signed("evaluations", self.bound, "stored-evaluation", "curator")
+        trust = {**self.trust, "evaluator": alternate_public_encoding(self.public["curator"])}
+        with self.assertRaisesRegex(Rejected, "signer_roles_not_separated"):
+            self.collect(trust=trust)
 
     def test_signed_but_expired_source_approval_is_rejected(self):
         self.approval["expires_at"] = "2000-01-01T00:00:00+00:00"

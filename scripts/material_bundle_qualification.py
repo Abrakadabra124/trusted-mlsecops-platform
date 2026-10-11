@@ -135,6 +135,17 @@ class MaterialBundleContracts(unittest.TestCase):
                     signer_public=self.fixture.public[role],
                 )
 
+    def test_equivalent_key_encodings_cannot_turn_curator_into_approver(self):
+        for role in ("curator", "evaluator"):
+            with (
+                self.subTest(role=role),
+                self.assertRaisesRegex(Rejected, "signer_roles_not_separated"),
+            ):
+                self.create(
+                    signing_key=self.fixture.directory / f"{role}.pem",
+                    signer_public=fixtures.alternate_public_encoding(self.fixture.public[role]),
+                )
+
     def test_wrong_signing_key_rejected_before_publication(self):
         with self.assertRaises(Rejected):
             self.create(signing_key=self.fixture.directory / "curator.pem")

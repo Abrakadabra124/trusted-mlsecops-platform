@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 signer identity encoding fix - 2026-10-11
+
+Final review воспроизвёл принятие одного ключа под разными Base64-представлениями за разные curator/evaluator/approver identities. Guards теперь сравнивают decoded bytes. Два regression methods воспроизвели три bypass cases до исправления и отказ после него. RB-24 содержит preconditions, fingerprint diagnosis и безопасную эскалацию без ручной подмены trust roots. Это не обход криптографии и не зарегистрированный production-инцидент.
+
 ## R1 signed candidate material bundle - 2026-10-11
 
 Добавлено замыкание проверяемых candidate materials: отдельный DSSE index, 9 immutable objects, offline semantic verification, idempotent SQL publication и serving-role readback. SQL и capsule используют одинаковые existing signature readers через explicit callback. Полный ModelReleaseBundle/approval не подменяются: capsule остаётся unapproved, M10 inconclusive. Controlled suites и fresh native SQL проверяют tamper, scope, nested signatures, partial writes и отсутствие новых holdout queries. PB-11/RB-22/RB-23 описывают диагностику, последствия publication и безопасный повтор.

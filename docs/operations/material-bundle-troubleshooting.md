@@ -1,4 +1,4 @@
-# PB-11 / RB-22 / RB-23: материалы candidate и восстановление публикации
+# PB-11 / RB-22 / RB-23 / RB-24: материалы candidate и восстановление публикации
 
 Сфера: [unapproved material bundle](../material-bundle.md), owned synthetic lab. Ответственные: platform operator; curator при source approval; evaluator при subject/report; security reviewer при подозрении на подмену. Никакая процедура не разрешает production promotion и не ослабляет M10.
 
@@ -65,3 +65,22 @@ uv run --locked python -m unittest scripts.material_bundle_qualification.Materia
 Fault injection: вторая запись прервана после первой successful write; envelope отсутствует, успех не возвращён. Повтор сохранил ровно 10 objects и прочитанный unapproved результат. Это in-memory transport test. Реальный SQL подтвердил идемпотентный повтор и права, но power-loss/disaster recovery этой capsule **не моделировались**.
 
 Rollback этого шага не требует переключения serving: активный release не менялся. При несовместимом verifier сохранить immutable материалы, прекратить publication, вернуть проверенную совместимую версию кода отдельным reviewed revert. Не удалять private evidence и не ослаблять schema. Эскалация обязательна при неверном signer, неожиданно разрешённом SQL probe, изменении metadata/ledger, неизвестном ownership или неповторимом envelope. Full release rollback/trust revocation ещё требуют T14-T20.
+
+## RB-24: одинаковый ключ ошибочно считается разными identities
+
+**Фактически воспроизведено при финальном review 2026-10-11.** Guards сравнивали строки Base64, а не decoded key bytes. Base64 - представление бинарных данных текстом; разные допустимые записи могут декодироваться в один public key. Controlled fixture меняет незначащие padding bits, сохраняя ключ. До исправления один curator мог также выступить evaluator или signer capsule: два test methods дали три `Rejected not raised` failures.
+
+Precondition: внешняя trusted configuration уже назначила один реальный ключ нескольким ролям под разными строками. Это **не** обход Ed25519, не создание подписи без private key и не возможность случайного сетевого клиента заменить trust roots. Реальных совпадающих production keys или атак не обнаружено; схема вообще не выдавала release approval.
+
+Исправлены guards `candidate_lineage` и `material_bundle`: сравнение decoded public key bytes. Строковое оформление перестало влиять на разделение ролей; подписи и внешний trust anchor по-прежнему проверяются. Не запрещать один вариант encoding вместо устранения ошибки идентичности.
+
+Read-only diagnosis для подтверждённого state, выводит только fingerprints публичных ключей:
+
+```powershell
+uv run --locked python -c "from mlsecops.contracts import read_json,digest; from mlsecops.signing import decode64; public=read_json('.runtime/trusted-keys.json'); print({role:digest(decode64(public[role])) for role in ('curator','evaluator','approver')})"
+uv run --locked python -m unittest scripts.candidate_lineage_qualification.CandidateLineageContracts.test_equivalent_public_key_encodings_cannot_split_signer_roles scripts.material_bundle_qualification.MaterialBundleContracts.test_equivalent_key_encodings_cannot_turn_curator_into_approver
+```
+
+Expected: все три fingerprints различаются, оба regression tests pass; одинаковые bytes дают controlled `signer_roles_not_separated`. При совпадении остановить сборку/promotion, сохранить references и передать owner/security reviewer. Другой текст того же ключа не исправляет проблему. Не перезаписывать `trusted-keys.json` или private keys вручную: нужна explicit key migration/re-authorization и проверка зависимых материалов, а не маскировка старых подписей новой конфигурацией.
+
+После исправления выполнить component suites и fresh native PB-11 на отдельном разрешённом state. Возврат к уязвимому строковому сравнению не допустимый rollback. Production key rotation/revocation пока не реализованы; при подозрении на действующий общий ключ оставлять release заблокированным. Наличие различных ключей не доказывает независимость людей, host admin или KMS.

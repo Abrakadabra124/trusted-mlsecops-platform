@@ -32,7 +32,8 @@ MAX_ENVELOPE_BYTES = 64 * 1024
 def _context(context, signer_public):
     require_fields(context, CONTEXT_FIELDS)
     require_fields(context["trust"], ("curator", "evaluator", "source_approval_digest"))
-    if signer_public in (context["trust"]["curator"], context["trust"]["evaluator"]):
+    signer = signing.decode64(signer_public)
+    if signer in (signing.decode64(context["trust"][role]) for role in ("curator", "evaluator")):
         raise Rejected("bundle_signer_roles_not_separated")
 
 

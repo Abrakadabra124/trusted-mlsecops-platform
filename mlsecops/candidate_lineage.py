@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from mlsecops import asset_graph, storage, storage_dataset, storage_pipeline
+from mlsecops import asset_graph, signing, storage, storage_dataset, storage_pipeline
 from mlsecops.contracts import Rejected, canonical, digest, require_fields
 
 OWNER_KINDS = ("dataset", "run", "model", "runtime", "policy")
@@ -31,7 +31,7 @@ def reconcile(
     ):
         if not isinstance(expected[key], str) or re.fullmatch(pattern, expected[key]) is None:
             raise Rejected("inventory_expected_build_invalid")
-    if trust["curator"] == trust["evaluator"]:
+    if signing.decode64(trust["curator"]) == signing.decode64(trust["evaluator"]):
         raise Rejected("inventory_signer_roles_not_separated")
     record, metadata, _ = storage_pipeline.load_candidate(
         "review", candidate_reference, policy, reader=read

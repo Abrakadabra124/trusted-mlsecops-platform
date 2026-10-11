@@ -14,6 +14,8 @@ Primary source сверена 2026-10-11: [DSSE protocol v1.0.2](https://github.
 
 Trust/configuration остаются вне bundle. Внешний signer должен отличаться от curator/evaluator. Каждая операция сохраняет `release_ready=false`; даже корректно подписанная capsule с quality failure не получает approval. Полный [контракт](../material-bundle.md) перечисляет material set, bounds и API.
 
+Наличие bytes в таблице с историческим именем `releases` не означает approved release: в этом lab increment serving SQL identity может прочитать unapproved capsule для проверки. Это не активация inference. Сейчас потребитель этих записей - диагностический verifier; loader/desired-state controller ещё не реализован. Будущая интеграция обязана проверять отдельный approved release type/authorization, а не брать любой последний объект таблицы или трактовать false flag как необязательную рекомендацию. Если нужна конфиденциальность candidate bytes даже от serving identity, потребуется отдельная artifact namespace/role migration до такого deployment.
+
 ## Альтернативы
 
 - Serving с доступом ко всем metadata tables увеличил бы полномочия и требовал бы migration. Текущие grants не меняются.
