@@ -31,3 +31,9 @@ Runtime source fingerprint меняется при добавлении моду
 Следующий интеграционный этап должен строить graph из уже проверенных signed materials, проверять доверенный snapshot collector и текущую revocation revision, хранить monotonic state, связывать полный bundle и сверять actual serving. SHA-256 и owner allowlist сами по себе не обеспечивают authentication, completeness происхождения, replay protection или независимость от host administrator.
 
 Контракт и команды: [asset graph](../asset-graph.md). Эксплуатация: [PB-09/RB-19](../operations/asset-graph-troubleshooting.md).
+
+## Уточнение: verified candidate projection
+
+2026-10-11: [collector](../candidate-lineage.md) читает настоящие signed curator/evaluator materials из SQL и строит пять nodes одного candidate. Он повторно использует существующие signature/material readers, проверяет дополнительные dataset/build/holdout bindings и не читает labels. SQL grants не меняются: publisher используется для manifest/lineage metadata, promoter для candidate/evaluation. Dedicated read-only inventory identity отложена до отдельной schema migration; существующие INSERT permissions явно остаются избыточными для collector.
+
+Model node ID связан с candidate reference, а его content digest - с bytes. Это сохраняет происхождение одинаковых моделей из разных runs и совместимо с существующим alias-impact traversal. Stored projection не становится signed approval, наблюдение за deployment или full M19 от этого не появляется. Полные source/build attestations, lifecycle persistence и serving integration остаются обязательными.

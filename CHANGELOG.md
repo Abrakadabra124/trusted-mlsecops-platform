@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 verified candidate lineage - 2026-10-11
+
+Добавлен read-only collector signed dataset/candidate/evaluation metadata в asset graph. Проверяет independent expected build pins, material/holdout bindings, timestamps и SQL client identities. Одинаковые model bytes сохраняют разные provenance nodes; quality failure остаётся failure, approval не выдаётся. 18 collector и 8 runner tests с полным coverage, native SQL qualification и RB-20/21 для metadata collisions и ошибок diagnostic output. Изменений grants или ledger reset нет; full M19 пока inconclusive.
+
 ## R1 asset dependency graph component - 2026-10-11
 
 Добавлены bounded schema v1, typed digest-bound references, owner/environment checks, cycle detection, complete deployment observation reconciliation и transitive revocation impact. Content aliases и previous rollback candidate не обходят impact calculation. Synthetic fixture и 25 tests выполняются также в developer CI. PB-09/RB-19 включает фактически воспроизведённый nested-input defect и проверку контролируемого отказа. Компонент не выдаёт approval, full M19 остаётся inconclusive; live collectors, persistence и serving integration ещё нужны.

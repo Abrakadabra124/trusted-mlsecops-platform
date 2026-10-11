@@ -35,7 +35,13 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
-      - name: Fresh PostgreSQL bootstrap
+      - name: Candidate lineage contracts and diagnostic runner
+        run: |
+          uv run --locked coverage run --source=mlsecops.candidate_lineage --data-file=.coverage-candidate-lineage -m scripts.candidate_lineage_qualification
+          uv run --locked coverage report --data-file=.coverage-candidate-lineage --fail-under=100
+          uv run --locked coverage run --source=scripts.candidate_lineage_native --data-file=.coverage-lineage-native -m scripts.candidate_lineage_native_qualification
+          uv run --locked coverage report --data-file=.coverage-lineage-native --fail-under=100
+      - name: Fresh PostgreSQL service
         run: |
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.storage_bootstrap
@@ -43,6 +49,8 @@ jobs:
         run: |
           uv run --locked python -m mlsecops build
           uv run --locked python -m mlsecops.acceptance --gate M03 --output .runtime/evidence/M03.json
+      - name: Read-only lineage from actual signed SQL materials
+        run: uv run --locked python -m scripts.candidate_lineage_native --state .runtime
       - name: Consistent backup and independent storage recovery
         run: uv run --locked python -m mlsecops.storage_recovery_qualification
       - name: M07 fresh evaluation, signed readback, leakage contracts and durable budget

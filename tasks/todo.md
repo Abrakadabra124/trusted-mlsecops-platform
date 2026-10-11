@@ -144,6 +144,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T25
 - [ ] Inventory graph и reconciliation. Зависимости: T04, T08. Gate: M19.
+- Прогресс: [collector signed candidate](../docs/candidate-lineage.md) строит реальную metadata projection из SQL без holdout reads, проверяет curator/evaluator/build bindings. 18 collector + 8 runner tests, отдельный native SQL replay; [PB-10/RB-20/RB-21](../docs/operations/candidate-lineage-troubleshooting.md). Это один candidate, не persistent deployed inventory; dedicated read-only role, lifecycle и serving integration ещё нужны.
 - Прогресс 2026-10-11: [структурный компонент](../docs/asset-graph.md) и [PB-09/RB-19](../docs/operations/asset-graph-troubleshooting.md). Strict schema v1, typed digest-bound edges, completeness/digest сверка observations и exact impact с aliases. 25 local tests, 100% statements/branches. Fixture 2 datasets/3 models/4 deployment records не является live serving; signed ingestion, durable/current revocation, collector и M11 integration остаются открыты.
 - Результат: versioned asset schema, owners, dependency graph, точный impacted set и блокировка неизвестных assets. В недели 4-5 готовится компонент; после T14-T15 проверяется интеграция отзыва до serving.
 - Проверка: fixture M19, dangling/cyclic reference, unknown owner, alias/digest mismatch; интеграционный отзыв ancestor укладывается в M11 и не затрагивает независимую ветвь.

@@ -4,7 +4,15 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Asset dependency graph: новый increment
+## Verified candidate lineage: новый increment
+
+2026-10-11: [collector T25](docs/candidate-lineage.md) и [PB-10/RB-20/RB-21](docs/operations/candidate-lineage-troubleshooting.md). Projection теперь строится из настоящих подписанных SQL материалов, не только fixture. Проверяются curator dataset/lineage, actual model bytes/digest, evaluator report/reservation и independent expected source/image pins. Labels и signing keys collector не читает, SQL grants не расширяет, нового holdout slot не резервирует. Разные candidates с одинаковой моделью сохраняют отдельные provenance nodes.
+
+Controlled tests: 18 collector tests, 50/50 statements и 22/22 branches; 8 native-runner tests, 96/96 statements и 26/26 branches. Существующие 25 graph tests также pass. Ruff check/format и pip-audit host lock pass. Full M19/R1 не приняты: это metadata projection одного unapproved candidate, не deployed inventory или release approval. Предыдущие image/poisoning blockers сохраняются.
+
+Fresh native SQL run завершён `2026-10-11T16:50:50.789064Z`: actual training/evaluation, 10 collector checks pass, graph из 5 nodes, exact dataset impact из 3 nodes. Оба client SELECT holdout получили 42501; manifests=3, lineage=1, candidates=4, evaluations=2 до/после collection не изменились. Это отдельный state, рабочие SQL/cluster services не менялись; собственный SQL container остановлен после ownership verification, volume/evidence сохранены. Source fingerprint `79e87c6a3be0afebbb5b74af2df0aa504576168b82b879424886ff0245b3eae2`, worker `sha256:e0be7a81839b69b50aaaf31bda171a3e72227eee33d5a473adc689f7cfd3f38e`; локальный checkout `1b62bda` с текущими uncommitted changes, не clean-checkout CI. Evidence file digest `92f06e436276065482353dd84a923936710367052454ce8cf4baec441762e13e`, graph digest `03813bc411dbf087bdba588bc7db5d91890d166582946f7db1a61be62d516d0b`, runner digest `302004026c5a33d97d3d2b4632d3135e7dd803f533d994335fa2d9a52eda95fa`. Native helper не создавал новых holdout reservations; единственный slot использовала предшествующая independent evaluation. Clean-checkout result будет зафиксирован после CI.
+
+## Asset dependency graph: предыдущий increment
 
 2026-10-11: [T25 component](docs/asset-graph.md), [ADR 0021](docs/decisions/0021-asset-graph.md), [PB-09/RB-19](docs/operations/asset-graph-troubleshooting.md). Versioned graph проверяет owners, environment, digest-bound typed dependencies, cycles, completeness и actual digest claims snapshot. Отзыв dataset-a на fixture из 17 nodes затрагивает точные 10 nodes и 3 deployments, включая rollback; deployment-b остаётся unaffected. Shared runtime/policy и content-alias negatives также проверены. Snapshot синтетический, не actual cluster observation.
 
