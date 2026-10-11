@@ -55,9 +55,9 @@ class BindingContracts(unittest.TestCase):
                 "limitations": ["controlled fixture"],
                 "scan": {
                     "format": "onnx",
-                    "policy_version": "linear-onnx-v1",
+                    "policy_version": "linear-onnx-v2",
                     "onnx_version": importlib.metadata.version("onnx"),
-                    "inspected_nodes": 1,
+                    "inspected_nodes": 2,
                     "unsupported": 0,
                     "skipped": 0,
                     "errors": 0,

@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Контракт ONNX, PB-12/RB-25/RB-26](operations/model-contract-troubleshooting.md). Диагностика export/graph/labels, неизвестных protobuf-полей и runtime outputs; безопасная свежая qualification без обхода policy или reset рабочего holdout.
 - [Подписанные материалы candidate, PB-11/RB-22/RB-23/RB-24](operations/material-bundle-troubleshooting.md). Сначала read-only lineage, затем явно изменяющая publication в owned lab; отказ на tamper/subject, безопасный повтор interrupted writes, SQL serving readback без approval и исправление сравнения эквивалентных ключей.
 - [Candidate lineage, PB-10/RB-20/RB-21](operations/candidate-lineage-troubleshooting.md). Read-only сверка настоящих подписанных SQL материалов, нерасширенные роли, сохранение разных runs при одинаковых model bytes и контролируемая ошибка записи evidence.
 - [Asset dependency graph, PB-09/RB-19](operations/asset-graph-troubleshooting.md). Synthetic replay, missing/cyclic/digest-swapped references, неполные observations, контролируемый отказ глубоко вложенного input. Не live revocation и не полный M19.

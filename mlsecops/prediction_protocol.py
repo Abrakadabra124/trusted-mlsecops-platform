@@ -72,10 +72,10 @@ def validate_scan(scan):
     )
     if (
         scan["format"] != "onnx"
-        or scan["policy_version"] != "linear-onnx-v1"
+        or scan["policy_version"] != "linear-onnx-v2"
         or scan["onnx_version"] != importlib.metadata.version("onnx")
         or type(scan["inspected_nodes"]) is not int
-        or not 1 <= scan["inspected_nodes"] <= 16
+        or scan["inspected_nodes"] != 2
         or any(
             type(scan[name]) is not int or scan[name] != 0
             for name in ("unsupported", "skipped", "errors")

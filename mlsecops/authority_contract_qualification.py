@@ -23,11 +23,11 @@ def qualify():
 
     scan = {
         "format": "onnx",
-        "inspected_nodes": 3,
+        "inspected_nodes": 2,
         "unsupported": 0,
         "skipped": 0,
         "errors": 0,
-        "policy_version": "linear-onnx-v1",
+        "policy_version": "linear-onnx-v2",
         "onnx_version": importlib.metadata.version("onnx"),
     }
     for name, expected in MUTATIONS.items():

@@ -78,6 +78,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T12
 - [ ] Safe format и robustness probes. Зависимость: T11. Gate: M09.
+- Компонент 2026-10-11: [linear-onnx-v2](../docs/model-contract.md), точный graph/parameter/output contract, 1000-row real CPU parity и отрицательные fixtures. Evasion, OOD/abstain и полный M09 остаются открытыми.
 - Результат: ONNX allowlist, parity report, declared evasion suite, ограниченный OOD/abstain policy.
 - Проверка: pickle/external tensor/custom operator/oversized graph отклоняются до load; golden cases соответствуют Python output.
 
@@ -160,6 +161,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T27
 - [ ] Artifact intake coverage. Зависимости: T12, T26. Gate: M21.
+- Компонент 2026-10-11: scanner требует полностью проверенный двухузловой профиль, rejects unknown protobuf fields, receipt v2/2 nodes. Полный intake/conversion/path/timeout/crash gate не завершён; [PB-12](../docs/operations/model-contract-troubleshooting.md).
 - Результат: quarantine report с declared format/tool coverage, scanned count, digest, policy version и явным inconclusive. Выбор scanner после проверки поддержки фактического ONNX-профиля.
 - Проверка: unsupported/zero-scanned/crash/timeout/stale report, подмена digest и mutation после conversion блокируются; разрешённый clean ONNX проходит полный intake.
 

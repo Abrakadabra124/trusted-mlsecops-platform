@@ -4,7 +4,17 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Signed candidate material bundle: новый increment
+## ONNX contract v2: новый increment
+
+[Контракт](docs/model-contract.md), [ADR 0023](docs/decisions/0023-linear-onnx-contract.md), [PB-12/RB-25/RB-26](docs/operations/model-contract-troubleshooting.md). Вместо проверки только operator names теперь проверяются связность выбранного двухузлового baseline, input/output types, labels, bounded finite parameters и неизвестные protobuf-поля; после исполнения проверяются оба outputs. Scan receipt требует v2/2 nodes, старые signed reports не переписываются.
+
+Локально 2026-10-11: 18 model methods, **89/89 statements, 26/26 branches, 100% coverage**. В suite настоящий sklearn export и CPU ONNX inference на 1000 synthetic golden rows с parity <=1e-5; controlled fixtures подтверждают rejection до ORT constructor. Дополнительно прошли 100 regression methods (lineage, bundle, native runner, evaluation binding/quality, poisoning evidence), protocol/authority suites, ruff и host pip-audit. Host audit не отменяет отдельные container findings.
+
+Native developer qualification выполнена в новом owned `.runtime/model-contract-v2-20261011`: **74 cases pass, 3 fresh runs**, max probability difference 0.0, max parity error 2.086162567138672e-07; AP каждого run 0.9323007296445032 на synthetic holdout. Source fingerprint `a13457f639f6f66c9d5a9f217255c61f1618e83d2a82b7ea600519aeba3a14e5`, Linux worker `sha256:81a803ab6cf8e8560e3cf799ea46eef3e3884337da764254ce450afed32a983c`, canonical report digest `9eda1b4c7e725e357a4c8f240396e1723a1de5f29beb2e5566ec0642a7fc3d28`. Это dirty local checkout на базе `064ddb0`, не clean-checkout CI. Private keys/data/evidence сохранены локально, рабочие SQL/cluster не менялись. Runtime CI получил отдельный model-contract coverage step; новый CI пока не подтверждён.
+
+Полные M09/M21, T12/T27 остаются открытыми: evasion/OOD, весь intake/conversion/path/timeout/crash набор и gate orchestration не подменяются structural scan. Известные image и poisoning blockers не сняты. M18/release_ready остаются незавершёнными.
+
+## Signed candidate material bundle: предыдущий increment
 
 Final self-review выявил и исправил различение identities по Base64-строкам вместо public key bytes. В controlled fixture один ключ в эквивалентных encodings проходил role-separation guards; два новых regression methods воспроизвели три bypass cases. Теперь сравниваются decoded bytes. [RB-24](docs/operations/material-bundle-troubleshooting.md) фиксирует условия, диагностику и запрет ручной подмены trust roots. Актуальная component verification: **21 bundle tests**, 109/109 statements и 42/42 branches; **21 lineage tests**, 61/61 statements и 26/26 branches. Исторические 20/20 и результаты на `7100e3d` ниже относятся к increment до этого follow-up; release approval не выдавался ни одной версией.
 

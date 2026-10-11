@@ -36,6 +36,12 @@ jobs:
           uv run --locked coverage run --source=mlsecops.asset_graph --data-file=.coverage-asset-graph -m scripts.asset_graph_qualification
           uv run --locked coverage report --data-file=.coverage-asset-graph --fail-under=100
           uv run --locked python -m scripts.asset_graph_fixture
+      - name: ONNX model contract and real CPU parity
+        run: |
+          uv run --locked ruff check scripts/model_contract_qualification.py
+          uv run --locked ruff format --check scripts/model_contract_qualification.py
+          uv run --locked coverage run --source=mlsecops.model --data-file=.coverage-model-contract -m scripts.model_contract_qualification
+          uv run --locked coverage report --data-file=.coverage-model-contract --fail-under=100
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
       - name: Verify frozen source and intake gate
