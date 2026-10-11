@@ -3,3 +3,4 @@
 !images/tracking/
 !images/tracking/requirements.lock
 !images/tracking/probe.py
+!images/tracking/server.py

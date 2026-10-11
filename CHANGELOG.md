@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 persistent private tracking - 2026-10-11
+
+Реализован [постоянный local MLflow](docs/tracking-service.md): separate metadata/auth PostgreSQL databases, certificate identities, HTTPS/mTLS, private backend network, loopback endpoint и внешний host publisher. Локально прошли 54 native + 16 controlled boundary checks, 74 worker checks, 13 configuration и 19 client contracts. Три настоящих обучения и artifacts сохранились после остановки/старта PostgreSQL и MLflow. Полные M06/T08, recovery, Kubernetes integration и image OS security не приняты; clean-checkout evidence ожидается.
+
 ## R1 MLflow compatibility and authorization spike - 2026-10-11
 
 Добавлен [отдельный MLflow 3.17.0 image и offline probe](docs/tracking-spike.md): hashed dependencies, проверка model-run projections, реальные grants/denials и restart с тремя fresh training runs. Локальный audit 91 dependency без известных vulnerabilities/skips; audit, 53 native HTTP checks, 27 projection и 12 orchestration contracts повторены в clean-checkout CI `38129646455` на `a48a9dc`, success. Worker dependencies, SQL и release authority не изменены. PostgreSQL/TLS deployment, image OS audit и полные T08/M06 не приняты.

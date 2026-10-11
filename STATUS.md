@@ -6,6 +6,8 @@
 
 ## Реализовано в первом increment
 
+T08 продолжен: [постоянный PostgreSQL/TLS tracking service](docs/tracking-service.md), отдельные DB roles и networks, verified HTTPS/mTLS, внешний host publisher, три настоящих обучения и restart без потери runs/artifacts. Локально 54 native + 16 controlled boundary checks и 74 worker checks прошли. Новый clean-checkout CI ещё не подтверждён. Полные T08/M06, scoped Kubernetes integration, metadata recovery и security image gate остаются открытыми.
+
 T07/T08: [изолированный MLflow spike и CI evidence](docs/tracking-spike.md). 91 pinned Python package прошёл локальный dependency audit без известных vulnerabilities/skips; 53 native HTTP auth/artifact/restart checks и три настоящих training runs прошли локально и в clean-checkout [run 38129646455](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38129646455) на `a48a9dc`. CI повторил dependency audit, 74 worker checks и 27 + 12 contracts. Это offline SQLite compatibility experiment, не целевой PostgreSQL/TLS service; T08/M06/M18 остаются открытыми. MLflow не получает release authority.
 
 Новый T02 slice: [signed restore в candidate PostgreSQL](docs/storage-candidate.md), отдельные свежие source/target, без смены working SQL. Локально и в [clean-checkout CI 3b4aaa0](docs/evidence/storage-candidate-2026-10-11.md) прошли 434 checks и 1 000 golden predictions/error 0.0; 33 image contracts, 14 runner contracts и 74 worker checks. Runner в CI имеет 10/10 covered branches, не весь проект. Отдельный локальный pull failure остаётся inconclusive. Новая scan DB дала candidate storage 3 Critical/88 High, worker 55 High: adoption и полные M01/M17/M18 остаются открытыми.
@@ -54,7 +56,7 @@ DVC 3.67.1 был проверен в spike, но не принят: pip-audit �
 
 ## Что не реализовано
 
-Постоянный MLflow с PostgreSQL/TLS, защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. Offline MLflow spike, SQL backup/restore и scoped publisher/scorer controllers проверены отдельными компонентами. Kubernetes Jobs и isolation probes не закрывают полный integration scope. Приняты только M02, M03 и M20; остальные полные gates не приняты. T03/T04/T26 завершены только в synthetic scope, остальные 26 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
+Защищённый promotion/verifier service, inference API, poisoning/evasion campaign, inventory/revocation service, drift monitoring и полный ML release/serving restore ещё не реализованы. Постоянный local MLflow с PostgreSQL/TLS, SQL backup/restore и scoped publisher/scorer controllers проверены отдельными компонентами; MLflow ещё не интегрирован с Kubernetes publisher и metadata recovery. Kubernetes Jobs и isolation probes не закрывают полный integration scope. Приняты только M02, M03 и M20; остальные полные gates не приняты. T03/T04/T26 завершены только в synthetic scope, остальные 26 задач открыты. Прогресс: [журнал реализации](docs/implementation.md). Обучение маленькой синтетической модели выполнено; дообучение ассистента не выполнялось.
 
 ## PostgreSQL storage increment
 

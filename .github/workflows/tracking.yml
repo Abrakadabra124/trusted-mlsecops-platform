@@ -1,4 +1,4 @@
-name: Isolated MLflow tracking spike
+name: MLflow tracking compatibility and private service
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ concurrency:
 jobs:
   tracking-spike:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -25,10 +25,12 @@ jobs:
       - name: Source, negative contracts and dependency audit
         run: |
           uv sync --locked --python 3.12.15
-          uv run --locked ruff check scripts/tracking*.py images/tracking/probe.py
-          uv run --locked ruff format --check scripts/tracking*.py images/tracking/probe.py
+          uv run --locked ruff check scripts/tracking*.py images/tracking/*.py
+          uv run --locked ruff format --check scripts/tracking*.py images/tracking/*.py
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m scripts.tracking_spike_qualification
+          uv run --locked python -m scripts.tracking_config_qualification
+          uv run --locked python -m scripts.tracking_client_qualification
           uv run --locked coverage run --source=scripts.tracking_records -m scripts.tracking_records_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage.json
@@ -40,6 +42,14 @@ jobs:
           uv run --locked python -m scripts.tracking_spike build
       - name: Three real trainings and offline MLflow authorization
         run: uv run --locked python -m scripts.tracking_spike qualify
+      - name: Persistent PostgreSQL, verified TLS and real publication
+        run: uv run --locked python -m scripts.tracking_service_qualification
+      - name: Stop only owned tracking services
+        if: ${{ always() }}
+        run: |
+          if test -f .runtime/tracking-service/resources.json; then
+            uv run --locked python -m scripts.tracking_service stop
+          fi
       - name: Scope reminder
         if: ${{ !cancelled() }}
-        run: echo 'Offline SQLite API/auth spike only. PostgreSQL/TLS integration, OS image audit and full T08/M06 are not accepted.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Private local PostgreSQL/TLS tracking component. Full M06, metadata-loss recovery, OS image audit and release approval remain unaccepted.' >> "$GITHUB_STEP_SUMMARY"

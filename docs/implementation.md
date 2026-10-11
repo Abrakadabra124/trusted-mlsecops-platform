@@ -4,6 +4,8 @@
 
 ## Порядок
 
+2026-10-11: [постоянный local tracking service](tracking-service.md) развивает ADR 0017: отдельная PostgreSQL с двумя certificate-authenticated DB roles, private backend network, loopback HTTPS endpoint и scoped host publication после настоящего обучения. Worker image и cluster runtime не меняются. Локальные persistence/access проверки прошли; полный M06 и production security остаются открытыми.
+
 2026-10-11: независимый от неустранённых image CVEs slice T07/T08 - [MLflow compatibility/auth spike](tracking-spike.md), [ADR 0017](decisions/0017-experiment-tracking.md). Он не ослабляет release gate: проверяет будущий tracking API в offline disposable container, не изменяя working SQL/worker environment. Целевые PostgreSQL/TLS и native input mutations остаются следующими обязательными шагами.
 
 2026-10-11: T02 [candidate storage rehearsal](storage-candidate.md), [ADR 0016](decisions/0016-candidate-storage-restore.md). В отличие от предыдущего host-only image audit, этот increment меняет внутренние storage Python interfaces, поэтому меняет runtime source fingerprint и требует новых builds/regression CI. Default image и доверие к source backup не расширены. Native fresh source-to-target restore прошёл 434 проверки; controlled contracts 33 + 14. Это compatibility evidence, не исправление CVEs, не перенос рабочей истории и не завершённый R1.

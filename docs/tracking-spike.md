@@ -2,6 +2,8 @@
 
 Scope T07/T08, [ADR 0017](decisions/0017-experiment-tracking.md). Это настоящий MLflow 3.17.0 с HTTP requests и тремя реальными обучениями, но пока **одноразовый offline SQLite spike**, не целевой PostgreSQL/TLS service и не выполненный M06. Production/release readiness остаётся false.
 
+Следующий increment вынесен отдельно: [постоянный local PostgreSQL/TLS service](tracking-service.md). Это не меняет исторический scope и counts данного SQLite probe.
+
 ## Технологии и ответственность
 
 MLflow хранит experiments, runs, параметры, метрики и артефакты. Он помогает сопоставить результат с исходными материалами, но не заменяет независимый evaluation, подпись артефактов и promotion verifier. Изменяемые tags/metrics/aliases не являются release approval.

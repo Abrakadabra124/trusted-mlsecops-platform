@@ -1,6 +1,6 @@
 # ADR 0017: tracking как отдельный недоверенный к выпуску сервис
 
-Дата: 2026-10-11. Статус: offline API/auth spike реализован; PostgreSQL/TLS deployment не принят. Scope: T07/T08 и M06, без ослабления M01-M23. [Реализация и границы](../tracking-spike.md).
+Дата: 2026-10-11. Статус: offline spike и [постоянный local PostgreSQL/TLS component](../tracking-service.md) реализованы; полный T08/M06 не принят. Scope: T07/T08 и M06, без ослабления M01-M23. [Первоначальный spike](../tracking-spike.md) сохранён как историческое evidence.
 
 ## Требование
 

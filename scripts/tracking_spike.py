@@ -31,6 +31,7 @@ def materials(root):
         "requirements.in",
         "requirements.lock",
         "probe.py",
+        "server.py",
     )
     return digest(
         canonical(
