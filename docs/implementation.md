@@ -4,6 +4,8 @@
 
 ## Порядок
 
+2026-10-11: [исполняемый M06 gate](reproducibility-gate.md) подключён к acceptance dispatcher. Он не принимает старый component JSON: создаёт новую campaign, восстанавливает training requests из signed splits, повторно сверяет model/vector/metadata и читает шесть tracking records. Добавлены explicit state, защита от reuse campaign, binding host scripts и stale-image negative. Локально 18 integration cases и 47 controlled contracts прошли; runtime fingerprint изменён, поэтому worker пересобран. T07/T08 целиком остаются открытыми; metadata-loss и serving alias ещё требуют реальной lifecycle-интеграции.
+
 2026-10-11: [native reproducibility campaign](reproducibility.md) продолжает T07/T08: три повторных и три изменённых обучения, общий frozen golden set, input bindings и шесть MLflow read-backs. Исправлен pairwise comparison bypass, добавлены 33 controlled cases. По запросу владельца [ранбуки и плейбуки](runbooks.md) теперь обязательны вместе с исправлениями; read-only tracking doctor имеет 26 tests и проверен на работающем сервисе. Полный M06 и R1 не приняты; дальнейшая работа - acceptance integration и оставшиеся T08 boundaries, не ослабление исходных порогов.
 
 2026-10-11: [постоянный local tracking service](tracking-service.md) развивает ADR 0017: отдельная PostgreSQL с двумя certificate-authenticated DB roles, private backend network, loopback HTTPS endpoint и scoped host publication после настоящего обучения. Worker image и cluster runtime не меняются. Локальные persistence/access проверки прошли; полный M06 и production security остаются открытыми.

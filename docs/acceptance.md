@@ -35,6 +35,8 @@ CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 
 ## M06
 **Воспроизводимость.** Три fresh-process обучения на одинаковом local-cpu профиле без reuse готовой модели. Все input digest совпадают; максимум абсолютной разницы вероятностей на golden set <= `1e-6`, разница AUPRC <= `1e-4`. Отдельно сохраняются artifact hashes, различие metadata не скрывается. Negative: seed/data/env mutation должна выявляться как изменение inputs, не считаться повторением. Evidence: runs, vectors digest и comparison report. T07, T08.
 
+Исполняемый контракт и порядок проверки: [M06 runbook](reproducibility-gate.md). Отсутствие prerequisites даёт inconclusive. Результат этого gate не заменяет полное завершение T07/T08 и остальных требований продукта.
+
 ## M07
 **Независимая оценка и отсутствие leakage.** Preprocessing fit только на train, нет пересечений entity IDs, real profile использует temporal/group split. Для lab: AUPRC >= 0.80 и прирост >= 0.10 к DummyClassifier на frozen holdout; >= 200 positive labels в общей оценке, >= 100 размеченных примеров на заявленный slice. Недостаточный объём = inconclusive. Для пилота эти synthetic thresholds не переносятся: нужен предварительно утверждённый cost/precision/recall target и 95% CI выигрыша против бизнес-правила. Negative: test leakage, незрелые labels, подмена evaluator report. T09, T10.
 

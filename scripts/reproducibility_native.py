@@ -1,4 +1,5 @@
 import argparse
+import re
 import uuid
 from pathlib import Path
 
@@ -93,15 +94,7 @@ def remove_environment(tag, image, identity):
         raise Rejected("reproducibility_cleanup_incomplete")
 
 
-def run_one(state, dataset, policy, image, golden, observed_environment):
-    metadata = train_candidate(state, dataset, policy, image)
-    _, model = load_candidate(state, metadata["run_id"], policy)
-    batch = PredictionBatch(model, [row["features"] for row in golden])
-    output, execution = run_worker(image, batch.request)
-    if execution["image_id"] != metadata["image_id"]:
-        raise Rejected("reproducibility_prediction_image_changed")
-    vector, _, _ = batch.consume(output)
-    vector = vector.tolist()
+def record_from(metadata, golden, vector, observed_environment):
     record = {
         "run_id": metadata["run_id"],
         "inputs": {
@@ -127,21 +120,55 @@ def run_one(state, dataset, policy, image, golden, observed_environment):
         "auprc": float(average_precision_score([row["label"] for row in golden], vector)),
     }
     validate_record(record, vector)
+    return record
+
+
+def projection(record, metadata, name):
+    return {
+        "source_run_id": record["run_id"],
+        "params": {
+            **record["inputs"],
+            "input_bundle_digest": digest(canonical(record["inputs"])),
+            "model_digest": record["model_digest"],
+            "vector_digest": record["vector_digest"],
+            "worker_image": metadata["image_id"],
+            "case": name,
+            "status": "unapproved-candidate",
+        },
+        "metrics": {"auprc": record["auprc"]},
+    }
+
+
+def run_one(state, dataset, policy, image, golden, observed_environment):
+    metadata = train_candidate(state, dataset, policy, image)
+    _, model = load_candidate(state, metadata["run_id"], policy)
+    batch = PredictionBatch(model, [row["features"] for row in golden])
+    output, execution = run_worker(image, batch.request)
+    if execution["image_id"] != metadata["image_id"]:
+        raise Rejected("reproducibility_prediction_image_changed")
+    vector, _, _ = batch.consume(output)
+    vector = vector.tolist()
+    record = record_from(metadata, golden, vector, observed_environment)
     write_json(state / "candidates" / record["run_id"] / "golden-scores.json", vector)
     return record, vector, metadata
 
 
-def qualify(root, worker_image):
-    output_path = root / ".runtime/evidence/reproducibility.json"
+def qualify(root, worker_image, *, runtime_state=None, campaign_id=None):
+    runtime_state = Path(runtime_state) if runtime_state is not None else root / ".runtime"
+    output_path = runtime_state / "evidence/reproducibility.json"
     write_json(output_path, {"status": "inconclusive", "release_ready": False, "started_at": now()})
     image = resolve_image(worker_image)
     baseline_environment = environment(image)
     if baseline_environment != {"OMP_NUM_THREADS": "1"}:
         raise Rejected("reproducibility_baseline_profile_changed")
-    tracker_state = root / ".runtime/tracking-service"
+    identity = campaign_id if campaign_id is not None else uuid.uuid4().hex
+    if not isinstance(identity, str) or not re.fullmatch(r"[0-9a-f]{32}", identity):
+        raise Rejected("reproducibility_campaign_id_invalid")
+    state = runtime_state / "reproducibility" / identity
+    if state.exists():
+        raise Rejected("reproducibility_campaign_reused")
+    tracker_state = runtime_state / "tracking-service"
     service = up(root, tracker_state, 15445)
-    identity = uuid.uuid4().hex
-    state = root / ".runtime/reproducibility" / identity
     initialize(root, state)
     policy = read_json(root / "policies/local-cpu.json")
     dataset = prepare(state, policy)
@@ -222,21 +249,9 @@ def qualify(root, worker_image):
     for name, (record, vector, metadata) in zip(
         ("repeat-1", "repeat-2", "repeat-3", "seed", "data", "environment"), runs, strict=True
     ):
-        projection = {
-            "source_run_id": record["run_id"],
-            "params": {
-                **record["inputs"],
-                "input_bundle_digest": digest(canonical(record["inputs"])),
-                "model_digest": record["model_digest"],
-                "vector_digest": record["vector_digest"],
-                "worker_image": metadata["image_id"],
-                "case": name,
-                "status": "unapproved-candidate",
-            },
-            "metrics": {"auprc": record["auprc"]},
-        }
-        receipt = publish(clients["publisher"], experiment, projection)
-        read_back(clients["reader"], receipt, projection)
+        exported = projection(record, metadata, name)
+        receipt = publish(clients["publisher"], experiment, exported)
+        read_back(clients["reader"], receipt, exported)
         receipts.append(receipt)
     if len({receipt["run_id"] for receipt in receipts}) != 6:
         raise Rejected("reproducibility_tracking_run_reused")
@@ -244,6 +259,7 @@ def qualify(root, worker_image):
         "status": "pass",
         "scope": "native-input-mutations-and-tracking-not-full-M06",
         "release_ready": False,
+        "campaign_id": identity,
         "completed_at": now(),
         "baseline": baseline,
         "mutations": mutations,

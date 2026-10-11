@@ -90,6 +90,57 @@ def report(gate, profile, root, state=None):
         except (Rejected, OSError) as error:
             result.update(status="fail", exit_code=1, residual_risks=[str(error)])
         result["finished_at"] = now()
+    elif gate == "M06":
+        if not all(
+            (state / "tracking-service" / name).is_file()
+            for name in ("configuration.json", "resources.json")
+        ):
+            result["residual_risks"] = [
+                "M06 requires explicit private tracking bootstrap and a current local-cpu worker image"
+            ]
+            return result
+        from mlsecops.reproducibility_gate import qualify
+
+        try:
+            evidence = qualify(root, state)
+            result.update(
+                status=evidence["status"],
+                source_dirty=evidence["source_dirty"],
+                cases=evidence["cases"],
+                exit_code=0,
+                metrics={"checks": evidence["checks"], **evidence["metrics"]},
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    **evidence["artifact_hashes"],
+                    "reproducibility_qualification": digest(
+                        bounded_read(state / "evidence/reproducibility-qualification.json")
+                    ),
+                },
+            )
+            result["input_digests"].update(evidence["input_digests"])
+        except (Rejected, OSError, subprocess.TimeoutExpired) as error:
+            unavailable = isinstance(error, (OSError, subprocess.TimeoutExpired)) or (
+                isinstance(error, Rejected)
+                and str(error).startswith(
+                    (
+                        "required_tool_",
+                        "storage_docker_",
+                        "storage_resource_missing",
+                        "image_source_fingerprint_mismatch",
+                        "tracking_https_not_ready",
+                        "tracking_postgres_not_ready",
+                        "artifact_unavailable",
+                    )
+                )
+            )
+            result.update(
+                status="inconclusive" if unavailable else "fail",
+                exit_code=2 if unavailable else 1,
+                residual_risks=[
+                    str(error) if isinstance(error, Rejected) else "M06 runtime unavailable"
+                ],
+            )
+        result["finished_at"] = now()
     elif gate == "M20":
         required = (
             "workspace.json",

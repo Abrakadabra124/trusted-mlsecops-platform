@@ -42,6 +42,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T07
 - [ ] CPU pipeline и export. Зависимость: T06. Gate: M06.
+- Интеграция 2026-10-11: [общий M06 dispatcher](../docs/reproducibility-gate.md) заново запускает campaign и сверяет файлы/requests/digests/MLflow. Локально 18 cases pass и 47 controlled contracts; новый clean-checkout CI ожидает подтверждения. Это численная приёмка, не автоматическое завершение всего T07/T08 lifecycle.
 - Новый component 2026-10-11: [native reproducibility campaign](../docs/reproducibility.md), три fresh-process повтора и по одному actual seed/data/environment изменению. Локально 6 training/6 prediction/6 MLflow records, 33 controlled comparator cases; baseline difference 0.0, mutations не приняты как повторы. Полный gate/dispatcher не закрыт. Добавлены [ранбуки и read-only плейбук](../docs/runbooks.md).
 - Результат: preprocess/train DAG с seed/hyperparameters и machine-readable outputs; fit только на train.
 - Проверка: три fresh-process runs, сравнение входов и predictions; mutation inputs не маскируется cache hit.

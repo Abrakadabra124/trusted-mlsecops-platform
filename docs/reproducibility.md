@@ -2,6 +2,8 @@
 
 Компонент T07/T08, 2026-10-11. Это исполняемая проверка на synthetic local CPU профиле, не полный M06 и не разрешение release. [Ранбук повторения и устранения проблем](operations/reproducibility-troubleshooting.md).
 
+Следующий increment подключает этот runner к [общему M06 gate](reproducibility-gate.md): новая campaign плюс reconciliation с сохранёнными model/data/vector bytes и повторный tracking read-back. Сам standalone report со scope `not-full-M06` по-прежнему не заменяет acceptance output.
+
 ## Требование и реализация
 
 Проверить, что три свежих обучения на одинаковых inputs воспроизводят предсказания, а реальные изменения seed/data/environment не принимаются за повторение. Сравнение только accuracy или model filename не обнаруживает изменение происхождения модели.
@@ -36,7 +38,7 @@ Private authoritative reports: `.runtime/evidence/reproducibility.json` и `.run
 
 Численный контракт допускает разные model hashes при одинаковых inputs и прогнозах в допуске. Здесь hashes совпали, но bit-for-bit reproducible builds между машинами не обещаются. Синтетическая AUPRC не является business utility.
 
-Полный M06 ещё не интегрирован в acceptance dispatcher; reconciliation с общим lineage, scoped Kubernetes publisher и metadata-loss/recovery остаются открытыми. Known High/Critical image findings не устранены. Tracking mutable, не WORM и не источник approval. Foundation repository и рабочая model storage не менялись.
+M06 теперь интегрируется через отдельный dispatcher/gate с reconciliation. Полная lifecycle lineage, scoped Kubernetes publisher и metadata-loss/recovery остаются открытыми задачами T07/T08 и продукта. Known High/Critical image findings не устранены. Tracking mutable, не WORM и не источник approval. Foundation repository и рабочая model storage не менялись.
 
 ## CI и эксплуатация
 

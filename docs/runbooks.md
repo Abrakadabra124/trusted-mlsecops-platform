@@ -7,6 +7,7 @@
 - [Tracking: диагностика и встреченные bootstrap-проблемы](operations/tracking-troubleshooting.md). Исполняемый read-only плейбук проверяет configuration, ownership/runtime policy и HTTPS без изменения сервисов. Отдельно описаны chmod/CHOWN, отсутствие опубликованного порта, частичный bootstrap и TLS.
 - [Воспроизводимость и наблюдение за CI](operations/reproducibility-troubleshooting.md). Проблемы canonical JSON, неполного pairwise comparison и недоступности API; порядок проверки input digests, повторных запусков и отрицательных сценариев.
 - [Шаблон incident record](operations/incident-template.md). Содержит границы воздействия, evidence, действия, rollback, критерии восстановления и следующий шаг.
+- [M06 gate и PB-04](reproducibility-gate.md). Свежая campaign, сверка отчёта с сохранёнными материалами, explicit state, stale-image/source checks и fail/inconclusive диагностика.
 
 Для каждого нового существенного сбоя обновлять этот каталог и соответствующий ранбук одновременно с исправлением. Ошибки разработки и controlled negative tests не называются production-инцидентами.
 
