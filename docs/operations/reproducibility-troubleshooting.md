@@ -69,3 +69,21 @@ Build выполняет pinned dependency/image downloads. Если уже ес
 **Исправление:** для каждого golden row рассчитывать `max(probabilities)-min(probabilities)` по всем трём повторам, затем общий максимум. Digest/shape checks и порог не изменены. Добавлены failing-before-fix случай и positive control с допустимым разбросом.
 
 **Порядок проверки:** comparator contracts -> PB-03 -> убедиться в pass baseline и отказах native mutations. После исправления comparator имеет 33 controlled cases. Возвращать прежнюю first-reference-only проверку как rollback нельзя; при regression остановить принятие результатов и сохранить векторы для расследования. Старый pass с ненулевым расхождением потребовал бы пересчёта, не автоматического доверия.
+
+## Дополнение к RB-06: watcher показывает устаревшее состояние
+
+2026-10-11 при проверке `c2597e5` собственный процесс `gh run watch 38157424605` продолжал работать и сохранял in-progress для M20. В 17:12 UTC direct query уже показывал `completed/success`, remote `updatedAt=17:06:04Z`; лог содержит `M20: pass` в 17:05:56Z. Наблюдаемое расхождение подтверждено; внутреннюю причину CLI, сети или output handling не удалось установить, не называть её исправленной.
+
+Безопасная последовательность для собственного watcher:
+
+```powershell
+$runId = 38157424605
+gh run view $runId --json headSha,status,conclusion,updatedAt,jobs
+gh run view $runId --log > .runtime/ci-watch-recheck.log
+```
+
+Путь для raw logs должен быть игнорируемым локальным каталогом этого проекта; не публиковать файл. Проверить exact head SHA, terminal state и релевантный gate outcome. Один timeout, ошибка HTTP или неполный output не подтверждают завершение. Если прямой запрос тоже неизвестен, повторять наблюдение того же run, не запускать новый workflow из-за истечения локального ожидания.
+
+Когда remote state действительно terminal, разрешено Ctrl+C только в собственном локальном watcher. В наблюдённом случае локальный helper завершился exit 1 после Ctrl+C, но remote workflow остался success. Это не failed CI и не команда `gh run cancel`; GitHub job не отменялся, повторный запуск не создавался. Перед продолжением подтвердить, что собственный handle завершён. Не останавливать чужие shell/gh процессы и не делать массовый process kill.
+
+Rollback инфраструктуры при сбое наблюдения не нужен. В [STATUS](../../STATUS.md) записываются результаты remote run, не exit code остановленного watcher. При устойчивом расхождении сохранить версию CLI, run ID, timestamps и безопасные excerpts для диагностики; credentials и raw logs оставлять приватными.

@@ -53,7 +53,7 @@ uv run --locked coverage report --data-file=.coverage-lineage-native --fail-unde
 uv run --locked python -m scripts.candidate_lineage_native --state .runtime
 ```
 
-Команда не bootstrap-ит, не обучает, не рестартует сервис и не пишет SQL. Она пишет private diagnostic report в `.runtime/evidence/candidate-lineage-native.json`. Для чистого воспроизведения storage CI выполняет её после M03, где уже создан fresh signed candidate. Native result и exact CI привязка публикуются в [STATUS](../STATUS.md). Не воспроизводить успех заменой pins на значения из неподтверждённого candidate.
+Команда не bootstrap-ит, не обучает, не рестартует сервис и не пишет SQL. Она пишет private diagnostic report в `.runtime/evidence/candidate-lineage-native.json`. Для чистого воспроизведения storage CI выполняет её после M03, где уже создан fresh signed candidate. [CI 38157424563](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38157424563) на `c2597e5` завершён success: 18 collector + 8 runner tests/100% coverage, 10 native checks и M03/M07 pass. Подробная привязка в [STATUS](../STATUS.md). Не воспроизводить успех заменой pins на значения из неподтверждённого candidate.
 
 ## Ограничения и следующий этап
 

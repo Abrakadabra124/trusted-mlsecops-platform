@@ -15,7 +15,7 @@ docker ps --format '{{.Names}} {{.Ports}}'
 uv run --locked python -m scripts.candidate_lineage_native --state .runtime
 ```
 
-Для другого проверенного state заменить только аргумент пути. Expected: exit 0, `status=pass`, `cases=10`, `full_M19=inconclusive`, `release_ready=false`. Report в `evidence/candidate-lineage-native.json` содержит verified graph из 5 nodes и impact из dataset/run/model. Сравнить exact IDs/edges с привязанными материалами приватно, не ограничиваться подсчётом nodes. Не загружать полный report или client directories в Git.
+Для другого проверенного state заменить только аргумент пути. Expected: exit 0, `status=pass`, `cases=10`, `full_M19=inconclusive`, `release_ready=false`. Report в `evidence/candidate-lineage-native.json` содержит verified graph из 5 nodes и impact из dataset/run/model. Сравнить exact IDs/edges с привязанными материалами приватно, не ограничиваться подсчётом nodes. Не загружать полный report или client directories в Git. Локальный native run и [clean-checkout CI 38157424563](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38157424563) на `c2597e5` подтвердили 10 checks, без write SQL или grant changes; полный M19 не заявляется.
 
 Native checks намеренно пробуют прочитать holdout от publisher и promoter: ожидается SQLSTATE 42501, permission denied. Это отрицательная проверка на собственном lab state, не обход прав. Между двумя snapshots неизменны ID sets manifests, lineage, candidates, evaluations, включая budget receipt. Отсутствие report или digest mismatch не разрешает fallback на registry alias.
 
