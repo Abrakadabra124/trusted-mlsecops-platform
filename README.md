@@ -6,6 +6,8 @@
 
 ## Запустить рабочий пример
 
+Независимая оценка: [постоянный holdout budget и PB-05](docs/operations/holdout-budget.md). SQL scorer ограничивает число попыток до чтения контрольных labels; новый run ID или перезапуск не обнуляют ledger. Это компонент M07, не общая приёмка release.
+
 Новое: [native reproducibility campaign](docs/reproducibility.md) с тремя повторениями, реальными seed/data/environment mutations и публикацией шести runs. [Ранбуки и плейбуки](docs/runbooks.md) описывают диагностику, встреченные проблемы и безопасное восстановление. Read-only tracking check: `uv run --locked python -m scripts.tracking_doctor`.
 
 Общая приёмка воспроизводимости: [M06 и PB-04](docs/reproducibility-gate.md), `uv run --locked python -m mlsecops.acceptance --gate M06 --output .runtime/evidence/M06.json`. Gate запускает новые обучения и сверяет сохранённые материалы; один старый report с pass недостаточен.

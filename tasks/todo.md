@@ -63,6 +63,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 - [ ] Independent evaluator. Зависимости: T09, T26. Gate: M07.
 - Результат: trusted scorer вне prediction worker, holdout access budget, signed subject-bound evaluation reports. Labels и signing keys недоступны worker.
 - Проверка: report swap, попытка trainer прочесть holdout, missing metric, signature mismatch; deny self-approval.
+- Increment 2026-10-11: [постоянный holdout budget](../docs/operations/holdout-budget.md) в SQL/scoped-controller scorer, atomic reservation до labels/worker, signed receipt, concurrent processes/restart/new-run negatives. Полный T10/M07 остаётся открыт; восстановление старого snapshot не имеет внешнего anti-rollback witness.
 
 ## T11
 - [ ] Poisoning benchmark. Зависимость: T10. Gate: M08.

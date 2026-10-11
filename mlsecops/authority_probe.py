@@ -96,6 +96,14 @@ def qualify(request):
     cases, executions, positive = [], [], []
     previous = None
     history_before = evaluation_snapshot(client)
+    reservations = []
+    original_claim = storage.claim
+
+    def tracked_claim(directory, table, content):
+        acquired = original_claim(directory, table, content)
+        if acquired:
+            reservations.append(digest(content))
+        return acquired
 
     def confirmed(name, condition, expected=True, actual=True):
         if not condition:
@@ -136,6 +144,7 @@ def qualify(request):
         with (
             patch("mlsecops.storage_pipeline.sign", wraps=storage_pipeline.sign) as signer,
             patch("mlsecops.storage.put", wraps=storage.put) as writer,
+            patch("mlsecops.storage.claim", side_effect=tracked_claim),
         ):
             try:
                 evaluated = storage_pipeline.evaluate(
@@ -155,7 +164,10 @@ def qualify(request):
                     str(error),
                 )
                 confirmed(f"{name}:no-sign-or-write", signer.call_count == writer.call_count == 0)
-                confirmed(f"{name}:history-unchanged", evaluation_snapshot(client) == snapshot)
+                confirmed(
+                    f"{name}:only-reservation-no-evaluation",
+                    set(evaluation_snapshot(client)) == set(snapshot) | {reservations[-1]},
+                )
             else:
                 confirmed(f"{name}:positive-only", name not in MUTATIONS)
                 confirmed(
@@ -170,9 +182,9 @@ def qualify(request):
                     == evaluated["evaluation"],
                 )
                 confirmed(
-                    f"{name}:single-new-row",
+                    f"{name}:evaluation-and-reservation-only",
                     set(evaluation_snapshot(client)) - set(snapshot)
-                    == {evaluated["evaluation_reference"]},
+                    == {evaluated["evaluation_reference"], reservations[-1]},
                 )
                 positive.append(evaluated)
                 if previous is None:
@@ -185,8 +197,11 @@ def qualify(request):
     confirmed(
         "exact-positive-history-delta",
         set(evaluation_snapshot(client))
-        == set(history_before) | {item["evaluation_reference"] for item in positive}
-        and len(positive) == 2,
+        == set(history_before)
+        | {item["evaluation_reference"] for item in positive}
+        | set(reservations)
+        and len(positive) == 2
+        and len(set(reservations)) == len(MUTATIONS) + 2,
     )
     return {
         "schema_version": 1,

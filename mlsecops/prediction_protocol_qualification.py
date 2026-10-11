@@ -190,6 +190,16 @@ def qualify():
             ),
             patch.object(
                 storage_pipeline.storage_dataset,
+                "read_manifest",
+                return_value=(manifest, statement),
+            ),
+            patch.object(
+                storage_pipeline.holdout_budget,
+                "reserve",
+                return_value={"scope": "controlled-fixture"},
+            ),
+            patch.object(
+                storage_pipeline.storage_dataset,
                 "read_dataset",
                 return_value=({"holdout": holdout}, manifest, statement),
             ),

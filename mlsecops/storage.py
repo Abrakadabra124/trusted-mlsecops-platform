@@ -98,6 +98,27 @@ def put(directory, table, content):
     return identifier
 
 
+def claim(directory, table, content):
+    if not isinstance(content, bytes) or not 1 <= len(content) <= MAX_BYTES:
+        raise Rejected("storage_object_size_invalid")
+    identifier = digest(content)
+    name = table_name(table)
+    try:
+        with connect(directory) as connection:
+            observed = connection.execute(
+                sql.SQL(
+                    "INSERT INTO {} (sha256, payload) VALUES (%s, %s) "
+                    "ON CONFLICT DO NOTHING RETURNING sha256"
+                ).format(name),
+                (identifier, content),
+            ).fetchone()
+            if observed not in (None, (identifier,)):
+                raise Rejected("storage_claim_verification_failed")
+    except psycopg.Error as error:
+        raise Rejected(f"storage_claim_rejected:{error.sqlstate or 'unavailable'}") from error
+    return observed is not None
+
+
 def get(directory, table, identifier):
     identifier = object_id(identifier)
     name = table_name(table)

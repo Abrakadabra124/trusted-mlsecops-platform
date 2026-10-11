@@ -8,6 +8,7 @@
 - [Воспроизводимость и наблюдение за CI](operations/reproducibility-troubleshooting.md). Проблемы canonical JSON, неполного pairwise comparison и недоступности API; порядок проверки input digests, повторных запусков и отрицательных сценариев.
 - [Шаблон incident record](operations/incident-template.md). Содержит границы воздействия, evidence, действия, rollback, критерии восстановления и следующий шаг.
 - [M06 gate и PB-04](reproducibility-gate.md). Свежая campaign, сверка отчёта с сохранёнными материалами, explicit state, stale-image/source checks и fail/inconclusive диагностика.
+- [Holdout budget, PB-05 и RB-08/09/10](operations/holdout-budget.md). Read-only ledger, исчерпание попыток, неопределённый commit, restore без ложного refund и проверка отказа до labels/worker.
 
 Для каждого нового существенного сбоя обновлять этот каталог и соответствующий ранбук одновременно с исправлением. Ошибки разработки и controlled negative tests не называются production-инцидентами.
 

@@ -2,7 +2,13 @@
 
 Дата текущей реализации: **2026-10-11**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
-Реализованы и проверены в synthetic local scope: **M02, M03, M06, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08 ещё требуют lifecycle-интеграции. Evidence привязано к commits, не является общей M18-приёмкой одного release. На `c9e672f` проверены M06, developer и storage CI; Kubernetes ещё ожидает terminal evidence, image security gate failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
+Реализованы и проверены в synthetic local scope: **M02, M03, M06, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08 ещё требуют lifecycle-интеграции. Evidence привязано к commits, не является общей M18-приёмкой одного release. На `c9e672f` проверены M06, developer, storage и Kubernetes CI (run 38136658891: success); image security gate failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
+
+## Постоянный бюджет holdout: текущий increment
+
+[ADR 0018](docs/decisions/0018-persistent-holdout-budget.md) и [PB-05/RB-08/09/10](docs/operations/holdout-budget.md). Реализован общий SQL ledger до чтения labels, frozen synthetic cap 32, signed receipt, запрет refund и read-only диагностика. Локально: 16 controlled tests, 100% statements/branches budget module, 164 protocol checks и 13 native SQL/model/concurrency/restart checks. Новый candidate/run ID не обходит лимит. CI для этого increment ещё не подтверждён; полный M07/T09/T10 остаётся открытым. Исторические M20 pass не заменяют повторную проверку изменённого scorer.
+
+Финальный local native report: 2026-10-11T12:13:49.561266Z, source fingerprint `3e4f7e862b5fb170243d6cc94789343d328bf534c84a2ca270c75eb5c40577f0`, 13/13 checks. Отдельный recovery regression: 433 checks, восстановленный reservation нельзя занять повторно, 1 000 golden predictions/error 0.0. Дополнительно прошли 26 SQL pipeline checks, 60 authority contract checks и 74 developer checks. Python dependency audit: known vulnerabilities не обнаружены; это не заменяет блокирующий OS image audit. Схема БД и data.lock не менялись, foundation и рабочий Kubernetes не изменялись.
 
 ## Реализовано в первом increment
 

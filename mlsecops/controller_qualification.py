@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from mlsecops import controller_runtime, kube_artifact_reader
+from mlsecops import controller_runtime, holdout_budget, kube_artifact_reader
 from mlsecops.cluster import CONTEXT, kubectl
 from mlsecops.contracts import (
     Rejected,
@@ -353,6 +353,13 @@ def qualify(root, state, image):
         read_json(state / "trusted-keys.json")["evaluator"],
     )
     confirmed("persisted-evaluation-signature-and-bytes", signed == evaluation)
+    access = signed["holdout_access"]
+    confirmed(
+        "signed-holdout-reservation-binding",
+        access["reservation"]
+        == digest(holdout_budget.reservation(access["holdout_digest"], access["slot"]))
+        and access["policy_digest"] == digest(canonical(holdout_budget.policy())),
+    )
     current = ledger(state)
     confirmed(
         "protected-splits-and-release-history-unchanged",
@@ -363,9 +370,9 @@ def qualify(root, state, image):
         ),
     )
     confirmed(
-        "new-candidate-and-evaluation-history",
+        "new-candidate-evaluation-and-reservation-history",
         current["candidates"]["rows"] > protected["candidates"]["rows"]
-        and current["evaluations"]["rows"] == protected["evaluations"]["rows"] + 1,
+        and current["evaluations"]["rows"] == protected["evaluations"]["rows"] + 2,
     )
     confirmed(
         "host-source-untouched",

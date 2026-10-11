@@ -466,6 +466,14 @@ def qualify(root, state, image="trusted-mlsecops:dev", port=15441, *, experiment
             public["evaluator"],
         )
         confirmed("evaluation-signature-and-binding-restored", evaluation == demo["evaluation"])
+        access = evaluation["holdout_access"]
+        reserved = storage.get(
+            target / "storage-clients/scorer", "evaluations", access["reservation"]
+        )
+        confirmed(
+            "holdout-reservation-restored-without-refund",
+            not storage.claim(target / "storage-clients/scorer", "evaluations", reserved),
+        )
         application_seconds = round(time.monotonic() - started, 6)
         confirmed("component-recovery-within-15-minutes", application_seconds <= 900)
         if experimental_image_id is not None:

@@ -73,15 +73,7 @@ def publish(state, dataset_id, lineage_id, policy):
     }
 
 
-def read_dataset(client, reference, policy, curator_public, expected_approval_digest, selected):
-    if (
-        not isinstance(selected, tuple)
-        or not selected
-        or any(not isinstance(name, str) for name in selected)
-        or len(set(selected)) != len(selected)
-        or any(name not in SPLITS for name in selected)
-    ):
-        raise Rejected("storage_split_selection_invalid")
+def read_manifest(client, reference, policy, curator_public, expected_approval_digest):
     envelope = decode(storage.get(client, "manifests", reference))
     statement = verify(envelope, "stored-dataset", curator_public)
     require_fields(
@@ -127,6 +119,21 @@ def read_dataset(client, reference, policy, curator_public, expected_approval_di
     )
     if lineage["source_sha256"] != statement["quarantine_object"]:
         raise Rejected("storage_dataset_lineage_mismatch")
+    return manifest, statement
+
+
+def read_dataset(client, reference, policy, curator_public, expected_approval_digest, selected):
+    if (
+        not isinstance(selected, tuple)
+        or not selected
+        or any(not isinstance(name, str) for name in selected)
+        or len(set(selected)) != len(selected)
+        or any(name not in SPLITS for name in selected)
+    ):
+        raise Rejected("storage_split_selection_invalid")
+    manifest, statement = read_manifest(
+        client, reference, policy, curator_public, expected_approval_digest
+    )
     splits, identifiers = {}, set()
     for name in selected:
         metadata = manifest["objects"][f"{name}.json"]

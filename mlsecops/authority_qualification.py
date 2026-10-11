@@ -215,8 +215,9 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         ),
     )
     confirmed(
-        "three-valid-evaluations-only",
-        after["evaluations"]["rows"] - before["evaluations"]["rows"] == 3,
+        "three-valid-evaluations-plus-spent-reservations-only",
+        after["evaluations"]["rows"] - before["evaluations"]["rows"]
+        == 3 + 1 + len(outputs["executions"]),
     )
     verified = verify_saved(state, read_json(state / "controllers/resources.json"))
     confirmed("profile-unchanged-through-gate", verified["profile"] == profile)

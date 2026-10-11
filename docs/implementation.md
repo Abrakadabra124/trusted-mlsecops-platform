@@ -4,6 +4,8 @@
 
 ## Порядок
 
+Increment 2026-10-11: [holdout budget](operations/holdout-budget.md), [ADR 0018](decisions/0018-persistent-holdout-budget.md). SQL scorer получает новый atomic slot после проверки signed manifest, но до чтения labels и prediction worker. Ledger сохраняется при restart, candidate/run changes и входит в storage backup. Ранбуки различают исчерпание, неопределённый commit и старый restore; M07 пока не принят. Native M20 history assertions обновлены: расход reservation допустим при отказе, подписанный report недопустим.
+
 2026-10-11: [исполняемый M06 gate](reproducibility-gate.md) подключён к acceptance dispatcher. Он не принимает старый component JSON: создаёт новую campaign, восстанавливает training requests из signed splits, повторно сверяет model/vector/metadata и читает шесть tracking records. Добавлены explicit state, защита от reuse campaign, binding host scripts и stale-image negative. Локально 18 integration cases и 47 controlled contracts прошли; runtime fingerprint изменён, поэтому worker пересобран. T07/T08 целиком остаются открытыми; metadata-loss и serving alias ещё требуют реальной lifecycle-интеграции.
 
 2026-10-11: [native reproducibility campaign](reproducibility.md) продолжает T07/T08: три повторных и три изменённых обучения, общий frozen golden set, input bindings и шесть MLflow read-backs. Исправлен pairwise comparison bypass, добавлены 33 controlled cases. По запросу владельца [ранбуки и плейбуки](runbooks.md) теперь обязательны вместе с исправлениями; read-only tracking doctor имеет 26 tests и проверен на работающем сервисе. Полный M06 и R1 не приняты; дальнейшая работа - acceptance integration и оставшиеся T08 boundaries, не ослабление исходных порогов.

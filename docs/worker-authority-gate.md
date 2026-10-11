@@ -53,7 +53,7 @@ Report `.runtime/evidence/M20.json` содержит gate status, время, so
 | Нет labels, keys, tokens и соседнего `/proc` у workers | `access:*`, настоящий scorer witness и обе worker identities |
 | Нет доступа к SQL/control-plane API | `access:*` network probes с положительными контролями; `controller:*` RBAC/admission negatives |
 | Разрешённый batch сохраняется и подписывается | `outputs:positive-before:*`, `outputs:positive-after:*`, независимое повторное чтение `gate:positive-*` |
-| Малформатный/replayed/oversized response не получает authority | `outputs:*:exact-rejection`, `no-sign-or-write`, `history-unchanged` для 19 cases |
+| Малформатный/replayed/oversized response не получает authority | `outputs:*:exact-rejection`, `no-sign-or-write`, `only-reservation-no-evaluation` для 19 cases; новая reservation расходует budget, но не даёт signed evaluation |
 | Model parser не работает рядом с signer | `gate:parser-outside-privileged-scorer`, observed separate worker Pod UIDs |
 | Нельзя подставить чужие/старые component reports | Свежий запуск всех suites, subject binding и `contracts:aggregate:*` negatives |
 | Ошибка проверки не оставляет прошлый pass | Invalidation в acceptance CLI и `contracts:cli-*` |

@@ -4,7 +4,7 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from mlsecops import storage, storage_dataset
+from mlsecops import holdout_budget, storage, storage_dataset
 from mlsecops.bootstrap import initialize
 from mlsecops.contracts import (
     Rejected,
@@ -116,6 +116,19 @@ def load_candidate(client, reference, policy):
 
 def evaluate(client, reference, policy, image, trust, signing_key, executor=run_worker):
     record, metadata, model = load_candidate(client, reference, policy)
+    manifest, statement = storage_dataset.read_manifest(
+        client,
+        record["dataset_reference"],
+        policy,
+        trust["curator"],
+        trust["source_approval_digest"],
+    )
+    if (
+        metadata.get("dataset_id") != statement["dataset_id"]
+        or metadata.get("lineage_id") != statement["lineage_id"]
+    ):
+        raise Rejected("stored_candidate_dataset_binding_mismatch")
+    access = holdout_budget.reserve(client, manifest["objects"]["holdout.json"]["sha256"])
     splits, manifest, statement = storage_dataset.read_dataset(
         client,
         record["dataset_reference"],
@@ -124,11 +137,6 @@ def evaluate(client, reference, policy, image, trust, signing_key, executor=run_
         trust["source_approval_digest"],
         ("holdout",),
     )
-    if (
-        metadata.get("dataset_id") != statement["dataset_id"]
-        or metadata.get("lineage_id") != statement["lineage_id"]
-    ):
-        raise Rejected("stored_candidate_dataset_binding_mismatch")
     report = evaluate_verified_candidate(
         metadata, model, splits["holdout"], manifest, policy, image, executor
     )
@@ -137,6 +145,7 @@ def evaluate(client, reference, policy, image, trust, signing_key, executor=run_
         "candidate_reference": reference,
         "dataset_reference": record["dataset_reference"],
         "lineage_id": statement["lineage_id"],
+        "holdout_access": access,
         "report": report,
     }
     envelope = sign(bound, "stored-evaluation", signing_key)
@@ -186,9 +195,9 @@ def demo(root, state, image, executor=run_worker):
         **evaluation,
         "status": "role-restricted-storage-preview-not-R1-accepted",
         "limitations": [
-            "Host orchestrator retains administrator access; independent controller identities are pending",
+            "Host demo orchestrator retains administrator access; scoped controllers use the same scorer path",
             "Synthetic data and known generator do not establish business utility or secret labels",
-            "MLflow, query budget, full M04/M20, promotion and serving remain pending; M03 runs separately",
+            "Persistent query budget is a component, not full M07; promotion and serving remain pending",
         ],
     }
     write_json(state / "storage-demo.json", result)

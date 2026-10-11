@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 persistent holdout budget - 2026-10-11
+
+В SQL/scoped-controller scorer добавлена atomic reservation до holdout read, append-only ledger с frozen synthetic cap 32 и binding receipt в подписанном report. Новый run/candidate и restart не сбрасывают бюджет; worker failure не даёт refund. Добавлены 16 controlled tests, native multi-process/restart qualification, read-only CLI и PB-05/RB-08/09/10. M20 history assertions различают reservation и signed evaluation; storage recovery проверяет сохранённый слот. Полный M07, защита от административного snapshot rollback и production readiness не объявляются завершёнными.
+
 ## R1 executable M06 acceptance - 2026-10-11
 
 [M06](docs/reproducibility-gate.md) теперь запускается общим CLI: свежая native campaign, восстановление input bindings из signed datasets, сверка модели и векторов, повторный MLflow read-back. Поддержан explicit state без fallback, захвачен host scripts digest и dirty flag, старые evidence не принимаются. Локально 18 integration cases, 47 controlled contracts, 100% statements/branches gate module; stale worker даёт inconclusive до rebuild. Полные T07/T08, остальные gates и release blockers сохранены. Добавлен ранбук PB-04.
