@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 fresh intake evidence reconciliation - 2026-10-13
+
+Добавлен M21 dispatcher с новой controlled/Docker/SQL campaign, actual signed-object reconciliation, source/image/policy/time binding, rejection stale/partial/foreign evidence и cleanup ownership guard. Native Docker scanner может проверять exact bytes SQL candidate вместо другой модели. 15 negative runner contracts и PB-16/RB-34 покрывают диагностику неполной приёмки. Missing scoped-controller matrix остаётся обязательным inconclusive, CI не скрывает exit 2; полный M21 и R1 не объявляются завершёнными.
+
 ## R1 signed intake denials - 2026-10-13
 
 SQL scorer сохраняет validated fail/inconclusive как отдельный DSSE `intake-denial` с exact subject и spent reservation. Идемпотентная публикация, проверка readback, read-only CLI, nonzero controller outcome и остановка при потере persistence. Ни отрицательная подпись, ни exit 0 audit reader не разрешают release. Добавлены negative contracts, disposable SQL replay и PB-15/RB-32/RB-33; full M21 остаётся открытым, native результаты фиксируются отдельно в STATUS.

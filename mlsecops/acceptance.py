@@ -193,6 +193,54 @@ def report(gate, profile, root, state=None):
             if isinstance(error, ClaimFailure):
                 result["diagnostics"] = {"holdout_concurrency": error.diagnostics}
         result["finished_at"] = now()
+    elif gate == "M21":
+        if not (state / "workspace.json").is_file():
+            result["residual_risks"] = [
+                "M21 requires explicit workspace bootstrap and a current worker image"
+            ]
+            return result
+        from mlsecops.intake_gate import qualify
+
+        try:
+            evidence = qualify(root, state)
+            result.update(
+                status=evidence["status"],
+                source_dirty=evidence["source_dirty"],
+                cases=evidence["cases"],
+                exit_code={"pass": 0, "fail": 1, "inconclusive": 2}[evidence["status"]],
+                metrics={"checks": evidence["checks"], **evidence["metrics"]},
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    **evidence["artifact_hashes"],
+                    "intake_gate": digest(bounded_read(state / "evidence/intake-gate.json")),
+                },
+            )
+            result["input_digests"].update(evidence["input_digests"])
+        except (Rejected, OSError, subprocess.TimeoutExpired) as error:
+            unavailable = isinstance(error, (OSError, subprocess.TimeoutExpired)) or (
+                isinstance(error, Rejected)
+                and str(error).startswith(
+                    (
+                        "M21_linux_required",
+                        "required_tool_",
+                        "storage_docker_",
+                        "storage_resource_missing",
+                        "storage_loopback_port_unavailable",
+                        "image_source_fingerprint_mismatch",
+                        "artifact_unavailable",
+                    )
+                )
+            )
+            result.update(
+                status="inconclusive" if unavailable else "fail",
+                exit_code=2 if unavailable else 1,
+                residual_risks=[
+                    str(error)
+                    if isinstance(error, Rejected) and str(error).startswith("M21_")
+                    else "M21 runtime unavailable or verification rejected"
+                ],
+            )
+        result["finished_at"] = now()
     elif gate == "M20":
         required = (
             "workspace.json",

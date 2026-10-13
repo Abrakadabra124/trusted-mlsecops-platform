@@ -10,13 +10,14 @@ from mlsecops.inventory import source_fingerprint
 from mlsecops.signing import decode64
 
 
-def qualify(image):
+def qualify(image, content=None):
     identifier = sandbox.resolve_image(image)
-    trained, _ = sandbox.run_worker(
-        identifier,
-        {"action": "train", "train": generate(rows=1000), "seed": 17, "features": [[0.5] * 6]},
-    )
-    content = decode64(trained["model"])
+    if content is None:
+        trained, _ = sandbox.run_worker(
+            identifier,
+            {"action": "train", "train": generate(rows=1000), "seed": 17, "features": [[0.5] * 6]},
+        )
+        content = decode64(trained["model"])
     cases = []
 
     def inspect(payload, executor=sandbox.run_worker):

@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Сверка intake evidence, PB-16/RB-34](operations/intake-gate-troubleshooting.md). Fresh Docker/SQL campaign, защита от stale/foreign/partial reports, ownership cleanup и обязательный inconclusive при отсутствующей scoped-controller matrix. Controlled и native evidence разграничены в STATUS.
 - [Подписанные отказы intake, PB-15/RB-32/RB-33](operations/intake-denial-troubleshooting.md). Read-only проверка отрицательного документа, потеря SQL persistence, безопасный retry без refund и явно изменяющий disposable-lab replay. Controlled contracts проверены; native CI evidence отражается в STATUS.
 - [Приём ML-артефакта, PB-14/RB-29/RB-30/RB-31](operations/artifact-intake-troubleshooting.md). Независимый scan, сохранение fail/inconclusive, native timeout/crash и clean-after-faults, Windows symlink privilege, Docker и порядок ownership bootstrap перед evidence.
 - [Qualification и ресурсы стенда, PB-13/RB-27/RB-28](operations/qualification-environment-troubleshooting.md). Сохранение failed CI attempt, один диагностический rerun без reset budget; установленное исчерпание Docker subnet pool. Recovery действий над networks здесь не проводилось.

@@ -1,0 +1,43 @@
+name: M21 intake evidence reconciliation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: intake-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  intake:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked dependencies and negative reconciliation contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --source=mlsecops.intake_gate --data-file=.coverage-intake-gate -m scripts.intake_gate_qualification
+          uv run --locked coverage report --data-file=.coverage-intake-gate --fail-under=100
+      - name: Owned workspace and exact source image
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python -m mlsecops build
+      - name: Fresh M21 campaign without accepting incomplete coverage
+        run: uv run --locked python -m mlsecops.acceptance --gate M21 --output .runtime/evidence/M21.json
+      - name: Sanitized evidence including incomplete or failed gate
+        if: always()
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M21.json','intake-gate.json')]; [print(canonical(read_json(path)).decode() if path.is_file() else path.name+': no completed evidence') for path in paths]"
+          echo 'M21 is not accepted while any required case is fail/inconclusive. Docker/SQL component success is not scoped-controller coverage or R1 approval.' >> "$GITHUB_STEP_SUMMARY"

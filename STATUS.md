@@ -4,7 +4,17 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Signed intake denial: новый increment
+## M21 evidence reconciliation: новый increment
+
+2026-10-13: [runner и карта покрытия](docs/intake-gate.md), [PB-16/RB-34](docs/operations/intake-gate-troubleshooting.md). Общий acceptance runner теперь исполняет fresh controlled/Docker/SQL campaign, связывает exact model bytes с signed evaluation/denials и проверяет source/image/policy/trust, timestamps и полный набор case IDs. Новая SQL campaign не использует рабочий ledger; cleanup проверяет ownership и не удаляет volumes. Подмена source/evidence и пропуск обязательной проверки не превращаются в pass.
+
+Локально: 15 новых runner contract methods, **166/166 statements и 50/50 branches, 100% coverage**. Проверки включают incomplete/foreign/stale reports, неверный unsafe fixture, actual-reader reconciliation с controlled SQL fixture, cleanup identity и незавершённый gate. Дополнительно 54 intake/denial/model methods прошли в Linux non-root/read-only/network-none container и 67 adjacent regression methods на host. Native Docker suite повторила 5 cases на image `sha256:8a3b06135218583b583c59940babfbd155cc24f94e8c97abe50f41cb12c037fc`, source fingerprint `764ea28e5844a0dec082b4cbec05358a9cfb86c7bcdc796bb8122798ee090d33`; local checkout dirty. Это не native SQL gate evidence, которое ещё требует clean-checkout CI.
+
+**Полный M21 остаётся inconclusive:** отдельный `scoped-controller-native-intake-matrix` ещё не выполнен. Runner не заменяет его прежним M20 pass. При успешном новом Docker/SQL component ожидаются 85 pass cases и один обязательный inconclusive; наличие кода не объявляет эти 85 native cases выполненными. CI workflow не подавляет exit 2 и остаётся failure при неполной приёмке. Release/serving integration, preflight outcomes, image audit и M08 blockers сохраняются. R1 goal активна.
+
+Fresh local developer state `.runtime/intake-gate-developer-20261013` подтвердил **74 checks, 3 runs**, probability difference=0.0 и parity `2.086162567138672e-07`; full acceptance inconclusive. Host pip-audit не нашёл известных уязвимостей, что не отменяет отдельные blocking container findings. Ruff и docs integrity прошли. Native SQL reconciliation ещё не проверен локально: прежний subnet limitation не обходился, рабочие SQL/cluster не менялись. Clean-checkout CI будет зафиксирован после терминальных outcomes.
+
+## Signed intake denial: предыдущий increment
 
 2026-10-13: [ADR 0025](docs/decisions/0025-signed-intake-denial.md), [PB-15/RB-32/RB-33](docs/operations/intake-denial-troubleshooting.md). SQL/scoped-controller path сохраняет проверенный IntakeFailure как отдельный signed `intake-denial`, связывает его с candidate/dataset/run/policy и уже существующей holdout reservation. Append-only table и роли не расширены. Reader не читает labels, повтор тех же bytes идемпотентен; quality evaluation reader отвергает denial payload type. При невозможности записи/readback evaluation не продолжается. Это durable negative outcome, не approval.
 
