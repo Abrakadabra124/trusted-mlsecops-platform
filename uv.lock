@@ -856,6 +856,7 @@ dependencies = [
     { name = "onnxruntime" },
     { name = "psycopg", extra = ["binary"] },
     { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "skl2onnx" },
     { name = "uvicorn" },
 ]
@@ -876,6 +877,7 @@ requires-dist = [
     { name = "onnxruntime", specifier = "==1.30.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.6" },
     { name = "scikit-learn", specifier = "==1.9.1" },
+    { name = "scipy", specifier = "==1.18.1" },
     { name = "skl2onnx", specifier = "==1.20.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]

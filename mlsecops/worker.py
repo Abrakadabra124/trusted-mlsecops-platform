@@ -20,15 +20,24 @@ def train(request):
     from sklearn.preprocessing import StandardScaler
 
     require_fields(request, ("action", "train", "seed", "features"))
+    if request["action"] not in ("train", "research-robust-train"):
+        raise Rejected("invalid_training_action")
     if type(request["seed"]) is not int or not 0 <= request["seed"] <= 2**32 - 1:
         raise Rejected("invalid_training_seed")
     train_features, train_labels = arrays(request["train"])
+    if request["action"] == "research-robust-train" and set(train_labels.tolist()) != {0, 1}:
+        raise Rejected("robust_training_requires_two_classes")
     golden = validate_features(request["features"])
     classifier = make_pipeline(
         StandardScaler(),
         LogisticRegression(random_state=request["seed"], solver="lbfgs", max_iter=300),
     )
     classifier.fit(train_features, train_labels)
+    optimization = None
+    if request["action"] == "research-robust-train":
+        from mlsecops.robust_training import refit
+
+        optimization = refit(classifier, train_features, train_labels)
     exported = to_onnx(
         classifier,
         golden[:1],
@@ -38,9 +47,9 @@ def train(request):
     runtime, scan = session(exported)
     onnx_scores = predict(runtime, request["features"])
     python_scores = classifier.predict_proba(golden)[:, 1].tolist()
-    return {
+    output = {
         "schema_version": 1,
-        "action": "train",
+        "action": request["action"],
         "model": encode64(exported),
         "model_digest": digest(exported),
         "input_digest": digest(canonical(request)),
@@ -53,6 +62,9 @@ def train(request):
             for name in ("numpy", "scikit-learn", "skl2onnx", "onnx", "onnxruntime")
         },
     }
+    if optimization is not None:
+        output["optimization"] = optimization
+    return output
 
 
 def predict_request(request):
@@ -64,7 +76,7 @@ def predict_request(request):
 def execute(request):
     if not isinstance(request, dict):
         raise Rejected("invalid_worker_request")
-    if request.get("action") == "train":
+    if request.get("action") in ("train", "research-robust-train"):
         return train(request)
     if request.get("action") == "predict":
         return predict_request(request)
