@@ -49,3 +49,17 @@ uv run --locked python -m mlsecops.acceptance --gate M21 --state .runtime --outp
 **Критерий результата:** полный report имеет 122 cases/status pass, source_dirty явно указан, подтверждены primary readback и cleanup. Не ограничиваться exit 0 отдельного contract workflow. Отсутствующий backend сохраняет gate inconclusive; любой invalid или incomplete native report блокирует pass. Даже M21 pass не разрешает release без остальных M-gates, image audit и poisoning policy.
 
 **Ограничения:** общий trusted host/API server и локальные keys, синтетические данные, разные CAS identities у Docker/cluster copies, отсутствие M23 tamper-resistant audit. Не проверяются parser exploit, произвольная согласованная ложь скомпрометированного scanner или SQL power-loss recovery. Точные реально выполненные tests/CI и оставшиеся риски хранятся в [STATUS](../../STATUS.md).
+
+## Проверенное выполнение и получение CI evidence
+
+[CI 04b5e78](../evidence/intake-acceptance-2026-10-13.md) подтвердил полный M21: 122/122 pass, включая 24 scoped checks, slots 24/25/26 и independent readback. В native deadline case Pod действительно исчез до terminal read; ранее наблюдённый UID позволил проверить ownership без выдуманного execution. Recovery рабочего production-кластера не проверялся.
+
+Встретившаяся проблема: сразу после completion `gh run view --log` вернул неполную копию лога. Exit 0 и строка M21 pass не заменяют отсутствующие JSON summaries. Сначала дождаться terminal run/job; затем получить полный лог конкретного job через read-only API. Не запускать повторный M21 ради задержавшегося экспорта и не расходовать дополнительные slots.
+
+Проверенный пример для **исторического job 115476494992**, из корня уже инициализированного owned workspace:
+
+```powershell
+gh api --allow-escape-sequences repos/Abrakadabra124/trusted-mlsecops-platform/actions/jobs/115476494992/logs > .runtime/ci-04b5e78-kubernetes-job.log
+```
+
+Флаг разрешает сохранить служебные escape sequences CLI в приватный файл, а не отключает TLS или контроль permissions. Не выводить raw file в публичный отчёт. Для другого run получить его job ID заново, проверить repository/commit/terminal status, затем сверить case set, source, image и hashes. При 404/403 или неполном export статус evidence остаётся неподтверждённым; эскалировать доступ/retention, а не подделывать report. В данном CI полный job log получен и его M21/native summaries проверены.

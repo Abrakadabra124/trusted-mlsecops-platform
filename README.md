@@ -4,7 +4,7 @@
 
 **Статус: R1 в разработке, первый рабочий developer preview.** Уже доступны синтетические данные, подписанные manifests, контейнерное обучение, ONNX-предсказания и отдельный scorer с подписанным evaluation report. Полная приёмка M01-M23 пока не пройдена: preview не является trusted release или production-платформой. Исследование: 2026-10-06; начало реализации: **2026-10-07**.
 
-Перед оценкой теперь обязателен [отдельный intake модели](docs/artifact-intake.md): проверка exact bytes в изолированном worker, защита от stale/partial scan и receipt в signed evaluation schema 2. [Плейбук и ранбуки](docs/operations/artifact-intake-troubleshooting.md) описывают воспроизведение, crash/timeout, восстановление и встреченные Windows/CI проблемы. Это компонент, не полный M21 или release approval.
+Перед оценкой обязателен [отдельный intake модели](docs/artifact-intake.md): проверка exact bytes в изолированном worker, защита от stale/partial scan и receipt в signed evaluation schema 2. **[M21 принят в clean-checkout CI: 122/122 cases](docs/evidence/intake-acceptance-2026-10-13.md)**, включая scoped Kubernetes replay, signed denials и независимый promoter readback. [PB-17/RB-35](docs/operations/scoped-intake-troubleshooting.md) описывает повторение, deadline/process failure и безопасную диагностику. Это synthetic lab gate, не release approval; image audit и poisoning blockers сохраняются.
 
 ## Запустить рабочий пример
 

@@ -2,6 +2,8 @@
 
 Executable runner `mlsecops.intake_gate` вызывается общей CLI acceptance. Добавлена scoped-controller negative intake matrix: M21 может стать pass только после её свежего выполнения и независимого promoter readback, вместе с Docker/SQL campaign. Без backend итог остаётся inconclusive, exit 2; release_ready всегда false. Исходный scope [M21](acceptance.md) не сокращён. Фактически проверенные commits/CI перечислены в STATUS, наличие нового кода не считается native evidence.
 
+**Проверено:** [clean-checkout CI 04b5e78](evidence/intake-acceptance-2026-10-13.md), 122/122 pass, source_dirty=false. M20 и остальные functional regressions прошли; image audit/M08 продолжают блокировать release. Это принятие M21 в synthetic scope, не всех lifecycle-зависимостей T27.
+
 ## Что выполняется заново
 
 1. Проверка owned workspace, Linux host и exact current-source Docker image. Linux нужен для настоящего symlink contract; Windows без этой возможности не получает skip-as-pass.
