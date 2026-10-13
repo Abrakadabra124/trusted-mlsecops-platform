@@ -47,3 +47,9 @@ printf 'M21 exit code: %s\n' "$result"
 **Критерий завершения диагностики:** удалось классифицировать причину, сохранить evidence с верным scope, чужие ресурсы не изменены, новая promotion заблокирована. Это не критерий завершения M21. **Rollback:** остановить новые campaigns, использовать совместимую reviewed версию для чтения исторических материалов, не переписывать signatures и не сбрасывать budget. **Эскалация:** неизвестные identities, loss of evidence или повторный native mismatch передать владельцу; не заменять неизвестную причину гипотезой об успешном восстановлении.
 
 Controlled tests проверяют stale/foreign/partial evidence, некорректную форму, cleanup guard и отсутствие pass при missing coverage. Native/CI outcomes фиксируются в STATUS после фактического исполнения, а не по наличию этого текста.
+
+## Проверенный запуск
+
+2026-10-13 [CI 38442903172](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38442903172), commit `12143a6d0cebc35832b7f50c0f18be5dc2a8ea8a`: native campaign завершена в `17:59:00.802340Z`, source_dirty=false. Подтверждены 54 controlled methods, 5 Docker cases, 25 SQL cases и сверка первичных signed materials. Итого **85 pass + 1 inconclusive**, именно missing scoped-controller case. Gate exit 2 сохранил workflow failure; это ожидаемое сохранение неполного покрытия, не свидетельство полного M21 pass. Отдельно runner contracts дали 15 methods/100% statements и branches. Digests в STATUS.
+
+Локально выполнены Linux controlled suite и Docker faults, но полный SQL replay на Windows не запускался. CI проверил те же bootstrap/build/acceptance entry points на fresh Linux runner; это не native исполнение shell-примера на машине пользователя и не DB crash recovery drill.
