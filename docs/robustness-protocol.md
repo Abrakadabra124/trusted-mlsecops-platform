@@ -2,6 +2,8 @@
 
 Протокол synthetic-lab-v1, зафиксирован 2026-10-13 **до первого измерения этой campaign**. T12/M09, не production и не общий adversarial robustness certificate. Результаты добавляются отдельно, параметры по ним не подбираются.
 
+[Проверенный результат local/clean-checkout CI](evidence/robustness-2026-10-13.md): guard и исполнение работают, но recall drop=0.07183673469387755 >0.05. Это statistical fail; неизменённый протокол и negative outcome остаются опубликованными.
+
 ## Предварительный контракт
 
 - Тренировка: неизменные первые 14 000 строк pinned data.lock, seed=17, прежний StandardScaler + LogisticRegression. Validation: следующие 3 000 строк, только parity. Final holdout не оценивается, SQL budget не сбрасывается.

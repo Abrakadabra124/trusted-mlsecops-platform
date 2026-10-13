@@ -8,6 +8,8 @@
 
 Domain-support guard отдельно подтвердил 12 abstentions без inference и корректный порядок mixed batch. Его успех не устраняет evasion внутри допустимой области. Full M09 остаётся не принятым; image/poisoning gates не отменяются.
 
+[Clean-checkout CI 5e3bb21](../evidence/robustness-2026-10-13.md) воспроизвёл все эти metrics, source_dirty=false, восемь worker executions и primary readback; workflow failure сохранён. Fresh owned workspace bootstrap в CI проверен. Это не production recovery или подтверждение уже реализованной mitigation.
+
 ## Технологии и границы
 
 Evasion означает изменение признаков на этапе предсказания, а poisoning - изменение обучения. Этот probe меняет только две заранее выбранные нормализованные координаты, не labels и не training data. Четыре corner queries выполняются штатным ONNX worker без сети, ключей, mounts и SQL credentials.

@@ -80,6 +80,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 ## T12
 - [ ] Safe format и robustness probes. Зависимость: T11. Gate: M09.
 - Increment 2026-10-13: [frozen evasion/domain support](../docs/robustness-protocol.md), [PB-18/RB-36](../docs/operations/robustness-troubleshooting.md). Исполняемый abstain core и реальные isolated train/intake/prediction probes; 17 controlled methods, два local replays, 12 outside-support abstentions. Измерено падение recall 0.07183673469387755 >0.05; failure не waived. Следом нужны заранее обоснованные mitigations с независимыми probes, release/serving integration и общий M09. Наличие OOD guard не устраняет атак внутри [0,1]^6.
+- [Clean-checkout CI 5e3bb21](../docs/evidence/robustness-2026-10-13.md) подтвердил execution complete, primary readback и те же metrics, source_dirty=false; workflow failure не подавлен. M20/M21 и functional regression остались pass. Это evidence выявленного риска, не закрытие T12/M09.
 - Компонент 2026-10-11: [linear-onnx-v2](../docs/model-contract.md), точный graph/parameter/output contract, 1000-row real CPU parity и отрицательные fixtures. Evasion, OOD/abstain и полный M09 остаются открытыми.
 - Результат: ONNX allowlist, parity report, declared evasion suite, ограниченный OOD/abstain policy.
 - Проверка: pickle/external tensor/custom operator/oversized graph отклоняются до load; golden cases соответствуют Python output.

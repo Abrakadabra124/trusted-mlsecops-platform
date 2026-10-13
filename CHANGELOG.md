@@ -4,6 +4,8 @@
 
 Добавлены ограниченный advisory core, frozen feature-space attack protocol, native Docker replay с independent intake, private primary materials и отдельный CI workflow без подавления failure. 17 negative/positive contracts, два local eight-worker replays и PB-18/RB-36. Domain-support guard подтвердил abstain, но recall drop 0.07183673469387755 превышает прежний 0.05: результат сохранён как fail, thresholds не менялись. Это T12 component, не full M09, production или release approval.
 
+[CI 5e3bb21](docs/evidence/robustness-2026-10-13.md) повторил metrics с source_dirty=false. M20 723/M21 122 pass и functional regressions success; image audit, poisoning и новая evasion campaign failure. Очищенные evidence и все девять terminal CI outcomes опубликованы без raw materials.
+
 ## R1 scoped Kubernetes intake qualification - 2026-10-13
 
 Добавлен scoped scorer probe с real Jobs, отдельным promoter readback signed evaluation/denials и binding к exact model bytes/materials свежей Docker campaign. DeadlineExceeded больше не классифицируется как обычный process crash; missing Pod принимается только по ранее сохранённому owner/UID observation. Permissions/admission не расширены, рабочий budget не сбрасывается. Полный M21 исполняется в Kubernetes workflow, contracts workflow не выдаёт gate approval. PB-17/RB-35 описывают fault mechanisms, расход трёх cluster slots, cleanup и ограничения; native outcomes в STATUS.
