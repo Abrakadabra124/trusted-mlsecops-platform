@@ -1,0 +1,43 @@
+name: Frozen evasion and domain guard
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: robustness-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bounded-evasion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked tools and negative contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --data-file=.coverage-robustness --source=mlsecops.advisory,scripts.robustness -m unittest scripts.robustness_qualification scripts.robustness_native_qualification
+          uv run --locked coverage report --data-file=.coverage-robustness --fail-under=100
+      - name: Build exact current source and owned workspace
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m mlsecops bootstrap
+      - name: Fresh training intake evasion and actual abstention
+        run: uv run --locked python -m scripts.robustness_native
+      - name: Sanitized result including statistical violations
+        if: always()
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; path=Path('.runtime/evidence/robustness.json'); print(canonical(read_json(path)).decode() if path.is_file() else 'No completed robustness evidence')"
+          echo 'Frozen synthetic evasion only. Threshold failures stay blocking; no release or full M09 approval.' >> "$GITHUB_STEP_SUMMARY"

@@ -4,6 +4,18 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
+## Evasion и domain-support guard: новый increment
+
+2026-10-13: [frozen protocol](docs/robustness-protocol.md), [PB-18/RB-36](docs/operations/robustness-troubleshooting.md). `mlsecops.advisory.decide` не исполняет predictor для конечных features вне synthetic [0,1]^6: возвращает abstain/score=null. Malformed input отвергается, predictor failure не маскируется abstain, порядок mixed batch сохраняется. Это runtime core для будущего serving, не публичный API или обход release loader; joint shift внутри support не обнаруживается.
+
+Зафиксированы до измерения: probe seed 73041, 3000 rows, только change_size/change_entropy, L-infinity 0.05/L1 0.10, четыре дополнительных corner queries и retain-clean. Training и threshold не менялись. Labels остаются у research evaluator, не передаются selector/prediction worker. Final holdout не оценивается и SQL budget не меняется.
+
+17 controlled methods прошли; advisory + attack core покрыты 98 statements/42 branches, 100%, не весь native orchestrator. Два local native replays завершили по 8 network-none worker executions: train, independent intake, clean/four-corner/mixed prediction. На 3000 validation rows parity error 2.086162567138672e-07, label mismatches=0. 12 outside-support fixtures дали abstain без worker; mixed score error 5.960464477539063e-08 в существующем допуске 1e-6. Primary material hashes, selected rows и metrics перечитаны из private файлов.
+
+Adjacent regression: 83 tests pass. Fresh developer state `.runtime/robustness-developer-20261013`: 74 component checks и три обучения, probability difference=0.0, parity error=2.086162567138672e-07; full acceptance inconclusive. Ruff/docs integrity прошли. Ни native research, ни developer replay не использовали working SQL/cluster.
+
+**Измеренный robustness fail:** 1225 positives, clean TP=1027/recall=0.8383673469387755, attacked TP=939/recall=0.7665306122448979. Потеря 88 TP, recall drop=0.07183673469387755 >0.05. Это завершённый эксперимент, а не ошибка исполнения. Никаких thresholds/feature budgets по результатам не меняли. Последняя local campaign `3f6f9b6649f04803b6ddf1a051108c08`, dirty checkout; source fingerprint `edb07dbce7b3fdcadc9fb06dad3a88e18235d71fb0d6a28be2ba312764420a3f`, image `sha256:a3a2bce611123fde5219c0195443c9c2877b54ae76a9983baf537b454b4a6ffe`, protocol `aabc4c258e9f6a0b066f7e639426b10b75c94017642c842cce5e96d2b5059376`. Clean-checkout CI ещё требуется. Full M09/T12 и R1 не приняты; остальные gates и прежние blockers сохранены.
+
 ## Scoped intake M21: проверенный increment
 
 2026-10-13: [PB-17/RB-35](docs/operations/scoped-intake-troubleshooting.md), [карта M21](docs/intake-gate.md). Добавлен native scoped scorer probe с 12 сценариями, fresh clean evaluation, двумя signed denials и отдельным promoter readback. Same model bytes/split materials должны совпасть с Docker campaign, но разные SQL candidate identities не выдаются за один CAS record. Полный M21 runner больше не содержит безусловный missing-case placeholder: pass возможен только после реального Kubernetes component и reconciliation; без backend остаётся inconclusive.

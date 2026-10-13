@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Evasion и abstain, PB-18/RB-36](operations/robustness-troubleshooting.md). Frozen inference-time budget, domain-support guard, отличия statistical failure от runtime error, безопасное повторение и запрет tuning по опубликованным probes.
 - [Scoped Kubernetes intake, PB-17/RB-35](operations/scoped-intake-troubleshooting.md). Реальные controller identities, scheduling deadline/process failure, Pod UID observations, отдельный promoter readback и запрет reset budget. Controlled/native evidence отдельно в STATUS.
 - [Сверка intake evidence, PB-16/RB-34](operations/intake-gate-troubleshooting.md). Fresh Docker/SQL campaign, защита от stale/foreign/partial reports, ownership cleanup и обязательный inconclusive при отсутствующей scoped-controller matrix. Controlled и native evidence разграничены в STATUS.
 - [Подписанные отказы intake, PB-15/RB-32/RB-33](operations/intake-denial-troubleshooting.md). Read-only проверка отрицательного документа, потеря SQL persistence, безопасный retry без refund и явно изменяющий disposable-lab replay. Controlled contracts проверены; native CI evidence отражается в STATUS.

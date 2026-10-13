@@ -8,6 +8,8 @@
 
 ## Запустить рабочий пример
 
+Новый [evasion/domain-support протокол](docs/robustness-protocol.md): ограниченная атака внутри допустимых признаков и явный abstain вне synthetic support. Локальный эксперимент обнаружил **падение recall на 7.18 п.п. при лимите 5**, а не подтвердил устойчивость модели. [PB-18/RB-36](docs/operations/robustness-troubleshooting.md) описывает диагностику и следующие действия без ослабления policy. Full M09/release остаётся заблокирован.
+
 Проверка устойчивости: [полная poisoning matrix 30+5](docs/poisoning-benchmark.md). Локальное исследование выявило 10 нарушений targeted threshold при 5% poisoning; CI не скрывает такой fail. Это исследовательский результат и release blocker, не заявление универсальной защиты.
 
 Приёмка оценки: [M07, PB-07 и RB-13/14](docs/evaluation-gate.md). Единая свежая campaign проверяет leakage, signed material binding и постоянный бюджет holdout в отдельных owned SQL-лабораториях. Не заменяет остальные gates и не разрешает production release.
