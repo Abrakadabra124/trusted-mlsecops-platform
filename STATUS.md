@@ -4,7 +4,15 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Independent artifact intake: новый increment
+## Signed intake denial: новый increment
+
+2026-10-13: [ADR 0025](docs/decisions/0025-signed-intake-denial.md), [PB-15/RB-32/RB-33](docs/operations/intake-denial-troubleshooting.md). SQL/scoped-controller path сохраняет проверенный IntakeFailure как отдельный signed `intake-denial`, связывает его с candidate/dataset/run/policy и уже существующей holdout reservation. Append-only table и роли не расширены. Reader не читает labels, повтор тех же bytes идемпотентен; quality evaluation reader отвергает denial payload type. При невозможности записи/readback evaluation не продолжается. Это durable negative outcome, не approval.
+
+Локально прошли 15 новых contract methods, объединённые 36 intake/denial methods в Linux non-root/read-only container и 132 adjacent regression methods. Intake module: 121/121 statements и 46/46 branches, 100%; denial module: 75/76 statements и 15/16 branches, combined coverage 98%, непокрытый вход `__main__` проверяется отдельным native CLI. Чистый controller import не загрузил onnx/onnxruntime. Fresh developer state дал 74 checks/3 runs, probability difference=0 и parity `2.086162567138672e-07`. Source fingerprint `8d70df16f29ca2f04af16905d11b653fe8b97198105e4633f8c8c0dd3be205f8`, local image `sha256:f69866a4692d5e24fc226549f262ec1e88aa65f427887845da48fb83ec07a34c`; checkout при проверке был dirty. Локальный рабочий SQL/holdout не изменялся.
+
+Native playbook требует явно disposable state, проверяет current image/source и бюджет, затем выполняет actual SQL publication, fresh-process readback, permission probes с rollback и сохранение исходной quality evaluation. Unsafe candidate - тестовый benign pickle; malformed response вводится после реального scanner, timeout - transport exception fixture. Последний не выдаётся за настоящий отказ процесса, уже отдельно проверенный PB-14. Native SQL и clean-checkout CI пока ожидают выполнения; 25 checks не объявляются пройденными по наличию кода. Полный M21 aggregator, preflight outcomes, filesystem preview persistence, Kubernetes-specific denial replay и release/serving integration остаются открытыми.
+
+## Independent artifact intake: предыдущий increment
 
 Реализован [T27 component](docs/artifact-intake.md), [ADR 0024](docs/decisions/0024-independent-artifact-intake.md), [PB-14/RB-29/RB-30](docs/operations/artifact-intake-troubleshooting.md). Отдельный worker до evaluation inference сканирует exact bytes без labels/features/key. Fresh request ID, model/request/response hashes, image/tool/policy и coverage counts связаны с receipt; failed/partial/stale результаты не разрешают prediction. Signed evaluation schema повышена до 2, SQL reader и material bundle требуют intake. Старые signed reports не редактируются и не принимаются как новая схема. Holdout budget не изменён.
 

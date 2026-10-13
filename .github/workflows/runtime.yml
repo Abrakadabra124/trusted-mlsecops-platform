@@ -50,7 +50,7 @@ jobs:
         run: |
           uv run --locked ruff check scripts/artifact_intake_qualification.py scripts/artifact_intake_fixture.py scripts/artifact_intake_native.py
           uv run --locked ruff format --check scripts/artifact_intake_qualification.py scripts/artifact_intake_fixture.py scripts/artifact_intake_native.py
-          uv run --locked coverage run --source=mlsecops.artifact_intake --data-file=.coverage-artifact-intake -m scripts.artifact_intake_qualification
+          uv run --locked coverage run --source=mlsecops.artifact_intake --data-file=.coverage-artifact-intake -m unittest scripts.artifact_intake_qualification scripts.intake_denial_qualification
           uv run --locked coverage report --data-file=.coverage-artifact-intake --fail-under=100
           uv run --locked python -m scripts.artifact_intake_native
       - name: Verify frozen source and intake gate

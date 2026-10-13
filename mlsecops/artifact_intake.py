@@ -157,10 +157,39 @@ def validate_receipt(report, content, image_id):
     require_fields(report, REPORT_FIELDS)
     request = request_for(content, report["inspection_id"])
     expected = response(request, report["scan"])
+    return _validate_report(report, expected, image_id, "worker")
+
+
+def validate_failure(report, content, image_id):
+    require_fields(report, REPORT_FIELDS)
+    if report["status"] not in ("fail", "inconclusive"):
+        raise Rejected("intake_denial_status_invalid")
+    request = request_for(content, report["inspection_id"])
+    origin = report["origin"]
+    if origin == "worker":
+        expected = response(request, reason=report["reason"])
+    elif origin == "controller":
+        outcomes = {
+            "scanner_protocol_rejected": "fail",
+            "scanner_unavailable": "inconclusive",
+            "scanner_timeout": "inconclusive",
+            "scanner_crash": "inconclusive",
+        }
+        if type(report["reason"]) is not str or report["reason"] not in outcomes:
+            raise Rejected("intake_denial_reason_invalid")
+        expected = response(request, reason="model_profile_rejected")
+        expected.update(reason=report["reason"], status=outcomes[report["reason"]], skipped=1)
+    else:
+        raise Rejected("intake_denial_origin_invalid")
+    return _validate_report(report, expected, image_id, origin)
+
+
+def _validate_report(report, expected, image_id, origin):
     if (
-        report["origin"] != "worker"
+        report["origin"] != origin
         or report["image_id"] != image_id
-        or report["response_digest"] != digest(canonical(expected))
+        or report["response_digest"]
+        != (digest(canonical(expected)) if origin == "worker" else None)
         or canonical({name: report[name] for name in RESPONSE_FIELDS if name != "action"})
         != canonical({name: expected[name] for name in RESPONSE_FIELDS if name != "action"})
     ):

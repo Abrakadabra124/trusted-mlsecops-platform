@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Подписанные отказы intake, PB-15/RB-32/RB-33](operations/intake-denial-troubleshooting.md). Read-only проверка отрицательного документа, потеря SQL persistence, безопасный retry без refund и явно изменяющий disposable-lab replay. Controlled contracts проверены; native CI evidence отражается в STATUS.
 - [Приём ML-артефакта, PB-14/RB-29/RB-30/RB-31](operations/artifact-intake-troubleshooting.md). Независимый scan, сохранение fail/inconclusive, native timeout/crash и clean-after-faults, Windows symlink privilege, Docker и порядок ownership bootstrap перед evidence.
 - [Qualification и ресурсы стенда, PB-13/RB-27/RB-28](operations/qualification-environment-troubleshooting.md). Сохранение failed CI attempt, один диагностический rerun без reset budget; установленное исчерпание Docker subnet pool. Recovery действий над networks здесь не проводилось.
 - [Контракт ONNX, PB-12/RB-25/RB-26](operations/model-contract-troubleshooting.md). Диагностика export/graph/labels, неизвестных protobuf-полей и runtime outputs; безопасная свежая qualification без обхода policy или reset рабочего holdout.

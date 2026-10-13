@@ -5,7 +5,14 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
-from mlsecops import artifact_intake, evaluation_quality, holdout_budget, storage, storage_dataset
+from mlsecops import (
+    artifact_intake,
+    evaluation_quality,
+    holdout_budget,
+    intake_denial,
+    storage,
+    storage_dataset,
+)
 from mlsecops.bootstrap import initialize
 from mlsecops.contracts import (
     Rejected,
@@ -259,9 +266,18 @@ def evaluate(client, reference, policy, image, trust, signing_key, executor=run_
         trust["source_approval_digest"],
         ("holdout",),
     )
-    report = evaluate_verified_candidate(
-        metadata, model, splits["holdout"], manifest, policy, image, executor
-    )
+    try:
+        report = evaluate_verified_candidate(
+            metadata, model, splits["holdout"], manifest, policy, image, executor
+        )
+    except artifact_intake.IntakeFailure as error:
+        try:
+            denial = intake_denial.publish(
+                client, reference, policy, trust, signing_key, access, error.report
+            )
+        except (Rejected, OSError):
+            raise Rejected("intake_denial_persistence_failed") from None
+        raise intake_denial.RecordedDenial(denial, error.report["status"]) from None
     bound = {
         "schema_version": 1,
         "candidate_reference": reference,

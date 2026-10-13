@@ -39,6 +39,10 @@ jobs:
         run: |
           uv run --locked coverage run --data-file=.coverage-holdout-diagnostics --source=mlsecops.holdout_diagnostics -m unittest scripts.holdout_budget_qualification.BudgetDiagnosticContracts
           uv run --locked coverage report --data-file=.coverage-holdout-diagnostics --fail-under=100
+      - name: Signed intake denial and outage contracts
+        run: |
+          uv run --locked coverage run --source=mlsecops.intake_denial --data-file=.coverage-intake-denial -m scripts.intake_denial_qualification
+          uv run --locked coverage report --data-file=.coverage-intake-denial --fail-under=95
       - name: Candidate lineage contracts and diagnostic runner
         run: |
           uv run --locked coverage run --source=mlsecops.candidate_lineage --data-file=.coverage-candidate-lineage -m scripts.candidate_lineage_qualification
@@ -74,3 +78,9 @@ jobs:
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/storage-recovery-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed storage recovery evidence')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/M07.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed M07 evidence')"
           echo 'M03 and synthetic M07 plus storage recovery. Controllers are checked separately; full M17 and full R1 remain pending.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Durable intake denials in disposable SQL state
+        run: uv run --locked python -m scripts.intake_denial_native --state .runtime --confirm-disposable
+      - name: Sanitized denial evidence
+        if: always()
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/intake-denial-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed denial qualification evidence')"

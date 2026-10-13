@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 signed intake denials - 2026-10-13
+
+SQL scorer сохраняет validated fail/inconclusive как отдельный DSSE `intake-denial` с exact subject и spent reservation. Идемпотентная публикация, проверка readback, read-only CLI, nonzero controller outcome и остановка при потере persistence. Ни отрицательная подпись, ни exit 0 audit reader не разрешают release. Добавлены negative contracts, disposable SQL replay и PB-15/RB-32/RB-33; full M21 остаётся открытым, native результаты фиксируются отдельно в STATUS.
+
 ## R1 independent artifact intake - 2026-10-13
 
 Отдельный inspect worker до prediction, bounded digest/nonce/image-bound receipt, mandatory signed evaluation schema 2 и повторная offline/SQL проверка. Старые reports не переписываются, holdout budget не сбрасывается. Добавлены 20 controlled contracts, 5 native Docker scenarios и обязательная CI coverage. PB-14/RB-29/RB-30 описывают fail/inconclusive, crash/deadline recovery и Windows/Docker ограничения. Full M21/release остаётся открытым.

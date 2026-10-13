@@ -7,6 +7,7 @@ from mlsecops import storage, storage_pipeline
 from mlsecops.contracts import Rejected, canonical, read_json, require_fields
 from mlsecops.controller_api import TARGETS
 from mlsecops.controller_worker import run, validate_profile
+from mlsecops.intake_denial import RecordedDenial
 from mlsecops.inventory import source_fingerprint
 
 
@@ -103,7 +104,21 @@ def main():
     )
     parser.add_argument("--request", type=Path, required=True)
     arguments = parser.parse_args()
-    print(canonical(execute(read_json(arguments.request))).decode())
+    try:
+        result = execute(read_json(arguments.request))
+    except RecordedDenial as error:
+        print(
+            canonical(
+                {
+                    "status": error.status,
+                    "decision": "deny-evaluation",
+                    "denial_reference": error.reference,
+                    "release_ready": False,
+                }
+            ).decode()
+        )
+        return 1
+    print(canonical(result).decode())
     return 0
 
 
