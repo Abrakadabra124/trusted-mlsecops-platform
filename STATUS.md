@@ -4,6 +4,20 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
+## Robust training: mitigation проверена, порог не пройден
+
+2026-10-13: [frozen paired protocol](docs/robust-training-protocol.md), [PB-19/RB-37](docs/operations/robust-training-troubleshooting.md), [подробное evidence](docs/evidence/robust-training-2026-10-13.md). Добавлена отдельная research worker action с clipped-box worst-case logistic loss. Обычный train, controller allowlists, thresholds и generated dataset bytes не менялись; candidate не получает adoption/release authority.
+
+18 controlled methods прошли; math core 63 statements/12 branches, 100%, не весь orchestrator. Local campaign `f58729ab50fc45fb973826b2866ef282` завершила 14 isolated workers, independent intake обеих моделей, parity по 3000 validation rows и по 12 abstentions без inference. 47 primary files перечитаны, raw prediction responses связаны с model/features/nonce/row order, summaries пересчитаны. Host ONNX parser не загружался; working SQL/cluster не использовались.
+
+Regression: объединённые 121 methods прошли в non-root/read-only/network-none Linux container. Предшествующая Windows suite дала 102 pass и один environment error WinError 1314 при создании symlink; проверку не skipped и не ослабляли, выполнили в Linux. Fresh developer workspace подтвердил 74 component checks, три обучения, probability difference=0.0, parity=2.086e-07, full acceptance inconclusive.
+
+После source review исправлены четыре gaps: точное число abstentions, training/intake semantic readback, sanitized cleanup timeout и десятичная граница AP loss. **Итоговые 22 новых controlled methods и 125 объединённых Linux tests pass**, math core по-прежнему 100%. Второй native replay `98a8244c7aba42beb53eca84c8b2dd1f` подтвердил прежние model bytes, все summaries/parity/optimization и fail; 14 workers/47 files, по 12 фактических abstentions, UTC 20:09:37.252367 - 20:10:28.091595. Host scripts digest `80df0322f5a97077757f00cebb08f7d7dcfd8688576b6b040a7fcdf4344ab445`; model training/protocol не менялись. Reviewer-agent проверил исправления read-only, это не independent human challenge.
+
+**Statistical fail сохранён на всех трёх probes.** Candidate recall drop: known 73041 = 0.052244897959183675, new 73043 = 0.06224066390041494, new 73047 = 0.06143344709897611, лимит 0.05. Для baseline: 0.07183673469387755 / 0.07385892116182573 / 0.07593856655290103. Clean AUPRC candidate 0.931794 / 0.931563 / 0.928822, потери AP <0.004 и в пределах 0.03. Уменьшение vulnerability не равно приёмке; attacked TP даже немного снизился на 73043 (938 -> 935). Не повышали tolerance, не меняли seeds/attacker budget после измерения.
+
+Solver сошёлся за 11 iterations, projected-gradient infinity norm 5.143e-09; candidate ONNX max error 1.624e-07, label mismatches=0. Это численная проверка, не независимый certificate. Первый запуск был остановлен source-lock mismatch до обучения: явное объявление уже pinned SciPy изменило uv.lock; после проверки прежнего generated SHA-256 обновлена только эта input binding в data.lock. Local checkout dirty; clean-checkout CI ещё требуется. Full M09/T12 и R1 не приняты, остальные blockers сохраняются.
+
 ## Evasion и domain-support guard: проверенный increment
 
 2026-10-13: [frozen protocol](docs/robustness-protocol.md), [PB-18/RB-36](docs/operations/robustness-troubleshooting.md). `mlsecops.advisory.decide` не исполняет predictor для конечных features вне synthetic [0,1]^6: возвращает abstain/score=null. Malformed input отвергается, predictor failure не маскируется abstain, порядок mixed batch сохраняется. Это runtime core для будущего serving, не публичный API или обход release loader; joint shift внутри support не обнаруживается.

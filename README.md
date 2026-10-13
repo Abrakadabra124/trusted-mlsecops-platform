@@ -8,6 +8,8 @@
 
 ## Запустить рабочий пример
 
+Проверена [mitigation через robust training](docs/robust-training-protocol.md): качество сохранилось, но recall drop кандидата **5.22-6.22% при лимите 5%** на трёх фиксированных probes. [Evidence](docs/evidence/robust-training-2026-10-13.md) и [PB-19/RB-37](docs/operations/robust-training-troubleshooting.md) показывают результаты, причину source-lock отказа и воспроизводимые команды. Baseline не заменён, failure не скрыт.
+
 Новый [evasion/domain-support протокол](docs/robustness-protocol.md): ограниченная атака внутри допустимых признаков и явный abstain вне synthetic support. Локальный эксперимент обнаружил **падение recall на 7.18 п.п. при лимите 5**, а не подтвердил устойчивость модели. [PB-18/RB-36](docs/operations/robustness-troubleshooting.md) описывает диагностику и следующие действия без ослабления policy. Full M09/release остаётся заблокирован.
 
 Проверка устойчивости: [полная poisoning matrix 30+5](docs/poisoning-benchmark.md). Локальное исследование выявило 10 нарушений targeted threshold при 5% poisoning; CI не скрывает такой fail. Это исследовательский результат и release blocker, не заявление универсальной защиты.

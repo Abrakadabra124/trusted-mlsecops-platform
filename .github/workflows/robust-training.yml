@@ -1,0 +1,43 @@
+name: Paired robust training research
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: robust-training-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  paired-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked tools and negative contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --data-file=.coverage-robust-training --source=mlsecops.robust_training -m unittest scripts.robust_training_qualification scripts.robust_training_native_qualification
+          uv run --locked coverage report --data-file=.coverage-robust-training --fail-under=100
+      - name: Build source-bound image and owned workspace
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m mlsecops bootstrap
+      - name: Paired clean and adaptive attack evaluation
+        run: uv run --locked python -m scripts.robust_training_native
+      - name: Sanitized result without raw materials
+        if: always()
+        run: |
+          uv run --locked python -c "import json; from pathlib import Path; from mlsecops.contracts import read_json; path=Path('.runtime/evidence/robust-training.json'); print(json.dumps(read_json(path),indent=2) if path.is_file() else 'No completed paired research evidence')"
+          echo 'Research only. Candidate failure remains blocking; no automatic adoption, release or full M09 approval.' >> "$GITHUB_STEP_SUMMARY"
