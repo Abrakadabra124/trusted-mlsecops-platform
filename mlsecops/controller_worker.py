@@ -36,7 +36,8 @@ def documents(profile, role, request, timeout=600):
     if (
         role not in TARGETS
         or not isinstance(request, dict)
-        or request.get("action") != {"publisher": "train", "scorer": "predict"}[role]
+        or request.get("action")
+        not in {"publisher": {"train"}, "scorer": {"predict", "inspect"}}[role]
     ):
         raise Rejected("controller_worker_action_mismatch")
     if type(timeout) is not int or not 1 <= timeout <= 600:

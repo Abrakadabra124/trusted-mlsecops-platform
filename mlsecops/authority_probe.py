@@ -116,6 +116,8 @@ def qualify(request):
 
         def executor(image, payload):
             nonlocal clean_response
+            if payload.get("action") == "inspect":
+                return run(profile, "scorer", payload, timeout=60)
             confirmed(f"{name}:image-bound", image == profile["image_id"])
             validate_request(payload)
             confirmed(f"{name}:features-without-labels-or-credentials", True)

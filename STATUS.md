@@ -1,10 +1,18 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-11**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-13**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## Holdout concurrency diagnostics: новый increment
+## Independent artifact intake: новый increment
+
+Реализован [T27 component](docs/artifact-intake.md), [ADR 0024](docs/decisions/0024-independent-artifact-intake.md), [PB-14/RB-29/RB-30](docs/operations/artifact-intake-troubleshooting.md). Отдельный worker до evaluation inference сканирует exact bytes без labels/features/key. Fresh request ID, model/request/response hashes, image/tool/policy и coverage counts связаны с receipt; failed/partial/stale результаты не разрешают prediction. Signed evaluation schema повышена до 2, SQL reader и material bundle требуют intake. Старые signed reports не редактируются и не принимаются как новая схема. Holdout budget не изменён.
+
+Локально 20 controlled tests прошли в Linux non-root/read-only container; 19 без symlink fixture прошли также на Windows с 103/103 statements и 38/38 branches (100%) intake module. Windows WinError 1314 для создания symlink не скрыт skip-ом: настоящий тест выполняется в Linux и CI. Native Docker suite дал 5 pass cases: clean, renamed pickle rejection, timeout, crash, clean-after-faults. У двух искусственно неисправных процессов status=inconclusive, approved_outputs пуст и удаление собственных контейнеров подтверждено. Это controlled fault injection, не реальный production-инцидент или parser exploit. Docker после перерыва запущен из существующей установки; Linux daemon 29.8.0 подтверждён, переустановки и изменения network policy не было.
+
+132 adjacent regression methods прошли и до, и после schema bump. Controller import check подтвердил отсутствие загруженных onnx/onnxruntime в чистом процессе. Финальный local developer schema 2 дал 74 checks/3 runs, probability difference=0, parity error `2.086162567138672e-07`; новый native fault replay тоже дал 5 pass. Source fingerprint `34f1fd5dcf8ee2ba4904f20db0bfce5e5c9adbfd79b2743110782e0c8bbd0952`, image `sha256:ad8cfb1924bd8787ff1348c3baceddc26e6a8026fced305e94fa0a5f0b535628`. Local checkout был dirty; clean-checkout CI фиксируется отдельно после завершения. Private evidence: `.runtime/artifact-intake-20261013/native-schema2.json` и `.runtime/artifact-intake-schema2-developer-20261013`, в Git не включено. Новая CI step требует 100% intake coverage и native failure replay. Полный M21 aggregator, durable quarantine failure storage и release/serving integration остаются открытыми. Image security и M08 blockers не waived; R1 goal активна.
+
+## Holdout concurrency diagnostics: предыдущий increment
 
 Устранён диагностический пробел, выявленный в первом storage CI на `36fa443`: [bounded observation](mlsecops/holdout_diagnostics.py) сохраняет номера заявленных slots и количества allowlisted reason codes. Foreign context/digest, malformed и duplicate receipts отвергаются, M07/CLI передают очищенный summary при отказе. Budget, SQL timeouts/roles и смысл exhaustion не ослаблены. [RB-27](docs/operations/qualification-environment-troubleshooting.md) разделяет наблюдение и root cause; старую утраченную причину новый код не восстанавливает.
 

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from mlsecops import evaluation_quality, holdout_budget, storage, storage_pipeline
 from mlsecops.contracts import Rejected, canonical, digest, now, read_json
 from mlsecops.signing import create_key, sign
+from scripts.artifact_intake_fixture import receipt
 from scripts.evaluation_quality_qualification import examples
 
 
@@ -24,7 +25,7 @@ class BindingContracts(unittest.TestCase):
         )
         cls.metadata = {
             "run_id": "1" * 32,
-            "model_digest": "2" * 64,
+            "model_digest": digest(b"controlled-model"),
             "dataset_id": "3" * 64,
             "lineage_id": "4" * 64,
             "image_id": "sha256:" + "5" * 64,
@@ -46,7 +47,7 @@ class BindingContracts(unittest.TestCase):
                 "policy_digest": digest(canonical(holdout_budget.policy())),
             },
             "report": {
-                "schema_version": 1,
+                "schema_version": 2,
                 "created_at": now(),
                 "holdout_digest": "8" * 64,
                 **{name: value for name, value in cls.metadata.items() if name != "lineage_id"},
@@ -73,6 +74,10 @@ class BindingContracts(unittest.TestCase):
                 "prediction_execution": {"image_id": cls.metadata["image_id"]},
             },
         }
+
+        cls.bound["report"]["intake"] = receipt(
+            b"controlled-model", cls.metadata["image_id"], cls.bound["report"]["scan"]
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -116,6 +121,19 @@ class BindingContracts(unittest.TestCase):
 
     def test_real_signature_and_expected_subject(self):
         self.assertEqual(self.read(), self.bound)
+        legacy = copy.deepcopy(self.bound)
+        legacy["report"]["schema_version"] = 1
+        with self.assertRaises(Rejected):
+            self.read(legacy)
+        missing = copy.deepcopy(self.bound)
+        del missing["report"]["intake"]
+        with self.assertRaises(Rejected):
+            self.read(missing)
+        for field, value in (("status", "fail"), ("model_digest", "0" * 64), ("inspected", 0)):
+            invalid = copy.deepcopy(self.bound)
+            invalid["report"]["intake"][field] = value
+            with self.subTest(field=field), self.assertRaises(Rejected):
+                self.read(invalid)
 
     def test_different_candidate_cannot_replay_valid_report(self):
         with self.assertRaisesRegex(Rejected, "stored_evaluation_subject_mismatch"):

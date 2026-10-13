@@ -17,6 +17,7 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, read_json
 from mlsecops.datasets import FEATURES
 from mlsecops.signing import create_key, sign
+from scripts.artifact_intake_fixture import receipt as intake_receipt
 from scripts.evaluation_quality_qualification import examples
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -152,7 +153,7 @@ class CandidateLineageContracts(unittest.TestCase):
                 "policy_digest": digest(canonical(holdout_budget.policy())),
             },
             "report": {
-                "schema_version": 1,
+                "schema_version": 2,
                 "created_at": now(),
                 "holdout_digest": holdout,
                 **{
@@ -189,6 +190,9 @@ class CandidateLineageContracts(unittest.TestCase):
                 "prediction_execution": {"image_id": self.expected["image_id"]},
             },
         }
+        self.bound["report"]["intake"] = intake_receipt(
+            self.model, self.expected["image_id"], self.bound["report"]["scan"]
+        )
         self.evaluation_ref = self.signed(
             "evaluations", self.bound, "stored-evaluation", "evaluator"
         )

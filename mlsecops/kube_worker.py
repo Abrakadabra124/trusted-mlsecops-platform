@@ -179,7 +179,11 @@ def verify_running_image(pod, image_id):
 
 
 def run_worker(state, image, request, timeout=600):
-    if not isinstance(request, dict) or request.get("action") not in {"train", "predict"}:
+    if not isinstance(request, dict) or request.get("action") not in {
+        "train",
+        "predict",
+        "inspect",
+    }:
         raise Rejected("unknown_worker_action")
     payload = canonical(request)
     if len(payload) > MAX_PROTOCOL or type(timeout) is not int or not 1 <= timeout <= 600:

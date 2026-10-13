@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from mlsecops import evaluation_quality
+from mlsecops import artifact_intake, evaluation_quality
 from mlsecops.contracts import (
     Rejected,
     atomic_write,
@@ -156,6 +156,9 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
 
 def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, image, executor):
     rules = evaluation_quality.freeze(policy)
+    intake = artifact_intake.inspect_candidate(
+        content, metadata["model_digest"], image, metadata["image_id"], executor
+    )
     batch = PredictionBatch(content, [row["features"] for row in holdout])
     output, execution = executor(image, batch.request)
     if execution["image_id"] != metadata["image_id"]:
@@ -163,7 +166,7 @@ def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, im
     scores, scan, protocol = batch.consume(output)
     quality = evaluation_quality.summarize(holdout, scores.tolist(), rules)
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": metadata["run_id"],
         "created_at": now(),
         "model_digest": digest(content),
@@ -175,6 +178,7 @@ def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, im
         "validation_parity_max_error": metadata["validation_parity_max_error"],
         "release_status": "unapproved",
         "scan": scan,
+        "intake": intake,
         "prediction_protocol": protocol,
         "prediction_execution": execution,
         "limitations": [

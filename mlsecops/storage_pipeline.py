@@ -5,7 +5,7 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
-from mlsecops import evaluation_quality, holdout_budget, storage, storage_dataset
+from mlsecops import artifact_intake, evaluation_quality, holdout_budget, storage, storage_dataset
 from mlsecops.bootstrap import initialize
 from mlsecops.contracts import (
     Rejected,
@@ -122,7 +122,7 @@ def read_evaluation(
 ):
     read = storage.get if reader is None else reader
     evaluation_quality.freeze(policy)
-    record, metadata, _ = load_candidate(client, candidate_reference, policy, reader=read)
+    record, metadata, model = load_candidate(client, candidate_reference, policy, reader=read)
     bound = verify(
         decode(read(client, "evaluations", evaluation_reference)),
         "stored-evaluation",
@@ -163,6 +163,7 @@ def read_evaluation(
             "validation_parity_max_error",
             "release_status",
             "scan",
+            "intake",
             "prediction_protocol",
             "prediction_execution",
             "limitations",
@@ -170,7 +171,7 @@ def read_evaluation(
     )
     if (
         type(report["schema_version"]) is not int
-        or report["schema_version"] != 1
+        or report["schema_version"] != 2
         or any(
             report[name] != metadata[name]
             for name in ("run_id", "model_digest", "dataset_id", "policy_digest", "image_id")
@@ -195,6 +196,7 @@ def read_evaluation(
         {name: report[name] for name in evaluation_quality.SUMMARY_FIELDS}
     )
     validate_scan(report["scan"])
+    artifact_intake.validate_receipt(report["intake"], model, metadata["image_id"])
     proof = report["prediction_protocol"]
     require_fields(
         proof,

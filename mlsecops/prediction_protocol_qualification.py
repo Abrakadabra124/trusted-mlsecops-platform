@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops import storage_pipeline
+from mlsecops import artifact_intake, storage_pipeline
 from mlsecops.contracts import Rejected, canonical, digest, now, read_json, write_json
 from mlsecops.inventory import source_fingerprint
 from mlsecops.prediction_protocol import MAX_BYTES, PredictionBatch, response, validate_request
@@ -143,6 +143,7 @@ def qualify():
     image = "sha256:" + "1" * 64
     metadata = {
         "image_id": image,
+        "model_digest": digest(content),
         "dataset_id": "2" * 64,
         "lineage_id": "3" * 64,
         "run_id": "4" * 32,
@@ -153,6 +154,8 @@ def qualify():
     holdout = [{"features": values, "label": index % 2} for index, values in enumerate(features)]
 
     def resolved_executor(reference, request):
+        if request["action"] == "inspect":
+            return artifact_intake.response(request, scan), {"image_id": image}
         confirmed("image-alias-reaches-resolver", reference == "local-alias")
         return response(request, probabilities, scan), {"image_id": image}
 
@@ -170,7 +173,9 @@ def qualify():
             policy,
             "local-alias",
             lambda reference, request: (
-                response(request, probabilities, scan),
+                artifact_intake.response(request, scan)
+                if request["action"] == "inspect"
+                else response(request, probabilities, scan),
                 {"image_id": "sha256:" + "0" * 64},
             ),
         ),
@@ -178,6 +183,8 @@ def qualify():
     for name, mutate in mutations:
 
         def executor(image, request):
+            if request["action"] == "inspect":
+                return artifact_intake.response(request, scan), {"image_id": image}
             output = response(request, probabilities, copy.deepcopy(scan))
             mutate(output)
             return output, {"image_id": image}

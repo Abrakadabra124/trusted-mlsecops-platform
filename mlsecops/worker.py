@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 from mlsecops.datasets import arrays, validate_features
-from mlsecops.model import predict, session
+from mlsecops.model import inspect_model, predict, session
 from mlsecops.prediction_protocol import response, validate_request
 from mlsecops.signing import encode64
 
@@ -68,6 +68,18 @@ def execute(request):
         return train(request)
     if request.get("action") == "predict":
         return predict_request(request)
+    if request.get("action") == "inspect":
+        from mlsecops import artifact_intake
+
+        content = artifact_intake.validate_request(request)
+        try:
+            scan = inspect_model(content)
+        except Rejected as error:
+            reason = (
+                str(error) if str(error) in artifact_intake.REASONS else "model_profile_rejected"
+            )
+            return artifact_intake.response(request, reason=reason)
+        return artifact_intake.response(request, scan=scan)
     raise Rejected("unknown_worker_action")
 
 

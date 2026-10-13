@@ -162,6 +162,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T27
 - [ ] Artifact intake coverage. Зависимости: T12, T26. Gate: M21.
+- Компонент 2026-10-13: [независимый intake](../docs/artifact-intake.md) обязателен до prediction, receipt проверяется в signed SQL reader; [PB-14/RB-29/RB-30](../docs/operations/artifact-intake-troubleshooting.md). Controlled protocol/path tests и native Docker faults выполнены; full M21 aggregator, durable quarantine failures и release/serving integration остаются открытыми.
 - Компонент 2026-10-11: scanner требует полностью проверенный двухузловой профиль, rejects unknown protobuf fields, receipt v2/2 nodes. Полный intake/conversion/path/timeout/crash gate не завершён; [PB-12](../docs/operations/model-contract-troubleshooting.md).
 - Результат: quarantine report с declared format/tool coverage, scanned count, digest, policy version и явным inconclusive. Выбор scanner после проверки поддержки фактического ONNX-профиля.
 - Проверка: unsupported/zero-scanned/crash/timeout/stale report, подмена digest и mutation после conversion блокируются; разрешённый clean ONNX проходит полный intake.

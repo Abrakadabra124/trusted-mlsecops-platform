@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.dummy import DummyClassifier
 from sklearn.metrics import average_precision_score
 
-from mlsecops import evaluation_quality, pipeline, storage_pipeline
+from mlsecops import artifact_intake, evaluation_quality, pipeline, storage_pipeline
 from mlsecops.contracts import Rejected, canonical, digest, read_json
 from mlsecops.prediction_protocol import response
 
@@ -283,7 +283,8 @@ class IntegrationContracts(unittest.TestCase):
             "errors": 0,
         }
         metadata = {
-            "image_id": "image",
+            "image_id": "sha256:" + "1" * 64,
+            "model_digest": digest(b"controlled-model"),
             "run_id": "1" * 32,
             "dataset_id": "a" * 64,
             "validation_parity_max_error": 0.0,
@@ -291,10 +292,12 @@ class IntegrationContracts(unittest.TestCase):
         manifest = {"objects": {"holdout.json": {"sha256": "b" * 64}}}
 
         def executor(image, request):
+            if request["action"] == "inspect":
+                return artifact_intake.response(request, scan), {"image_id": image}
             return response(request, scores, scan), {"image_id": image}
 
         result = pipeline.evaluate_verified_candidate(
-            metadata, b"controlled-model", rows, manifest, profile(), "image", executor
+            metadata, b"controlled-model", rows, manifest, profile(), metadata["image_id"], executor
         )
         self.assertEqual(result["quality_component"], "inconclusive")
         self.assertEqual(result["release_status"], "unapproved")
