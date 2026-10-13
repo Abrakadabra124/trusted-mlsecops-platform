@@ -113,6 +113,8 @@ def run(profile, role, request, timeout=600):
             )
             if terminal:
                 if terminal["type"] != "Complete":
+                    if terminal.get("reason") == "DeadlineExceeded":
+                        raise Rejected("controller_worker_deadline")
                     raise Rejected("controller_worker_failed")
                 break
             time.sleep(1)

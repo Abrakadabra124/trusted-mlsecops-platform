@@ -37,6 +37,7 @@ CONTRACT_FILES = (
     "artifact_intake_native",
     "intake_denial_native",
     "candidate_lineage_qualification",
+    "kube_intake_contracts",
 )
 
 
@@ -95,7 +96,7 @@ def run_contracts(root):
         raise Rejected("M21_contracts_failed")
     evidence = decode(result.stdout, 1024 * 1024)
     checked_cases(evidence, case_ids())
-    if evidence.get("scope") != SCOPE or len(evidence["cases"]) < 54:
+    if evidence.get("scope") != SCOPE or len(evidence["cases"]) < 66:
         raise Rejected("M21_contract_scope_invalid")
     return evidence
 
@@ -282,7 +283,7 @@ def qualify(root, state):
     marker = validate(campaign)
     try:
         demo = storage_pipeline.demo(root, campaign, image)
-        _, _, content = storage_pipeline.load_candidate(
+        _, metadata, content = storage_pipeline.load_candidate(
             campaign / "storage-clients/promoter",
             demo["candidate"]["candidate_reference"],
             read_json(root / "policies/local-cpu.json"),
@@ -290,6 +291,17 @@ def qualify(root, state):
         native = scan(image, content)
         denials = deny(root, campaign, image)
         result = reconcile(root, campaign, demo, native, denials, image, started)
+        kubernetes = None
+        if (state / "controllers/resources.json").is_file():
+            from mlsecops.intake_probe import CASE_IDS
+            from mlsecops.kube_intake_qualification import HOST_CASES
+            from mlsecops.kube_intake_qualification import qualify as kube_qualify
+
+            kubernetes = kube_qualify(root, state, content, image, metadata["materials"])
+            checked_cases(kubernetes, CASE_IDS | HOST_CASES)
+            result["input_digests"]["kubernetes_candidate_reference"] = kubernetes[
+                "candidate_reference"
+            ]
         if (
             fingerprint != source_fingerprint(root)
             or sources != contract_source(root)
@@ -300,7 +312,10 @@ def qualify(root, state):
         ):
             raise Rejected("M21_source_changed_during_campaign")
         hashes, cases = {}, []
-        for name, report in (("contracts", contracts), ("native", native), ("denials", denials)):
+        components = [("contracts", contracts), ("native", native), ("denials", denials)]
+        if kubernetes is not None:
+            components.append(("kubernetes", kubernetes))
+        for name, report in components:
             path = safe_child(campaign, "evidence/M21-" + name + ".json")
             write_json(path, report)
             hashes[name] = digest(bounded_read(path))
@@ -324,15 +339,15 @@ def qualify(root, state):
         cases.append(
             {
                 "id": "scoped-controller-native-intake-matrix",
-                "status": "inconclusive",
+                "status": "pass" if kubernetes is not None else "inconclusive",
                 "expected": "pass",
-                "actual": "not-yet-implemented",
+                "actual": "pass" if kubernetes is not None else "backend-not-available",
             }
         )
         result.update(
             schema_version=1,
             scope="M21-intake-acceptance",
-            status="inconclusive",
+            status="pass" if kubernetes is not None else "inconclusive",
             component_status="pass",
             release_ready=False,
             campaign_id=campaign_id,
@@ -343,7 +358,9 @@ def qualify(root, state):
             checks=len(cases),
             artifact_hashes=hashes,
             limitations=[
-                "Full M21 remains inconclusive until scoped-controller native negative intake replay is reconciled",
+                "Scoped-controller native intake replay is mandatory; missing backend leaves M21 inconclusive",
+                "Kubernetes deadline uses unschedulable owned Job, crash uses malformed request; neither is a parser exploit",
+                "Docker and Kubernetes candidate records have distinct storage identities; exact model bytes and split materials must match",
                 "Docker faults are real replacement processes; SQL timeout is a controlled transport exception",
                 "Fresh disposable SQL state does not reset or refund any working holdout budget",
                 "Trusted host, local keys and synthetic data; not independent attestation or universal malware detection",

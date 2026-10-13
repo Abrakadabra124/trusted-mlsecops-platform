@@ -52,6 +52,8 @@ jobs:
         run: |
           uv run --locked python -m mlsecops.controller_bootstrap
           uv run --locked python -m mlsecops.acceptance --gate M20 --output .runtime/evidence/M20.json
+      - name: Complete fresh M21 with scoped intake and independent SQL readback
+        run: uv run --locked python -m mlsecops.acceptance --gate M21 --output .runtime/evidence/M21.json
       - name: Sanitized component evidence
         if: always()
         run: |
@@ -59,6 +61,7 @@ jobs:
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-storage-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Private storage qualification report not produced.')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-migration-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Migration qualification report not produced.')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M20.json','authority-qualification.json','M20-outputs.json','M20-access.json','M20-controller.json')]; [print(canonical(read_json(path)).decode() if path.exists() else path.name+': no report produced') for path in paths]"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M21.json','intake-gate.json','kube-intake-qualification.json')]; [print(canonical(read_json(path)).decode() if path.is_file() else path.name+': no completed report') for path in paths]"
           echo 'M20 lab acceptance plus storage components. Full R1 acceptance remains inconclusive.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove owned disposable CI cluster
         if: always() && steps.bootstrap.outcome == 'success'

@@ -1,4 +1,4 @@
-name: M21 intake evidence reconciliation
+name: Intake evidence contracts
 on:
   push:
     branches: [main]
@@ -30,14 +30,7 @@ jobs:
           uv run --locked python scripts/check_docs.py
           uv run --locked coverage run --source=mlsecops.intake_gate --data-file=.coverage-intake-gate -m scripts.intake_gate_qualification
           uv run --locked coverage report --data-file=.coverage-intake-gate --fail-under=100
-      - name: Owned workspace and exact source image
+      - name: Complete controlled suite including scoped intake contracts
         run: |
-          uv run --locked python -m mlsecops bootstrap
-          uv run --locked python -m mlsecops build
-      - name: Fresh M21 campaign without accepting incomplete coverage
-        run: uv run --locked python -m mlsecops.acceptance --gate M21 --output .runtime/evidence/M21.json
-      - name: Sanitized evidence including incomplete or failed gate
-        if: always()
-        run: |
-          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M21.json','intake-gate.json')]; [print(canonical(read_json(path)).decode() if path.is_file() else path.name+': no completed evidence') for path in paths]"
-          echo 'M21 is not accepted while any required case is fail/inconclusive. Docker/SQL component success is not scoped-controller coverage or R1 approval.' >> "$GITHUB_STEP_SUMMARY"
+          uv run --locked python -m scripts.intake_contracts
+          echo 'Controlled contracts only. Full fresh M21 campaign runs with its required backend in Kubernetes isolation qualification; no missing gate is waived.' >> "$GITHUB_STEP_SUMMARY"

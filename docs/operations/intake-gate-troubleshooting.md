@@ -2,6 +2,8 @@
 
 Владелец: MLSecOps lab operator. Область: [M21 runner](../intake-gate.md). Требуются Linux, pinned uv/Python из lockfile, Linux Docker, доступный loopback 15453 и subnet pool. Без этих условий результат не считается pass. Рабочие SQL volumes и holdout budget изменять запрещено.
 
+Обновление scoped-backend: [PB-17/RB-35](scoped-intake-troubleshooting.md) добавляет native matrix и promoter readback. Полный запуск перенесён в Kubernetes workflow с нужными services; отдельный intake workflow теперь явно называется contracts-only и не заменяет gate. Описание 85+1 и missing implementation далее относится к историческому commit 12143a6. В текущем коде отсутствие backend по-прежнему даёт inconclusive, а pass возможен только после нового полноценного replay.
+
 ## RB-34: зелёные компоненты, но M21 inconclusive
 
 **Установленный пробел:** source review показал отсутствие общего M21 runner, который заново запускает и связывает controlled/native/SQL reports. Раздельные успешные тесты не доказывали их принадлежность одному candidate, image и запуску. Это integration gap, не зарегистрированный production-инцидент. Новый runner проверяет эти связи, но сохраняет явный missing scoped-controller case вместо фиктивного pass.

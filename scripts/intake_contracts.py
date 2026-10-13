@@ -8,6 +8,7 @@ MODULES = (
     "scripts.artifact_intake_qualification",
     "scripts.intake_denial_qualification",
     "scripts.model_contract_qualification",
+    "scripts.kube_intake_contracts",
 )
 SCOPE = "controlled-intake-contracts-real-parser-and-paths-not-native-isolation"
 
@@ -25,7 +26,7 @@ def qualify():
         result.wasSuccessful()
         and not result.skipped
         and not result.expectedFailures
-        and len(expected) >= 54
+        and len(expected) >= 66
         and result.testsRun == len(expected) == len(result.passed)
         and set(result.passed) == expected
     )

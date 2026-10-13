@@ -2,6 +2,7 @@
 
 ## Проверенные локальные процедуры
 
+- [Scoped Kubernetes intake, PB-17/RB-35](operations/scoped-intake-troubleshooting.md). Реальные controller identities, scheduling deadline/process failure, Pod UID observations, отдельный promoter readback и запрет reset budget. Controlled/native evidence отдельно в STATUS.
 - [Сверка intake evidence, PB-16/RB-34](operations/intake-gate-troubleshooting.md). Fresh Docker/SQL campaign, защита от stale/foreign/partial reports, ownership cleanup и обязательный inconclusive при отсутствующей scoped-controller matrix. Controlled и native evidence разграничены в STATUS.
 - [Подписанные отказы intake, PB-15/RB-32/RB-33](operations/intake-denial-troubleshooting.md). Read-only проверка отрицательного документа, потеря SQL persistence, безопасный retry без refund и явно изменяющий disposable-lab replay. Controlled contracts проверены; native CI evidence отражается в STATUS.
 - [Приём ML-артефакта, PB-14/RB-29/RB-30/RB-31](operations/artifact-intake-troubleshooting.md). Независимый scan, сохранение fail/inconclusive, native timeout/crash и clean-after-faults, Windows symlink privilege, Docker и порядок ownership bootstrap перед evidence.

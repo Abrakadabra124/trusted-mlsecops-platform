@@ -404,7 +404,7 @@ class IntakeGateContracts(unittest.TestCase):
             self.assertEqual(result["status"], "inconclusive")
             self.assertEqual(result["component_status"], "pass")
             self.assertFalse(result["release_ready"])
-            self.assertEqual(result["cases"][-1]["actual"], "not-yet-implemented")
+            self.assertEqual(result["cases"][-1]["actual"], "backend-not-available")
             self.assertEqual(result["checks"], len(result["cases"]))
             self.assertEqual(set(result["artifact_hashes"]), {"contracts", "native", "denials"})
             with patch.object(intake_gate, "qualify", return_value=result):
@@ -423,6 +423,38 @@ class IntakeGateContracts(unittest.TestCase):
             self.assertEqual(
                 intake_gate.read_json(state / "evidence/intake-gate.json")["status"], "inconclusive"
             )
+
+    def test_full_gate_requires_fresh_scoped_component_and_propagates_failure(self):
+        from mlsecops.intake_probe import CASE_IDS
+        from mlsecops.kube_intake_qualification import HOST_CASES
+
+        for rejected in (False, True):
+            with self.subTest(rejected=rejected), tempfile.TemporaryDirectory() as temporary:
+                state = Path(temporary)
+                stop = self.campaign_fixture(state)
+                write_json(state / "controllers/resources.json", {"controlled": True})
+                native = {
+                    "status": "pass",
+                    "candidate_reference": "0" * 64,
+                    "cases": [
+                        {"id": name, "status": "pass"} for name in sorted(CASE_IDS | HOST_CASES)
+                    ],
+                }
+                with patch(
+                    "mlsecops.kube_intake_qualification.qualify",
+                    return_value=native,
+                    side_effect=Rejected("kube_intake_material_binding") if rejected else None,
+                ):
+                    if rejected:
+                        with self.assertRaisesRegex(Rejected, "kube_intake_material_binding"):
+                            intake_gate.qualify(ROOT, state)
+                    else:
+                        result = intake_gate.qualify(ROOT, state)
+                        self.assertEqual(result["status"], "pass")
+                        self.assertEqual(result["cases"][-1]["actual"], "pass")
+                        self.assertIn("kubernetes", result["artifact_hashes"])
+                        self.assertFalse(result["release_ready"])
+                stop.assert_called_once()
 
     def test_foreign_cleanup_identity_is_never_stopped(self):
         with tempfile.TemporaryDirectory() as temporary:

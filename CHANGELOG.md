@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 scoped Kubernetes intake qualification - 2026-10-13
+
+Добавлен scoped scorer probe с real Jobs, отдельным promoter readback signed evaluation/denials и binding к exact model bytes/materials свежей Docker campaign. DeadlineExceeded больше не классифицируется как обычный process crash; missing Pod принимается только по ранее сохранённому owner/UID observation. Permissions/admission не расширены, рабочий budget не сбрасывается. Полный M21 исполняется в Kubernetes workflow, contracts workflow не выдаёт gate approval. PB-17/RB-35 описывают fault mechanisms, расход трёх cluster slots, cleanup и ограничения; native outcomes в STATUS.
+
 ## R1 fresh intake evidence reconciliation - 2026-10-13
 
 Добавлен M21 dispatcher с новой controlled/Docker/SQL campaign, actual signed-object reconciliation, source/image/policy/time binding, rejection stale/partial/foreign evidence и cleanup ownership guard. Native Docker scanner может проверять exact bytes SQL candidate вместо другой модели. 15 negative runner contracts и PB-16/RB-34 покрывают диагностику неполной приёмки. Missing scoped-controller matrix остаётся обязательным inconclusive, CI не скрывает exit 2; полный M21 и R1 не объявляются завершёнными.

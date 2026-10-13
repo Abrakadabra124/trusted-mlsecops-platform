@@ -4,7 +4,17 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M07 принят в clean-checkout CI на `51ddfef`; image security gate остаётся failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
-## M21 evidence reconciliation: новый increment
+## Scoped intake M21: новый increment
+
+2026-10-13: [PB-17/RB-35](docs/operations/scoped-intake-troubleshooting.md), [карта M21](docs/intake-gate.md). Добавлен native scoped scorer probe с 12 сценариями, fresh clean evaluation, двумя signed denials и отдельным promoter readback. Same model bytes/split materials должны совпасть с Docker campaign, но разные SQL candidate identities не выдаются за один CAS record. Полный M21 runner больше не содержит безусловный missing-case placeholder: pass возможен только после реального Kubernetes component и reconciliation; без backend остаётся inconclusive. Проверенный pass ещё требует нового CI, не выводится из наличия кода.
+
+12 новых controlled methods прошли: real host parser с fake API, complete matrix, deadline classification, исчезновение Pod до terminal read, чужие UIDs, stale/foreign evidence и readback binding. Отдельные 16 gate methods дали 177/177 statements и 54/54 branches (100%). Это coverage gate module, не всех новых probe/host modules. Объединённая Linux suite прошла 66 methods в non-root/read-only/network-none container; 83 adjacent regression methods прошли на host. Source fingerprint `59aab518888eb458f5964e90f9ad46ea31b6adaa94bd0dc373f2e83c02fca653`, local image `sha256:2dc0bece7c8f7112f8c9674dee1ac3c49fee4cdeadda34202500da0390542414`, dirty checkout. Локальный рабочий cluster/SQL/holdout не менялся; native scoped evidence ожидает clean-checkout CI.
+
+Fresh local developer state `.runtime/scoped-intake-developer-20261013` подтвердил 74 component checks и три обучения: AUPRC=0.9323007296445032, dummy=0.4073333333333333, probability difference=0.0, parity error=2.086162567138672e-07. Это synthetic component evidence, full acceptance остаётся inconclusive.
+
+Deadline в Kubernetes - непланируемый owned Job с наблюдаемым UID, не parser CPU-hang; crash - неправильный request digest у штатного процесса. Receive-boundary mutations не являются эксплойтом scanner. Полная приёмка ожидает 122 checks: 66 controlled, 5 Docker, 25 SQL, 24 scoped и 2 integration. Workflow gate не игнорирует exit status, security/M08 blockers не waived. Цель R1 остаётся активной.
+
+## M21 evidence reconciliation: предыдущий increment
 
 2026-10-13: [runner и карта покрытия](docs/intake-gate.md), [PB-16/RB-34](docs/operations/intake-gate-troubleshooting.md). Общий acceptance runner теперь исполняет fresh controlled/Docker/SQL campaign, связывает exact model bytes с signed evaluation/denials и проверяет source/image/policy/trust, timestamps и полный набор case IDs. Новая SQL campaign не использует рабочий ledger; cleanup проверяет ownership и не удаляет volumes. Подмена source/evidence и пропуск обязательной проверки не превращаются в pass.
 

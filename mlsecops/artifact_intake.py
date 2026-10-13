@@ -230,7 +230,12 @@ def inspect_candidate(content, expected_digest, image, expected_image, executor)
         if isinstance(error, subprocess.TimeoutExpired) or (
             isinstance(error, Rejected)
             and str(error)
-            in {"worker_deadline", "worker_transport_deadline", "controller_worker_wait_deadline"}
+            in {
+                "worker_deadline",
+                "worker_transport_deadline",
+                "controller_worker_wait_deadline",
+                "controller_worker_deadline",
+            }
         ):
             report["reason"] = "scanner_timeout"
         elif isinstance(error, Rejected) and str(error) in {
