@@ -8,6 +8,8 @@ Local candidate улучшил измеренное падение recall, но 
 
 Review исправил четыре gaps доказательств/отказов; итоговые 22 controlled methods и 125 Linux tests pass. Второй 14-worker native replay дал идентичные model bytes/metrics, statistical fail сохранён. Thresholds и training objective не менялись.
 
+[Clean-checkout CI a252f6f](docs/evidence/robust-training-2026-10-13.md) повторил модель и все summaries с source_dirty=false. Все 10 workflows terminal: шесть functional/documentation success, четыре research/security failure. M20 723/M21 122 pass; image, poisoning и обе evasion campaigns не waived. Опубликованы aggregate evidence и digests без raw materials.
+
 ## R1 bounded evasion and domain-support abstain - 2026-10-13
 
 Добавлены ограниченный advisory core, frozen feature-space attack protocol, native Docker replay с independent intake, private primary materials и отдельный CI workflow без подавления failure. 17 negative/positive contracts, два local eight-worker replays и PB-18/RB-36. Domain-support guard подтвердил abstain, но recall drop 0.07183673469387755 превышает прежний 0.05: результат сохранён как fail, thresholds не менялись. Это T12 component, не full M09, production или release approval.

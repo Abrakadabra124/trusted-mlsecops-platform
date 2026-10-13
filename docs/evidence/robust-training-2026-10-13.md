@@ -68,6 +68,27 @@ Adjacent regression и новые contracts вместе: **121 tests pass** в 
 
 Второй native replay `98a8244c7aba42beb53eca84c8b2dd1f`, UTC `2026-10-13T20:09:37.252367Z` - `20:10:28.091595Z`, также execution complete / reconciliation pass / statistical fail. Проверены 14 workers, 47 primary files, по 12 фактических abstentions. Summaries, parity, optimization и model bytes побайтно/структурно совпали с первым replay. Новый host scripts digest `80df0322f5a97077757f00cebb08f7d7dcfd8688576b6b040a7fcdf4344ab445`, остальные input digests прежние. Чисто численное сравнение AP использует Decimal, без изменения 0.03; training, seeds и budgets не менялись.
 
-Новый workflow `Paired robust training research` не использует continue-on-error. Clean-checkout результаты добавляются после реального terminal run, не выводятся из local success исполнения. Baseline evasion workflow сохранён отдельно. Нельзя считать результатом релиза ни exit 0 unit tests, ни улучшение loss, ни полную таблицу research metrics. Adoption потребует отдельного решения, повторения poisoning/M07 и release/serving integration.
+Code commit `a252f6feb161fe852213e0d0b55f58ab18b60f8c`, [Paired robust training research](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873351): **failure из-за frozen recall-drop violations**, execution complete, primary reconciliation pass, source_dirty=false. Campaign `c3db3d38980d4b858a6e1dc7517d2280`, UTC `2026-10-13T20:12:11.847320Z` - `20:13:02.181392Z`. Все summaries, модели, protocol и host scripts совпали с reviewed local replay. Optimization и parity также прежние. CI image `sha256:0ad3713e5470ebe24f94406e92682335befc417d23664b156591a0bdbb869269`; другой build image не выдаётся за bit-for-bit воспроизведение container image.
+
+| Workflow | Run | Результат |
+| --- | --- | --- |
+| Paired robust training research | [38460873351](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873351) | failure: candidate не прошёл recall drop; 14 workers завершены |
+| Frozen evasion and domain guard | [38460873381](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873381) | failure: прежние 88 lost TP, drop 0.071836734694 |
+| Developer runtime qualification | [38460873329](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873329) | success: 74 checks, три runs, probability difference=0.0 |
+| Storage role and TLS qualification | [38460873443](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873443) | success: M03 431, M07 97 cases pass |
+| MLflow tracking compatibility and private service | [38460873291](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873291) | success: M06 18 cases pass |
+| Intake evidence contracts | [38460873405](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873405) | success: controlled contracts, не самостоятельный full M21 |
+| Documentation integrity | [38460873483](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873483) | success |
+| Worker and storage image audit | [38460873463](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873463) | failure: все четыре scans исполнены, findings сохранены |
+| Frozen poisoning research matrix | [38460873386](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873386) | failure: primary integrity pass, 10 statistical violations |
+| Kubernetes isolation qualification | [38460873478](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38460873478) | success: M20 723, M21 122 cases pass |
+
+Все десять workflows terminal: шесть success, четыре failure. M20 завершён UTC `2026-10-13T20:25:48.067625Z`, M21 `20:28:09.893747Z`, source revision тот же; M21 явно source_dirty=false. Kubernetes worker image `sha256:0909506d353ac3bb2112c818a1dfb4faf38bb57fb3de65656ab149c641eea3f9`, source fingerprint прежний `20db5ec7...`. M21 повторно проверил пять Docker native, 25 SQL cases и scoped-controller matrix. Это regression принятых synthetic gates, не общий M18 release pass. GitHub job-log API проверен после завершения, raw logs остаются только локально.
+
+Poisoning campaign `bddfc5751d0a4e018a4922dd378e1f1e`, execution complete/source_dirty=false, reconciliation проверил 35 cases/251 files. Report digest `6937213bc3fa47391043b6bccd2a4903c7846d4297e2c3e1d1fccbbcbc0a5c24`, materials `ec0018352622e402845a46ed7951625eef6cea21d2280071049d9f571a1e2080`. Улучшение evasion другой research-модели не отменяет эти baseline poisoning результаты.
+
+Image audit `e26c4e37cb2e4831b60219f81fd30f12`, source_dirty=false: Critical/High/Unknown counts worker 0/56/0, storage 9/115/19, worker candidate 0/55/0, storage candidate 1/85/0. Это package finding counts, не число доказанных exploit paths. Candidate compatibility pass не разрешает security adoption.
+
+Workflow не использует continue-on-error. Baseline evasion workflow сохранён отдельно. Нельзя считать результатом релиза ни exit 0 unit tests, ни улучшение loss, ни полную таблицу research metrics. Adoption потребует отдельного решения, повторения poisoning/M07 и release/serving integration.
 
 Воспроизведение и ветви диагностики: [PB-19/RB-37](../operations/robust-training-troubleshooting.md). Raw train/probes/models/requests/keys остаются private; здесь только synthetic aggregates/digests.

@@ -8,6 +8,8 @@
 
 При реализации действительно встретился `source_lock_mismatch_explicit_update_required` до запуска workers. Причина установлена: явное объявление SciPy в dependencies изменило uv.lock, хотя версия уже была установлена транзитивно. Generated output перепроверен побайтно, обновлена только provenance-привязка uv.lock в data.lock. Ошибка сохранена в private log; данные и thresholds не менялись. Отключать validate_lock нельзя.
 
+[Проверенное evidence на a252f6f](../evidence/robust-training-2026-10-13.md): два local replays и clean-checkout CI подтвердили одинаковые model bytes/metrics. Candidate recall drop 0.052245/0.062241/0.061433 остаётся выше 0.05; выполнение завершено, exit 1 корректен. Fresh owned bootstrap, 14 workers и semantic primary reconciliation проверены. Это установленный statistical failure, не незавершённое обучение. Rollback production или исправление самого evasion-риска этим evidence не доказаны.
+
 ## RB-37: read-only диагностика
 
 ```powershell
