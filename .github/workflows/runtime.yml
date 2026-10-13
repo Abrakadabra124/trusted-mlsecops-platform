@@ -44,6 +44,8 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-model-contract --fail-under=100
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
+      - name: Initialize owned developer state before writing evidence
+        run: uv run --locked python -m mlsecops bootstrap
       - name: Independent artifact intake contracts and native failures
         run: |
           uv run --locked ruff check scripts/artifact_intake_qualification.py scripts/artifact_intake_fixture.py scripts/artifact_intake_native.py
@@ -53,7 +55,6 @@ jobs:
           uv run --locked python -m scripts.artifact_intake_native
       - name: Verify frozen source and intake gate
         run: |
-          uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.boundary_probe_qualification
           uv run --locked python -m mlsecops.authority_contract_qualification
           uv run --locked coverage run --source=mlsecops.prediction_protocol --data-file=.runtime/evidence/protocol.coverage -m mlsecops.prediction_protocol_qualification

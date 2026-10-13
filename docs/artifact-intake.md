@@ -1,6 +1,6 @@
 # Независимый приём ML-артефакта
 
-Компонент T27/M21 от 2026-10-13. [ADR 0024](decisions/0024-independent-artifact-intake.md), [PB-14/RB-29/RB-30](operations/artifact-intake-troubleshooting.md). Полный M21 ещё не подключён к acceptance runner. Этот компонент не разрешает release.
+Компонент T27/M21 от 2026-10-13. [ADR 0024](decisions/0024-independent-artifact-intake.md), [PB-14/RB-29/RB-30/RB-31](operations/artifact-intake-troubleshooting.md). Полный M21 ещё не подключён к acceptance runner. Этот компонент не разрешает release.
 
 ## Что и зачем
 
@@ -46,7 +46,7 @@ Receipt schema 1: input digest/bytes, inspection ID, request/response hashes, to
 
 ## Проверки и оставшаяся работа
 
-Controlled suite: 20 методов, реальный небольшой экспорт для parser tests, подделки protocol и role/path tests. Linux выполняет настоящий symlink case. Windows host без CreateSymbolicLinkPrivilege не может создать такой fixture; это не исправляется отключением теста или запуском Codex администратором. Все 20 выполняются в Linux/CI, 19 остальных отдельно проверяются на Windows.
+Controlled suite: 21 метод, реальный небольшой экспорт для parser tests, подделки protocol и role/path tests, ownership-before-evidence regression. Linux выполняет настоящий symlink case. Windows host без CreateSymbolicLinkPrivilege не может создать такой fixture; это не исправляется отключением теста или запуском Codex администратором. Все 21 выполняются в Linux/CI, 20 остальных отдельно проверяются на Windows.
 
 Native Docker suite: настоящее обучение, чистый intake, renamed pickle, deadline/crash injection, повторный clean scan после сбоев. Fault injection заменяет только процесс в собственном network-none контейнере на sleep или exit 19. Это настоящие отказ процесса/дедлайн и проверка cleanup, но не воспроизведение уязвимости ONNX и не native Kubernetes failure test. Developer qualification проверяет путь training -> intake -> prediction -> signed evaluation в трёх fresh runs.
 

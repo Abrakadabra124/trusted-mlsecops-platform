@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops import artifact_intake, model, pipeline, worker
-from mlsecops.contracts import Rejected, canonical, digest, read_json
+from mlsecops.bootstrap import initialize
+from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from mlsecops.datasets import generate
 from mlsecops.signing import decode64
 
@@ -37,6 +38,20 @@ class ArtifactIntakeContracts(unittest.TestCase):
         self.assertEqual(receipt["inspected"], 1)
         self.assertEqual(receipt["scan"]["inspected_nodes"], 2)
         artifact_intake.validate_receipt(receipt, self.content, IMAGE)
+
+    def test_evidence_must_not_precede_workspace_ownership(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            unowned = state / "unowned"
+            write_json(unowned / "evidence/intake.json", {"fixture": True})
+            with patch("mlsecops.bootstrap.collect", return_value={"fixture": True}):
+                with self.assertRaisesRegex(Rejected, "refusing_nonempty_unowned_workspace"):
+                    initialize(root, unowned)
+                owned = state / "owned"
+                original = initialize(root, owned)
+                write_json(owned / "evidence/intake.json", {"fixture": True})
+                self.assertEqual(initialize(root, owned), original)
 
     def test_scanner_has_no_features_labels_or_signer_and_does_not_create_runtime(self):
         captured = []
