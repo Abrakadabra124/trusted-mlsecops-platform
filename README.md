@@ -4,6 +4,8 @@
 
 **Статус: R1 в разработке, первый рабочий developer preview.** Уже доступны синтетические данные, подписанные manifests, контейнерное обучение, ONNX-предсказания и отдельный scorer с подписанным evaluation report. Полная приёмка M01-M23 пока не пройдена: preview не является trusted release или production-платформой. Исследование: 2026-10-06; начало реализации: **2026-10-07**.
 
+Перед оценкой теперь обязателен [отдельный intake модели](docs/artifact-intake.md): проверка exact bytes в изолированном worker, защита от stale/partial scan и receipt в signed evaluation schema 2. [Плейбук и ранбуки](docs/operations/artifact-intake-troubleshooting.md) описывают воспроизведение, crash/timeout, восстановление и встреченные Windows/CI проблемы. Это компонент, не полный M21 или release approval.
+
 ## Запустить рабочий пример
 
 Проверка устойчивости: [полная poisoning matrix 30+5](docs/poisoning-benchmark.md). Локальное исследование выявило 10 нарушений targeted threshold при 5% poisoning; CI не скрывает такой fail. Это исследовательский результат и release blocker, не заявление универсальной защиты.
