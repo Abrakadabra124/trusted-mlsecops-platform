@@ -10,7 +10,7 @@
 
 ## Запустить рабочий пример
 
-Для испытания настоящего upstream candidate добавлен [PB-26](docs/operations/candidate-serving-troubleshooting.md): неизменённый signed proposal -> отдельный qualification permit -> isolated ONNX/HTTP -> source readback. Permit не заменяет release approval и не скрывает failed gates. [Проверки и ограничения](docs/evidence/candidate-serving-2026-10-15.md).
+Для испытания настоящего upstream candidate добавлен [PB-26](docs/operations/candidate-serving-troubleshooting.md): неизменённый signed proposal -> отдельный qualification permit -> isolated ONNX/HTTP -> source readback. **39/39 native cases pass в clean-checkout CI `0a47b7b`**. Permit не заменяет release approval и не скрывает failed gates. [Проверки, terminal CI matrix и ограничения](docs/evidence/candidate-serving-2026-10-15.md).
 
 Для promotion journal добавлен [явный backup v2 и независимый restore](docs/operations/promotion-recovery-troubleshooting.md): общий snapshot CAS/journal, внешний backup-id pin и maintenance при import. [Evidence и ограничения](docs/evidence/promotion-recovery-2026-10-14.md). Восстановленная БД не становится автоматически trusted serving.
 

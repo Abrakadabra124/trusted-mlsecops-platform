@@ -1,6 +1,6 @@
 # ADR 0032: Испытание настоящего candidate без фиктивной release acceptance
 
-Дата: 2026-10-15 (Europe/Moscow). Статус: реализация. Scope: T15, отдельная qualification phase перед final approval. Полный M12/R1 ещё не принят. UTC campaign timestamps сохраняются отдельно.
+Дата: 2026-10-15 (Europe/Moscow). Статус: реализован и проверен в scoped qualification. На `0a47b7b` 39 native cases pass, [evidence](../evidence/candidate-serving-2026-10-15.md). Scope: T15, отдельная qualification phase перед final approval. Полный M12/R1 ещё не принят. UTC campaign timestamps сохраняются отдельно.
 
 ## Проблема
 

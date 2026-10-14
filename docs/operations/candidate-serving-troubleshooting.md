@@ -1,6 +1,6 @@
 # PB-26 / RB-50 / RB-51: Испытание настоящей модели без разрешения выпуска
 
-Владельцы: platform owner для стенда, ML owner для source/evaluation, security owner для ключей и отзыва. Scope: synthetic CPU qualification, не production. [ADR 0032](../decisions/0032-candidate-serving-qualification.md), [проверенное evidence](../evidence/candidate-serving-2026-10-15.md).
+Владельцы: platform owner для стенда, ML owner для source/evaluation, security owner для ключей и отзыва. Scope: synthetic CPU qualification, не production. [ADR 0032](../decisions/0032-candidate-serving-qualification.md), [проверенное evidence](../evidence/candidate-serving-2026-10-15.md): на `0a47b7b` 39/39 native checks pass в clean-checkout CI.
 
 Qualification permit - подписанное разрешение испытать конкретный candidate в конкретной короткой campaign. Это не release approval: permit не утверждает, что M01-M23 прошли. Полные failed/inconclusive gates продолжают запрещать выпуск. У отдельного loopback API ready означает проверенную загрузку кандидата для испытания, не готовность к production.
 
@@ -64,6 +64,8 @@ Reference response получен отдельным ONNX worker на тех ж�
 **Rollback и эскалация:** production head эта процедура не меняет, поэтому rollback production alias не нужен. При неопределённом cleanup сохранить owned resource identifiers приватно, подтвердить workspace/container/volume ownership и обратиться к platform owner. При изменении source CAS/budget прекратить повторы и расследовать с security owner; успешный HTTP не компенсирует такой дефект. Global prune/reset и отключение TLS/подписей запрещены.
 
 **Частичный bootstrap:** review выявил отсутствие cleanup при startup/migration error после создания storage marker. Теперь helper читает и проверяет реальные ownership/configuration, затем удаляет только свои container/network/volume и проверяет их отсутствие через успешные Docker list requests перед удалением private state. Если bootstrap прерван до marker, ownership не подтверждён или Docker недоступен, автоматическое удаление запрещено: `reader_bootstrap_cleanup_unconfirmed`/ошибка ownership, state сохраняется для оператора. Это намеренное ограничение автоматического recovery, не обещание отсутствия orphan resources при любом сбое. Controlled regression проверяет обе ветки и отказ при оставшихся ресурсах; реальный partial-bootstrap fault injection пока не проведён.
+
+Readback опирается на отдельные запросы списка [контейнеров](https://docs.docker.com/reference/cli/docker/container/ls/), [сетей](https://docs.docker.com/reference/cli/docker/network/ls/) и [volumes](https://docs.docker.com/reference/cli/docker/volume/ls/). Пустой stdout команды с ошибкой не считается доказательством отсутствия ресурса. Успешная native cleanup проверена в этой campaign; это не проверка каждой возможной ошибки Docker daemon.
 
 ## RB-51: Срок истёк во время trust read или роли используют один ключ
 

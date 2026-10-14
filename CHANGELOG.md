@@ -2,6 +2,8 @@
 
 ## R1 actual-candidate serving qualification - 2026-10-15
 
+На `0a47b7b` clean-checkout CI подтвердил 39 actual-candidate HTTP/ONNX/TLS cases, golden error 0.0 и model revocation -> 503. Все 10 workflow завершены: 6 success / 4 failure; image/ML blockers сохранены. Полная [terminal matrix](docs/evidence/candidate-serving-2026-10-15.md) не является M18 acceptance.
+
 Добавлены purpose-separated short-lived permit и qualification-only Reader неизменённого upstream signed proposal. Same Engine/HTTP/isolated worker проверяются без переноса all-pass contract reports на настоящий candidate. Read-only source snapshot/readback, отдельная disposable trust authority, release denial и 14 дополнительных HTTP boundary/overload checks. Исправлены expiry-after-refresh, Base64 key alias и fixture-only import leakage; production Reader/config не меняются. [PB-26/RB-50/RB-51](docs/operations/candidate-serving-troubleshooting.md), [evidence](docs/evidence/candidate-serving-2026-10-15.md). Полные M12/R1 и final approval не объявляются завершёнными.
 
 ## R1 serving resource и startup cleanup corrections - 2026-10-14
