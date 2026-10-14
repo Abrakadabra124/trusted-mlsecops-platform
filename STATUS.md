@@ -1,8 +1,12 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-14**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-15**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
+
+## Испытание actual candidate без фиктивного release approval
+
+После `afdc05c` добавлен [ADR 0032](docs/decisions/0032-candidate-serving-qualification.md): immutable upstream proposal, отдельный короткий qualification permit и read-only HTTP replay на реальных model bytes. Production approval и all-pass fixtures не используются как разрешение выпуска. Локально 129 methods pass, qualification Reader 94% coverage; исправлены review expiry race, Base64 key alias, startup cleanup и stale report. [PB-26/RB-50/RB-51](docs/operations/candidate-serving-troubleshooting.md), [evidence](docs/evidence/candidate-serving-2026-10-15.md). Fresh native CI ещё не подтверждён, полный M12/R1 остаётся открыт.
 
 ## Постоянный worker и inference API: T15 increment
 

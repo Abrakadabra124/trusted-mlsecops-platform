@@ -12,11 +12,12 @@ from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.datasets import FEATURES
 from mlsecops.inventory import command
 from mlsecops.serving_runtime import Worker
-from scripts import model_contract_qualification as model_fixtures
-from scripts.artifact_intake_fixture import receipt as intake_receipt
 
 
 def bind_real_runtime(fixture, image):
+    from scripts import model_contract_qualification as model_fixtures
+    from scripts.artifact_intake_fixture import receipt as intake_receipt
+
     model_fixtures.ModelContractTests.setUpClass()
     generated = model_fixtures.ModelContractTests
     authorization = fixture.fixture
@@ -122,7 +123,7 @@ def site(engine):
                 raise Rejected("serving_native_shutdown")
 
 
-def check_http(services, reader, golden, confirmed, rejected):
+def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
     engine = serving.Engine(reader)
     request = services.enter_context(site(engine))
     features, expected = golden
@@ -138,7 +139,7 @@ def check_http(services, reader, golden, confirmed, rejected):
         abs(item["score"] - score)
         for item, score in zip(result["predictions"], expected, strict=True)
     )
-    confirmed("http-golden-real-CPU-parity", status == 200 and maximum_error <= 1e-5)
+    confirmed("http-golden-CPU-consistency", status == 200 and maximum_error <= 1e-5)
     confirmed(
         "http-running-digest-bound",
         result["model_sha256"] == engine.loaded.model_sha256
@@ -160,6 +161,8 @@ def check_http(services, reader, golden, confirmed, rejected):
     )
     confirmed("http-oversized-413", request("/v1/predict", b"x" * 65537)[0] == 413)
     confirmed("client-errors-do-not-disable-model", request("/readyz")[0] == 200)
+    if exercise is not None:
+        exercise(engine, request, body)
     rejected(
         "native-malformed-model-never-ready",
         lambda: Worker(b"not-onnx", reader.image).start(),

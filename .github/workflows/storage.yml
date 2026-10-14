@@ -128,3 +128,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-serving --fail-under=85
       - name: Disposable actual HTTP and isolated ONNX serving with current SQL trust
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable --worker-image trusted-mlsecops:dev
+      - name: Candidate qualification permission and actual HTTP matrix contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-candidate-serving --source=scripts.candidate_serving_reader -m unittest scripts.candidate_serving_reader_qualification
+          uv run --locked coverage report --data-file=.coverage-candidate-serving --fail-under=90
+          uv run --locked python -m unittest scripts.candidate_serving_native_qualification
+      - name: Unchanged actual candidate in isolated HTTP qualification without release approval
+        run: uv run --locked python -m scripts.candidate_serving_native --state .runtime --confirm-disposable

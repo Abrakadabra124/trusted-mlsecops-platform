@@ -5,7 +5,7 @@ from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops.contracts import Rejected, decode, read_json
+from mlsecops.contracts import Rejected, decode, read_json, write_json
 from scripts import release_reader_native as native
 
 
@@ -57,9 +57,10 @@ class ReaderDiagnosticContracts(unittest.TestCase):
                 "container_id": "owned",
                 "workspace_id": "workspace",
                 "network": "net",
+                "network_id": "network-owned",
                 "volume": "vol",
             }
-            for field in (None, "container_id", "workspace_id"):
+            for field in (None, "container_id", "workspace_id", "network_id", "volume"):
                 with self.subTest(field=field), ExitStack() as stack:
                     observed = {**owner, **({field: "foreign"} if field else {})}
                     stack.enter_context(patch.object(native.bootstrap, "initialize"))
@@ -70,6 +71,7 @@ class ReaderDiagnosticContracts(unittest.TestCase):
                         )
                     )
                     docker = stack.enter_context(patch.object(native.storage_bootstrap, "docker"))
+                    docker.return_value.stdout = b""
                     remove = stack.enter_context(patch.object(native.shutil, "rmtree"))
                     if field:
                         with self.assertRaisesRegex(Rejected, "reader_cleanup_ownership"):
@@ -82,8 +84,78 @@ class ReaderDiagnosticContracts(unittest.TestCase):
                             state, state, "campaign", "models", 15444
                         ) as destination:
                             self.assertEqual(destination.parent, (state / "evidence").resolve())
-                        self.assertEqual(docker.call_count, 3)
+                        self.assertEqual(docker.call_count, 6)
                         remove.assert_called_once_with(destination)
+
+    def test_bootstrap_failure_after_marker_cleans_only_verified_owned_resources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            owner = {
+                "container_id": "owned",
+                "workspace_id": "workspace",
+                "network": "net",
+                "network_id": "network-owned",
+                "volume": "vol",
+            }
+
+            def fail_after_marker(destination, port):
+                write_json(destination / "storage.json", owner)
+                raise Rejected("storage_startup_deadline")
+
+            with (
+                patch.object(native.bootstrap, "initialize"),
+                patch.object(native.storage_bootstrap, "bootstrap", side_effect=fail_after_marker),
+                patch.object(native.storage_bootstrap, "validate", return_value=owner) as validate,
+                patch.object(native.storage_bootstrap, "docker") as docker,
+                patch.object(native.shutil, "rmtree") as remove,
+            ):
+                docker.return_value.stdout = b""
+                with self.assertRaisesRegex(Rejected, "^storage_startup_deadline$"):
+                    with native.disposable(state, state, "campaign", "models", 15444):
+                        self.fail("bootstrap failure must not enter qualification")
+                self.assertEqual(validate.call_count, 2)
+                self.assertEqual(docker.call_count, 6)
+                remove.assert_called_once()
+
+    def test_bootstrap_without_identity_reports_unconfirmed_cleanup_and_preserves_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            with (
+                patch.object(native.bootstrap, "initialize"),
+                patch.object(
+                    native.storage_bootstrap, "bootstrap", side_effect=Rejected("partial")
+                ),
+                patch.object(native.storage_bootstrap, "docker") as docker,
+                patch.object(native.shutil, "rmtree") as remove,
+            ):
+                with self.assertRaisesRegex(Rejected, "reader_bootstrap_cleanup_unconfirmed"):
+                    with native.disposable(state, state, "campaign", "models", 15444):
+                        self.fail("partial bootstrap must not enter qualification")
+                docker.assert_not_called()
+                remove.assert_not_called()
+
+    def test_cleanup_keeps_private_state_if_resources_still_exist(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            owner = {
+                "container_id": "owned",
+                "workspace_id": "workspace",
+                "network": "net",
+                "network_id": "network-owned",
+                "volume": "vol",
+            }
+            with (
+                patch.object(native.bootstrap, "initialize"),
+                patch.object(native.storage_bootstrap, "bootstrap"),
+                patch.object(native.storage_bootstrap, "validate", return_value=owner),
+                patch.object(native.storage_bootstrap, "docker") as docker,
+                patch.object(native.shutil, "rmtree") as remove,
+            ):
+                docker.return_value.stdout = b"still-present"
+                with self.assertRaisesRegex(Rejected, "reader_cleanup_unconfirmed"):
+                    with native.disposable(state, state, "campaign", "models", 15444):
+                        pass
+                remove.assert_not_called()
 
     def test_path_escape_is_rejected_before_bootstrap(self):
         with (

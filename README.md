@@ -10,6 +10,8 @@
 
 ## Запустить рабочий пример
 
+Для испытания настоящего upstream candidate добавлен [PB-26](docs/operations/candidate-serving-troubleshooting.md): неизменённый signed proposal -> отдельный qualification permit -> isolated ONNX/HTTP -> source readback. Permit не заменяет release approval и не скрывает failed gates. [Проверки и ограничения](docs/evidence/candidate-serving-2026-10-15.md).
+
 Для promotion journal добавлен [явный backup v2 и независимый restore](docs/operations/promotion-recovery-troubleshooting.md): общий snapshot CAS/journal, внешний backup-id pin и maintenance при import. [Evidence и ограничения](docs/evidence/promotion-recovery-2026-10-14.md). Восстановленная БД не становится автоматически trusted serving.
 
 Следующий T14 component - [отдельная online trust authority и lease](docs/operations/trust-troubleshooting.md): root-signed текущая policy, отзыв материалов/ключей, deadline максимум 60 s и проверка в SDK promotion. [Результаты и ограничения](docs/evidence/online-trust-2026-10-14.md). Endpoint integration и полная M11-приёмка ещё не завершены.

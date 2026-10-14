@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 actual-candidate serving qualification - 2026-10-15
+
+Добавлены purpose-separated short-lived permit и qualification-only Reader неизменённого upstream signed proposal. Same Engine/HTTP/isolated worker проверяются без переноса all-pass contract reports на настоящий candidate. Read-only source snapshot/readback, отдельная disposable trust authority, release denial и 14 дополнительных HTTP boundary/overload checks. Исправлены expiry-after-refresh, Base64 key alias и fixture-only import leakage; production Reader/config не меняются. [PB-26/RB-50/RB-51](docs/operations/candidate-serving-troubleshooting.md), [evidence](docs/evidence/candidate-serving-2026-10-15.md). Полные M12/R1 и final approval не объявляются завершёнными.
+
 ## R1 serving resource и startup cleanup corrections - 2026-10-14
 
 Native `d0d4423` подтвердил 34 HTTP/ONNX/TLS cases, но review обнаружил расхождение resource profile и ошибки thread-start/cleanup ownership. Исправлены Docker request/readback и signed runtime descriptor на 1 CPU / 1 GiB; старый descriptor отвергается даже с корректной подписью. Heartbeat публикуется после start, Channel завершает child при thread failure, Engine владеет Worker до изменяющего one-shot start. Добавлены negative regressions и диагностические ветви [RB-48/RB-49](docs/operations/serving-troubleshooting.md). [Evidence](docs/evidence/serving-api-2026-10-14.md) разделяет предыдущий native commit и последующие corrections. Full M12/R1 остаются открытыми.

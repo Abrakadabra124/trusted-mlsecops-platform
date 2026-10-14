@@ -21,7 +21,6 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_child, write_json
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.sandbox import resolve_image
-from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 
 
@@ -34,7 +33,13 @@ def disposable(root, state, campaign, suffix, port):
     bootstrap.initialize(root, destination)
     owned = None
     try:
-        storage_bootstrap.bootstrap(destination, port)
+        try:
+            storage_bootstrap.bootstrap(destination, port)
+        except Exception:
+            if not safe_child(destination, "storage.json").is_file():
+                raise Rejected("reader_bootstrap_cleanup_unconfirmed") from None
+            owned = storage_bootstrap.validate(destination)
+            raise
         owned = storage_bootstrap.validate(destination)
         yield destination
     finally:
@@ -45,17 +50,36 @@ def disposable(root, state, campaign, suffix, port):
             if (
                 destination.resolve().parent != (state / "evidence").resolve()
                 or destination.is_symlink()
-                or observed["container_id"] != owned["container_id"]
-                or observed["workspace_id"] != owned["workspace_id"]
+                or any(
+                    observed[field] != owned[field]
+                    for field in ("container_id", "workspace_id", "network_id", "volume")
+                )
             ):
                 raise Rejected("reader_cleanup_ownership")
             storage_bootstrap.docker(["rm", "--force", observed["container_id"]])
-            storage_bootstrap.docker(["network", "rm", observed["network"]])
+            storage_bootstrap.docker(["network", "rm", observed["network_id"]])
             storage_bootstrap.docker(["volume", "rm", observed["volume"]])
+            queries = (
+                [
+                    "container",
+                    "ls",
+                    "--all",
+                    "--quiet",
+                    "--no-trunc",
+                    "--filter",
+                    f"id={observed['container_id']}",
+                ],
+                ["network", "ls", "--quiet", "--filter", f"id={observed['network_id']}"],
+                ["volume", "ls", "--quiet", "--filter", f"name=^{observed['volume']}$"],
+            )
+            if any(storage_bootstrap.docker(query).stdout.strip() for query in queries):
+                raise Rejected("reader_cleanup_unconfirmed")
             shutil.rmtree(destination)
 
 
 def qualify(root, state, image=None):
+    from scripts import promotion_qualification as fixtures
+
     state = Path(state).resolve()
     source = storage_bootstrap.validate(state)
     original_ledger = storage_restore.ledger(source["name"])
