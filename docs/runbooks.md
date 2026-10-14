@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Release proposal/authorization, PB-20/RB-38/RB-39](operations/release-authorization-troubleshooting.md). Диагностика отказа, schema/time binding, interrupted publication, idempotent retry и rollback без удаления evidence. Controlled и native результаты раздельно в [evidence](evidence/release-authorization-2026-10-14.md).
+
 ## Проверенные локальные процедуры
 
 - [Robust training, PB-19/RB-37](operations/robust-training-troubleshooting.md). Paired baseline/candidate, fixed probes/utility guards, диагностика convergence и source-lock mismatch без ослабления policy. Controlled и native outcomes раздельно в STATUS.

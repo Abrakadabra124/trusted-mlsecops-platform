@@ -88,6 +88,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T13
 - [ ] Release bundle и promotion verifier. Зависимости: T12, T25, T27. Gate: M10.
+- Increment 2026-10-14: [release descriptor, supplemental materials и отдельная авторизация](../docs/release-authorization.md); SQL proposal readback и fail-closed M01-M23 report contract. [PB-20/RB-38/RB-39](../docs/operations/release-authorization-troubleshooting.md), [evidence](../docs/evidence/release-authorization-2026-10-14.md). Durable state transition/concurrency/replay, scoped controller, полный общий evidence bundle и M10 ещё нужны. Не использовать controlled all-pass fixtures для native approval.
 - Foundation 2026-10-11: [signed candidate materials](../docs/material-bundle.md), 9-object verification closure, offline signature/binding checks, SQL publication/serving readback, 12 native checks. [PB-11/RB-22/RB-23](../docs/operations/material-bundle-troubleshooting.md). Capsule unapproved; full release schema, ML-BOM/model card, approval, full gates и promotion state machine ещё нужны. Это не M10 pass и не закрытие T13.
 - Результат: versioned format, signatures/envelopes, subject/environment/policy binding, approval и idempotent state transition.
 - Проверка: весь negative promotion suite; данные, model, report и runtime image проверяются как один release.

@@ -69,6 +69,8 @@ flowchart LR
 
 ## Неделя 8: Bundle, approval и отзыв доверия
 
+Исполняемый порядок T13 от 2026-10-14: (1) полный digest-bound release descriptor поверх существующей candidate capsule, включая feature contract, model card, ML-BOM, dependency lock и runtime profile; (2) отдельно подписанные promotion policy, assurance и approval с внешним trust root, exact subject/environment/policy binding и отказом при любом отсутствующем/непринятом gate; (3) durable promotion state machine и concurrency/replay checks; (4) scoped controller и serving integration. Первые два шага проверяются controlled positive/negative matrix и реальным чтением candidate из disposable SQL. Реальная отсутствующая приёмка не заменяется искусственно зелёными reports. M10 остаётся открыт до проверки переходов состояния и integration; M11/M12 не закрываются offline signature tests.
+
 **Задачи:** T13, T14, интеграция T25. Реализовать signed bundle и отдельное approval; закрепить signer/evaluator/policy/environment binding, idempotency, replay prevention и revocation. Связать inventory с verifier и транзитивным отзывом. Изменение alias, model bytes и evaluation report не должно обходить gate.
 
 **Результат:** проверяемый promotion state machine и revocation tests. **Приёмка:** M10, M11. **Риск:** локальные keys остаются lab-допущением, не заменяют production workload identity/KMS.

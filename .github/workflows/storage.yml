@@ -53,6 +53,12 @@ jobs:
         run: |
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.storage_bootstrap
+      - name: Release bundle, authority separation and fail-closed report contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-release --source=mlsecops.release_policy,mlsecops.release_bundle,mlsecops.release_authorization -m unittest scripts.release_policy_qualification scripts.release_bundle_qualification scripts.release_authorization_qualification
+          uv run --locked coverage report --data-file=.coverage-release --fail-under=100
+          uv run --locked coverage run --data-file=.coverage-release-native --source=scripts.release_native -m scripts.release_native_qualification
+          uv run --locked coverage report --data-file=.coverage-release-native --fail-under=95
       - name: Candidate material bundle contracts and diagnostic runner
         run: |
           uv run --locked coverage run --source=mlsecops.material_bundle --data-file=.coverage-material-bundle -m scripts.material_bundle_qualification
@@ -67,6 +73,8 @@ jobs:
         run: uv run --locked python -m scripts.candidate_lineage_native --state .runtime
       - name: Unapproved material bundle and serving-role verified readback
         run: uv run --locked python -m scripts.material_bundle_native --state .runtime
+      - name: Signed release proposal, SQL readback and missing assurance denial
+        run: uv run --locked python -m scripts.release_native --state .runtime
       - name: Consistent backup and independent storage recovery
         run: uv run --locked python -m mlsecops.storage_recovery_qualification
       - name: M07 fresh evaluation, signed readback, leakage contracts and durable budget

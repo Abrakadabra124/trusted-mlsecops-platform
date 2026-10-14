@@ -1,8 +1,14 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-13**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-14**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
+
+## Release proposal и отдельная авторизация
+
+2026-10-14: [контракт](docs/release-authorization.md), [ADR 0026](docs/decisions/0026-release-authorization.md), [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md). Добавлены подписанный descriptor с шестью дополнительными документами, внешний policy pin, отдельные publisher/assessor/approver и проверка полного набора M01-M23. Proposal можно сохранить в immutable SQL releases, но это не active promotion. Реальный candidate без assurance должен получить отказ, не test-generated pass.
+
+20 controlled security methods pass, core 215 statements/86 branches 100%; 6 controlled runner methods pass, runner 98%. Исправлены несовместимость case schema/ID и assurance до начала policy. Ранбуки включают диагностику, безопасный retry после partial publication, expiry и rollback без reset/TLS bypass. [Evidence](docs/evidence/release-authorization-2026-10-14.md) отделяет эти tests от pending native/CI. T13/M10, state machine, revocation и serving integration остаются открытыми; release_ready=false.
 
 ## Robust training: mitigation проверена, порог не пройден
 
