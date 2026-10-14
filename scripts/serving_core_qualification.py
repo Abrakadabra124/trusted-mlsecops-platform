@@ -48,6 +48,41 @@ class ServingCoreContracts(unittest.TestCase):
         self.worker.close.assert_called_once()
         self.assertIsNone(self.engine.loaded)
 
+    def test_heartbeat_start_failure_keeps_cleanup_safe_and_idempotent(self):
+        with patch.object(
+            serving.threading.Thread, "start", side_effect=RuntimeError("PRIVATE-CANARY")
+        ):
+            with self.assertRaisesRegex(Rejected, "^serving_activation_rejected$"):
+                self.engine.activate()
+        self.assertIsNone(self.engine.loaded)
+        self.worker.close.assert_called_once()
+        self.engine.close()
+        self.engine.close()
+        self.assertIsNone(self.engine.heartbeat)
+
+    def test_activation_can_retry_heartbeat_start_after_transient_failure(self):
+        with patch.object(
+            serving.threading.Thread, "start", side_effect=RuntimeError("PRIVATE-CANARY")
+        ):
+            with self.assertRaises(Rejected):
+                self.engine.activate()
+        self.engine.activate()
+        self.assertTrue(self.engine.heartbeat.is_alive())
+        self.assertTrue(self.engine.check()["ready"])
+
+    def test_failed_worker_start_retains_cleanup_handle_until_confirmed(self):
+        self.worker.start.side_effect = Rejected("controlled-start-failure")
+        self.worker.close.side_effect = OSError("PRIVATE-CANARY")
+        try:
+            with self.assertRaisesRegex(Rejected, "^serving_cleanup_unconfirmed$"):
+                self.engine.activate()
+            self.assertIsNone(self.engine.loaded)
+            self.assertIs(self.engine.worker, self.worker)
+        finally:
+            self.worker.close.side_effect = None
+        self.engine.close()
+        self.assertIsNone(self.engine.worker)
+
     def test_revocation_after_inference_discards_result_and_closes_worker(self):
         self.engine.activate()
         self.reader.check.side_effect = [None, Rejected("revoked")]

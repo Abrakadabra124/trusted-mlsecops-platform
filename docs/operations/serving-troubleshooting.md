@@ -58,4 +58,23 @@ uv run --locked python -m scripts.release_reader_native --state .runtime --confi
 - Regression test показал slot leak в обратную сторону: отменённый HTTP task освобождал слот, хотя synchronous inference продолжался. Исправлено shielded execution с deferred release callback; callback также забирает exception, не печатая private detail.
 - AutoRemove может удалить контейнер между `container ls` и `rm`. Ошибка rm не считается доказательством живого orphan: проверяется конечное отсутствие. Если контейнер всё ещё есть, cleanup остаётся unconfirmed и handle сохраняется.
 - Positive reader fixture раньше содержала opaque `controlled-no-model-parser`, а не ONNX. Для runtime campaign создана отдельная настоящая synthetic модель и заново связаны model/capsule/release/report subjects. Test assurance остаётся явно fixture; его не выдают за реальную M01-M23 приёмку.
-- [Evidence](../evidence/serving-api-2026-10-14.md) хранит фактические local/native результаты и ограничения, включая отсутствие независимого review и production deployment.
+- Source review нашёл несовпадение CPU/RAM между acceptance, Docker и signed runtime-profile. Исправлен общий контракт 1 vCPU / 1 GiB; regression отвергает старый профиль даже после корректной переподписи. Это исправление проектного дефекта, не ручная миграция существующего release.
+- Scoped reviewer воспроизвёл незапущенный heartbeat после `Thread.start()` failure: `close()` бросал `RuntimeError`, retry мог оставить ready без heartbeat. Handle сохраняется только после успешного start; два regression tests проверяют close/retry. Внешняя human challenge этим не заменяется.
+- Смежный failing test показал raw Channel thread-start exception после создания CLI process. Исправление завершает child, подтверждает exit и закрывает pipes. Engine сохраняет Worker до one-shot start, чтобы initial-load/cleanup failure не терял handle; retry удаления проверен отдельно.
+- Повторный review выявил сочетание thread-start + kill failure. Channel сохранён до запуска thread, cleanup error обезличен, handle остаётся доступным для retry. Живой IO thread не считается успешной cleanup; closed loop не ждёт новый request, если sentinel не вошёл в полную queue. Негативные tests и фактический scoped child probe описаны в evidence.
+- [Evidence](../evidence/serving-api-2026-10-14.md) хранит фактические local/native результаты, scoped review и остающиеся ограничения. Production deployment не заявляется.
+
+## Дополнительные ветви RB-48/RB-49
+
+**Resource mismatch.** Сначала read-only сверить pinned commit, signed runtime-profile и `docker inspect <owned-full-container-id>`; публично сохранять только CPU/RAM, read-only/network flags и digest. В актуальном профиле `NanoCpus=1000000000`, `Memory=1073741824`, `MemorySwap=1073741824`; limits не являются измеренным потреблением. Не исполнять `docker update` для обхода load validation, не менять signed bytes на месте. Изменяющий шаг: собрать новый pinned image и новый proposal, пройти независимый approval, затем verified load. При несовпадении остаться unready; rollback на отозванный или несовместимый descriptor запрещён.
+
+**Thread resource exhaustion.** При startup failure проверить лимиты процессов/потоков, память и количество собственных процессов без вывода credential-bearing command lines. Самостоятельно не повышать host limits и не убивать чужие процессы. После устранения причины штатно остановить собственный API, подтвердить worker cleanup и запустить с approved config. Regression command ниже безопасен для working Docker: он подменяет только `Thread.start()` в test process.
+
+```powershell
+uv run --locked python -m unittest scripts.serving_core_qualification.ServingCoreContracts.test_heartbeat_start_failure_keeps_cleanup_safe_and_idempotent scripts.serving_core_qualification.ServingCoreContracts.test_activation_can_retry_heartbeat_start_after_transient_failure
+uv run --locked python -m unittest scripts.release_bundle_qualification.ReleaseBundleContracts.test_signed_runtime_profile_matches_one_cpu_one_gib_serving
+```
+
+Ожидается соответственно 2 и 1 passed tests. Они не доказывают реальное исчерпание ресурсов host. Конечное состояние восстановления: нет необработанного cleanup exception, старый worker отсутствует, новый verified load создаёт heartbeat, readiness и golden response имеют ожидаемые digests. Если cleanup или readiness не подтверждены, эскалировать platform owner, не считать восстановлением один успешный restart command.
+
+Если `docker create` вернул timeout до полного container ID, исход создания неизвестен. Не считать отсутствие handle доказательством отсутствия orphan. Оператор делает read-only inventory собственных session labels и сверяет campaign/время/ownership; удаление только после подтверждения полного ID и принадлежности. Автоматическая recovery этого случая и kill при полном падении controller ещё не приняты. Не применять global prune или удалить контейнер лишь по похожему имени.

@@ -41,6 +41,7 @@ class Engine:
                 self.clear()
                 loaded = self.reader.load()
                 self.worker = Worker(loaded.model, self.reader.image)
+                self.worker.start()
                 if (
                     self.worker.image != self.reader.image
                     or self.worker.binding["model_sha256"] != loaded.model_sha256
@@ -51,8 +52,9 @@ class Engine:
                 self.reader.check(loaded)
                 self.loaded = loaded
                 if self.heartbeat is None:
-                    self.heartbeat = threading.Thread(target=self.maintain, daemon=True)
-                    self.heartbeat.start()
+                    heartbeat = threading.Thread(target=self.maintain, daemon=True)
+                    heartbeat.start()
+                    self.heartbeat = heartbeat
                 return self.identity()
             except Exception:
                 self.clear()

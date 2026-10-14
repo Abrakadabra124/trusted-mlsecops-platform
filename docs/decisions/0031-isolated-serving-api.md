@@ -1,12 +1,12 @@
 # ADR 0031: Постоянный изолированный ONNX worker и loopback API
 
-Дата: 2026-10-14. Статус: реализация, native CI ещё не подтверждён. Scope: T15 component. M12/M13/M14/R1 не закрыты.
+Дата: 2026-10-14. Статус: реализация; native d0d4423 проверен, последующие resource/heartbeat corrections требуют отдельного CI. Scope: T15 component. M12/M13/M14/R1 не закрыты. Точные bindings: [evidence](../evidence/serving-api-2026-10-14.md).
 
 ## Требование и решение
 
 После [ADR 0030](0030-current-release-reader.md) контроллер умеет получить проверенные immutable bytes, но это не runtime load. ONNX Runtime исполняет ONNX-граф; даже файл модели может потреблять чрезмерные ресурсы. Поэтому parsing, structural inspection и inference выполняются в отдельном процессе контейнера, а не рядом с SQL credentials.
 
-`Worker` создаёт постоянный контейнер по точному image digest и сверяет Docker inspect с запросом: non-root 65532, network=none, read-only root, без host mounts/ports/devices/signing keys/client certificates, all capabilities dropped, no-new-privileges, 1 GiB RAM/swap total, 2 CPU, 64 PIDs, 32 MiB noexec/nosuid tmpfs. Docker logs отключены. Local Docker controller/daemon/host остаются доверенными и привилегированными; этот вариант не выдаётся за scoped Kubernetes serving или production isolation.
+`Worker` создаёт постоянный контейнер по точному image digest и сверяет Docker inspect с запросом: non-root 65532, network=none, read-only root, без host mounts/ports/devices/signing keys/client certificates, all capabilities dropped, no-new-privileges, 1 GiB RAM/swap total, 1 CPU, 64 PIDs, 32 MiB noexec/nosuid tmpfs. Release runtime-profile задаёт те же CPU/RAM; старый ошибочный 2 CPU / 4 GiB descriptor не допускается. Docker logs отключены. Local Docker controller/daemon/host остаются доверенными и привилегированными; этот вариант не выдаётся за scoped Kubernetes serving или production isolation.
 
 Модель передаётся через stdin ровно один раз. Worker сверяет hash exact bytes, применяет существующий strict `linear-onnx-v2` scanner и создаёт один CPU InferenceSession из тех же bytes. Load acknowledgment включает session ID, model digest, request digest, scanner result и установленную ONNX Runtime version. Worker не выбирает модель по имени, пути или URL. Модель ограничена 8 MiB; transport load frame 12 MiB. Это ограничение текущего маленького linear profile, не поддержка произвольных моделей.
 
@@ -15,6 +15,8 @@
 ## Ресурсы и lifecycle
 
 Parent pipe transport использует единственный daemon IO thread и очереди ёмкостью один элемент. Deadline охватывает запись в stdin и чтение bounded response: 30 s для initial load, 2 s для predict/ping. Поздний reply не может стать ответом следующему запросу: после timeout session терминальна. Cleanup работает только по полному ID собственного созданного контейнера и подтверждает его отсутствие. При неудаче сохраняется handle для повторной cleanup, а serving остаётся unready.
+
+Engine получает Worker handle до первого изменяющего Docker call, затем вызывает одноразовый `start()`. Поэтому initial load + cleanup failure не теряет владельца контейнера. Channel при отказе thread start завершает и перечитывает статус своего CLI child, закрывает pipes, не вызывает join незапущенного потока. Heartbeat публикуется только после успешного start. Эти свойства проверены отдельными controlled tests; неизвестный исход самого `docker create` до получения полного ID требует operator reconciliation, автоматическое удаление по непроверенному имени не выполняется.
 
 В worker установлен 120 s alarm на каждую операцию/ожидание stdin. Engine выполняет heartbeat каждые 30 s; остановка parent не должна оставлять обычный idle worker навсегда. Alarm не объявляется защитой от произвольного уже скомпрометированного native runtime; внешние Docker resource limits и cleanup остаются обязательными.
 
@@ -42,4 +44,6 @@ Native runner расширяет изолированную fixture ADR 0030 н�
 - [ONNX Runtime Python API](https://onnxruntime.ai/docs/api/python/api_summary.html): поддержка serialized model bytes; проект использует bytes, не повторное чтение пути.
 - [FastAPI lifespan](https://fastapi.tiangolo.com/advanced/events/): единый startup/shutdown lifecycle.
 - [Starlette request streaming](https://www.starlette.io/requests/): чтение body chunks без предварительного накопления всего тела; ограничения размера добавлены проектом.
+- [Python 3.12 threading](https://docs.python.org/3.12/library/threading.html): join до успешного start вызывает RuntimeError; успешное создание Thread не равно запуску.
+- [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/): CPU quota и memory/swap bounds требуют явной настройки; одинаковые memory и memory-swap не оставляют дополнительного swap budget. Проверено 2026-10-14.
 - [API и запуск](../serving-api.md), [PB-25/RB-48/RB-49](../operations/serving-troubleshooting.md), [evidence](../evidence/serving-api-2026-10-14.md).

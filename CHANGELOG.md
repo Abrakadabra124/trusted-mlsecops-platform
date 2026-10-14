@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 serving resource и startup cleanup corrections - 2026-10-14
+
+Native `d0d4423` подтвердил 34 HTTP/ONNX/TLS cases, но review обнаружил расхождение resource profile и ошибки thread-start/cleanup ownership. Исправлены Docker request/readback и signed runtime descriptor на 1 CPU / 1 GiB; старый descriptor отвергается даже с корректной подписью. Heartbeat публикуется после start, Channel завершает child при thread failure, Engine владеет Worker до изменяющего one-shot start. Добавлены negative regressions и диагностические ветви [RB-48/RB-49](docs/operations/serving-troubleshooting.md). [Evidence](docs/evidence/serving-api-2026-10-14.md) разделяет предыдущий native commit и последующие corrections. Full M12/R1 остаются открытыми.
+
 ## R1 isolated serving API increment - 2026-10-14
 
 Постоянный digest-pinned Docker worker загружает exact verified ONNX bytes один раз и использует bounded nonce/row-bound JSON protocol без сети, mounts и signing credentials. Engine проверяет current Reader до/после inference и не сохраняет fallback при failure. Добавлен loopback FastAPI/Uvicorn с bearer auth, named features, body/admission limits и 401/413/422/429/503; cancellation сохраняет slot до завершения underlying thread. [ADR 0031](docs/decisions/0031-isolated-serving-api.md), [API](docs/serving-api.md), [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md), [evidence](docs/evidence/serving-api-2026-10-14.md). Полные gates и production readiness не объявляются пройденными.

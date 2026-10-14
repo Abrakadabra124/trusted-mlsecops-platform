@@ -6,7 +6,9 @@
 
 ## Постоянный worker и inference API: T15 increment
 
-2026-10-14 после `a711ffa`: [ADR 0031](docs/decisions/0031-isolated-serving-api.md), [API contract и запуск](docs/serving-api.md), [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md). Verified Reader -> resource-bounded Docker worker -> HTTP score/abstain с before/after trust, nonce/digest binding и fail-closed lifecycle. Локальная suite: 41 methods pass, controlled coverage 94%, объединённая adjacent suite 138 pass; native CI пока ожидается. [Evidence](docs/evidence/serving-api-2026-10-14.md) отделяет настоящие transport/runtime probes от synthetic contract assurance. T15/M12, M13/M14 и полный R1 не закрыты.
+2026-10-14 после `a711ffa`: [ADR 0031](docs/decisions/0031-isolated-serving-api.md), [API contract и запуск](docs/serving-api.md), [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md). Verified Reader -> resource-bounded Docker worker -> HTTP score/abstain с before/after trust, nonce/digest binding и fail-closed lifecycle. На `d0d4423` storage CI подтвердил 34 actual HTTP/ONNX/TLS checks: golden error=3.1665e-08, stopped worker denial=2.1045 s, cleanup/reload и signed revocation -> 503. [Evidence](docs/evidence/serving-api-2026-10-14.md) отделяет runtime probes от synthetic contract assurance. T15/M12, M13/M14 и полный R1 не закрыты.
+
+После native review исправлены ошибочные resource bounds на 1 CPU / 1 GiB и ошибки thread-start/cleanup ownership. 50 local serving methods pass, coverage 94%; новый native replay этих corrections ещё обязателен. Старые signed runtime profiles не мигрируются автоматически. Scoped reviewers нашли heartbeat/Channel cleanup defects, они воспроизведены regression tests; полный security audit не заявляется. Все 10 workflows `d0d4423` terminal: 6 success / 4 failure, M20 723 / M21 122 pass. Failed image/poisoning/evasion/paired gates не ослаблены.
 
 ## Проверенное чтение текущего release: T15 component
 

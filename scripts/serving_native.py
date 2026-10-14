@@ -162,7 +162,7 @@ def check_http(services, reader, golden, confirmed, rejected):
     confirmed("client-errors-do-not-disable-model", request("/readyz")[0] == 200)
     rejected(
         "native-malformed-model-never-ready",
-        lambda: Worker(b"not-onnx", reader.image),
+        lambda: Worker(b"not-onnx", reader.image).start(),
         "serving_load_failed",
     )
     command(["docker", "kill", "--signal", "STOP", identifier])

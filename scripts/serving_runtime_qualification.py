@@ -12,6 +12,84 @@ from mlsecops.contracts import Rejected, canonical
 
 
 class BoundedPipeContracts(unittest.TestCase):
+    def test_closed_channel_does_not_consume_pending_requests(self):
+        channel = serving_runtime.Channel(Mock())
+        channel.closed = True
+        channel.requests.get = Mock(side_effect=AssertionError("read-after-close"))
+        channel.exchange_loop()
+        channel.requests.get.assert_not_called()
+
+    def test_alive_io_thread_keeps_cleanup_unconfirmed(self):
+        channel = serving_runtime.Channel(Mock())
+        channel.reader = Mock(ident=1)
+        channel.reader.is_alive.return_value = True
+        with self.assertRaisesRegex(Rejected, "^serving_cleanup_unconfirmed$"):
+            channel.close()
+        channel.reader.is_alive.return_value = False
+        channel.close()
+        channel.process.stdin.close.assert_called_once()
+        channel.process.stdout.close.assert_called_once()
+
+    def test_thread_start_failure_reaps_child_and_closes_pipes(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time;time.sleep(30)"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        channel = serving_runtime.Channel(process)
+        try:
+            with patch.object(
+                serving_runtime.threading.Thread,
+                "start",
+                side_effect=RuntimeError("PRIVATE-CANARY"),
+            ):
+                with self.assertRaisesRegex(Rejected, "^serving_transport_failed$"):
+                    channel.start()
+            self.assertIsNotNone(process.poll())
+            self.assertTrue(process.stdin.closed)
+            self.assertTrue(process.stdout.closed)
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+            process.stdin.close()
+            process.stdout.close()
+
+    def test_failed_thread_and_failed_kill_retain_channel_for_cleanup_retry(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time;time.sleep(30)"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        channel = serving_runtime.Channel(process)
+        try:
+            with (
+                patch.object(
+                    serving_runtime.threading.Thread,
+                    "start",
+                    side_effect=RuntimeError("PRIVATE-START"),
+                ),
+                patch.object(process, "kill", side_effect=OSError("PRIVATE-CLEANUP")),
+            ):
+                with self.assertRaisesRegex(Rejected, "^serving_cleanup_unconfirmed$"):
+                    channel.start()
+            self.assertIsNone(process.poll())
+            self.assertTrue(channel.closed)
+            channel.close()
+            self.assertIsNotNone(process.poll())
+            self.assertTrue(process.stdin.closed)
+            self.assertTrue(process.stdout.closed)
+            with self.assertRaisesRegex(Rejected, "^serving_transport_closed$"):
+                channel.start()
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+            process.stdin.close()
+            process.stdout.close()
+
     def process(self, source):
         process = subprocess.Popen(
             [sys.executable, "-u", "-c", source],
@@ -21,6 +99,7 @@ class BoundedPipeContracts(unittest.TestCase):
         )
         channel = serving_runtime.Channel(process)
         self.addCleanup(channel.close)
+        channel.start()
         return process, channel
 
     def test_real_pipe_echo_is_bounded_and_can_exchange_twice(self):
@@ -66,6 +145,7 @@ class BoundedPipeContracts(unittest.TestCase):
             ("--cap-drop", "ALL"),
             ("--memory", "1g"),
             ("--memory-swap", "1g"),
+            ("--cpus", "1"),
             ("--pids-limit", "64"),
             ("--security-opt", "no-new-privileges"),
             ("--log-driver", "none"),
@@ -110,7 +190,7 @@ class DockerLifecycleContracts(unittest.TestCase):
                 "AutoRemove": True,
                 "Memory": 1024**3,
                 "MemorySwap": 1024**3,
-                "NanoCpus": 2 * 10**9,
+                "NanoCpus": 10**9,
                 "PidsLimit": 64,
                 "CapDrop": ["ALL"],
                 "SecurityOpt": ["no-new-privileges"],
@@ -176,7 +256,7 @@ class DockerLifecycleContracts(unittest.TestCase):
         return result
 
     def test_constructor_readback_predict_ping_and_idempotent_cleanup(self):
-        worker = serving_runtime.Worker(b"controlled", self.image)
+        worker = serving_runtime.Worker(b"controlled", self.image).start()
         self.addCleanup(worker.close)
         self.assertEqual(worker.predict([[0.5] * 6]), [0.5])
         worker.ping()
@@ -195,6 +275,7 @@ class DockerLifecycleContracts(unittest.TestCase):
             ("Memory", 0),
             ("MemorySwap", -1),
             ("NanoCpus", 0),
+            ("NanoCpus", 2 * 10**9),
             ("PidsLimit", 0),
             ("AutoRemove", False),
             ("Binds", ["/host:/app"]),
@@ -211,12 +292,24 @@ class DockerLifecycleContracts(unittest.TestCase):
                 self.observed["HostConfig"] = {**original, key: value}
                 self.exists = True
                 with self.assertRaisesRegex(Rejected, "serving_load_failed"):
-                    serving_runtime.Worker(b"controlled", self.image)
+                    serving_runtime.Worker(b"controlled", self.image).start()
                 self.assertFalse(self.exists)
         self.process.assert_not_called()
 
+    def test_worker_ownership_precedes_create_and_start_is_one_shot(self):
+        with patch.object(serving_runtime, "command", side_effect=self.command) as command:
+            worker = serving_runtime.Worker(b"controlled", self.image)
+            command.assert_not_called()
+            self.process.assert_not_called()
+            self.assertIsNone(worker.channel)
+            self.assertIsNone(worker.container)
+            self.assertIs(worker.start(), worker)
+            with self.assertRaisesRegex(Rejected, "^serving_worker_start_state$"):
+                worker.start()
+            worker.close()
+
     def test_invalid_reply_closes_and_remove_failure_keeps_retry_handle(self):
-        worker = serving_runtime.Worker(b"controlled", self.image)
+        worker = serving_runtime.Worker(b"controlled", self.image).start()
         self.corrupt = True
         self.remove_failure = True
         with self.assertRaisesRegex(Rejected, "serving_cleanup_unconfirmed"):
@@ -227,8 +320,21 @@ class DockerLifecycleContracts(unittest.TestCase):
         worker.close()
         self.assertIsNone(worker.container)
 
-    def test_disappearing_container_during_remove_is_confirmed_absent(self):
+    def test_initial_load_failure_keeps_owned_container_for_cleanup_retry(self):
         worker = serving_runtime.Worker(b"controlled", self.image)
+        self.observed["HostConfig"]["Memory"] = 0
+        self.remove_failure = True
+        with self.assertRaisesRegex(Rejected, "^serving_cleanup_unconfirmed$"):
+            worker.start()
+        self.assertTrue(worker.closed)
+        self.assertEqual(worker.container, self.identifier)
+        self.process.assert_not_called()
+        self.remove_failure = False
+        worker.close()
+        self.assertIsNone(worker.container)
+
+    def test_disappearing_container_during_remove_is_confirmed_absent(self):
+        worker = serving_runtime.Worker(b"controlled", self.image).start()
         original = self.command
 
         def raced(arguments, timeout):

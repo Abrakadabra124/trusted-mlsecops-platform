@@ -22,10 +22,18 @@ class Channel:
         self.lock = threading.Lock()
         self.closed = False
         self.reader = threading.Thread(target=self.exchange_loop, daemon=True)
-        self.reader.start()
+
+    def start(self):
+        if self.closed or self.reader.ident is not None:
+            raise Rejected("serving_transport_closed")
+        try:
+            self.reader.start()
+        except Exception:
+            self.close()
+            raise Rejected("serving_transport_failed") from None
 
     def exchange_loop(self):
-        while (content := self.requests.get()) is not None:
+        while not self.closed and (content := self.requests.get()) is not None:
             try:
                 self.process.stdin.write(content)
                 self.process.stdin.flush()
@@ -63,20 +71,25 @@ class Channel:
 
     def close(self):
         self.closed = True
-        with suppress(queue.Full):
-            self.requests.put_nowait(None)
-        if self.process.poll() is None:
-            with suppress(ProcessLookupError):
-                if os.name == "posix" and os.getpgid(self.process.pid) == self.process.pid:
-                    os.killpg(self.process.pid, signal.SIGKILL)
-                else:
-                    self.process.kill()
-        self.process.wait(timeout=3)
-        self.reader.join(timeout=1)
-        if not self.reader.is_alive():
+        try:
+            with suppress(queue.Full):
+                self.requests.put_nowait(None)
+            if self.process.poll() is None:
+                with suppress(ProcessLookupError):
+                    if os.name == "posix" and os.getpgid(self.process.pid) == self.process.pid:
+                        os.killpg(self.process.pid, signal.SIGKILL)
+                    else:
+                        self.process.kill()
+            self.process.wait(timeout=3)
+            if self.reader.ident is not None:
+                self.reader.join(timeout=1)
+            if self.reader.is_alive():
+                raise Rejected("serving_cleanup_unconfirmed")
             for stream in (self.process.stdin, self.process.stdout):
                 with suppress(OSError, ValueError):
                     stream.close()
+        except Exception:
+            raise Rejected("serving_cleanup_unconfirmed") from None
 
 
 def create_arguments(image, session):
@@ -101,7 +114,7 @@ def create_arguments(image, session):
         "--pids-limit",
         "64",
         "--cpus",
-        "2",
+        "1",
         "--memory",
         "1g",
         "--memory-swap",
@@ -131,7 +144,7 @@ def verify_container(value, image, session):
         or host["AutoRemove"] is not True
         or host["Memory"] != 1024**3
         or host["MemorySwap"] != 1024**3
-        or host["NanoCpus"] != 2 * 10**9
+        or host["NanoCpus"] != 10**9
         or host["PidsLimit"] != 64
         or host.get("Binds")
         or host.get("PortBindings")
@@ -157,13 +170,19 @@ class Worker:
         self.channel = None
         self.binding = {name: initial[name] for name in ("session_id", "model_sha256")}
         self.closed = False
+        self.initial = initial
+
+    def start(self):
+        if self.closed or self.initial is None:
+            raise Rejected("serving_worker_start_state")
+        initial, self.initial = self.initial, None
         try:
-            identifier = command(create_arguments(image, initial["session_id"]), timeout=30)
+            identifier = command(create_arguments(self.image, initial["session_id"]), timeout=30)
             if re.fullmatch(r"[a-f0-9]{64}", identifier) is None:
                 raise Rejected("serving_container_identity")
             self.container = identifier
             inspected = decode(command(["docker", "inspect", identifier], timeout=10).encode())[0]
-            verify_container(inspected, image, initial["session_id"])
+            verify_container(inspected, self.image, initial["session_id"])
             process = subprocess.Popen(
                 ["docker", "start", "--attach", "--interactive", identifier],
                 stdin=subprocess.PIPE,
@@ -172,7 +191,9 @@ class Worker:
                 start_new_session=os.name == "posix",
             )
             self.channel = Channel(process)
+            self.channel.start()
             self.send(initial, timeout=30)
+            return self
         except Exception:
             self.close()
             raise Rejected("serving_load_failed") from None

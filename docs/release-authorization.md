@@ -19,7 +19,7 @@ CAS (content-addressed storage) хранит байты под SHA-256, а не 
 | model-card | Назначение, synthetic-only classification, digest модели, оценка и явные ограничения |
 | ml-bom | Связи ONNX, embedded preprocessing, dataset/lineage, lock, packages и training/serving images |
 | parameters | Source-bound baseline recipe, C=1, max_iter=300, seed, request digest и CPU profile |
-| runtime-profile | Локальный isolated worker: UID 65532, read-only, network-none, 2 CPU/4 GiB |
+| runtime-profile | Serving worker: UID 65532, read-only, network-none, 1 CPU/1 GiB; совпадает с Docker request/readback |
 | split_manifest | Canonical payload исходного curator-signed dataset manifest с digest/rows split |
 | evaluation_policy | Canonical policy bytes, сравниваемые с независимым context |
 | asset_projection | Canonical пересчитанная projection связей candidate и материалов |

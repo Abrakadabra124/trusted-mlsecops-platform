@@ -5,8 +5,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops import release_bundle, storage
-from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops import release_bundle, serving_runtime, storage
+from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.signing import sign, verify
 from scripts import material_bundle_qualification as fixtures
 
@@ -131,6 +131,26 @@ class ReleaseBundleContracts(unittest.TestCase):
             invalid["documents"]["model-card"] = value
             with self.assertRaisesRegex(Rejected, "material_size"):
                 self.check(invalid)
+
+    def test_signed_runtime_profile_matches_one_cpu_one_gib_serving(self):
+        package = self.create()
+        profile = decode(package["documents"]["runtime-profile"])
+        self.assertEqual((profile["cpu_millis"], profile["memory_mib"]), (1000, 1024))
+        arguments = serving_runtime.create_arguments(profile["image"], "b" * 32)
+        self.assertEqual(
+            int(arguments[arguments.index("--cpus") + 1]) * 1000, profile["cpu_millis"]
+        )
+        self.assertEqual(arguments[arguments.index("--memory") + 1], "1g")
+        self.assertEqual(arguments[arguments.index("--memory-swap") + 1], "1g")
+        invalid = copy.deepcopy(package)
+        invalid["documents"]["runtime-profile"] = canonical(
+            {**profile, "cpu_millis": 2000, "memory_mib": 4096}
+        )
+        payload = verify(package["envelope"], "model-release", self.materials.public)
+        payload["materials"]["runtime-profile"] = digest(invalid["documents"]["runtime-profile"])
+        invalid["envelope"] = sign(payload, "model-release", self.materials.key)
+        with self.assertRaisesRegex(Rejected, "release_material_semantics"):
+            self.check(invalid)
 
     def test_proposal_publication_is_idempotent_and_serving_readback_matches(self):
         package = self.create()
