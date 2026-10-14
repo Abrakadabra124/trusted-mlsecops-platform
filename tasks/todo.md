@@ -126,6 +126,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T20
 - [ ] Backup и независимый restore. Зависимость: T19. Gate: M17.
+- Increment 2026-10-14: [signed snapshot v2 CAS + promotion journal](../docs/decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](../docs/operations/promotion-recovery-troubleshooting.md), [evidence](../docs/evidence/promotion-recovery-2026-10-14.md). External backup pin, exact readback, maintenance и неизменяющий retry; source-offline qualification отдельно от controlled contracts. Автоматический pre-receipt resume, current trust/serving recovery и расписание ещё не приняты.
 - Прогресс: native consistent SQL backup, signed manifest, fresh storage restore, 430 component checks и 1 000 golden predictions работают. Нет полного release/serving recovery, актуального trust-service revocation и ежедневного расписания, поэтому задача и M17 остаются открытыми.
 - Результат: metadata/artifact backup manifest, recovery runbook и evidence из нового namespace/storage.
 - Проверка: RTO/RPO, corrupt/missing blob, denied expired/revoked trust, golden predictions после restore.

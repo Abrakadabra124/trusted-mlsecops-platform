@@ -30,8 +30,8 @@ def ledger_sql():
     )
 
 
-def validate_ledger(value):
-    if not isinstance(value, dict) or set(value) != set(TABLES):
+def validate_ledger(value, *, expected_tables=TABLES):
+    if not isinstance(value, dict) or set(value) != set(expected_tables):
         raise Rejected("backup_ledger_tables_invalid")
     for entry in value.values():
         if not isinstance(entry, dict) or set(entry) != {"rows", "bytes", "sha256", "invalid"}:
@@ -89,7 +89,9 @@ def json_session(arguments, query):
 
 
 @contextmanager
-def snapshot(name):
+def snapshot(name, *, include_promotion=False):
+    from mlsecops import promotion_recovery
+
     arguments = [
         "docker",
         "exec",
@@ -109,23 +111,31 @@ def snapshot(name):
         "-d",
         DATABASE,
     ]
+    extra = (
+        f"'promotion', ({promotion_recovery.ledger_sql()})"
+        if include_promotion
+        else "'promotion_absent', NOT EXISTS (SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'ml_promotion')"
+    )
     query = (
         "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
         "SET LOCAL idle_in_transaction_session_timeout = '180s';\n"
         "SET LOCAL statement_timeout = '60s';\n"
         "SELECT jsonb_build_object('snapshot', pg_export_snapshot(), "
-        "'promotion_absent', NOT EXISTS (SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'ml_promotion'), "
+        f"{extra}, "
         f"'tables', ({ledger_sql()}));\n"
     )
     with json_session(arguments, query) as (result, process):
         if (
             not isinstance(result, dict)
-            or set(result) != {"snapshot", "tables", "promotion_absent"}
+            or set(result)
+            != {"snapshot", "tables", "promotion" if include_promotion else "promotion_absent"}
             or not isinstance(result["snapshot"], str)
             or not re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+", result["snapshot"])
         ):
             raise Rejected("backup_snapshot_identity_invalid")
-        if result["promotion_absent"] is not True:
+        if include_promotion:
+            promotion_recovery.validate_combined(result["tables"], result["promotion"])
+        elif result["promotion_absent"] is not True:
             raise Rejected("backup_promotion_ledger_not_supported")
         validate_ledger(result["tables"])
         yield result

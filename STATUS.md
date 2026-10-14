@@ -4,6 +4,10 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
+## Согласованное восстановление promotion journal
+
+2026-10-14: [backup v2 / ADR 0028](docs/decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](docs/operations/promotion-recovery-troubleshooting.md). CAS и journal связаны одним exported snapshot, обеими migrations и подписью. Restore требует внешний backup-id pin, новый owned target, эксклюзивную OS lock и maintenance до readback; completed retry не стирает поздние записи. 124 local methods pass, новые helpers 61 statements/10 branches 100%. Native source-offline recovery pending: [evidence](docs/evidence/promotion-recovery-2026-10-14.md). Полный M17, online revocation и serving activation не приняты.
+
 ## Promotion admission и постоянный journal
 
 2026-10-14: [promotion ledger](docs/promotion-ledger.md), [ADR 0027](docs/decisions/0027-promotion-ledger.md), [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md). SDK проверяет signed chain до записи; отдельная PostgreSQL schema связывает environment/policy/sequence с immutable request. Row-locked transition, current retry, stale/conflicting rejection, post-lock expiry и event readback не объявляются serving activation. Full M10/M11 остаётся открыт.

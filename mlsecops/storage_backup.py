@@ -5,6 +5,7 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from mlsecops import promotion_recovery
 from mlsecops.contracts import (
     Rejected,
     atomic_write,
@@ -37,6 +38,7 @@ def migration():
 def verify_manifest(envelope, public, policy, moment=None):
     trusted_keys(public)
     statement = verify(envelope, "storage-backup", public["trust"])
+    extended = isinstance(statement, dict) and statement.get("schema_version") == 2
     require_fields(
         statement,
         (
@@ -51,12 +53,13 @@ def verify_manifest(envelope, public, policy, moment=None):
             "trusted_keys_digest",
             "archive",
             "tables",
+            *(("promotion",) if extended else ()),
         ),
     )
     require_fields(statement["migration"], ("version", "sha256"))
     if (
         type(statement["schema_version"]) is not int
-        or statement["schema_version"] != 1
+        or statement["schema_version"] not in (1, 2)
         or statement["format"] != "postgres-custom-data-only"
         or statement["image"] != IMAGE
         or type(statement["migration"]["version"]) is not int
@@ -94,6 +97,8 @@ def verify_manifest(envelope, public, policy, moment=None):
     ):
         raise Rejected("backup_archive_metadata_invalid")
     validate_ledger(statement["tables"])
+    if extended:
+        promotion_recovery.validate_combined(statement["tables"], statement["promotion"])
     return statement
 
 
@@ -110,12 +115,13 @@ def read_backup(directory, public, policy):
     return statement, content
 
 
-def create(root, state):
+def create(root, state, *, include_promotion=False):
     from mlsecops.promotion_state import require_legacy_backup_scope
 
     root, state = Path(root), Path(state)
     marker = validate(state)
-    require_legacy_backup_scope(marker["name"])
+    if not include_promotion:
+        require_legacy_backup_scope(marker["name"])
     verify_configuration(state, marker["name"])
     expected = migration()
     if (
@@ -129,7 +135,7 @@ def create(root, state):
     public = trusted_keys(read_json(state / "trusted-keys.json"))
     policy = read_json(root / "policies/local-cpu.json")
     started = now()
-    with snapshot(marker["name"]) as observed:
+    with snapshot(marker["name"], include_promotion=include_promotion) as observed:
         arguments = [
             "docker",
             "exec",
@@ -149,13 +155,17 @@ def create(root, state):
             "--no-privileges",
             "--no-large-objects",
             "--lock-wait-timeout=5s",
+            "--strict-names",
             f"--snapshot={observed['snapshot']}",
         ]
         for table in TABLES:
             arguments.extend(("--table", f"ml.{table}"))
+        if include_promotion:
+            for table in promotion_recovery.TABLES:
+                arguments.extend(("--table", f"ml_promotion.{table}"))
         content = binary_command(arguments)
     statement = {
-        "schema_version": 1,
+        "schema_version": 2 if include_promotion else 1,
         "format": "postgres-custom-data-only",
         "started_at": started,
         "completed_at": now(),
@@ -166,6 +176,7 @@ def create(root, state):
         "trusted_keys_digest": digest(canonical(public)),
         "archive": {"name": "data.dump", "sha256": digest(content), "bytes": len(content)},
         "tables": observed["tables"],
+        **({"promotion": observed["promotion"]} if include_promotion else {}),
     }
     envelope = sign(statement, "storage-backup", state / "keys/trust.pem")
     verify_manifest(envelope, public, policy)
@@ -186,6 +197,7 @@ def create(root, state):
         "directory": str(destination.resolve()),
         "bytes": len(content),
         "tables": statement["tables"],
+        **({"promotion": statement["promotion"]} if include_promotion else {}),
         "status": "verified-backup-not-release",
     }
 
@@ -193,9 +205,14 @@ def create(root, state):
 def main():
     parser = argparse.ArgumentParser(description="Create a signed, consistent local SQL backup")
     parser.add_argument("--state", type=Path, default=Path(".runtime"))
+    parser.add_argument("--include-promotion", action="store_true")
     arguments = parser.parse_args()
     try:
-        result = create(Path(__file__).resolve().parents[1], arguments.state)
+        result = create(
+            Path(__file__).resolve().parents[1],
+            arguments.state,
+            include_promotion=arguments.include_promotion,
+        )
         write_json(arguments.state / "evidence/storage-backup.json", result)
         print(canonical(result).decode())
         return 0

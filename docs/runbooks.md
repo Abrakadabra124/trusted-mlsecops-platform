@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Promotion recovery, PB-22/RB-42/RB-43](operations/promotion-recovery-troubleshooting.md). Общий snapshot CAS/journal, внешний backup-id pin, source-offline qualification, maintenance при неопределённом import и запрет overwrite поздних записей. [Evidence](evidence/promotion-recovery-2026-10-14.md) отделяет controlled tests от native результатов.
+
 - [Promotion ledger, PB-21/RB-40/RB-41](operations/promotion-ledger-troubleshooting.md). Ambiguous commit, concurrent sequence, expiry после lock, безопасный retry и запрет неполного backup/обнуления journal. [Evidence](evidence/promotion-ledger-2026-10-14.md) различает controlled SQL fixtures и полноценное ML approval.
 
 - [Release proposal/authorization, PB-20/RB-38/RB-39](operations/release-authorization-troubleshooting.md). Диагностика отказа, schema/time binding, interrupted publication, idempotent retry и rollback без удаления evidence. Controlled и native результаты раздельно в [evidence](evidence/release-authorization-2026-10-14.md).

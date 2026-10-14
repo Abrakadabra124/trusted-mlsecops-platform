@@ -33,7 +33,7 @@ SELECT FOR UPDATE блокирует строку environment до конца т
 
 Старый backup экспортирует только исходные CAS tables. После появления ledger он намеренно запрещён: иначе можно потерять sequence и допустить replay после restore. Есть ранняя диагностика и обязательная проверка отсутствия ledger **в том же REPEATABLE READ snapshot**, который экспортируется для pg_dump. Предварительная проверка сама по себе была недостаточна из-за гонки с migration.
 
-Новый полный backup/restore ledger ещё не реализован. Это явное ограничение deployment, а не разрешение удалить schema ради старого backup. Старый архив не восстанавливает promotion state; отсутствие heads/events после restore означает неполное восстановление, не новый sequence=0. Полный M17 остаётся открыт.
+Добавлен [явный backup/restore v2](decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](operations/promotion-recovery-troubleshooting.md); фактический verification scope в [evidence](evidence/promotion-recovery-2026-10-14.md). Старый архив не восстанавливает promotion state; отсутствие heads/events после restore означает неполное восстановление, не новый sequence=0. Полный M17 и текущая revocation/serving readiness остаются открытыми.
 
 ## Что доказывают проверки
 

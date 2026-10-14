@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 promotion recovery increment - 2026-10-14
+
+Добавлен opt-in signed backup v2 для CAS и promotion journal в одном snapshot, exact migration/TOC/chain checks, внешний restore pin и maintenance до readback. V1 не теряет guard, новый target не становится release-ready. [PB-22/RB-42/RB-43](docs/operations/promotion-recovery-troubleshooting.md), [evidence](docs/evidence/promotion-recovery-2026-10-14.md). Completed retry не стирает новые данные; автоматический pre-receipt resume и полный M17 ещё нужны.
+
 ## R1 promotion ledger / admission increment - 2026-10-14
 
 Добавлены отдельная PostgreSQL schema и restricted transition, policy/sequence/current-idempotency проверки, full signed-chain SDK admission до writes и immutable event readback. Legacy backup запрещён при наличии неподдерживаемого ledger, проверка scope связана с экспортируемым snapshot. [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md) описывают retry/time/commit/recovery failures. [Evidence](docs/evidence/promotion-ledger-2026-10-14.md); не полный M10 или activation.

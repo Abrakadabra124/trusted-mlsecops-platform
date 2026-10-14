@@ -77,6 +77,8 @@ flowchart LR
 
 **Задачи:** T13, T14, интеграция T25. Реализовать signed bundle и отдельное approval; закрепить signer/evaluator/policy/environment binding, idempotency, replay prevention и revocation. Связать inventory с verifier и транзитивным отзывом. Изменение alias, model bytes и evaluation report не должно обходить gate.
 
+Recovery increment после a65ee56: opt-in backup manifest v2 включает CAS и promotion authorities/events/heads в одном exported snapshot, фиксирует обе migrations и проверяет структурную связность journal. Legacy v1 сохраняет запрет пропуска ledger. Restore допускает только новый owned target и внешний операторский backup-id pin, не выбираемый автоматически из архива; data-only TOC allowlist и одна транзакция, maintenance для application clients до сверки. Повтор завершённого restore не стирает поздние записи; повреждённый, неподписанный, неполный или чужой backup не даёт ready. Native acceptance: concurrent promotion исключён из snapshot целиком, exact journal/CAS readback в независимом target, stale replay/роль/повтор/неопределённый import. Backup pin выбирает конкретный recovery point, но не доказывает отсутствие более новых решений после него: serving activation и current trust/revocation остаются отдельным обязательным шагом M11/M17. Обновлять PB/RB одновременно с кодом.
+
 **Результат:** проверяемый promotion state machine и revocation tests. **Приёмка:** M10, M11. **Риск:** локальные keys остаются lab-допущением, не заменяют production workload identity/KMS.
 
 ## Неделя 9: Serving и privacy

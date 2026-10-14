@@ -74,6 +74,13 @@ jobs:
         run: |
           uv run --locked python -m mlsecops build
           uv run --locked python -m mlsecops.acceptance --gate M03 --output .runtime/evidence/M03.json
+      - name: Promotion recovery contracts and CLI boundaries
+        run: |
+          uv run --locked coverage run --data-file=.coverage-promotion-recovery --source=mlsecops.promotion_recovery -m scripts.promotion_recovery_qualification
+          uv run --locked coverage report --data-file=.coverage-promotion-recovery --fail-under=100
+          uv run --locked python -m scripts.promotion_recovery_native_qualification
+          uv run --locked coverage run --data-file=.coverage-recovery-lock --source=mlsecops.recovery_lock -m scripts.recovery_lock_qualification
+          uv run --locked coverage report --data-file=.coverage-recovery-lock --fail-under=100
       - name: Read-only lineage from actual signed SQL materials
         run: uv run --locked python -m scripts.candidate_lineage_native --state .runtime
       - name: Unapproved material bundle and serving-role verified readback
@@ -99,3 +106,5 @@ jobs:
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/intake-denial-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed denial qualification evidence')"
       - name: Disposable promotion ledger SQL concurrency, roles and restart
         run: uv run --locked python -m scripts.promotion_native --state .runtime --confirm-disposable
+      - name: Complete journal backup and independent recovery with source offline
+        run: uv run --locked python -m scripts.promotion_recovery_native --state .runtime --confirm-disposable
