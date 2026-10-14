@@ -19,6 +19,16 @@ Run ID здесь относится к конкретному инцидент�
 
 Если отчёт говорит fail, не переименовывать его в environmental inconclusive без установленной причины. Если неизвестен actual отказ, это диагностический пробел, а не разрешение ослабить assertion. Runtime/SQL/security failures разбираются отдельно от статистического poisoning failure.
 
+### Отказ наблюдателя GitHub, не самого workflow
+
+2026-10-14 при online-trust qualification `gh run watch` и отдельные GET получили `net/http: TLS handshake timeout`. Это транспортная ошибка локального клиента. Она не означает failure/cancelled workflow и не разрешает новый запуск поверх ещё работающего.
+
+1. Сохранить прежние run ID, commit SHA и job ID. Не пересоздавать workflow по одному timeout и не отключать проверку сертификата.
+2. После паузы выполнить read-only запрос того же запуска, например `gh run view 38619008900 --json status,conclusion,headSha,url`. Если CLI снова недоступен, использовать подключённый GitHub для чтения того же workflow run/jobs, не менять ref или attempt.
+3. При in_progress продолжить ожидание того же job. При completed сверить conclusion и получить logs именно его job ID. Ошибка старого watcher не заменяет этот результат.
+4. В этой сессии connector подтвердил tracking success, poisoning failure и ещё работающий Kubernetes job. Позже тот же job завершился success, M21 122 cases pass в 19:10:18.797963 UTC. Workflows не перезапускались. Восстановление самого CLI transport не заявлено: причин сетевого сбоя не установлено.
+5. Если ни один read-only канал недоступен, записать статус наблюдения unknown, сохранить ранее подтверждённое evidence и не объявлять pipeline остановленным. Эскалировать владельцу соединения без вывода токенов или proxy credentials.
+
 ## RB-27: concurrent-over-budget-denied в M07
 
 Первый [storage run, attempt 1](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38163839413/attempts/1) на `36fa443` завершился failure в 2026-10-11T18:29:47Z с `holdout_qualification_failed:concurrent-over-budget-denied`. Developer ONNX suite, реальные training/evaluation, SQL roles, material bundle и recovery steps этого run до M07 прошли. Следовательно, нельзя автоматически приписывать отказ проверке ONNX.

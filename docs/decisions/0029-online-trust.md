@@ -1,6 +1,6 @@
 # ADR 0029: отдельная текущая trust authority и ограниченный lease
 
-Дата: 2026-10-14. Статус: implementation in progress, не M11 acceptance.
+Дата: 2026-10-14. Статус: implemented component, controlled + native SQL verified; не полная M11 acceptance. [Evidence](../evidence/online-trust-2026-10-14.md).
 
 ## Контекст
 
@@ -24,6 +24,6 @@ Authority размещается только в отдельном свежем
 
 ## Проверка и источники
 
-План: signature/schema/bounds/clock/outage/replay unit negatives; actual TLS SQL read, concurrent updates, роли, restart, missing service и deadline trace в disposable CI. До выполнения это план, не доказательство M11. Отдельный runbook должен описывать outage, stale pin, revoked material, конфликт обновления и запрет ручного продления lease.
+Signature/schema/bounds/clock/outage/replay unit negatives проверены. На `214cc3c` выполнены 45 native checks: actual TLS SQL read, concurrent updates, роли, restart, missing service и deadline trace в disposable CI. First denial через 59.992019191 s от завершения последнего успешного online read. [Runbook](../operations/trust-troubleshooting.md) описывает outage, stale pin, revoked material, конфликт обновления и запрет ручного продления lease. Это не endpoint M11 evidence.
 
 Проверены официальные документы 2026-10-14: [PostgreSQL transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html), [libpq TLS verification](https://www.postgresql.org/docs/18/libpq-ssl.html), [Python monotonic clock](https://docs.python.org/3/library/time.html#time.monotonic). Выбор отдельной authority и двух clocks является проектным решением, не готовой гарантией этих библиотек.

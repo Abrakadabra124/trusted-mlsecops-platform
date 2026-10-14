@@ -71,6 +71,8 @@ uv run --locked python -m unittest scripts.trust_qualification scripts.trust_aut
 
 Native runner требует отдельный disposable state и доступный Docker. Он создаёт собственную дочернюю authority, не меняет model storage, останавливает **собственный** container для реального 60-second outage и удаляет только проверенные owned resources. Не запускать на рабочем state только ради диагностики.
 
+На `214cc3c` в clean-checkout CI прошли 45 native checks, source_dirty=false. Первый отказ после последнего успешного read: 59.992019191 s. Все fingerprints и точный scope приведены в evidence; это SDK/SQL client, не готовый HTTP endpoint.
+
 ```powershell
 uv run --locked python -m scripts.trust_native --state .runtime --confirm-disposable
 ```
