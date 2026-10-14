@@ -6,9 +6,9 @@
 
 ## Release proposal и отдельная авторизация
 
-2026-10-14: [контракт](docs/release-authorization.md), [ADR 0026](docs/decisions/0026-release-authorization.md), [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md). Добавлены подписанный descriptor с шестью дополнительными документами, внешний policy pin, отдельные publisher/assessor/approver и проверка полного набора M01-M23. Proposal можно сохранить в immutable SQL releases, но это не active promotion. Реальный candidate без assurance должен получить отказ, не test-generated pass.
+2026-10-14: [контракт](docs/release-authorization.md), [ADR 0026](docs/decisions/0026-release-authorization.md), [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md). Добавлены подписанный descriptor с девятью дополнительными документами, внешний policy pin, отдельные publisher/assessor/approver и проверка полного набора M01-M23. Proposal можно сохранить в immutable SQL releases, но это не active promotion. Реальный candidate без assurance должен получить отказ, не test-generated pass.
 
-20 controlled security methods pass, core 215 statements/86 branches 100%; 6 controlled runner methods pass, runner 98%. Исправлены несовместимость case schema/ID и assurance до начала policy. Ранбуки включают диагностику, безопасный retry после partial publication, expiry и rollback без reset/TLS bypass. [Evidence](docs/evidence/release-authorization-2026-10-14.md) отделяет эти tests от pending native/CI. T13/M10, state machine, revocation и serving integration остаются открытыми; release_ready=false.
+21 controlled security methods pass, core 229 statements/94 branches 100%; 8 controlled runner methods pass, runner 98%. Исправлены несовместимость case schema/ID, assurance до начала policy, CAS closure и SQL denial probe. Ранбуки включают диагностику, безопасный retry после partial publication, expiry и rollback без reset/TLS bypass. [Evidence](docs/evidence/release-authorization-2026-10-14.md) отделяет эти tests от native/CI. T13/M10, state machine, revocation и serving integration остаются открытыми; release_ready=false.
 
 ## Robust training: mitigation проверена, порог не пройден
 

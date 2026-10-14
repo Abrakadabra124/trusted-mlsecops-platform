@@ -11,6 +11,9 @@ DOCUMENTS = (
     "ml-bom",
     "parameters",
     "runtime-profile",
+    "split_manifest",
+    "evaluation_policy",
+    "asset_projection",
 )
 ATTRIBUTES = ("release_id", "sequence", "owner", "issued_at", "expires_at", "issuer")
 MATERIALS = (
@@ -18,11 +21,8 @@ MATERIALS = (
     "model",
     "preprocessing",
     "dataset_manifest",
-    "split_manifest",
     "evaluation_report",
-    "evaluation_policy",
     "provenance",
-    "asset_projection",
     *DOCUMENTS,
 )
 
@@ -62,6 +62,16 @@ def documents(capsule, lock, *, context, publisher_public, serving_image):
     lineage = signing.verify(
         decode(objects[("lineage", bindings["lineage_object"])]),
         "data-lineage",
+        context["trust"]["curator"],
+    )
+    dataset = signing.verify(
+        decode(objects[("manifests", bindings["dataset_reference"])]),
+        "stored-dataset",
+        context["trust"]["curator"],
+    )
+    split = signing.verify(
+        decode(objects[("manifests", dataset["manifest_object"])]),
+        "dataset",
         context["trust"]["curator"],
     )
     if (
@@ -136,6 +146,9 @@ def documents(capsule, lock, *, context, publisher_public, serving_image):
     }
     values = {
         "dependency-lock": lock,
+        "split_manifest": canonical(split),
+        "evaluation_policy": canonical(context["policy"]),
+        "asset_projection": canonical(verified["projection"]),
         **{
             name: canonical(value)
             for name, value in (
@@ -152,11 +165,8 @@ def documents(capsule, lock, *, context, publisher_public, serving_image):
         "model": model,
         "preprocessing": model,
         "dataset_manifest": bindings["dataset_reference"],
-        "split_manifest": metadata["dataset_id"],
         "evaluation_report": context["evaluation_reference"],
-        "evaluation_policy": digest(canonical(context["policy"])),
         "provenance": record["metadata_object"],
-        "asset_projection": digest(canonical(verified["projection"])),
         **{name: digest(content) for name, content in values.items()},
     }
     return values, materials, verified
@@ -296,19 +306,26 @@ def load(client, reference, *, publisher_public):
         material_bundle.MAX_ENVELOPE_BYTES,
     )
     capsule_index = material_bundle._index(capsule_envelope, publisher_public)
+    objects = {}
+    for item in capsule_index["objects"]:
+        content = storage.get(client, "releases", item["sha256"])
+        if len(content) != item["bytes"]:
+            raise Rejected("release_storage_material_size")
+        objects[(item["namespace"], item["sha256"])] = content
     capsule = {
         "envelope": capsule_envelope,
-        "objects": {
-            (item["namespace"], item["sha256"]): storage.get(client, "releases", item["sha256"])
-            for item in capsule_index["objects"]
-        },
+        "objects": objects,
     }
+    values = {}
+    for name in DOCUMENTS:
+        content = storage.get(client, "releases", payload["materials"][name])
+        if not 0 < len(content) <= release_policy.MAX_DOCUMENT:
+            raise Rejected("release_storage_material_size")
+        values[name] = content
     return {
         "envelope": envelope,
         "capsule": capsule,
-        "documents": {
-            name: storage.get(client, "releases", payload["materials"][name]) for name in DOCUMENTS
-        },
+        "documents": values,
     }
 
 

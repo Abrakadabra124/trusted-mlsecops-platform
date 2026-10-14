@@ -5,7 +5,7 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
-from mlsecops import material_bundle, release_authorization, release_bundle, signing
+from mlsecops import material_bundle, release_authorization, release_bundle, signing, storage
 from mlsecops.acceptance import GATES
 from mlsecops.contracts import (
     Rejected,
@@ -124,6 +124,11 @@ def qualify(root, state, image):
         "serving-cannot-publish-proposal",
         lambda: release_bundle.publish(clients["serving"], package, **arguments),
         "release_publisher_storage_identity",
+    )
+    rejected(
+        "serving-direct-sql-write-denied",
+        lambda: storage.put(clients["serving"], "releases", b"release-denied-write-probe"),
+        "storage_write_rejected:42501",
     )
     approval_public = signing.create_key(safe_child(campaign, "release-approver.pem"))
     policy = {

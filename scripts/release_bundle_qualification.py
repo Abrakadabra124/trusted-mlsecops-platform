@@ -138,6 +138,8 @@ class ReleaseBundleContracts(unittest.TestCase):
         with self.memory_storage(values):
             reference = release_bundle.publish("promoter", package, **self.arguments)
             before = dict(values)
+            materials = self.check(package)["manifest"]["materials"]
+            self.assertTrue(set(materials.values()) <= set(values))
             self.assertEqual(
                 release_bundle.publish("promoter", package, **self.arguments), reference
             )
@@ -198,6 +200,38 @@ class ReleaseBundleContracts(unittest.TestCase):
                 self.assertRaisesRegex(Rejected, "material_semantics"),
             ):
                 self.check(altered)
+
+    def test_load_checks_declared_size_before_retaining_all_sql_materials(self):
+        package = self.create()
+        manifest = self.check(package)["manifest"]
+        values = {}
+        with self.memory_storage(values):
+            release_bundle.publish("promoter", package, **self.arguments)
+            capsule = verify(
+                package["capsule"]["envelope"], "candidate-materials", self.materials.public
+            )
+            capsule["objects"][0]["bytes"] += 1
+            oversized = b"x" * (1024 * 1024 + 1)
+            for field, content in (
+                ("capsule", canonical(sign(capsule, "candidate-materials", self.materials.key))),
+                ("model-card", oversized),
+            ):
+                reference = digest(content)
+                values[reference] = content
+                envelope = sign(
+                    {**manifest, "materials": {**manifest["materials"], field: reference}},
+                    "model-release",
+                    self.materials.key,
+                )
+                outer = canonical(envelope)
+                values[digest(outer)] = outer
+                with (
+                    self.subTest(field=field),
+                    self.assertRaisesRegex(Rejected, "storage_material_size"),
+                ):
+                    release_bundle.load(
+                        "serving", digest(outer), publisher_public=self.materials.public
+                    )
 
     def test_storage_receipts_and_post_write_readback_cannot_be_trusted_blindly(self):
         package = self.create()

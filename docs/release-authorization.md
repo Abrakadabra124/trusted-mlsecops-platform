@@ -10,7 +10,7 @@ CAS (content-addressed storage) хранит байты под SHA-256, а не 
 
 ## Материалы
 
-Комплект включает существующую [9-object capsule](material-bundle.md), её envelope, шесть дополнительных документов и внешний release envelope: **17 уникальных SQL objects** в проверенном профиле. Нет training/holdout rows, raw scores или private keys. Это набор для проверки, не backup полного обучения.
+Комплект включает существующую [9-object capsule](material-bundle.md), её envelope, девять дополнительных документов и внешний release envelope: **20 уникальных SQL objects** в проверенном профиле. Нет training/holdout rows, raw scores или private keys. Это набор для проверки, не backup полного обучения.
 
 | Документ | Ответственность |
 | --- | --- |
@@ -20,6 +20,9 @@ CAS (content-addressed storage) хранит байты под SHA-256, а не 
 | ml-bom | Связи ONNX, embedded preprocessing, dataset/lineage, lock, packages и training/serving images |
 | parameters | Source-bound baseline recipe, C=1, max_iter=300, seed, request digest и CPU profile |
 | runtime-profile | Локальный isolated worker: UID 65532, read-only, network-none, 2 CPU/4 GiB |
+| split_manifest | Canonical payload исходного curator-signed dataset manifest с digest/rows split |
+| evaluation_policy | Canonical policy bytes, сравниваемые с независимым context |
+| asset_projection | Canonical пересчитанная projection связей candidate и материалов |
 
 ML-BOM (Machine Learning Bill of Materials) здесь - минимальный внутренний JSON-контракт, не заявленная совместимость с CycloneDX. Parameters описывает baseline recipe из закреплённого source; это не восстановление hyperparameters по весам и не независимая аттестация trainer. Research robust-training candidate этим increment не принимается. Runtime profile описывает существующий worker, **не будущий HTTP serving** и не измеренный SLO.
 
@@ -36,7 +39,7 @@ Release manifest связывает source commit, training/serving image, featu
 
 `subject_sha256` - hash canonical manifest; `proposal_reference` - hash serialized envelope в CAS. Это разные значения. Отчёты связываются с первым, SQL reader получает второе. Во избежание циклических hashes сначала создаётся descriptor, потом reports/assurance, затем approval. Descriptor не содержит hash будущего approval.
 
-Reports <=1 MiB каждый и <=8 MiB суммарно, 1-5000 cases, 1-2048 artifact references; новые signed documents <=1 MiB, supplemental files <=1 MiB каждый. Вложенная capsule сохраняет собственные более строгие bounds. Неизвестные поля signed contracts и неизвестная schema отклоняются.
+Reports <=1 MiB каждый и <=8 MiB суммарно, 1-5000 cases, 1-2048 artifact references; новые signed documents <=1 MiB, supplemental files <=1 MiB каждый. Вложенная capsule сохраняет собственные более строгие bounds. SQL loader проверяет фактическую длину после каждого get, прежде чем накапливать весь комплект; транспорт одного get также имеет SQL size limit, но не streaming API. Неизвестные поля signed contracts и неизвестная schema отклоняются.
 
 ## Публикация и отрицательная демонстрация
 

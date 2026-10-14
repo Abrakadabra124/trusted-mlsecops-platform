@@ -51,6 +51,7 @@ class NativeReleaseContracts(unittest.TestCase):
         ):
             (self.state / f"keys/{role}.pem").write_bytes(original.read_bytes())
         self.published = {}
+        self.serving_can_write = False
 
     def get(self, client, table, reference):
         if table == "releases":
@@ -58,6 +59,11 @@ class NativeReleaseContracts(unittest.TestCase):
         return self.fixture.materials.get(Path(client).name, table, reference)
 
     def put(self, client, table, content):
+        if Path(client).name == "serving":
+            if not self.serving_can_write:
+                raise Rejected("storage_write_rejected:42501")
+            self.published[digest(content)] = content
+            return digest(content)
         self.assertEqual((Path(client).name, table), ("promoter", "releases"))
         self.published[digest(content)] = content
         return digest(content)
@@ -100,9 +106,9 @@ class NativeReleaseContracts(unittest.TestCase):
         self.assertFalse(report["release_ready"])
         self.assertFalse(report["source_dirty"])
         self.assertEqual(
-            (len(report["cases"]), report["objects"], report["documents"]), (10, 17, 6)
+            (len(report["cases"]), report["objects"], report["documents"]), (11, 20, 9)
         )
-        self.assertEqual(len(self.published), 17)
+        self.assertEqual(len(self.published), 20)
         stored = self.state / "release-proposals" / report["campaign_id"] / "report.json"
         self.assertEqual(read_json(stored), report)
 
@@ -113,6 +119,25 @@ class NativeReleaseContracts(unittest.TestCase):
                 self.assertRaisesRegex(Rejected, "native_negative"),
             ):
                 self.qualify()
+
+    def test_unexpected_sql_write_permission_fails_native_not_only_client_guard(self):
+        self.serving_can_write = True
+        with self.assertRaisesRegex(Rejected, "native_negative_bypass"):
+            self.qualify()
+
+    def test_ownership_failure_preserves_historical_evidence_but_returns_failure(self):
+        output = self.state / "evidence/release-native.json"
+        historical = {"status": "pass", "campaign_id": "historical-only"}
+        write_json(output, historical)
+        with (
+            patch.object(native.sys, "argv", ["native", "--state", str(self.state)]),
+            patch.object(native, "validate", side_effect=Rejected("unknown-owner")),
+            patch.object(native, "write_json") as writer,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(native.main(), 1)
+            writer.assert_not_called()
+        self.assertEqual(read_json(output), historical)
 
     def test_input_metadata_and_object_set_changes_fail_closed(self):
         for changes, reason in (

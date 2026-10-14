@@ -2,7 +2,7 @@
 
 ## R1 release proposal / authorization increment - 2026-10-14
 
-Добавлены complete signed descriptor, шесть supplemental документов, отдельные policy/assurance/approval с decoded-key separation, subject/environment/time binding и обязательными M01-M23. SQL proposal publication идемпотентна и выполняет full readback; activation отсутствует, release_ready=false. 26 controlled methods, отдельный native SQL workflow step, [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md), [ADR 0026](docs/decisions/0026-release-authorization.md). Исправлены contract mismatch и policy-validity time gap. Проверенные результаты: [evidence](docs/evidence/release-authorization-2026-10-14.md).
+Добавлены complete signed descriptor, девять supplemental документов, отдельные policy/assurance/approval с decoded-key separation, subject/environment/time binding и обязательными M01-M23. SQL proposal publication идемпотентна и выполняет full readback; activation отсутствует, release_ready=false. 29 controlled methods, отдельный native SQL workflow step, [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md), [ADR 0026](docs/decisions/0026-release-authorization.md). Исправлены contract mismatch, policy-validity time gap, CAS closure и прямой SQL write-denial probe. Проверенные результаты: [evidence](docs/evidence/release-authorization-2026-10-14.md).
 
 ## R1 paired robust training research - 2026-10-13
 
