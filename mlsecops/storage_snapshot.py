@@ -120,6 +120,8 @@ def snapshot(name, *, include_promotion=False):
         "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
         "SET LOCAL idle_in_transaction_session_timeout = '180s';\n"
         "SET LOCAL statement_timeout = '60s';\n"
+        "DO $guard$ BEGIN IF to_regnamespace('ml_trust') IS NOT NULL THEN "
+        "RAISE EXCEPTION 'trust_authority_backup_forbidden'; END IF; END $guard$;\n"
         "SELECT jsonb_build_object('snapshot', pg_export_snapshot(), "
         f"{extra}, "
         f"'tables', ({ledger_sql()}));\n"

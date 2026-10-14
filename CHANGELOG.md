@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 online trust increment - 2026-10-14
+
+Добавлены отдельная TLS SQL authority, root-signed monotonic policy versions и необратимые revocation sets. Lease учитывает время запроса, wall/server expiry и clock rollback; SDK promotion требует свежий trust read, сверяет model/dataset/runtime/signers и не возвращает activation при неопределённом commit. Model backup не архивирует authority. [PB-23/RB-44/RB-45](docs/operations/trust-troubleshooting.md), [evidence](docs/evidence/online-trust-2026-10-14.md). Endpoint, root rotation, rollback authorization и full M11 остаются открытыми.
+
 ## R1 promotion recovery increment - 2026-10-14
 
 Добавлен opt-in signed backup v2 для CAS и promotion journal в одном snapshot, exact migration/TOC/chain checks, внешний restore pin и maintenance до readback. V1 не теряет guard, новый target не становится release-ready. [PB-22/RB-42/RB-43](docs/operations/promotion-recovery-troubleshooting.md), [evidence](docs/evidence/promotion-recovery-2026-10-14.md). Completed retry не стирает новые данные; автоматический pre-receipt resume и полный M17 ещё нужны.

@@ -10,6 +10,8 @@
 
 Для promotion journal добавлен [явный backup v2 и независимый restore](docs/operations/promotion-recovery-troubleshooting.md): общий snapshot CAS/journal, внешний backup-id pin и maintenance при import. [Evidence и ограничения](docs/evidence/promotion-recovery-2026-10-14.md). Восстановленная БД не становится автоматически trusted serving.
 
+Следующий T14 component - [отдельная online trust authority и lease](docs/operations/trust-troubleshooting.md): root-signed текущая policy, отзыв материалов/ключей, deadline максимум 60 s и проверка в SDK promotion. [Результаты и ограничения](docs/evidence/online-trust-2026-10-14.md). Endpoint integration и полная M11-приёмка ещё не завершены.
+
 Проверенный T13 increment: [постоянный promotion journal](docs/promotion-ledger.md) и [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md). Подписи проверяются до записи, конкурентный выбор сериализуется SQL-транзакцией; 108 native SQL checks pass в [CI evidence](docs/evidence/promotion-ledger-2026-10-14.md). Это ещё не serving activation; legacy backup с ledger запрещён, для совместного восстановления нужен явный v2 path. Установка явная, рабочий state автоматически не мигрируется.
 
 Новый [release proposal и authorization contract](docs/release-authorization.md) связывает модель, dataset, lock, runtime, evidence и отдельное approval. [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md) описывает отказ выпуска и восстановление interrupted publication. Это часть T13: active promotion/serving ещё не разрешены, release_ready=false.

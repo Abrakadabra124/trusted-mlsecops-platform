@@ -3,10 +3,11 @@ from unittest.mock import MagicMock, patch
 
 import psycopg
 
-from mlsecops import promotion, storage
+from mlsecops import promotion, storage, trust
 from mlsecops.contracts import Rejected, decode
 from mlsecops.signing import sign
 from scripts import release_authorization_qualification as fixtures
+from scripts import trust_qualification as trust_fixtures
 
 
 class PromotionAdmissionContracts(unittest.TestCase):
@@ -39,6 +40,16 @@ class PromotionAdmissionContracts(unittest.TestCase):
             "expected_serving_image": fixture.bundle.arguments["expected_serving_image"],
         }
         self.clock = fixture.clock
+        self.trust_fixture = trust_fixtures.TrustContracts()
+        self.trust_fixture.setUp()
+        self.addCleanup(self.trust_fixture.doCleanups)
+        self.trust_fixture.wall = float(self.clock)
+        self.trust_fixture.payload.update(
+            promotion_policy_sha256=fixture.policy_hash,
+            issued_at=self.clock - 1,
+            expires_at=self.clock + 3600,
+        )
+        self.lease = self.trust_fixture.lease
         self.values = {}
         self.head = None
         self.calls = []
@@ -69,7 +80,96 @@ class PromotionAdmissionContracts(unittest.TestCase):
             self.fixture.bundle.memory_storage(self.values),
             patch.object(storage, "connect", return_value=self.connection),
         ):
-            return promotion.promote("promoter", **{**self.arguments, **changes})
+            return promotion.promote(
+                "promoter", **{**self.arguments, "trust_lease": self.lease, **changes}
+            )
+
+    def test_missing_online_trust_or_revoked_model_denies_before_writes(self):
+        with self.assertRaisesRegex(Rejected, "promotion_online_trust_required"):
+            self.run_admission(trust_lease=None)
+        self.assertEqual(self.values, {})
+        model = self.fixture.package["capsule"]["objects"]
+        self.trust_fixture.payload["revoked_artifacts"] = sorted(
+            {reference for _, reference in model}
+        )
+        with self.assertRaisesRegex(Rejected, "trust_artifact_revoked"):
+            self.run_admission()
+        self.assertEqual(self.values, {})
+        self.assertIsNone(self.head)
+
+    def test_trust_loss_after_journal_commit_does_not_return_activation(self):
+        original = self.execute
+
+        def failed_trust(query, parameters=None):
+            cursor = original(query, parameters)
+            if "record_selection" in query:
+                self.trust_fixture.failure = trust.Unavailable("trust_service_unavailable")
+            return cursor
+
+        self.connection.execute.side_effect = failed_trust
+        with self.assertRaisesRegex(trust.Unavailable, "trust_service_unavailable"):
+            self.run_admission()
+        self.assertIsNotNone(self.head)
+
+    def test_trust_environment_cannot_be_substituted(self):
+        self.lease.environment = "foreign"
+        with self.assertRaisesRegex(Rejected, "promotion_trust_environment_mismatch"):
+            self.run_admission()
+        self.assertEqual(self.values, {})
+
+    def test_ancestor_and_signer_revocations_are_in_admission_scope(self):
+        from mlsecops import signing
+        from mlsecops.contracts import digest
+
+        projection = decode(self.fixture.package["documents"]["asset_projection"])
+        self.trust_fixture.payload["revoked_artifacts"] = [
+            projection["graph"]["assets"][0]["sha256"]
+        ]
+        with self.assertRaisesRegex(Rejected, "trust_artifact_revoked"):
+            self.run_admission()
+        self.assertEqual(self.values, {})
+        self.trust_fixture.payload["version"] = 2
+        self.trust_fixture.payload["revoked_keys"] = [
+            digest(signing.decode64(self.arguments["trusted_root"]))
+        ]
+        decision = promotion.release_authorization.verify(**self.arguments, clock=self.clock)
+        scope = promotion.trust_scope(self.arguments, decision, self.fixture.policy)
+        self.assertIn(self.trust_fixture.payload["revoked_keys"][0], scope["keys"])
+
+    def test_each_signed_material_reference_is_independently_revocable(self):
+        from mlsecops.contracts import canonical, digest
+
+        package = self.arguments["package"]
+        split = decode(package["documents"]["split_manifest"])
+        projection = decode(package["documents"]["asset_projection"])
+        references = {
+            "proposal_reference": digest(canonical(package["envelope"])),
+            "source_approval": self.arguments["context"]["trust"]["source_approval_digest"],
+            "lineage_id": projection["bindings"]["lineage_id"],
+            "source_fingerprint": projection["bindings"]["source_fingerprint"],
+            **{name: item["sha256"] for name, item in split["objects"].items()},
+            **{
+                name: digest(canonical(self.arguments[name]))
+                for name in ("policy_envelope", "assurance_envelope", "approval_envelope")
+            },
+        }
+        for label, reference in references.items():
+            with self.subTest(material=label):
+                self.values.clear()
+                self.head = None
+                self.trust_fixture.payload["revoked_artifacts"] = [reference]
+                self.lease = trust.Lease(
+                    self.trust_fixture.read,
+                    trusted_root=self.trust_fixture.public,
+                    environment="local-cpu",
+                    minimum_version=1,
+                    wall_clock=lambda: self.trust_fixture.wall,
+                    monotonic_clock=lambda: self.trust_fixture.monotonic,
+                )
+                with self.assertRaisesRegex(Rejected, "trust_artifact_revoked"):
+                    self.run_admission()
+                self.assertEqual(self.values, {})
+                self.assertIsNone(self.head)
 
     def test_same_authorization_retries_after_time_passes_without_new_request(self):
         first = self.run_admission()

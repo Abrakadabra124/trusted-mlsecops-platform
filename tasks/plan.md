@@ -83,6 +83,8 @@ Recovery increment после a65ee56: opt-in backup manifest v2 включае�
 
 ## Неделя 9: Serving и privacy
 
+Перед endpoint использовать [online trust ADR 0029](../docs/decisions/0029-online-trust.md): отдельный текущий signed policy service, независимый от model backup, online startup, monotonic lease максимум 60 s, без cache grace после expiry. Подключить проверку до и после inference, сверку реально загруженного bundle и текущий revoked ancestor set. Component/SDK pass не заменяет эту endpoint приёмку; root rotation и разрешённый rollback остаются отдельными проверками T14.
+
 **Задачи:** T15, T16. Реализовать API-контракт, verify-then-load, atomic bundle selection, trusted readiness, ошибки и abstain. Добавить auth/quotas, ограниченный audit, redaction и тестовые PII canaries.
 
 **Результат:** usable reference inference API с известным model digest, negative API/loader suite, reconciliation реально загруженной версии и отзыв ancestor до endpoint. **Приёмка:** M12, M13, M19 целиком. **Безопасный fallback:** отсутствие ML не отменяет deterministic release gates.

@@ -4,6 +4,10 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
+## Текущее доверие: реализация T14
+
+2026-10-14 после `4804079`: [отдельная TLS SQL authority / ADR 0029](docs/decisions/0029-online-trust.md), [PB-23/RB-44/RB-45](docs/operations/trust-troubleshooting.md). Signed policy versions и irreversible revocations, lease <=60 s без продления при outage/clock rollback, fresh trust admission в SDK. 23 local trust/authority methods и 18 promotion/request methods pass, Python core coverage 100%; SQL engine этим не покрыт. Объединённая adjacent suite: 156 methods pass. [Evidence](docs/evidence/online-trust-2026-10-14.md) сохраняет найденные и исправленные defects и статус native CI. Полный M11/R1 не принят, serving endpoint/root rotation/rollback ещё нужны.
+
 ## Согласованное восстановление promotion journal
 
 2026-10-14: [backup v2 / ADR 0028](docs/decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](docs/operations/promotion-recovery-troubleshooting.md). CAS и journal связаны одним exported snapshot, обеими migrations и подписью. Restore требует внешний backup-id pin, новый owned target, эксклюзивную OS lock и maintenance до readback; completed retry не стирает поздние записи. **125 local methods pass**, новые helpers 61 statements/10 branches 100%. На `8f94e2e` **36 native recovery checks pass** при остановленной source БД; 1 000 predictions/error=0.0, путь до golden checks 6.870389 s, source_dirty=false. [Evidence](docs/evidence/promotion-recovery-2026-10-14.md) сохраняет первый failed run и точные ограничения. Полный M17, online revocation и serving activation не приняты.

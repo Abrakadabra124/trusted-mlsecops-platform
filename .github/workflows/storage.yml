@@ -108,3 +108,10 @@ jobs:
         run: uv run --locked python -m scripts.promotion_native --state .runtime --confirm-disposable
       - name: Complete journal backup and independent recovery with source offline
         run: uv run --locked python -m scripts.promotion_recovery_native --state .runtime --confirm-disposable
+      - name: Current trust, lease and authority command contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-trust --source=mlsecops.trust,mlsecops.trust_authority -m unittest scripts.trust_qualification scripts.trust_authority_qualification
+          uv run --locked coverage report --data-file=.coverage-trust --fail-under=100
+          uv run --locked python -m scripts.trust_native_qualification
+      - name: Separate TLS trust authority, revocations and real sixty-second outage
+        run: uv run --locked python -m scripts.trust_native --state .runtime --confirm-disposable
