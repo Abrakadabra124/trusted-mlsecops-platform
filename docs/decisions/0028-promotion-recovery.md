@@ -1,6 +1,6 @@
 # ADR 0028: единый snapshot CAS и promotion journal
 
-Дата: 2026-10-14. Статус: реализуется лабораторный recovery increment; native evidence pending. Полные M11/M17 не приняты.
+Дата: 2026-10-14. Статус: реализован лабораторный recovery increment; [36 native checks](../evidence/promotion-recovery-2026-10-14.md) проверены в clean-checkout CI. Полные M11/M17 не приняты.
 
 ## Контекст
 

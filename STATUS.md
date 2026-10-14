@@ -6,7 +6,9 @@
 
 ## Согласованное восстановление promotion journal
 
-2026-10-14: [backup v2 / ADR 0028](docs/decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](docs/operations/promotion-recovery-troubleshooting.md). CAS и journal связаны одним exported snapshot, обеими migrations и подписью. Restore требует внешний backup-id pin, новый owned target, эксклюзивную OS lock и maintenance до readback; completed retry не стирает поздние записи. 124 local methods pass, новые helpers 61 statements/10 branches 100%. Native source-offline recovery pending: [evidence](docs/evidence/promotion-recovery-2026-10-14.md). Полный M17, online revocation и serving activation не приняты.
+2026-10-14: [backup v2 / ADR 0028](docs/decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](docs/operations/promotion-recovery-troubleshooting.md). CAS и journal связаны одним exported snapshot, обеими migrations и подписью. Restore требует внешний backup-id pin, новый owned target, эксклюзивную OS lock и maintenance до readback; completed retry не стирает поздние записи. **125 local methods pass**, новые helpers 61 statements/10 branches 100%. На `8f94e2e` **36 native recovery checks pass** при остановленной source БД; 1 000 predictions/error=0.0, путь до golden checks 6.870389 s, source_dirty=false. [Evidence](docs/evidence/promotion-recovery-2026-10-14.md) сохраняет первый failed run и точные ограничения. Полный M17, online revocation и serving activation не приняты.
+
+Итог CI последнего recovery increment на `8f94e2e`: **6 success / 4 failure**, все десять workflows завершены. Regression: M03 431, M06 18, M07 97, M20 723, M21 122 cases pass; M21 завершён 2026-10-14 18:20:17.786175 UTC. Image audit, poisoning, baseline evasion и paired robustness остаются failure. Полная матрица и измеренные нарушения сохранены в [recovery evidence](docs/evidence/promotion-recovery-2026-10-14.md). Принятый компонент восстановления не разрешает release и не закрывает R1/M17.
 
 ## Promotion admission и постоянный journal
 

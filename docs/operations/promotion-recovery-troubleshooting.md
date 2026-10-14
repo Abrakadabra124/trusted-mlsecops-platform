@@ -31,6 +31,10 @@ uv run --locked python -m scripts.promotion_recovery_native --state .runtime --c
 
 Native runner предназначен только для свежего owned CI state после promotion qualification. Он создаёт controlled SQL selections, делает concurrent promotion после snapshot, останавливает **исходную disposable БД**, восстанавливает новый target, проверяет 1 000 predictions через sandbox worker, возвращает source и удаляет только созданные им verified targets. Отдельный target получает намеренную потерю ответа после commit. Это не read-only doctor и не ML approval. Результат/ограничения в `.runtime/evidence/promotion-recovery.json`; прошлый pass-файл не доказывает текущий запуск.
 
+Проверено на `8f94e2e`: 36 native checks pass, source-offline restore до golden checks 6.870389 s, 1 000 predictions/error=0.0. Отдельно 125 local methods pass; Windows и Linux subprocess locking проверены. Точный campaign/source/backup binding в evidence. Это прогретый CI runner, не cold-machine RTO, power-loss тест или полный M17.
+
+V2 поддержан здесь для независимого Docker target. Прежний Kubernetes migration принимает только v1 table scope и отвергнет дополнительные journal tables до maintenance/import. Не удалять их из архива и не обходить TOC check; перенос v2 в Kubernetes требует отдельной реализации и приёмки.
+
 ## RB-42: backup запрещён или manifest не принят
 
 1. `backup_promotion_ledger_not_supported` в обычной команде - ожидаемая защита v1. Если нужен journal, использовать проверенный explicit v2 path, а не удалять schema или guard.
