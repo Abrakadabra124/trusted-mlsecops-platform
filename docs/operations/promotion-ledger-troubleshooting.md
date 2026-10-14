@@ -24,6 +24,8 @@ uv run --locked python -m scripts.promotion_native --state .runtime --confirm-di
 
 Успех означает component status=pass, full_M10=inconclusive, release_ready=false. Evidence хранится в `.runtime/evidence/promotion-native.json`; публично публикуются только очищенные агрегаты. Один прежний pass-файл не подтверждает новый запуск: проверять exit, campaign/source и законченный readback. При ownership failure исторический report намеренно не переписывается в потенциально чужом state.
 
+Проверено 2026-10-14 на `fab7294`: 108 native SQL checks pass, включая restart, плюс 12 release checks с настоящим missing-assurance SDK denial. Локально 106 adjacent methods pass. Точные campaign/source/migration bindings и завершённый storage run находятся в evidence. Положительный native ML promotion, полное recovery ledger и power-loss проверка этим не заявляются.
+
 ## RB-40: sequence conflict, timeout или ambiguous commit
 
 1. Прекратить автоматические повторы. Сохранить точные proposal/proof/request references, environment, source и время в приватном evidence. Не выводить signing keys или connection credentials.
@@ -40,6 +42,8 @@ uv run --locked python -c "from mlsecops.promotion_state import state; from mlse
 5. `P1002` - неизвестный environment или policy mismatch. Не менять pin на значение из отвергнутого пакета. Проверить trusted configuration и эскалировать approver/platform-owner; rotation отдельно ещё не реализована.
 6. `promotion_commit_unconfirmed` не различает снаружи rollback и committed-but-response-lost. Read-only сверить immutable event для ожидаемого environment/sequence и его request bytes, не только latest head. При недоступной БД сохранить outcome unconfirmed. Автоматического retry в SDK нет.
 7. Retry выполняется только с прежними документами, прежним environment/sequence и ещё действующим approval через полный admission. Успех требует совпадения SQL receipt и последующего event/CAS readback. `recorded-not-activated` не разрешает вручную обходить loader или включать endpoint.
+
+`P1001` означает некорректный request или отсутствующий связанный material. Сверить schema, точные bytes/digests и наличие proposal/proof, не подставлять документ с похожим именем. `P1005` означает расхождение head и immutable event: остановить promotion, сохранить состояние для platform-owner и не восстанавливать недостающую строку ручным INSERT. Ошибки SQL transport/parse могут иметь стандартный SQLSTATE вместо P100x; неизвестный код не считать безопасным retry.
 
 Реально найдено: первоначально новый request содержал текущее время попытки, поэтому повтор через секунду получал другой digest и sequence conflict. Controlled regression сначала воспроизвёл отказ; request теперь использует signed approval issued_at. Это дефект реализации до выпуска, не production-инцидент.
 

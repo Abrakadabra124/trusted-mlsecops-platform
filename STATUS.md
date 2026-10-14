@@ -8,7 +8,9 @@
 
 2026-10-14: [promotion ledger](docs/promotion-ledger.md), [ADR 0027](docs/decisions/0027-promotion-ledger.md), [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md). SDK проверяет signed chain до записи; отдельная PostgreSQL schema связывает environment/policy/sequence с immutable request. Row-locked transition, current retry, stale/conflicting rejection, post-lock expiry и event readback не объявляются serving activation. Full M10/M11 остаётся открыт.
 
-Controlled tests воспроизвели retry bug и backup scope race; исправлены deterministic request time и проверка scope в exported snapshot. Старый backup запрещён при наличии ledger до реализации согласованного recovery. Docker Engine на локальном host сейчас недоступен; working runtime не запускался, native qualification выполняется в отдельном CI. [Evidence](docs/evidence/promotion-ledger-2026-10-14.md) отделяет локальные tests от ещё не подтверждённых native результатов.
+Controlled tests воспроизвели retry bug и backup scope race; исправлены deterministic request time и проверка scope в exported snapshot. Старый backup запрещён при наличии ledger до реализации согласованного recovery. Docker Engine на локальном host сейчас недоступен; working runtime не запускался. На `fab7294` отдельный clean-checkout storage CI подтвердил **108 native SQL checks** и **12 release checks**, включая SDK missing-assurance denial без записи. Локально 106 methods pass, promotion core 97 statements/32 branches 100%. [Evidence](docs/evidence/promotion-ledger-2026-10-14.md) отделяет controlled payloads, настоящее SQL исполнение и остающиеся M10/M11/M17 ограничения.
+
+На `fab7294` все 10 workflows terminal: **6 success / 4 failure**. M06 18, M03 431, M07 97, M20 723 и M21 122 cases pass; M21 завершён 2026-10-14 17:35:25 UTC. Image audit, poisoning, baseline evasion и paired robustness сохраняют fail без ослабления policy. Полная матрица, bindings и ограничения опубликованы в evidence. Следующий increment - согласованный backup/restore promotion journal, затем дальнейшая controller/serving integration; это не завершённый R1.
 
 ## Release proposal и отдельная авторизация
 

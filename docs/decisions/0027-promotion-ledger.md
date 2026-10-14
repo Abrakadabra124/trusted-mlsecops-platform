@@ -1,6 +1,6 @@
 # ADR 0027: PostgreSQL journal вместо изменяемого alias
 
-Дата: 2026-10-14. Статус: реализация локального increment; native qualification pending до evidence. Полный M10/M11/M17 не закрыт.
+Дата: 2026-10-14. Статус: реализован лабораторный increment; 108 native SQL checks проверены в [CI evidence](../evidence/promotion-ledger-2026-10-14.md). Полный M10/M11/M17 не закрыт.
 
 ## Контекст
 
