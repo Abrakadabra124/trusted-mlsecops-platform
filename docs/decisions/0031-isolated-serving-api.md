@@ -1,6 +1,6 @@
 # ADR 0031: Постоянный изолированный ONNX worker и loopback API
 
-Дата: 2026-10-14. Статус: реализация; native d0d4423 проверен, последующие resource/heartbeat corrections требуют отдельного CI. Scope: T15 component. M12/M13/M14/R1 не закрыты. Точные bindings: [evidence](../evidence/serving-api-2026-10-14.md).
+Дата: 2026-10-14. Статус: реализация; native d0d4423 и resource/startup cleanup corrections на 2942255 проверены отдельными clean-checkout storage campaigns. Scope: T15 component. M12/M13/M14/R1 не закрыты. Точные bindings: [evidence](../evidence/serving-api-2026-10-14.md).
 
 ## Требование и решение
 

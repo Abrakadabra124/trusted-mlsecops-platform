@@ -1,6 +1,6 @@
 # Persistent isolated serving и API: 2026-10-14
 
-Parent: `a711ffa99b7cfa8594c7cf0832e4fc3dda66f3f6`. Первый runtime commit: `d0d4423e62489b956405fdd72890859c247d57e8`. Scope: T15 implementation component. Полные M12/M13/M14/R1 остаются открытыми. Ниже отдельно указаны native evidence этого commit и последующие исправления, требующие своего CI.
+Parent: `a711ffa99b7cfa8594c7cf0832e4fc3dda66f3f6`. Первый runtime commit: `d0d4423e62489b956405fdd72890859c247d57e8`, исправления: `29422551726476849c26eaddb1c0ad3576f911bd`. Scope: T15 implementation component. Полные M12/M13/M14/R1 остаются открытыми. Ниже отдельно указаны native evidence каждого commit; старый результат не подменяет replay corrections.
 
 ## Локальные проверки
 
@@ -53,9 +53,37 @@ Source review обнаружил resource mismatch: acceptance требует se
 
 Второй scoped reviewer указал, что первая попытка исправления Channel всё ещё теряла handle, если после thread-start failure одновременно отказывал kill. Основной агент воспроизвёл на реальном Python child: `OSError PRIVATE-CLEANUP`, child_alive=True; test cleanup затем безопасно завершил его. Channel теперь тоже имеет отдельный start и заранее сохранён у Worker; cleanup errors обезличены, handle удерживается до подтверждения. Дополнительные failing tests обнаружили чтение queue после close и ошибочное подтверждение cleanup живого IO thread. Closed loop больше не зависит от успешного enqueue sentinel в полную queue; живой thread означает cleanup_unconfirmed.
 
-После всех corrections: **50 local serving methods pass за 4.812 s**, coverage **94% на 523 statements / 156 branches**. Release contracts: 22 methods pass, 229 statements / 94 branches, 100% для трёх Python modules, не SQL/Docker. Объединённая adjacent suite: **137 methods за 10.639 s**. Это перечисленная release/reader/promotion/trust/serving suite, не весь репозиторий; предыдущие 138 включали другой набор adjacent modules. Native результаты `d0d4423` не выдаются за проверку этих новых исправлений; новый clean-checkout CI ещё обязателен. Подозрение на несовпадение policy digest опровергнуто source check: `release_native` и acceptance используют один полный `policies/local-cpu.json`; scoring-only policy ошибочно не подставляется.
+После всех corrections: **50 local serving methods pass за 4.812 s**, coverage **94% на 523 statements / 156 branches**. Release contracts: 22 methods pass, 229 statements / 94 branches, 100% для трёх Python modules, не SQL/Docker. Объединённая adjacent suite: **137 methods за 10.639 s**. Это перечисленная release/reader/promotion/trust/serving suite, не весь репозиторий; предыдущие 138 включали другой набор adjacent modules. Native результаты `d0d4423` не выдаются за проверку новых исправлений; обязательный replay на `2942255` описан далее. Подозрение на несовпадение policy digest опровергнуто source check: `release_native` и acceptance используют один полный `policies/local-cpu.json`; scoring-only policy ошибочно не подставляется.
 
-## Оставшаяся работа
+## Проверка исправлений на 2942255
+
+[Storage CI 38633252132](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252132) completed/success. **34 native checks pass** на clean checkout `29422551726476849c26eaddb1c0ad3576f911bd` с исправленными CPU/RAM, one-shot Worker/Channel start и cleanup semantics. Signed fixture остаётся qualification, не real ML approval.
+
+- Campaign `a6c73653c5f24281af085b5f175b2513`, UTC `2026-10-14T20:40:02.328241` - `20:40:20.169918`.
+- Fingerprint `30bbfd3cf753f64c39fdd867982083d6db81f1e4bffedae206b7bb3e425e5cfd`, `source_dirty=false`.
+- 3 golden rows, max error `3.166496753692627e-08`; stopped-worker denial `2.1115809909999825 s`, removal/readback и explicit verified reload pass.
+- Model revocation через actual signed SQL authority блокирует prediction/readiness; `release_ready=false`, `full_M12=inconclusive` сохранены.
+- CI regression: 50 serving methods за 3.975 s, coverage 94% на 523 statements / 156 branches; reader-only 18, journal 108, recovery 36 и 1 000 golden rows/error=0; M03 431 / M07 97 pass.
+- Trust component: 45 checks, first denial `59.99116139800003 s`. HTTP outage deadline ещё не квалифицирован; это не его замена.
+
+| Workflow | Run | Результат |
+| --- | --- | --- |
+| Developer | [38633252300](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252300) | success, 74 checks / 3 trainings |
+| Storage/TLS/serving | [38633252132](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252132) | success |
+| Tracking | [38633252306](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252306) | success, M06 18 cases |
+| Intake contracts | [38633252287](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252287) | success |
+| Docs | [38633252183](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252183) | success |
+| Kubernetes | [38633252058](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252058) | success, M20 723 / M21 122 cases |
+| Image audit | [38633252147](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252147) | failure |
+| Poisoning | [38633252214](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252214) | failure |
+| Evasion | [38633252211](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252211) | failure |
+| Paired robust | [38633252106](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38633252106) | failure |
+
+Developer difference=0.0, parity error=`2.086162567138672e-07`. Все четыре image scans выполнены; High/Critical counts совпали с d0d4423, waiver нет. Poisoning `f52310659d9a4bff827b0918a28ca1ba`: integrity pass, 35 cases / 251 files, 10 violations / 0 inconclusive. Evasion `9fabf74a7fd247f6aa0898ee02cdc77a`: execution complete / primary pass, recall drop=`0.07183673469387755`. Paired `b19bcc295fd54bf786a0214cd11f75be`: execution complete / primary pass, candidate drops `0.052244897959183675`, `0.06224066390041494`, `0.06143344709897611` при лимите 0.05. Эти отказы продолжают блокировать release.
+
+Итог `2942255`: **10 terminal workflows, 6 success / 4 failure**. M20 723 cases завершён UTC `20:48:53.549599`; M21 122 cases завершён `20:51:09.570574`, source_dirty=false. Оба reports содержат runtime commit и fingerprint выше. Cleanup disposable CI cluster завершён success. Полный R1 не принят, T15 и остальные открытые задачи не помечены выполненными; текущая цель остаётся активной.
+
+## Оставшаяся работа и review
 
 Заключительный fresh-context review scoped lifecycle corrections не обнаружил новых actionable findings. Reviewer выполнил 28 профильных tests и четыре in-memory fault probes; основной агент независимо выполнил полный перечисленный набор 137 методов. Это автоматический review ограниченного diff, не human M22 challenge, penetration test или гарантия отсутствия всех ошибок. Локальный Docker не запускался.
 
