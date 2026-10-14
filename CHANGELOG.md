@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 isolated serving API increment - 2026-10-14
+
+Постоянный digest-pinned Docker worker загружает exact verified ONNX bytes один раз и использует bounded nonce/row-bound JSON protocol без сети, mounts и signing credentials. Engine проверяет current Reader до/после inference и не сохраняет fallback при failure. Добавлен loopback FastAPI/Uvicorn с bearer auth, named features, body/admission limits и 401/413/422/429/503; cancellation сохраняет slot до завершения underlying thread. [ADR 0031](docs/decisions/0031-isolated-serving-api.md), [API](docs/serving-api.md), [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md), [evidence](docs/evidence/serving-api-2026-10-14.md). Полные gates и production readiness не объявляются пройденными.
+
 ## R1 current release reader increment - 2026-10-14
 
 Serving-only reader связывает current SQL head/event/authority с полной signed authorization, immutable material bytes и текущим trust. Повторная head/time проверка, external sequence floor и in-process equivocation history; frozen handoff не объявляется runtime readiness. Добавлены controlled negative tests, отдельная disposable native qualification и [PB-24/RB-46/RB-47](docs/operations/release-reader-troubleshooting.md). Настоящие блокирующие ML gates не ослаблены; HTTP/sandbox activation и full M12 остаются открытыми. [Evidence](docs/evidence/release-reader-2026-10-14.md).

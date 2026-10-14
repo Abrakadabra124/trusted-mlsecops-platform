@@ -5,11 +5,10 @@ from mlsecops.datasets import FEATURES
 from mlsecops.prediction_protocol import validate_scores
 
 
-def decide(features, predictor):
+def validate(features):
     if not isinstance(features, list) or not 1 <= len(features) <= 100:
         raise Rejected("advisory_batch_limit")
-    supported, positions, decisions = [], [], []
-    for index, row in enumerate(features):
+    for row in features:
         if not isinstance(row, list) or len(row) != len(FEATURES):
             raise Rejected("advisory_feature_shape")
         try:
@@ -18,6 +17,12 @@ def decide(features, predictor):
             finite = False
         if not finite:
             raise Rejected("advisory_feature_type")
+
+
+def decide(features, predictor):
+    validate(features)
+    supported, positions, decisions = [], [], []
+    for index, row in enumerate(features):
         decisions.append({"decision": "abstain", "reason": "outside-support", "score": None})
         if all(0 <= value <= 1 for value in row):
             supported.append(list(row))

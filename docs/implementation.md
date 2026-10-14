@@ -1,5 +1,7 @@
 # Реализация R1
 
+Increment 2026-10-14 после `a711ffa`: [постоянный isolated worker / ADR 0031](decisions/0031-isolated-serving-api.md) и [loopback HTTP API](serving-api.md). Связаны verified Reader, one-load ONNX session, bounded framing/deadline/cleanup и trust checks до/после inference; bad client input не выключает здоровую модель. [PB-25/RB-48/RB-49](operations/serving-troubleshooting.md) и [evidence](evidence/serving-api-2026-10-14.md). Настоящий candidate с failed gates не принят; native positive chain использует отдельные contract fixtures. Полный M12 ещё открыт.
+
 Increment 2026-10-14 после `94e45c3`: [current release reader / ADR 0030](decisions/0030-current-release-reader.md), [PB-24/RB-46/RB-47](operations/release-reader-troubleshooting.md). SQL selection повторно связывается с полной authorization и текущим trust; returning exact bytes не объявляется ONNX load/readiness. [Evidence](evidence/release-reader-2026-10-14.md) сохраняет controlled/native scope. Следующий шаг T15: isolated worker session, running digest и API contract. M12 ещё не принят.
 
 На `37397ce` 18 native reader checks pass в двух disposable TLS SQL workspace, source_dirty=false; 86 local adjacent methods pass. Синтетическая signed positive fixture проверяет механизм enforcement, не разрешает реальную модель с failed gates. Working Docker/WSL не изменялся.

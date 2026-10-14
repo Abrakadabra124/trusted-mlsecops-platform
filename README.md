@@ -2,7 +2,7 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
-Новый component: [проверенное чтение текущего release](docs/decisions/0030-current-release-reader.md) повторно проверяет authorization и online trust, обнаруживает смену head и возвращает неизменяемые model bytes. Это ещё не ONNX runtime load или готовый API; `release_ready=false`. [PB-24/RB-46/RB-47](docs/operations/release-reader-troubleshooting.md) и [точные evidence/ограничения](docs/evidence/release-reader-2026-10-14.md).
+Новый increment: [локальный inference API](docs/serving-api.md) связывает [проверенный Reader](docs/decisions/0030-current-release-reader.md) с постоянным изолированным ONNX worker, before/after-inference trust checks, named features, body limits и явными отказами. Полная M12/R1 приёмка ещё не пройдена; positive native fixture не разрешает реальный candidate с failed gates. [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md), [evidence и ограничения](docs/evidence/serving-api-2026-10-14.md).
 
 **Статус: R1 в разработке, первый рабочий developer preview.** Уже доступны синтетические данные, подписанные manifests, контейнерное обучение, ONNX-предсказания и отдельный scorer с подписанным evaluation report. Полная приёмка M01-M23 пока не пройдена: preview не является trusted release или production-платформой. Исследование: 2026-10-06; начало реализации: **2026-10-07**.
 

@@ -83,6 +83,8 @@ Recovery increment после a65ee56: opt-in backup manifest v2 включае�
 
 ## Неделя 9: Serving и privacy
 
+Реализован [API/isolated serving increment](../docs/serving-api.md): persistent session, actual-byte load handshake, before/after trust checks и bounded HTTP contract. [ADR 0031](../docs/decisions/0031-isolated-serving-api.md) и [evidence](../docs/evidence/serving-api-2026-10-14.md) отделяют fixture execution от настоящей acceptance. Далее обязательны candidate-bound full M12, HTTP outage deadline trace и T16 privacy/quotas/audit; thresholds и исходная цель не сокращены.
+
 Реализован pre-runtime [current reader ADR 0030](../docs/decisions/0030-current-release-reader.md): immutable bytes + repeated authorization/current head/lease checks. Следующая интеграция обязана передать именно эти bytes isolated worker, подтвердить running digest, проверить before/after-inference state и HTTP contract. Native positive contract fixture не заменяет реальную ML acceptance; [evidence](../docs/evidence/release-reader-2026-10-14.md) и [PB-24](../docs/operations/release-reader-troubleshooting.md).
 
 Перед endpoint использовать [online trust ADR 0029](../docs/decisions/0029-online-trust.md): отдельный текущий signed policy service, независимый от model backup, online startup, monotonic lease максимум 60 s, без cache grace после expiry. Подключить проверку до и после inference, сверку реально загруженного bundle и текущий revoked ancestor set. Component/SDK pass не заменяет эту endpoint приёмку; root rotation и разрешённый rollback остаются отдельными проверками T14.

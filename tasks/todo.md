@@ -102,6 +102,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T15
 - [ ] Inference API и loader. Зависимость: T14. Gate: M12.
+- Increment после `a711ffa`: [ADR 0031/API](../docs/serving-api.md), persistent Docker ONNX session, named-input loopback HTTP, before/after trust checks, deadlines/cleanup и cancellation accounting. [PB-25/RB-48/RB-49](../docs/operations/serving-troubleshooting.md), [evidence](../docs/evidence/serving-api-2026-10-14.md). 41 local serving methods pass, 94% controlled coverage, 138 adjacent methods pass; native CI ожидается. Полный candidate-bound M12 и HTTP outage trace остаются обязательными, test assurance не превращается в real approval.
 - Increment 2026-10-14: [ADR 0030](../docs/decisions/0030-current-release-reader.md), Reader проверяет current head/event, authorization, current trust и неизменяемые bytes. На `37397ce` 18 native TLS SQL checks pass, 86 local adjacent methods pass. [PB-24/RB-46/RB-47](../docs/operations/release-reader-troubleshooting.md), [evidence](../docs/evidence/release-reader-2026-10-14.md). Это pre-runtime component с controlled positive fixture, не verified ONNX load/readiness или HTTP API; задача остаётся открытой.
 - Результат: API schema, verified readiness, atomic bundle load и явные ошибки/abstain.
 - Проверка: request limit suite, malicious paths/URLs не поддерживаются, TOCTOU и missing signature не дают ready.

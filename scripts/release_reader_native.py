@@ -2,7 +2,7 @@ import argparse
 import shutil
 import sys
 import uuid
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 
 import psycopg
@@ -20,7 +20,9 @@ from mlsecops import (
 )
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_child, write_json
 from mlsecops.inventory import command, source_fingerprint
+from mlsecops.sandbox import resolve_image
 from scripts import promotion_qualification as fixtures
+from scripts import serving_native
 
 
 @contextmanager
@@ -53,7 +55,7 @@ def disposable(root, state, campaign, suffix, port):
             shutil.rmtree(destination)
 
 
-def qualify(root, state):
+def qualify(root, state, image=None):
     state = Path(state).resolve()
     source = storage_bootstrap.validate(state)
     original_ledger = storage_restore.ledger(source["name"])
@@ -64,9 +66,13 @@ def qualify(root, state):
     campaign = uuid.uuid4().hex
     started = now()
     cases = []
+    runtime = None
+    if image is not None:
+        image = resolve_image(image)
 
     def confirmed(label, condition=True):
         if not condition:
+            print(canonical({"case": label, "status": "fail"}).decode(), flush=True)
             raise Rejected("reader_case_failed:" + label)
         cases.append(label)
         print(canonical({"case": label, "status": "pass"}).decode(), flush=True)
@@ -85,9 +91,11 @@ def qualify(root, state):
     fixture = fixtures.PromotionAdmissionContracts()
     try:
         fixture.setUp()
+        golden = serving_native.bind_real_runtime(fixture, image) if image is not None else None
         with (
             disposable(root, state, campaign, "models", 15444) as models,
             disposable(root, state, campaign, "trust", 15445) as authority,
+            ExitStack() as services,
         ):
             promoter = models / "storage-clients/promoter"
             serving = models / "storage-clients/serving"
@@ -157,7 +165,17 @@ def qualify(root, state):
                 ).load(),
                 "serving_sequence_replay",
             )
+            if image is not None:
+                runtime_reader = release_reader.Reader(
+                    serving, **options, trust_lease=lease(), minimum_sequence=1
+                )
+                http, body, runtime = serving_native.check_http(
+                    services, runtime_reader, golden, confirmed, rejected
+                )
             trust_authority.update(authority, policy, key, revoked_artifacts=[loaded.model_sha256])
+            if image is not None:
+                confirmed("actual-revocation-http-503", http("/v1/predict", body)[0] == 503)
+                confirmed("actual-revocation-readiness-503", http("/readyz")[0] == 503)
             rejected(
                 "model-revocation-denies-existing-handoff",
                 lambda: reader.check(loaded),
@@ -195,7 +213,9 @@ def qualify(root, state):
     )
     return {
         "schema_version": 1,
-        "scope": "release-reader-real-TLS-SQL-controlled-signed-fixture-not-M12",
+        "scope": "serving-HTTP-ONNX-TLS-controlled-fixture-not-full-M12"
+        if image is not None
+        else "release-reader-real-TLS-SQL-controlled-signed-fixture-not-M12",
         "status": "pass",
         "release_ready": False,
         "full_M12": "inconclusive",
@@ -206,9 +226,10 @@ def qualify(root, state):
         "started_at": started,
         "finished_at": now(),
         "cases": cases,
+        "runtime": runtime,
         "limitations": [
             "All-pass gate reports are controlled contract fixtures, not actual ML acceptance",
-            "No HTTP endpoint, ONNX runtime load, inference or readiness claimed",
+            "HTTP/ONNX execution only when an explicit worker image is supplied; not actual ML acceptance",
             "Current source ML security failures remain blocking",
         ],
     }
@@ -218,13 +239,14 @@ def main(arguments=None):
     parser = argparse.ArgumentParser(description="Disposable signed release reader qualification")
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--confirm-disposable", action="store_true", required=True)
+    parser.add_argument("--worker-image")
     options = parser.parse_args(arguments)
     output = None
     try:
         storage_bootstrap.validate(options.state)
         output = safe_child(options.state, "evidence/release-reader-qualification.json")
         write_json(output, {"status": "inconclusive", "release_ready": False})
-        result = qualify(Path(__file__).resolve().parents[1], options.state)
+        result = qualify(Path(__file__).resolve().parents[1], options.state, options.worker_image)
         write_json(output, result)
         print(canonical({**result, "cases": len(result["cases"])}).decode())
         return 0

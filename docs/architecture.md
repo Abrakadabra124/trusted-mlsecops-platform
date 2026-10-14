@@ -124,7 +124,7 @@ Rollback допускает меньший release sequence только чер�
 
 ## 7. Контракт inference
 
-Предлагается `POST /v1/predict`: именованные конечные числовые/категориальные признаки по версии схемы, до 100 строк, body до 64 KiB, без произвольных файлов и URL. Возврат: request ID, advisory score в `[0,1]`, decision=`advisory|abstain`, bundle digest, schema version, reason code. Финальный набор полей определяется T03/T15.
+Реализован local contract `POST /v1/predict`: `schema_version=1`, именованные numeric `instances` по шести fixed features, до 100 строк, body до 64 KiB, без произвольных файлов и URL. Возврат: server request ID, advisory score в `[0,1]`, decision=`score|abstain`, model/bundle digests, schema version и reason code. [API](serving-api.md) и [ADR 0031](decisions/0031-isolated-serving-api.md) фиксируют итоговые поля, isolated worker, startup/shutdown и пределы; полная M12/R1 приёмка остаётся открытой. Категориальные/business features в текущем synthetic profile не реализованы.
 
 - Неверная схема/NaN/неизвестные обязательные категории: 422, oversized body: 413, превышение квоты: 429.
 - Нет доверенной модели/истёк trust lease: 503, никакой загрузки случайного fallback.

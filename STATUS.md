@@ -4,6 +4,10 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
+## Постоянный worker и inference API: T15 increment
+
+2026-10-14 после `a711ffa`: [ADR 0031](docs/decisions/0031-isolated-serving-api.md), [API contract и запуск](docs/serving-api.md), [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md). Verified Reader -> resource-bounded Docker worker -> HTTP score/abstain с before/after trust, nonce/digest binding и fail-closed lifecycle. Локальная suite: 41 methods pass, controlled coverage 94%, объединённая adjacent suite 138 pass; native CI пока ожидается. [Evidence](docs/evidence/serving-api-2026-10-14.md) отделяет настоящие transport/runtime probes от synthetic contract assurance. T15/M12, M13/M14 и полный R1 не закрыты.
+
 ## Проверенное чтение текущего release: T15 component
 
 2026-10-14 после `94e45c3`: [ADR 0030](docs/decisions/0030-current-release-reader.md), serving-only reader с повторной проверкой подписей/authorization/current trust, head race/expiry checks и immutable bytes handoff. Никакого ready=true или HTTP endpoint; T15/M12 и полная цель открыты. [PB-24/RB-46/RB-47](docs/operations/release-reader-troubleshooting.md), [evidence](docs/evidence/release-reader-2026-10-14.md) отделяют локальные controlled tests от native CI и будущей runtime integration.

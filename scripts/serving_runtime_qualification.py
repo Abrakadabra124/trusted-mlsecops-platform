@@ -1,0 +1,246 @@
+import copy
+import importlib.metadata
+import subprocess
+import sys
+import time
+import unittest
+from unittest.mock import Mock, patch
+
+from mlsecops import serving_protocol as protocol
+from mlsecops import serving_runtime
+from mlsecops.contracts import Rejected, canonical
+
+
+class BoundedPipeContracts(unittest.TestCase):
+    def process(self, source):
+        process = subprocess.Popen(
+            [sys.executable, "-u", "-c", source],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        channel = serving_runtime.Channel(process)
+        self.addCleanup(channel.close)
+        return process, channel
+
+    def test_real_pipe_echo_is_bounded_and_can_exchange_twice(self):
+        process, channel = self.process(
+            "import sys\nfor line in sys.stdin.buffer:\n sys.stdout.buffer.write(line);sys.stdout.buffer.flush()"
+        )
+        for value in ({"n": 1}, {"n": 2}):
+            self.assertEqual(channel.exchange(value, timeout=2), value)
+        channel.close()
+        channel.close()
+        self.assertIsNotNone(process.poll())
+        with self.assertRaises(Rejected):
+            channel.exchange({}, timeout=1)
+
+    def test_hang_partial_and_excessive_output_kill_process(self):
+        sources = (
+            "import time;time.sleep(30)",
+            "import sys,time;sys.stdout.write('{');sys.stdout.flush();time.sleep(30)",
+            f"import sys,time;sys.stdout.write('x'*{protocol.MAX_FRAME + 2});sys.stdout.flush();time.sleep(30)",
+            "import sys;sys.stdout.write('PRIVATE-CANARY\\n');sys.stdout.flush()",
+            "pass",
+        )
+        for source in sources:
+            with self.subTest(source=source[:30]):
+                process, channel = self.process(source)
+                started = time.monotonic()
+                with self.assertRaisesRegex(Rejected, "^serving_transport_failed$"):
+                    channel.exchange({}, timeout=0.3)
+                self.assertLess(time.monotonic() - started, 4)
+                self.assertIsNotNone(process.poll())
+
+    def test_timeout_validation_precedes_pipe_write(self):
+        _, channel = self.process("import time;time.sleep(30)")
+        for timeout in (0, -1, True, float("nan"), 61):
+            with self.subTest(timeout=timeout), self.assertRaises(Rejected):
+                channel.exchange({}, timeout=timeout)
+
+    def test_docker_command_has_no_mounts_network_or_credentials(self):
+        arguments = serving_runtime.create_arguments("sha256:" + "a" * 64, "b" * 32)
+        for flag, value in (
+            ("--network", "none"),
+            ("--user", "65532:65532"),
+            ("--cap-drop", "ALL"),
+            ("--memory", "1g"),
+            ("--memory-swap", "1g"),
+            ("--pids-limit", "64"),
+            ("--security-opt", "no-new-privileges"),
+            ("--log-driver", "none"),
+        ):
+            self.assertEqual(arguments[arguments.index(flag) + 1], value)
+        self.assertIn("--read-only", arguments)
+        self.assertIn("--rm", arguments)
+        self.assertFalse(
+            {"--mount", "-v", "--volume", "--env", "-e", "--privileged", "-p"} & set(arguments)
+        )
+
+    def test_wrong_resolved_image_is_rejected_before_docker_create(self):
+        with (
+            patch.object(serving_runtime, "resolve_image", return_value="sha256:" + "b" * 64),
+            patch.object(serving_runtime, "command") as command,
+        ):
+            with self.assertRaisesRegex(Rejected, "serving_image_pin"):
+                serving_runtime.Worker(b"model", "sha256:" + "a" * 64)
+            command.assert_not_called()
+
+
+class DockerLifecycleContracts(unittest.TestCase):
+    def setUp(self):
+        self.image = "sha256:" + "a" * 64
+        self.identifier = "b" * 64
+        self.exists = True
+        self.remove_failure = False
+        self.corrupt = False
+        self.observed = {
+            "Image": self.image,
+            "Config": {
+                "User": "65532:65532",
+                "Labels": {},
+                "Cmd": ["python", "-m", "mlsecops.serving_worker"],
+                "Entrypoint": None,
+            },
+            "Mounts": [],
+            "HostConfig": {
+                "NetworkMode": "none",
+                "ReadonlyRootfs": True,
+                "Privileged": False,
+                "AutoRemove": True,
+                "Memory": 1024**3,
+                "MemorySwap": 1024**3,
+                "NanoCpus": 2 * 10**9,
+                "PidsLimit": 64,
+                "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges"],
+                "LogConfig": {"Type": "none"},
+                "Tmpfs": {"/tmp": "rw,noexec,nosuid,size=32m"},
+            },
+        }
+        self.channel = Mock()
+        self.channel.exchange.side_effect = self.reply
+        for target, values in (
+            ("resolve_image", {"return_value": self.image}),
+            ("command", {"side_effect": self.command}),
+            ("Channel", {"return_value": self.channel}),
+        ):
+            patcher = patch.object(serving_runtime, target, **values)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch.object(serving_runtime.subprocess, "Popen", return_value=Mock())
+        self.process = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def command(self, arguments, timeout):
+        if arguments[1] == "create":
+            session = arguments[arguments.index("--label") + 1].split("=", 1)[1]
+            self.observed["Config"]["Labels"]["org.trusted-mlsecops.session"] = session
+            return self.identifier
+        if arguments[1] == "inspect":
+            return canonical([self.observed]).decode()
+        if arguments[1] == "rm":
+            self.assertEqual(arguments[-1], self.identifier)
+            if self.remove_failure:
+                raise Rejected("controlled-remove-failure")
+            self.exists = False
+            return self.identifier
+        self.assertIn(f"id={self.identifier}", arguments)
+        return self.identifier if self.exists else ""
+
+    def reply(self, request, timeout):
+        extra = {"ready": True}
+        if request["action"] == "load":
+            extra.update(
+                runtime_version=importlib.metadata.version("onnxruntime"),
+                scan={
+                    "format": "onnx",
+                    "policy_version": "linear-onnx-v2",
+                    "onnx_version": importlib.metadata.version("onnx"),
+                    "inspected_nodes": 2,
+                    "unsupported": 0,
+                    "skipped": 0,
+                    "errors": 0,
+                },
+            )
+        elif request["action"] == "predict":
+            extra = {
+                "predictions": [
+                    {"row_id": f"{request['request_id']}:{index}", "score": 0.5}
+                    for index in range(len(request["features"]))
+                ]
+            }
+        result = protocol.response(request, **extra)
+        if self.corrupt:
+            result["model_sha256"] = "f" * 64
+        return result
+
+    def test_constructor_readback_predict_ping_and_idempotent_cleanup(self):
+        worker = serving_runtime.Worker(b"controlled", self.image)
+        self.addCleanup(worker.close)
+        self.assertEqual(worker.predict([[0.5] * 6]), [0.5])
+        worker.ping()
+        worker.close()
+        worker.close()
+        self.assertFalse(self.exists)
+        self.assertEqual(self.process.call_count, 1)
+        with self.assertRaises(Rejected):
+            worker.ping()
+
+    def test_every_resource_violation_is_rejected_before_process_start(self):
+        changes = (
+            ("Privileged", True),
+            ("ReadonlyRootfs", False),
+            ("NetworkMode", "host"),
+            ("Memory", 0),
+            ("MemorySwap", -1),
+            ("NanoCpus", 0),
+            ("PidsLimit", 0),
+            ("AutoRemove", False),
+            ("Binds", ["/host:/app"]),
+            ("Devices", [{}]),
+            ("PortBindings", {"80/tcp": [{}]}),
+            ("CapDrop", []),
+            ("SecurityOpt", []),
+            ("LogConfig", {"Type": "json-file"}),
+            ("Tmpfs", {}),
+        )
+        original = copy.deepcopy(self.observed["HostConfig"])
+        for key, value in changes:
+            with self.subTest(field=key):
+                self.observed["HostConfig"] = {**original, key: value}
+                self.exists = True
+                with self.assertRaisesRegex(Rejected, "serving_load_failed"):
+                    serving_runtime.Worker(b"controlled", self.image)
+                self.assertFalse(self.exists)
+        self.process.assert_not_called()
+
+    def test_invalid_reply_closes_and_remove_failure_keeps_retry_handle(self):
+        worker = serving_runtime.Worker(b"controlled", self.image)
+        self.corrupt = True
+        self.remove_failure = True
+        with self.assertRaisesRegex(Rejected, "serving_cleanup_unconfirmed"):
+            worker.ping()
+        self.assertTrue(worker.closed)
+        self.assertEqual(worker.container, self.identifier)
+        self.remove_failure = False
+        worker.close()
+        self.assertIsNone(worker.container)
+
+    def test_disappearing_container_during_remove_is_confirmed_absent(self):
+        worker = serving_runtime.Worker(b"controlled", self.image)
+        original = self.command
+
+        def raced(arguments, timeout):
+            if arguments[1] == "rm":
+                self.exists = False
+                raise Rejected("already-auto-removed")
+            return original(arguments, timeout)
+
+        with patch.object(serving_runtime, "command", side_effect=raced):
+            worker.close()
+        self.assertIsNone(worker.container)
+
+
+if __name__ == "__main__":
+    unittest.main()
