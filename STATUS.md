@@ -10,6 +10,10 @@
 
 21 controlled security methods pass, core 229 statements/94 branches 100%; 8 controlled runner methods pass, runner 98%. Исправлены несовместимость case schema/ID, assurance до начала policy, CAS closure и SQL denial probe. Ранбуки включают диагностику, безопасный retry после partial publication, expiry и rollback без reset/TLS bypass. [Evidence](docs/evidence/release-authorization-2026-10-14.md) отделяет эти tests от native/CI. T13/M10, state machine, revocation и serving integration остаются открытыми; release_ready=false.
 
+На `cd4c6fd` clean-checkout storage CI подтвердил **11 native checks, 20 immutable objects/9 documents**, одинаковые проверенные model bytes через serving, прямой SQL write denial и отказ без assurance; source_dirty=false. M03 431 и M07 97 cases pass. Финальная локальная adjacent suite: 88 methods pass. Developer CI: 74 checks/3 обучения, probability difference=0.0. Подробные source/image/subject bindings и ссылки на завершённые runs в evidence; общая приёмка R1 этим не заменяется.
+
+Все 10 workflows на этом commit terminal: **6 success / 4 failure**. M06 18, M20 723 и M21 122 cases pass; M21 завершён 2026-10-14 16:46:35 UTC. Image audit, poisoning, baseline evasion и paired mitigation корректно остаются failure. Native authorization не выдаёт release без обязательной assurance. Подробная матрица и scanner counts в [evidence](docs/evidence/release-authorization-2026-10-14.md); full T13/M10 и R1 не завершены.
+
 ## Robust training: mitigation проверена, порог не пройден
 
 2026-10-13: [frozen paired protocol](docs/robust-training-protocol.md), [PB-19/RB-37](docs/operations/robust-training-troubleshooting.md), [подробное evidence](docs/evidence/robust-training-2026-10-13.md). Добавлена отдельная research worker action с clipped-box worst-case logistic loss. Обычный train, controller allowlists, thresholds и generated dataset bytes не менялись; candidate не получает adoption/release authority.

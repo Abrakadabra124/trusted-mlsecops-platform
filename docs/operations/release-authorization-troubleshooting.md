@@ -24,6 +24,8 @@ uv run --locked python -m scripts.release_native --state .runtime
 
 Expected: status=pass, cases=11, objects=20, documents=9, full_M10=inconclusive, release_ready=false. Внутри: два реальных отказа авторизации, одинаковые model bytes через serving, идемпотентный повтор одного package, прямой SQL INSERT ролью serving получает 42501, metadata и holdout budget неизменны. Проверять завершённый exit и актуальный source, не только наличие старого pass-файла.
 
+**Проверено в clean-checkout CI на cd4c6fd:** все эти 11 checks прошли на настоящем PostgreSQL; [bindings и завершённый run](../evidence/release-authorization-2026-10-14.md). Power-loss recovery остаётся controlled-only. Полный M10 не принят даже при success этого компонента.
+
 Приватное evidence: `.runtime/evidence/release-native.json`, `.runtime/release-proposals/<campaign>/report.json`. Не печатать PEM и не добавлять `.runtime` в Git. Новый CLI запуск создаёт **новую campaign/window/ID**, он не является retry прежнего proposal. Идемпотентность проверяется для одного package внутри запуска и отдельным controlled outage test.
 
 ## RB-38: корректно подписанный release не получает разрешение
