@@ -1,6 +1,6 @@
 # ADR 0030: Проверенное чтение текущего release перед runtime
 
-Дата: 2026-10-14. Статус: реализован component, native qualification ожидает CI. T15/M12 остаются открытыми.
+Дата: 2026-10-14. Статус: реализован component; на `37397ce` 18 native TLS SQL checks pass. T15/M12 остаются открытыми.
 
 ## Проблема
 

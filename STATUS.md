@@ -8,6 +8,10 @@
 
 2026-10-14 после `94e45c3`: [ADR 0030](docs/decisions/0030-current-release-reader.md), serving-only reader с повторной проверкой подписей/authorization/current trust, head race/expiry checks и immutable bytes handoff. Никакого ready=true или HTTP endpoint; T15/M12 и полная цель открыты. [PB-24/RB-46/RB-47](docs/operations/release-reader-troubleshooting.md), [evidence](docs/evidence/release-reader-2026-10-14.md) отделяют локальные controlled tests от native CI и будущей runtime integration.
 
+На `37397ce` [storage CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38624026031) completed/success: **18 native reader checks pass** с actual TLS SQL и одноразовыми test roots. Positive all-pass documents здесь только contract fixture, не принятие реального candidate. 86 local adjacent methods pass, reader Python branches 100%; M03 431/M07 97 и journal/recovery/trust regression pass. Полные ML blockers не сняты.
+
+Все десять workflows `37397ce` завершены: **6 success / 4 failure**. M06 18, M20 723 и M21 122 cases pass; последний завершён 19:45:08.777058 UTC. Image audit, poisoning, baseline evasion и paired robustness остаются fail. Полная матрица и точные metrics в reader evidence; goal остаётся активным, следующий этап - isolated runtime load и inference API.
+
 ## Текущее доверие: реализация T14
 
 2026-10-14 после `4804079`: [отдельная TLS SQL authority / ADR 0029](docs/decisions/0029-online-trust.md), [PB-23/RB-44/RB-45](docs/operations/trust-troubleshooting.md). Signed policy versions и irreversible revocations, lease <=60 s без продления при outage/clock rollback, fresh trust admission в SDK. 23 local trust/authority methods и 18 promotion/request methods pass, Python core coverage 100%; SQL engine этим не покрыт. Объединённая adjacent suite: 156 methods pass. [Evidence](docs/evidence/online-trust-2026-10-14.md) сохраняет найденные и исправленные defects и статус native CI. Полный M11/R1 не принят, serving endpoint/root rotation/rollback ещё нужны.
