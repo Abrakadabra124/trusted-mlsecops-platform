@@ -14,4 +14,14 @@ Docker Engine локально недоступен через dockerDesktopLinu
 
 ## Ограничения
 
+## Первый CI и correction
+
+[Storage run 38610935513](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38610935513) на `75dbf56` завершился failure на новом recovery step; прежние CAS recovery, M03/M07 и 108 promotion checks прошли. Полный native recovery этого commit не принят. Исходный runner сохранил только generic failure, поэтому точный последний успешный шаг по тому log не устанавливается.
+
+Code inspection выявил ошибочную границу negative probe: `storage.connect` преобразует psycopg startup failure в `Rejected`, а runner ожидал psycopg.Error. Controlled regression воспроизводит это преобразование; теперь используется прежний maintenance probe с непосредственным psycopg connection и точным распознаванием database-limit denial, посторонняя TLS/auth error не считается pass. Добавлены безопасные case progress и allowlisted failure codes без вывода SQL/credentials. Полный native outcome проверяется новым run, не выводится только из исправления.
+
+Intake evidence первого run показывал source_dirty=true: legacy negative restore исходного `.runtime` теперь создаёт sibling `..runtime.recovery.lock` у корня checkout. Добавлен узкий ignore для `*.recovery.lock`, не для исходников; `git check-ignore` подтвердил этот путь. Новый runner требует чистый checkout до и после campaign. Presence lockfile не доказывает живой процесс. После correction 19 focused recovery/CLI/lock methods pass.
+
+## Оставшиеся ограничения
+
 Recovery pin выбирает конкретный snapshot, но не доказывает latest state и не восстанавливает post-snapshot promotions. Controlled SQL selections не являются одобренными моделями. Target без завершённого receipt остаётся fenced; автоматический pre-receipt resume ещё не реализован. Online revocation, serving activation, расписание/offsite/encryption и полный M17 остаются открытыми. Security/research failures не обходятся.

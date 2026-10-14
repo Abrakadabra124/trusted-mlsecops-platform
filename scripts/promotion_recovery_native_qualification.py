@@ -12,6 +12,29 @@ from scripts import promotion_recovery_native as native
 
 
 class RecoveryCliContracts(unittest.TestCase):
+    def test_maintenance_probe_distinguishes_startup_denial_from_other_failures(self):
+        with patch.object(
+            native.storage, "connection_parameters", return_value={"user": "ml_serving"}
+        ):
+            with patch.object(
+                native.psycopg,
+                "connect",
+                side_effect=psycopg.OperationalError("too many connections for database mlsecops"),
+            ):
+                with self.assertRaisesRegex(Rejected, "storage_connection_rejected"):
+                    native.storage.connect(Path("unused"))
+                self.assertEqual(
+                    native.maintenance(Path("unused"), "serving")["result"],
+                    "database-maintenance-denied",
+                )
+            with patch.object(
+                native.psycopg,
+                "connect",
+                side_effect=psycopg.OperationalError("certificate rejected"),
+            ):
+                with self.assertRaisesRegex(Rejected, "maintenance_wrong_failure"):
+                    native.maintenance(Path("unused"), "serving")
+
     def test_missing_confirmation_never_starts_disposable_mutations(self):
         with (
             patch.object(native.sys, "argv", ["native", "--state", "unused"]),

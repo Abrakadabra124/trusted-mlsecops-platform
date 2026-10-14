@@ -32,6 +32,7 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.inventory import command, source_fingerprint
+from mlsecops.kube_storage_probe import maintenance
 from mlsecops.pipeline import validate_scores
 from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.sandbox import run_worker
@@ -46,6 +47,8 @@ def qualify(root, state, image):
     campaign = uuid.uuid4().hex
     started = now()
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
+    if command(["git", "-C", str(root), "status", "--porcelain"]):
+        raise Rejected("promotion_recovery_source_dirty")
     fingerprint = source_fingerprint(root)
     public = read_json(state / "trusted-keys.json")
     policy = read_json(root / "policies/local-cpu.json")
@@ -100,6 +103,16 @@ def qualify(root, state, image):
     cases = []
 
     def confirmed(name, condition):
+        print(
+            canonical(
+                {
+                    "scope": "promotion-recovery-check",
+                    "case": name,
+                    "status": "pass" if condition else "fail",
+                }
+            ).decode(),
+            flush=True,
+        )
         if not condition:
             raise Rejected("promotion_recovery_check_failed:" + name)
         cases.append(name)
@@ -343,13 +356,12 @@ def qualify(root, state, image):
             )
             == "0",
         )
-        try:
-            with storage.connect(interrupted / "storage-clients/serving"):
-                raise Rejected("promotion_recovery_maintenance_bypassed")
-        except psycopg.Error as error:
-            confirmed(
-                "actual-serving-connection-denied-after-interruption", error.sqlstate == "53300"
-            )
+        denied = maintenance(interrupted / "storage-clients/serving", "serving")
+        confirmed(
+            "actual-serving-connection-denied-after-interruption",
+            denied
+            == {"status": "pass", "role": "serving", "result": "database-maintenance-denied"},
+        )
         rejected(
             "interrupted-target-not-overwritten-on-retry",
             "restore_requires_new_target",
@@ -371,7 +383,8 @@ def qualify(root, state, image):
         "source-and-revision-stable",
         validate(state)["container_id"] == marker["container_id"]
         and source_fingerprint(root) == fingerprint
-        and command(["git", "-C", str(root), "rev-parse", "HEAD"]) == revision,
+        and command(["git", "-C", str(root), "rev-parse", "HEAD"]) == revision
+        and not command(["git", "-C", str(root), "status", "--porcelain"]),
     )
     return {
         "schema_version": 1,
@@ -383,6 +396,7 @@ def qualify(root, state, image):
         "started_at": started,
         "finished_at": now(),
         "source_revision": revision,
+        "source_dirty": False,
         "source_fingerprint": fingerprint,
         "backup_id": backup["backup_id"],
         "archive_bytes": backup["bytes"],
@@ -418,11 +432,37 @@ def main():
         write_json(output, result)
         print(canonical({**result, "cases": len(result["cases"])}).decode())
         return 0
-    except (Rejected, psycopg.Error, OSError, KeyError, TypeError, ValueError, RuntimeError):
+    except (
+        Rejected,
+        psycopg.Error,
+        OSError,
+        KeyError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+    ) as error:
+        known = {
+            "storage_connection_rejected",
+            "storage_docker_failed:exec",
+            "backup_snapshot_unavailable",
+            "backup_process_failed_or_warned",
+            "backup_ledger_content_invalid",
+            "restore_ledger_mismatch",
+            "restore_promotion_ledger_mismatch",
+            "restore_target_busy",
+            "promotion_backup_migration_mismatch",
+            "promotion_recovery_source_dirty",
+        }
+        reason = str(error) if str(error) in known else "unclassified-sanitized"
         if output is not None:
             with suppress(Rejected, OSError):
-                write_json(output, {"status": "fail", "release_ready": False})
-        print("Promotion recovery rejected; inspect the owned disposable state", file=sys.stderr)
+                write_json(output, {"status": "fail", "reason": reason, "release_ready": False})
+        print(
+            canonical(
+                {"scope": "promotion-recovery-failure", "status": "fail", "reason": reason}
+            ).decode(),
+            file=sys.stderr,
+        )
         return 1
 
 

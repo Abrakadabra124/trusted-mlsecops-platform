@@ -15,6 +15,7 @@ mlflow.db
 evidence/raw/
 tmp/
 .coverage*
+*.recovery.lock
 htmlcov/
 .ruff_cache/
 *.egg-info/
