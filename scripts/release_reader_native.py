@@ -1,0 +1,243 @@
+import argparse
+import shutil
+import sys
+import uuid
+from contextlib import contextmanager, suppress
+from pathlib import Path
+
+import psycopg
+
+from mlsecops import (
+    bootstrap,
+    promotion,
+    promotion_state,
+    release_reader,
+    storage,
+    storage_bootstrap,
+    storage_restore,
+    trust,
+    trust_authority,
+)
+from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_child, write_json
+from mlsecops.inventory import command, source_fingerprint
+from scripts import promotion_qualification as fixtures
+
+
+@contextmanager
+def disposable(root, state, campaign, suffix, port):
+    relative = f"evidence/reader-{campaign}-{suffix}"
+    destination = safe_child(state, relative)
+    if destination.exists():
+        raise Rejected("reader_target_exists")
+    bootstrap.initialize(root, destination)
+    owned = None
+    try:
+        storage_bootstrap.bootstrap(destination, port)
+        owned = storage_bootstrap.validate(destination)
+        yield destination
+    finally:
+        if owned is not None:
+            if safe_child(state, relative) != destination:
+                raise Rejected("reader_cleanup_path")
+            observed = storage_bootstrap.validate(destination)
+            if (
+                destination.resolve().parent != (state / "evidence").resolve()
+                or destination.is_symlink()
+                or observed["container_id"] != owned["container_id"]
+                or observed["workspace_id"] != owned["workspace_id"]
+            ):
+                raise Rejected("reader_cleanup_ownership")
+            storage_bootstrap.docker(["rm", "--force", observed["container_id"]])
+            storage_bootstrap.docker(["network", "rm", observed["network"]])
+            storage_bootstrap.docker(["volume", "rm", observed["volume"]])
+            shutil.rmtree(destination)
+
+
+def qualify(root, state):
+    state = Path(state).resolve()
+    source = storage_bootstrap.validate(state)
+    original_ledger = storage_restore.ledger(source["name"])
+    revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
+    if command(["git", "-C", str(root), "status", "--porcelain"]):
+        raise Rejected("reader_source_dirty")
+    fingerprint = source_fingerprint(root)
+    campaign = uuid.uuid4().hex
+    started = now()
+    cases = []
+
+    def confirmed(label, condition=True):
+        if not condition:
+            raise Rejected("reader_case_failed:" + label)
+        cases.append(label)
+        print(canonical({"case": label, "status": "pass"}).decode(), flush=True)
+
+    def rejected(label, operation, code):
+        try:
+            operation()
+        except Rejected as error:
+            if str(error) != code:
+                raise Rejected("reader_wrong_denial:" + label) from None
+            confirmed(label)
+        else:
+            raise Rejected("reader_negative_bypass:" + label)
+
+    fixtures.PromotionAdmissionContracts.setUpClass()
+    fixture = fixtures.PromotionAdmissionContracts()
+    try:
+        fixture.setUp()
+        with (
+            disposable(root, state, campaign, "models", 15444) as models,
+            disposable(root, state, campaign, "trust", 15445) as authority,
+        ):
+            promoter = models / "storage-clients/promoter"
+            serving = models / "storage-clients/serving"
+            trust_client = authority / "storage-clients/serving"
+            public, key = fixture.trust_fixture.public, fixture.trust_fixture.key
+            policy = fixture.arguments["expected_policy"]
+            promotion_state.install(models)
+            promotion_state.configure(models, "local-cpu", policy)
+            trust_authority.install(authority, "local-cpu", public)
+            trust_authority.update(authority, policy, key)
+
+            def lease():
+                return trust.Lease(
+                    lambda: trust_authority.read(trust_client, "local-cpu", public),
+                    trusted_root=public,
+                    environment="local-cpu",
+                    minimum_version=1,
+                )
+
+            options = {
+                name: fixture.arguments[name]
+                for name in ("context", "trusted_root", "expected_policy", "expected_serving_image")
+            }
+            reader = release_reader.Reader(
+                serving, **options, trust_lease=lease(), minimum_sequence=1
+            )
+            rejected("empty-head-denied", reader.load, "release_invalid_integer")
+            receipt = promotion.promote(promoter, trust_lease=lease(), **fixture.arguments)
+            confirmed("controlled-signed-fixture-recorded", not receipt["release_ready"])
+            before = storage_restore.ledger(storage_bootstrap.validate(models)["name"])
+            loaded = reader.load()
+            confirmed(
+                "real-TLS-current-head-verified",
+                loaded.request_sha256 == receipt["request_sha256"]
+                and loaded.subject_sha256 == receipt["subject_sha256"]
+                and loaded.sequence == 1,
+            )
+            confirmed(
+                "exact-immutable-model-bytes",
+                loaded.model == fixture.fixture.bundle.materials.fixture.model
+                and loaded.model_sha256 == digest(loaded.model),
+            )
+            confirmed("not-runtime-ready", loaded.release_ready is False)
+            confirmed("current-check-signed-online-trust", reader.check(loaded)["version"] == 1)
+            confirmed("repeat-load-same-content", reader.load() == loaded)
+            rejected(
+                "old-object-not-current-after-reload",
+                lambda: reader.check(loaded),
+                "serving_release_not_current",
+            )
+            loaded = reader.current
+            confirmed(
+                "reader-performs-no-writes",
+                storage_restore.ledger(storage_bootstrap.validate(models)["name"]) == before,
+            )
+            rejected(
+                "promoter-not-serving-identity",
+                lambda: release_reader.Reader(
+                    promoter, **options, trust_lease=lease(), minimum_sequence=1
+                ).load(),
+                "serving_storage_identity",
+            )
+            rejected(
+                "external-sequence-floor-enforced",
+                lambda: release_reader.Reader(
+                    serving, **options, trust_lease=lease(), minimum_sequence=2
+                ).load(),
+                "serving_sequence_replay",
+            )
+            trust_authority.update(authority, policy, key, revoked_artifacts=[loaded.model_sha256])
+            rejected(
+                "model-revocation-denies-existing-handoff",
+                lambda: reader.check(loaded),
+                "trust_artifact_revoked",
+            )
+            rejected("model-revocation-denies-new-load", reader.load, "trust_artifact_revoked")
+            selection = decode(storage.get(serving, "releases", loaded.request_sha256))
+            proof = decode(storage.get(serving, "releases", selection["authorization_reference"]))
+            proof["assurance_envelope"] = None
+            selection.update(
+                sequence=2,
+                authorization_reference=storage.put(promoter, "releases", canonical(proof)),
+            )
+            reference = storage.put(promoter, "releases", canonical(selection))
+            with storage.connect(promoter) as connection:
+                observed = connection.execute(
+                    "SELECT ml_promotion.record_selection(%s)", (reference,)
+                ).fetchone()
+            confirmed("structural-SQL-selection-is-not-authorization", observed == (reference,))
+            rejected(
+                "missing-assurance-denies-native-reader", reader.load, "release_assurance_required"
+            )
+            confirmed("failed-load-has-no-current", reader.current is None)
+        confirmed("owned-test-workspaces-removed", not models.exists() and not authority.exists())
+    finally:
+        fixture.doCleanups()
+        fixtures.PromotionAdmissionContracts.tearDownClass()
+    confirmed(
+        "source-state-and-checkout-unchanged",
+        storage_bootstrap.validate(state)["container_id"] == source["container_id"]
+        and storage_restore.ledger(source["name"]) == original_ledger
+        and source_fingerprint(root) == fingerprint
+        and command(["git", "-C", str(root), "rev-parse", "HEAD"]) == revision
+        and not command(["git", "-C", str(root), "status", "--porcelain"]),
+    )
+    return {
+        "schema_version": 1,
+        "scope": "release-reader-real-TLS-SQL-controlled-signed-fixture-not-M12",
+        "status": "pass",
+        "release_ready": False,
+        "full_M12": "inconclusive",
+        "campaign_id": campaign,
+        "source_revision": revision,
+        "source_dirty": False,
+        "source_fingerprint": fingerprint,
+        "started_at": started,
+        "finished_at": now(),
+        "cases": cases,
+        "limitations": [
+            "All-pass gate reports are controlled contract fixtures, not actual ML acceptance",
+            "No HTTP endpoint, ONNX runtime load, inference or readiness claimed",
+            "Current source ML security failures remain blocking",
+        ],
+    }
+
+
+def main(arguments=None):
+    parser = argparse.ArgumentParser(description="Disposable signed release reader qualification")
+    parser.add_argument("--state", type=Path, required=True)
+    parser.add_argument("--confirm-disposable", action="store_true", required=True)
+    options = parser.parse_args(arguments)
+    output = None
+    try:
+        storage_bootstrap.validate(options.state)
+        output = safe_child(options.state, "evidence/release-reader-qualification.json")
+        write_json(output, {"status": "inconclusive", "release_ready": False})
+        result = qualify(Path(__file__).resolve().parents[1], options.state)
+        write_json(output, result)
+        print(canonical({**result, "cases": len(result["cases"])}).decode())
+        return 0
+    except (Rejected, psycopg.Error, OSError, KeyError, TypeError, ValueError, RuntimeError):
+        if output is not None:
+            with suppress(Rejected, OSError):
+                write_json(output, {"status": "fail", "release_ready": False})
+        print(
+            canonical({"status": "fail", "reason": "release_reader_native_rejected"}).decode(),
+            file=sys.stderr,
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

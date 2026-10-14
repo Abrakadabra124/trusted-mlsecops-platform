@@ -115,3 +115,10 @@ jobs:
           uv run --locked python -m scripts.trust_native_qualification
       - name: Separate TLS trust authority, revocations and real sixty-second outage
         run: uv run --locked python -m scripts.trust_native --state .runtime --confirm-disposable
+      - name: Current release reader and immutable handoff contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-release-reader --source=mlsecops.release_reader -m unittest scripts.release_reader_qualification
+          uv run --locked coverage report --data-file=.coverage-release-reader --fail-under=100
+          uv run --locked python -m unittest scripts.release_reader_native_qualification
+      - name: Disposable TLS SQL reader with controlled signed fixtures, not ML acceptance
+        run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable

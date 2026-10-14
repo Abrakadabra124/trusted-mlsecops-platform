@@ -102,6 +102,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T15
 - [ ] Inference API и loader. Зависимость: T14. Gate: M12.
+- Increment 2026-10-14: [ADR 0030](../docs/decisions/0030-current-release-reader.md), Reader проверяет current head/event, authorization, current trust и неизменяемые bytes. [PB-24/RB-46/RB-47](../docs/operations/release-reader-troubleshooting.md), [evidence](../docs/evidence/release-reader-2026-10-14.md). Это pre-runtime component, не verified ONNX load/readiness или HTTP API; задача остаётся открытой.
 - Результат: API schema, verified readiness, atomic bundle load и явные ошибки/abstain.
 - Проверка: request limit suite, malicious paths/URLs не поддерживаются, TOCTOU и missing signature не дают ready.
 

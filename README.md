@@ -2,6 +2,8 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
+Новый component: [проверенное чтение текущего release](docs/decisions/0030-current-release-reader.md) повторно проверяет authorization и online trust, обнаруживает смену head и возвращает неизменяемые model bytes. Это ещё не ONNX runtime load или готовый API; `release_ready=false`. [PB-24/RB-46/RB-47](docs/operations/release-reader-troubleshooting.md) и [точные evidence/ограничения](docs/evidence/release-reader-2026-10-14.md).
+
 **Статус: R1 в разработке, первый рабочий developer preview.** Уже доступны синтетические данные, подписанные manifests, контейнерное обучение, ONNX-предсказания и отдельный scorer с подписанным evaluation report. Полная приёмка M01-M23 пока не пройдена: preview не является trusted release или production-платформой. Исследование: 2026-10-06; начало реализации: **2026-10-07**.
 
 Перед оценкой обязателен [отдельный intake модели](docs/artifact-intake.md): проверка exact bytes в изолированном worker, защита от stale/partial scan и receipt в signed evaluation schema 2. **[M21 принят в clean-checkout CI: 122/122 cases](docs/evidence/intake-acceptance-2026-10-13.md)**, включая scoped Kubernetes replay, signed denials и независимый promoter readback. [PB-17/RB-35](docs/operations/scoped-intake-troubleshooting.md) описывает повторение, deadline/process failure и безопасную диагностику. Это synthetic lab gate, не release approval; image audit и poisoning blockers сохраняются.

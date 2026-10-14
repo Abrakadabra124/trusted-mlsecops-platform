@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Проверенное чтение release, PB-24/RB-46/RB-47](operations/release-reader-troubleshooting.md). Journal не заменяет approval; material integrity, head race, expiry и revoke не обходятся cached model. [Evidence](evidence/release-reader-2026-10-14.md) отдельно отмечает controlled fixture, настоящий SQL и отсутствующий runtime endpoint.
+
 - [Online trust, PB-23/RB-44/RB-45](operations/trust-troubleshooting.md). Отдельная authority, irreversible revoke, outage/clock/expiry, conflicts и запрет переноса устаревшего доверия из backup. [Evidence](evidence/online-trust-2026-10-14.md) различает controlled clocks, actual TLS SQL и оставшуюся endpoint integration.
 
 - [Promotion recovery, PB-22/RB-42/RB-43](operations/promotion-recovery-troubleshooting.md). Общий snapshot CAS/journal, внешний backup-id pin, source-offline qualification, maintenance при неопределённом import и запрет overwrite поздних записей. [Evidence](evidence/promotion-recovery-2026-10-14.md) отделяет controlled tests от native результатов.

@@ -20,7 +20,7 @@ Promotion SDK требует fresh trust read после полной крипт
 
 ## Границы и recovery
 
-Authority размещается только в отдельном свежем owned workspace. Model backup v1/v2 не сохраняет её и должен отказать при попытке архивировать authority state, а не создать частичную копию. Восстановленный model storage обращается к текущей authority отдельно. Не создавать подписанные all-pass ML approvals для qualification: controlled subject fixtures не означают разрешённый release.
+Authority размещается только в отдельном свежем owned workspace. Model backup v1/v2 не сохраняет её и должен отказать при попытке архивировать authority state, а не создать частичную копию. Восстановленный model storage обращается к текущей authority отдельно. Не создавать подписанные all-pass ML approvals для настоящего candidate ради прохождения qualification: controlled subject fixtures не означают разрешённый release. [ADR 0030](0030-current-release-reader.md) отдельно ограничивает positive contract fixtures случайными test roots и disposable хранилищами; они не являются acceptance evidence и не снимают реальные failed gates.
 
 ## Проверка и источники
 

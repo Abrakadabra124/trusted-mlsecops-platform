@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 current release reader increment - 2026-10-14
+
+Serving-only reader связывает current SQL head/event/authority с полной signed authorization, immutable material bytes и текущим trust. Повторная head/time проверка, external sequence floor и in-process equivocation history; frozen handoff не объявляется runtime readiness. Добавлены controlled negative tests, отдельная disposable native qualification и [PB-24/RB-46/RB-47](docs/operations/release-reader-troubleshooting.md). Настоящие блокирующие ML gates не ослаблены; HTTP/sandbox activation и full M12 остаются открытыми. [Evidence](docs/evidence/release-reader-2026-10-14.md).
+
 ## R1 online trust increment - 2026-10-14
 
 Добавлены отдельная TLS SQL authority, root-signed monotonic policy versions и необратимые revocation sets. Lease учитывает время запроса, wall/server expiry и clock rollback; SDK promotion требует свежий trust read, сверяет model/dataset/runtime/signers и не возвращает activation при неопределённом commit. Model backup не архивирует authority. [PB-23/RB-44/RB-45](docs/operations/trust-troubleshooting.md), [evidence](docs/evidence/online-trust-2026-10-14.md). Endpoint, root rotation, rollback authorization и full M11 остаются открытыми.
