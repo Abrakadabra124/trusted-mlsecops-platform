@@ -113,16 +113,20 @@ def snapshot(name):
         "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
         "SET LOCAL idle_in_transaction_session_timeout = '180s';\n"
         "SET LOCAL statement_timeout = '60s';\n"
-        f"SELECT jsonb_build_object('snapshot', pg_export_snapshot(), 'tables', ({ledger_sql()}));\n"
+        "SELECT jsonb_build_object('snapshot', pg_export_snapshot(), "
+        "'promotion_absent', NOT EXISTS (SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'ml_promotion'), "
+        f"'tables', ({ledger_sql()}));\n"
     )
     with json_session(arguments, query) as (result, process):
         if (
             not isinstance(result, dict)
-            or set(result) != {"snapshot", "tables"}
+            or set(result) != {"snapshot", "tables", "promotion_absent"}
             or not isinstance(result["snapshot"], str)
             or not re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+", result["snapshot"])
         ):
             raise Rejected("backup_snapshot_identity_invalid")
+        if result["promotion_absent"] is not True:
+            raise Rejected("backup_promotion_ledger_not_supported")
         validate_ledger(result["tables"])
         yield result
 

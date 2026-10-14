@@ -65,6 +65,11 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-material-bundle --fail-under=100
           uv run --locked coverage run --source=scripts.material_bundle_native --data-file=.coverage-bundle-native -m scripts.material_bundle_native_qualification
           uv run --locked coverage report --data-file=.coverage-bundle-native --fail-under=100
+      - name: Promotion admission and ledger request contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-promotion --source=mlsecops.promotion,mlsecops.promotion_state -m unittest scripts.promotion_qualification scripts.promotion_state_qualification
+          uv run --locked coverage report --data-file=.coverage-promotion --fail-under=100
+          uv run --locked python -m scripts.promotion_native_qualification
       - name: M03 integrity, actual SQL roles and training/evaluation
         run: |
           uv run --locked python -m mlsecops build
@@ -92,3 +97,5 @@ jobs:
         if: always()
         run: |
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/intake-denial-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'No completed denial qualification evidence')"
+      - name: Disposable promotion ledger SQL concurrency, roles and restart
+        run: uv run --locked python -m scripts.promotion_native --state .runtime --confirm-disposable

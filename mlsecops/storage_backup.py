@@ -111,8 +111,11 @@ def read_backup(directory, public, policy):
 
 
 def create(root, state):
+    from mlsecops.promotion_state import require_legacy_backup_scope
+
     root, state = Path(root), Path(state)
     marker = validate(state)
+    require_legacy_backup_scope(marker["name"])
     verify_configuration(state, marker["name"])
     expected = migration()
     if (

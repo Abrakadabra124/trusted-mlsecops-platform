@@ -5,7 +5,14 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
-from mlsecops import material_bundle, release_authorization, release_bundle, signing, storage
+from mlsecops import (
+    material_bundle,
+    promotion,
+    release_authorization,
+    release_bundle,
+    signing,
+    storage,
+)
 from mlsecops.acceptance import GATES
 from mlsecops.contracts import (
     Rejected,
@@ -166,6 +173,17 @@ def qualify(root, state, image):
         lambda: release_authorization.verify(**authorization),
         "release_assurance_required",
     )
+    denied_before = release_snapshot(clients["serving"])
+    rejected(
+        "actual-promotion-admission-without-assurance-denied",
+        lambda: promotion.promote(
+            clients["promoter"],
+            **{name: value for name, value in authorization.items() if name != "clock"},
+        ),
+        "release_assurance_required",
+    )
+    if release_snapshot(clients["serving"]) != denied_before:
+        raise Rejected("release_native_denied_promotion_wrote_materials")
     empty_assurance = {
         "schema_version": 1,
         "issuer": "lab-assessor",

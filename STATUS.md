@@ -4,6 +4,12 @@
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
+## Promotion admission и постоянный journal
+
+2026-10-14: [promotion ledger](docs/promotion-ledger.md), [ADR 0027](docs/decisions/0027-promotion-ledger.md), [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md). SDK проверяет signed chain до записи; отдельная PostgreSQL schema связывает environment/policy/sequence с immutable request. Row-locked transition, current retry, stale/conflicting rejection, post-lock expiry и event readback не объявляются serving activation. Full M10/M11 остаётся открыт.
+
+Controlled tests воспроизвели retry bug и backup scope race; исправлены deterministic request time и проверка scope в exported snapshot. Старый backup запрещён при наличии ledger до реализации согласованного recovery. Docker Engine на локальном host сейчас недоступен; working runtime не запускался, native qualification выполняется в отдельном CI. [Evidence](docs/evidence/promotion-ledger-2026-10-14.md) отделяет локальные tests от ещё не подтверждённых native результатов.
+
 ## Release proposal и отдельная авторизация
 
 2026-10-14: [контракт](docs/release-authorization.md), [ADR 0026](docs/decisions/0026-release-authorization.md), [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md). Добавлены подписанный descriptor с девятью дополнительными документами, внешний policy pin, отдельные publisher/assessor/approver и проверка полного набора M01-M23. Proposal можно сохранить в immutable SQL releases, но это не active promotion. Реальный candidate без assurance должен получить отказ, не test-generated pass.

@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 promotion ledger / admission increment - 2026-10-14
+
+Добавлены отдельная PostgreSQL schema и restricted transition, policy/sequence/current-idempotency проверки, full signed-chain SDK admission до writes и immutable event readback. Legacy backup запрещён при наличии неподдерживаемого ledger, проверка scope связана с экспортируемым snapshot. [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md) описывают retry/time/commit/recovery failures. [Evidence](docs/evidence/promotion-ledger-2026-10-14.md); не полный M10 или activation.
+
 ## R1 release proposal / authorization increment - 2026-10-14
 
 Добавлены complete signed descriptor, девять supplemental документов, отдельные policy/assurance/approval с decoded-key separation, subject/environment/time binding и обязательными M01-M23. SQL proposal publication идемпотентна и выполняет full readback; activation отсутствует, release_ready=false. 29 controlled methods, отдельный native SQL workflow step, [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md), [ADR 0026](docs/decisions/0026-release-authorization.md). Исправлены contract mismatch, policy-validity time gap, CAS closure и прямой SQL write-denial probe. Проверенные результаты: [evidence](docs/evidence/release-authorization-2026-10-14.md).

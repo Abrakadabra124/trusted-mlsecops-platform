@@ -8,6 +8,8 @@
 
 ## Запустить рабочий пример
 
+Следующий T13 increment: [постоянный promotion journal](docs/promotion-ledger.md) и [PB-21/RB-40/RB-41](docs/operations/promotion-ledger-troubleshooting.md). Подписи проверяются до записи, конкурентный выбор сериализуется SQL-транзакцией. Это ещё не serving activation; legacy backup с ledger запрещён до поддержки полного recovery. Установка явная, рабочий state автоматически не мигрируется.
+
 Новый [release proposal и authorization contract](docs/release-authorization.md) связывает модель, dataset, lock, runtime, evidence и отдельное approval. [PB-20/RB-38/RB-39](docs/operations/release-authorization-troubleshooting.md) описывает отказ выпуска и восстановление interrupted publication. Это часть T13: active promotion/serving ещё не разрешены, release_ready=false.
 
 Проверена [mitigation через robust training](docs/robust-training-protocol.md): качество сохранилось, но recall drop кандидата **5.22-6.22 п.п. при лимите 5 п.п.** на трёх фиксированных probes. [Evidence](docs/evidence/robust-training-2026-10-13.md) и [PB-19/RB-37](docs/operations/robust-training-troubleshooting.md) показывают результаты, причину source-lock отказа и воспроизводимые команды. Baseline не заменён, failure не скрыт.

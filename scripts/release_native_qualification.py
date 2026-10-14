@@ -3,7 +3,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from mlsecops.contracts import Rejected, digest, read_json, write_json
 from mlsecops.signing import create_key
@@ -98,6 +98,12 @@ class NativeReleaseContracts(unittest.TestCase):
                     side_effect=lambda client: {"user": "ml_" + Path(client).name},
                 )
             )
+            connection = MagicMock()
+            connection.__enter__.return_value = connection
+            connection.execute.return_value.fetchone.side_effect = lambda: (
+                int(native.time.time()),
+            )
+            stack.enter_context(patch.object(native.storage, "connect", return_value=connection))
             return native.qualify(self.root, self.state, "controlled")
 
     def test_real_signatures_complete_readback_and_actual_candidate_denied(self):
@@ -106,7 +112,7 @@ class NativeReleaseContracts(unittest.TestCase):
         self.assertFalse(report["release_ready"])
         self.assertFalse(report["source_dirty"])
         self.assertEqual(
-            (len(report["cases"]), report["objects"], report["documents"]), (11, 20, 9)
+            (len(report["cases"]), report["objects"], report["documents"]), (12, 20, 9)
         )
         self.assertEqual(len(self.published), 20)
         stored = self.state / "release-proposals" / report["campaign_id"] / "report.json"
@@ -124,6 +130,15 @@ class NativeReleaseContracts(unittest.TestCase):
         self.serving_can_write = True
         with self.assertRaisesRegex(Rejected, "native_negative_bypass"):
             self.qualify()
+
+    def test_denied_admission_cannot_write_any_release_material(self):
+        def denied(*arguments, **keywords):
+            self.published[digest(b"forbidden")] = b"forbidden"
+            raise Rejected("release_assurance_required")
+
+        with patch.object(native.promotion, "promote", side_effect=denied):
+            with self.assertRaisesRegex(Rejected, "denied_promotion_wrote_materials"):
+                self.qualify()
 
     def test_ownership_failure_preserves_historical_evidence_but_returns_failure(self):
         output = self.state / "evidence/release-native.json"

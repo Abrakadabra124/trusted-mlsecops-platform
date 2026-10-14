@@ -12,7 +12,7 @@ Controlled tests, без Docker/SQL:
 uv run --locked python -m unittest scripts.release_policy_qualification scripts.release_bundle_qualification scripts.release_authorization_qualification scripts.release_native_qualification
 ```
 
-Ожидается 29 methods pass. Это cryptographic/transport/orchestrator fixtures, **не 29 реальных gates**. Они не обучают модель и не подтверждают успешную production promotion.
+Ожидается 30 methods pass после добавления admission denial contract. Это cryptographic/transport/orchestrator fixtures, **не 30 реальных gates**. Они не обучают модель и не подтверждают успешную production promotion.
 
 Реальная SQL-проверка выполняется в workflow [storage.yml](../../.github/workflows/storage.yml), после bootstrap, M03, lineage и capsule. Для уже подготовленного **отдельного disposable state** команда:
 
@@ -22,7 +22,7 @@ uv run --locked python -m scripts.release_native --state .runtime
 
 **Изменяющее действие:** INSERT только immutable releases objects и новые приватные campaign key/report files. Предварительно runner проверяет ownership. Команда не bootstrap, не reset и не migration; на рабочем state её не запускать только ради демонстрации. В CI `.runtime` принадлежит свежему runner. Требуются current-source signed candidate/evaluation, TLS clients и разрешённый CPU image.
 
-Expected: status=pass, cases=11, objects=20, documents=9, full_M10=inconclusive, release_ready=false. Внутри: два реальных отказа авторизации, одинаковые model bytes через serving, идемпотентный повтор одного package, прямой SQL INSERT ролью serving получает 42501, metadata и holdout budget неизменны. Проверять завершённый exit и актуальный source, не только наличие старого pass-файла.
+Текущий expected после добавления promotion admission: status=pass, cases=12, objects=20, documents=9, full_M10=inconclusive, release_ready=false. Внутри: отказы verifier и SDK без assurance, одинаковые model bytes через serving, идемпотентный повтор одного package, прямой SQL INSERT ролью serving получает 42501, metadata и holdout budget неизменны. Проверять завершённый exit и актуальный source, не только наличие старого pass-файла.
 
 **Проверено в clean-checkout CI на cd4c6fd:** все эти 11 checks прошли на настоящем PostgreSQL; [bindings и завершённый run](../evidence/release-authorization-2026-10-14.md). Interrupted publication проверена controlled transport; power-loss не моделировался. Полный M10 не принят даже при success этого компонента.
 
