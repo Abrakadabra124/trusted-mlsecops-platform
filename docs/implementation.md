@@ -1,6 +1,6 @@
 # Реализация R1
 
-2026-10-15: [response deadline / ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53/PB-27](operations/serving-deadline-troubleshooting.md). Failure-first HTTP/Engine tests и owned paused-query harness для установленного TLS-соединения. [Evidence](evidence/serving-deadline-2026-10-15.md) сохраняет найденные гонки; native результат до проверки CI не заявляется. Full R1 остаётся открыт.
+2026-10-15: [response deadline / ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53/PB-27](operations/serving-deadline-troubleshooting.md). Failure-first HTTP/Engine tests и owned paused-query harness для установленного TLS-соединения. **Native `ed87e97`: 52 actual-candidate cases pass**, paused SQL 503 за 10.002350314 s при ACTIVE query, stopped-authority 59.748078461 s. [Evidence](evidence/serving-deadline-2026-10-15.md) сохраняет гонки, 163 local methods и ограничения. Native pause у короткого expiry ещё не выполнен; full R1 остаётся открыт.
 
 2026-10-15: [HTTP trust-outage slice](evidence/http-trust-outage-2026-10-15.md) выявил late-denial failure `2905e70`, 60.082361397 s. [ADR 0033](decisions/0033-serving-retirement.md) отделяет invalidation от retained cleanup; [RB-52](operations/candidate-serving-troubleshooting.md) описывает drain/recovery. **Повторный CI `e9120e0`: 46/46 actual-candidate checks pass, первый 503 через 59.995078784 s**, cleanup/source readback подтверждены. Старый failure сохранён; полный M11/M12, включая slow network/read deadlines, остаётся открыт.
 

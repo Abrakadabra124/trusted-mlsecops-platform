@@ -2,6 +2,8 @@
 
 Ответственный: platform operator; при подозрении на подмену authority также security reviewer. Только disposable lab с подтверждённым ownership. Рабочие Docker/WSL/SQL не изменять. [ADR 0034](../decisions/0034-serving-response-deadline.md), [evidence](../evidence/serving-deadline-2026-10-15.md).
 
+Проверка процедуры: clean-checkout CI `ed87e97`, 52 actual-candidate cases pass, включая pause/denial/unpause/cleanup/explicit recovery. Локально 7 controlled harness methods pass, в том числе late-connect после finally и запрет pass при idle query. Это доказательства disposable профиля, не проверка восстановления промышленной инфраструктуры.
+
 ## RB-53: диагностика до изменения состояния
 
 **Симптом:** `/livez` отвечает, но authenticated predict/ready возвращают 503; подлежащий SQL thread или cleanup может ещё работать. 503 не является подтверждением удаления worker. После восстановления SQL автоматический 200 намеренно не появляется.

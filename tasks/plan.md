@@ -105,6 +105,8 @@ HTTP outage slice после `cdea4236` реализуется отдельны�
 
 ## Неделя 10: Нагрузка и ML monitoring
 
+Checkpoint перед переходом к T16: [ed87e97 evidence](../docs/evidence/serving-deadline-2026-10-15.md) подтвердил 52 candidate cases и paused established SQL denial за 10.002350314 s; stopped-authority 59.748078461 s. Native pause пока проверен со свежим lease; более короткий expiry и shortening покрыты controlled tests. Следующий малый runtime slice - отдельный disposable native профиль с подлинной краткоживущей signed policy, без подмены системных часов, и fresh trust renewal перед explicit recovery. Проверить client-completed 503 до фактического expiry, no-auto-reactivation и source preservation; сохранить fail при нарушении, не снижать пороги. Далее T16: ограниченный список authenticated principals, per-client quotas до body/executor, bounded audit allowlist и canary export tests. Это будущие deliverables, не завершённые функции.
+
 **Задачи:** T17, T18. Измерить latency/throughput/resource usage по фиксированному профилю. Добавить data/prediction/label-quality reports, trust alerts и telemetry health. Проверить clean windows, drift injection и delayed labels; feedback отправлять только в quarantine.
 
 **Результат:** benchmark, dashboards, маршрутизируемые alerts, отсутствие auto-promotion по drift. **Приёмка:** M14, M15. **Ограничение:** небольшой lab-run не подтверждает месячный SLO.

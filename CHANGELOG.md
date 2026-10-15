@@ -2,7 +2,7 @@
 
 ## R1 response deadline и generation fence - 2026-10-15
 
-[ADR 0034](docs/decisions/0034-serving-response-deadline.md): fixed HTTP budget, current shorter lease, monotonic approval expiry, per-activation fence и retained pending slots после timeout/cancel. Добавлены negative races и owned paused-query diagnostic, [RB-53/PB-27](docs/operations/serving-deadline-troubleshooting.md). [Evidence](docs/evidence/serving-deadline-2026-10-15.md); native CI и полный M11/M12 не подменяются controlled tests.
+[ADR 0034](docs/decisions/0034-serving-response-deadline.md): fixed HTTP budget, current shorter lease, monotonic approval expiry, per-activation fence и retained pending slots после timeout/cancel. Добавлены negative races и owned paused-query diagnostic, [RB-53/PB-27](docs/operations/serving-deadline-troubleshooting.md). **Native `ed87e97`: 52 actual-candidate checks pass; paused-query HTTP 503 за 10.002350314 s**, stopped-authority 59.748078461 s. Все workflows terminal, 6 success / 4 failure; [evidence](docs/evidence/serving-deadline-2026-10-15.md). Полные M11/M12/R1 и known image/ML failures не закрыты.
 
 ## R1 immediate serving invalidation - 2026-10-15
 

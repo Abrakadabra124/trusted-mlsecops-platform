@@ -6,7 +6,7 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
-Следующий increment: [HTTP deadline и paused SQL](docs/evidence/serving-deadline-2026-10-15.md), [ADR 0034](docs/decisions/0034-serving-response-deadline.md), [RB-53/PB-27](docs/operations/serving-deadline-troubleshooting.md). Fencing поколения, immutable expiry, retained pending ownership и current-lease recheck после serialization. До terminal CI новый native результат не заявляется; прежние доказательства ниже относятся только к своим commits.
+Новый increment `ed87e97`: [HTTP deadline и paused SQL](docs/evidence/serving-deadline-2026-10-15.md), [ADR 0034](docs/decisions/0034-serving-response-deadline.md), [RB-53/PB-27](docs/operations/serving-deadline-troubleshooting.md). **Storage CI: 52 actual-candidate checks pass; paused SQL -> клиентский 503 за 10.002350314 s при ещё незавершённой SQL-команде.** Stopped-authority denial 59.748078461 s, cleanup и explicit fresh recovery подтверждены. Локально 163 adjacent methods, 66 serving methods/93% coverage. Fencing поколения, immutable expiry, retained pending ownership и current-lease recheck после serialization. Native near-expiry paused profile ещё нужен; полные M11/M12 не закрыты.
 
 Новый slice после `cdea4236`: [timestamped HTTP trust outage и online recovery](docs/evidence/http-trust-outage-2026-10-15.md), [RB-52](docs/operations/candidate-serving-troubleshooting.md). Native `2905e70` выявил late 503 60.082361397 s; failed trace сохранён. [ADR 0033](docs/decisions/0033-serving-retirement.md) отделяет invalidation от retained cleanup, включая Worker/Channel errors. **Clean-checkout CI `e9120e0`: 46 actual-candidate cases pass, первый 503 59.995078784 s**, explicit fresh recovery и source preservation. Локально 146 methods pass; 56 serving methods/94% coverage. Полный M11/M12 не закрыт: в частности, slow/blackholed trust read требует отдельной приёмки, запас измеренного deadline лишь около 4.9 ms.
 
@@ -14,7 +14,7 @@
 
 ## Постоянный worker и inference API: T15 increment
 
-Последний code commit **`e9120e0`: все 10 workflows terminal, 6 success / 4 failure**. Повторены M03/M07, M06 18, M20 723 и M21 122; новый actual-candidate outage/recovery 46 pass. Image audit, poisoning, evasion и paired robustness остаются fail; [точная matrix](docs/evidence/http-trust-outage-2026-10-15.md). Следующий slice - slow/blackholed trust read и bounded client-visible denial без ослабления 60 s, затем оставшаяся privacy/quotas/audit acceptance.
+Последний code commit **`ed87e97`: все 10 workflows terminal, 6 success / 4 failure**. Повторены M03 431/M07 97, M06 18, M20 723 и M21 122; actual-candidate outage/paused-query/recovery 52 pass. M21 finished 2026-10-15T17:20:17.204967 UTC. Image audit, poisoning, evasion и paired robustness остаются fail; [точная matrix](docs/evidence/serving-deadline-2026-10-15.md). Следующий slice - native paused read с короткой настоящей signed policy до expiry, затем T16 privacy/quotas/audit; полная R1 acceptance не закрыта.
 
 Итог CI `0a47b7b`: **6 success / 4 failure, все terminal**. Storage, developer, tracking, Kubernetes, intake contracts и docs прошли. M20 723 / M21 122 повторены на этой ревизии. Image audit, poisoning, evasion и paired robustness сохраняют реальный failure; [точная matrix и metrics](docs/evidence/candidate-serving-2026-10-15.md) опубликованы без искусственного all-green. Следующий slice - timestamped HTTP trust-outage <=60 s и online recovery; qualification permit не заменяет release approval.
 
