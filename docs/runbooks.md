@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Actual candidate qualification, PB-26/RB-50/RB-51](operations/candidate-serving-troubleshooting.md). Source/permit binding, expiry во время trust read, сравнение ключей по bytes, отдельный test authority и запрет превращать qualification в release approval. [Evidence](evidence/candidate-serving-2026-10-15.md) разделяет contracts, actual runtime и незакрытую acceptance.
+- [Actual candidate qualification, PB-26/RB-50/RB-51/RB-52](operations/candidate-serving-troubleshooting.md). Source/permit binding, expiry, key separation, owned-authority outage, timestamped HTTP trace и online recovery. [Candidate evidence](evidence/candidate-serving-2026-10-15.md) и [outage evidence](evidence/http-trust-outage-2026-10-15.md) отделяют contracts от native результатов. Qualification не разрешает release.
 
 - [Serving API, PB-25/RB-48/RB-49](operations/serving-troubleshooting.md). Liveness versus readiness, auth/schema/overload, worker deadline/cleanup, cancellation accounting, thread-start failure, resource-profile mismatch и verified reload. [Evidence](evidence/serving-api-2026-10-14.md) не смешивает component fixture с полным ML release.
 

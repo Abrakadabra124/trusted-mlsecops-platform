@@ -99,6 +99,8 @@ Recovery increment после a65ee56: opt-in backup manifest v2 включае�
 
 **Результат:** usable reference inference API с известным model digest, negative API/loader suite, reconciliation реально загруженной версии и отзыв ancestor до endpoint. **Приёмка:** M12, M13, M19 целиком. **Безопасный fallback:** отсутствие ML не отменяет deterministic release gates.
 
+HTTP outage slice после `cdea4236` реализуется отдельным diagnostic module поверх того же actual-candidate Reader/Engine. Не менять production lease ради удобного теста. Сначала локальные trace/ownership/recovery negatives, затем clean-checkout native CI с сохранением fail/inconclusive и обновлением PB-26/RB-52; при позднем HTTP отказе исследовать runtime cleanup, не вычитать его из measured latency.
+
 ## Неделя 10: Нагрузка и ML monitoring
 
 **Задачи:** T17, T18. Измерить latency/throughput/resource usage по фиксированному профилю. Добавить data/prediction/label-quality reports, trust alerts и telemetry health. Проверить clean windows, drift injection и delayed labels; feedback отправлять только в quarantine.

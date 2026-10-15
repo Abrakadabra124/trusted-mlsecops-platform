@@ -18,7 +18,6 @@ from mlsecops import (
     storage_bootstrap,
     storage_pki,
     storage_restore,
-    trust,
     trust_authority,
 )
 from mlsecops.contracts import (
@@ -37,6 +36,8 @@ from mlsecops.prediction_protocol import PredictionBatch
 from scripts.candidate_serving_reader import KIND, CandidateReader, bind_proposal
 from scripts.release_reader_native import disposable
 from scripts.serving_native import check_http, site
+from scripts.serving_outage_native import ObservedLease
+from scripts.serving_outage_native import exercise as exercise_outage
 
 
 def http_matrix(engine, request, body, confirmed):
@@ -183,7 +184,7 @@ def qualify(root, state, image, *, trust_port=15446):
         trust_client = safe_child(authority, "storage-clients/serving")
 
         def reader(selected=envelope):
-            lease = trust.Lease(
+            lease = ObservedLease(
                 lambda: trust_authority.read(
                     trust_client, permit["environment"], qualification_public
                 ),
@@ -237,16 +238,35 @@ def qualify(root, state, image, *, trust_port=15446):
                 == 503,
             )
         with ExitStack() as services:
+            outage = {}
+
+            def exercise(engine, request, body):
+                http_matrix(engine, request, body, confirmed)
+                if loaded.expires_at - math.ceil(time.time()) < 100:
+                    raise Rejected("candidate_outage_proposal_window_too_short")
+                outage.update(
+                    exercise_outage(
+                        engine,
+                        request,
+                        body,
+                        authority=authority,
+                        port=trust_port,
+                        reader_factory=reader,
+                        expected=scores,
+                        output=safe_child(destination, "http-outage.json"),
+                        confirmed=confirmed,
+                    )
+                )
+
             request, body, runtime = check_http(
                 services,
                 reader(),
                 (features, scores),
                 confirmed,
                 rejected,
-                exercise=lambda engine, request, body: http_matrix(
-                    engine, request, body, confirmed
-                ),
+                exercise=exercise,
             )
+            runtime["http_trust_outage"] = outage
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )
@@ -291,7 +311,7 @@ def qualify(root, state, image, *, trust_port=15446):
         "limitations": [
             "Qualification permission is not release approval; failed gates remain blocking",
             "Golden consistency uses another ONNX worker, not independent sklearn parity",
-            "Production Reader acceptance, HTTP outage trace, privacy/audit and load acceptance remain separate",
+            "Production Reader acceptance, privacy/audit and load acceptance remain separate",
         ],
     }
     write_json(safe_child(destination, "report.json"), result)

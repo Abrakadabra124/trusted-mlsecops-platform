@@ -1,4 +1,4 @@
-# PB-26 / RB-50 / RB-51: Испытание настоящей модели без разрешения выпуска
+# PB-26 / RB-50 / RB-51 / RB-52: Испытание настоящей модели без разрешения выпуска
 
 Владельцы: platform owner для стенда, ML owner для source/evaluation, security owner для ключей и отзыва. Scope: synthetic CPU qualification, не production. [ADR 0032](../decisions/0032-candidate-serving-qualification.md), [проверенное evidence](../evidence/candidate-serving-2026-10-15.md): на `0a47b7b` 39/39 native checks pass в clean-checkout CI.
 
@@ -16,6 +16,7 @@ git rev-parse HEAD
 uv run --locked coverage run --data-file=.coverage-candidate-serving --source=scripts.candidate_serving_reader -m unittest scripts.candidate_serving_reader_qualification
 uv run --locked coverage report --data-file=.coverage-candidate-serving --fail-under=90
 uv run --locked python -m unittest scripts.candidate_serving_native_qualification
+uv run --locked python -m unittest scripts.serving_outage_qualification
 ```
 
 После каждой команды проверять `$LASTEXITCODE`; при ненулевом коде следующий этап не выполнять. Эти тесты используют controlled signed fixtures и controlled clocks. HTTP contract действительно проходит через loopback server, но model worker в локальной harness suite подставной. Это не native Docker evidence.
@@ -76,3 +77,26 @@ Readback опирается на отдельные запросы списка 
 **Key separation:** сравнение Base64-строк допускало две разные кодировки одного Ed25519 public key. Теперь независимость qualification signer от publisher/curator/evaluator проверяется по декодированным bytes; три alias cases отклоняются. Это обход проверки независимости ролей при неправильной конфигурации, не возможность подделать подпись чужого ключа. При обнаружении в конфигурации выдать новый независимый qualification key; не менять encoding прежнего ключа.
 
 Проверка исправлений выполняется командами PB-26. Локальная suite отдельно проверяет, что actual-candidate controller при импорте не загружает ONNX parser/runtime и approval fixtures; fixture-only imports перенесены в старый fixture path. Это проверка import boundary, не полная sandbox/security сертификация.
+
+## RB-52: Authority недоступна, поздний HTTP-отказ или неудачный recovery
+
+Ответственный: platform owner; при signature/ownership mismatch - security owner. Prerequisites и разрешённый disposable стенд те же, что в PB-26. [Метод, evidence и ограничения](../evidence/http-trust-outage-2026-10-15.md). Новый native этап останавливает только свою authority примерно на 60 s, затем проверяет online recovery. Source CAS не останавливается.
+
+**Симптом и влияние:** prediction/readiness дают 503 после потери доверия. Это ожидаемый fail-closed режим, а не разрешение брать старый alias. ML недоступен, deterministic release gates продолжают действовать. Нельзя отключать verifier, увеличивать lease, подменять clock или создавать фиктивный approved report ради устранения 503.
+
+### Read-only диагностика
+
+1. Сохранить commit, campaign ID, model/bundle digests и безопасный trace своей `.runtime/serving-qualifications/<campaign>/http-outage.json`. Проверить `git status --short` и source revision. Не публиковать keys, clients, raw request/response или полный log.
+2. Проверить `last_verified`: UTC Unix seconds в `wall`, `monotonic`, `deadline`, policy version/hash и sequence. Это последний успешный verified policy read, не последний HTTP 200 или время остановки контейнера. Ошибка чтения не меняет anchor.
+3. В `records` сверить начало/конец запросов, status, response_valid и неизменные trust_sequence/lease_deadline. `assessment.first_503_seconds` включает transport/cleanup. Значение >60 - failure, даже если Engine заблокировал модель раньше клиентского ответа.
+4. `missing_outage_phase`: нет pre-expiry 200, двух 503 или probe после deadline. `trust_refreshed_or_lease_changed_during_outage`: проверить остановку именно нужной authority. `ml_response_after_deadline_or_denial`: запретить выпуск, исследовать trust/runtime boundary. 429/timeout не заменяют 503.
+
+### Восстановление и readback
+
+Автоматический playbook проверяет marker и Docker identity. В `finally` выполняется start только прежнего полного container ID, затем bounded SQL readiness и повторная identity validation. Повторный bootstrap/migration/export credentials не нужен. При changed/unknown ownership restart запрещён; оставить состояние для ручного разбора. Никаких global restart/prune, остановки source storage или угадывания container name.
+
+После restart ожидается 503 до explicit activation. Затем повторно читается signed policy, проверяется proposal, те же bytes загружаются в новый isolated worker и сравниваются golden scores. Требуются больший successful-read sequence, timestamp после старого deadline, прежние digests и другой worker ID. Успешный `docker start` этого не доказывает. Cleanup и source readback остаются обязательными.
+
+Если authority восстановлена, но загрузка не проходит, проверить expiry и revoke set. Истёкший permit требует новой qualification campaign от свежих материалов. Отозванную модель нельзя вернуть старым backup. Повторить весь PB-26 на новом disposable стенде, сохранив failed trace; rollback к неподписанному/отозванному состоянию запрещён.
+
+**Эскалация:** identity mismatch, неизвестные остаточные ресурсы, неверная подпись, ML после deadline, clock jump или поздний 503. До выяснения причины fail/inconclusive сохраняется. Controlled tests проверяют ownership/failure cleanup; сбой реального Docker daemon этим не считается проверенным.

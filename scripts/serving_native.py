@@ -161,8 +161,6 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
     )
     confirmed("http-oversized-413", request("/v1/predict", b"x" * 65537)[0] == 413)
     confirmed("client-errors-do-not-disable-model", request("/readyz")[0] == 200)
-    if exercise is not None:
-        exercise(engine, request, body)
     rejected(
         "native-malformed-model-never-ready",
         lambda: Worker(b"not-onnx", reader.image).start(),
@@ -180,6 +178,8 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
         "explicit-verified-reload-recovers",
         request("/v1/predict", body)[0] == 200 and engine.worker.container != identifier,
     )
+    if exercise is not None:
+        exercise(engine, request, body)
     return (
         request,
         body,

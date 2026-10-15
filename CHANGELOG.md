@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 HTTP trust-outage diagnostic slice - 2026-10-15
+
+Observed verified reads, bounded timestamped HTTP trace, owned-authority stop/restart, cold-start denial и fresh explicit recovery. Поздний 503 остаётся failure, включая cleanup latency. Controlled negatives и [RB-52](docs/operations/candidate-serving-troubleshooting.md) входят в increment. [Evidence](docs/evidence/http-trust-outage-2026-10-15.md); native CI ещё нужен, полный M11/M12/R1 не закрыт.
+
 ## R1 actual-candidate serving qualification - 2026-10-15
 
 На `0a47b7b` clean-checkout CI подтвердил 39 actual-candidate HTTP/ONNX/TLS cases, golden error 0.0 и model revocation -> 503. Все 10 workflow завершены: 6 success / 4 failure; image/ML blockers сохранены. Полная [terminal matrix](docs/evidence/candidate-serving-2026-10-15.md) не является M18 acceptance.
