@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 bounded client admission - 2026-10-15
+
+[ADR 0035](docs/decisions/0035-serving-client-quotas.md): private multi-client config, per-client integer rate/in-flight limits и retained tickets. Legacy token теперь ограничен 20/s, burst 40, in-flight 4; режим unlimited не добавлен. [RB-54/PB-28](docs/operations/serving-client-troubleshooting.md) и [evidence](docs/evidence/serving-clients-2026-10-15.md). Локально 186 methods pass, access core coverage 100%; native проверка pending, полный M13/R1 открыт.
+
 ## R1 near-expiry serving qualification - 2026-10-15
 
 [Expiry profile](docs/evidence/serving-expiry-2026-10-15.md) для подлинной краткоживущей signed trust policy: deadline до expiry, отказ после expiry, renewal/readback и explicit recovery. Concurrent observer устраняет неоднозначность ACTIVE, прочитанного лишь после HTTP completion; исправлены race сохранённого snapshot и потеря early-failure evidence. **Native `960091f`: 62 cases pass**, near-expiry 503 за 6.694990456 s, последующий 503 при всё ещё pending SQL, explicit recovery с version 3. 170 local methods pass. [PB-27/RB-53](docs/operations/serving-deadline-troubleshooting.md); полный R1 не принят.

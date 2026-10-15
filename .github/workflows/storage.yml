@@ -126,6 +126,8 @@ jobs:
         run: |
           uv run --locked coverage run --data-file=.coverage-serving --source=mlsecops.serving_protocol,mlsecops.serving_worker,mlsecops.serving_runtime,mlsecops.serving,mlsecops.serving_http -m unittest scripts.serving_session_qualification scripts.serving_runtime_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.serving_native_qualification
           uv run --locked coverage report --data-file=.coverage-serving --fail-under=85
+          uv run --locked coverage run --data-file=.coverage-client-access --source=mlsecops.serving_access -m unittest scripts.serving_access_qualification scripts.serving_http_qualification
+          uv run --locked coverage report --data-file=.coverage-client-access --fail-under=100
       - name: Disposable actual HTTP and isolated ONNX serving with current SQL trust
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable --worker-image trusted-mlsecops:dev
       - name: Candidate qualification permission and actual HTTP matrix contracts

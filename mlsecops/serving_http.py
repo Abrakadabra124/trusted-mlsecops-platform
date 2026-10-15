@@ -12,7 +12,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from mlsecops import advisory, release_reader, serving, trust, trust_authority
+from mlsecops import advisory, release_reader, serving, serving_access, trust, trust_authority
 from mlsecops.contracts import Rejected, bounded_read, decode, require_fields
 from mlsecops.datasets import FEATURES
 
@@ -58,9 +58,11 @@ async def read_body(request):
     return features
 
 
-def create_app(engine, token):
-    if not isinstance(token, str) or re.fullmatch(r"[a-f0-9]{64}", token) is None:
-        raise Rejected("http_token_required")
+def create_app(engine, token=None, *, clients=None):
+    if clients is None:
+        clients = serving_access.Access.single(token)
+    elif token is not None or not isinstance(clients, serving_access.Access):
+        raise Rejected("http_clients_conflict")
 
     @asynccontextmanager
     async def lifespan(app):
@@ -101,7 +103,7 @@ def create_app(engine, token):
                 remaining(budget)
                 return task.result()
 
-    async def execute(operation, deferred, budget, *arguments):
+    async def execute(operation, deferred, budget, ticket, *arguments):
         remaining(budget)
         task = asyncio.create_task(
             asyncio.to_thread(operation, *arguments, generation=budget.generation)
@@ -117,6 +119,7 @@ def create_app(engine, token):
                 with suppress(Exception):
                     engine.expire(budget.generation)
             app.state.slots.release()
+            ticket.release()
 
         task.add_done_callback(finished)
         return await await_result(task, budget)
@@ -141,14 +144,6 @@ def create_app(engine, token):
                 return
             await super().__call__(scope, receive, send)
 
-    def authenticated(request):
-        values = request.headers.getlist("authorization")
-        return (
-            len(values) == 1
-            and len(values[0]) == 71
-            and secrets.compare_digest(values[0].encode(), f"Bearer {token}".encode())
-        )
-
     @app.get("/livez")
     async def live():
         return {"status": "alive"}
@@ -156,19 +151,28 @@ def create_app(engine, token):
     @app.get("/readyz")
     async def ready(request: Request):
         request_id = secrets.token_hex(16)
-        if not authenticated(request):
+        principal = clients.authenticate(request.headers.getlist("authorization"))
+        if principal is None:
             return error(401, "unauthorized", request_id)
         try:
             budget = engine.response_budget()
             remaining(budget)
         except Exception:
             return error(503, "not_ready", request_id)
-        if app.state.slots.locked():
-            return error(503, "not_ready", request_id)
-        await app.state.slots.acquire()
-        deferred = [False]
         try:
-            result = await execute(engine.check, deferred, budget)
+            ticket = clients.acquire(principal)
+        except serving_access.Limited:
+            return error(429, "client_limited", request_id)
+        except Rejected:
+            return error(503, "not_ready", request_id)
+        deferred = [False]
+        acquired = False
+        try:
+            if app.state.slots.locked():
+                return error(503, "not_ready", request_id)
+            await app.state.slots.acquire()
+            acquired = True
+            result = await execute(engine.check, deferred, budget, ticket)
             if result.get("ready") is not True:
                 raise Rejected("http_not_ready")
             return VerifiedResponse({**result, "request_id": request_id}, budget, "not_ready")
@@ -176,23 +180,34 @@ def create_app(engine, token):
             return error(503, "not_ready", request_id)
         finally:
             if not deferred[0]:
-                app.state.slots.release()
+                ticket.release()
+                if acquired:
+                    app.state.slots.release()
 
     @app.post("/v1/predict")
     async def predict(request: Request):
         request_id = secrets.token_hex(16)
-        if not authenticated(request):
+        principal = clients.authenticate(request.headers.getlist("authorization"))
+        if principal is None:
             return error(401, "unauthorized", request_id)
         try:
             budget = engine.response_budget()
             remaining(budget)
         except Exception:
             return error(503, "model_unavailable", request_id)
-        if app.state.slots.locked():
-            return error(429, "overloaded", request_id)
-        await app.state.slots.acquire()
-        deferred = [False]
         try:
+            ticket = clients.acquire(principal)
+        except serving_access.Limited:
+            return error(429, "client_limited", request_id)
+        except Rejected:
+            return error(503, "model_unavailable", request_id)
+        deferred = [False]
+        acquired = False
+        try:
+            if app.state.slots.locked():
+                return error(429, "overloaded", request_id)
+            await app.state.slots.acquire()
+            acquired = True
             try:
                 remaining(budget)
                 body_task = asyncio.create_task(read_body(request))
@@ -212,7 +227,7 @@ def create_app(engine, token):
             except Rejected:
                 remaining(budget)
                 return error(422, "invalid_request", request_id)
-            result = await execute(engine.predict, deferred, budget, features)
+            result = await execute(engine.predict, deferred, budget, ticket, features)
             return VerifiedResponse(
                 {**result, "request_id": request_id}, budget, "model_unavailable"
             )
@@ -224,13 +239,16 @@ def create_app(engine, token):
             return error(503, "model_unavailable", request_id)
         finally:
             if not deferred[0]:
-                app.state.slots.release()
+                ticket.release()
+                if acquired:
+                    app.state.slots.release()
 
     return app
 
 
 def configured(path):
     config = decode(bounded_read(path, 1024 * 1024))
+    credential_field = "principals_file" if "principals_file" in config else "token_file"
     require_fields(
         config,
         (
@@ -243,13 +261,17 @@ def configured(path):
             "minimum_sequence",
             "trust_root",
             "minimum_trust_version",
-            "token_file",
+            credential_field,
         ),
     )
-    secret = Path(config["token_file"])
+    secret = Path(config[credential_field])
     if not secret.is_absolute() or os.name == "posix" and secret.stat().st_mode & 0o077:
         raise Rejected("http_token_permissions")
-    token = bounded_read(secret, 65).decode("ascii").strip()
+    clients = (
+        serving_access.Access(decode(bounded_read(secret, MAX_BODY), MAX_BODY))
+        if credential_field == "principals_file"
+        else serving_access.Access.single(bounded_read(secret, 65).decode("ascii").strip())
+    )
     lease = trust.Lease(
         lambda: trust_authority.read(
             config["trust_client"], config["context"]["policy"]["environment"], config["trust_root"]
@@ -272,7 +294,7 @@ def configured(path):
         },
         trust_lease=lease,
     )
-    return create_app(serving.Engine(reader), token)
+    return create_app(serving.Engine(reader), clients=clients)
 
 
 def main():

@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Client identity и quotas, RB-54/PB-28](operations/serving-client-troubleshooting.md). 401/429/503, bounded credentials, retained in-flight tickets и safe recovery без reset quotas. [Evidence](evidence/serving-clients-2026-10-15.md) различает unit/loopback и native qualification.
+
 - [HTTP deadline и зависшее доверие, RB-53/PB-27](operations/serving-deadline-troubleshooting.md). Sticky generation fence, retained pending operations, paused established SQL query и unpause-before-drain. [Evidence](evidence/serving-deadline-2026-10-15.md) отделяет controlled от native проверки.
 
 - [Actual candidate qualification, PB-26/RB-50/RB-51/RB-52](operations/candidate-serving-troubleshooting.md). Source/permit binding, expiry, key separation, owned-authority outage, timestamped HTTP trace и online recovery. [Candidate evidence](evidence/candidate-serving-2026-10-15.md) и [outage evidence](evidence/http-trust-outage-2026-10-15.md) отделяют contracts от native результатов. Qualification не разрешает release.

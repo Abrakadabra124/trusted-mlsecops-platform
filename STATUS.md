@@ -6,6 +6,8 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
+Следующий T16 increment реализует [bounded client admission](docs/evidence/serving-clients-2026-10-15.md): private allowlist, per-client token bucket/in-flight, retained ownership после HTTP cancellation и явные legacy limits. [ADR 0035](docs/decisions/0035-serving-client-quotas.md), [RB-54/PB-28](docs/operations/serving-client-troubleshooting.md). Локально 186 adjacent methods pass; native CI ещё нужен. Полный audit/M13 не реализован этим slice.
+
 На `960091f` [near-expiry profile](docs/evidence/serving-expiry-2026-10-15.md) подтверждён storage CI: **62 actual-candidate cases pass**. Реальная signed policy version 2 с lifetime 8 s: HTTP 503 за **6.694990456 s**, до lease/signed expiry, ACTIVE timestamp внутри запроса. Повторный 503 после expiry при pending SQL, renewal version 3, explicit fresh recovery и source preservation проверены. Исторический `ed87e97` не имел отдельной метки ACTIVE до completion. Полный M11/M12/R1 не закрыт; следующий slice T16 privacy/quotas/audit.
 
 Все 10 workflows `960091f` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished `2026-10-15T17:57:43.889180Z`. Image audit, poisoning, evasion и paired robustness остаются fail. [Полная matrix и sanitized traces](docs/evidence/serving-expiry-2026-10-15.md) сохраняют эти ограничения. Локально 170 adjacent methods pass; code и runbook не разрешают final release.

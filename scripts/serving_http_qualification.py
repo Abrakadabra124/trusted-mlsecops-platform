@@ -8,13 +8,140 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from mlsecops import serving, serving_http
+from mlsecops import serving, serving_access, serving_http
 from mlsecops.contracts import Rejected, canonical, decode
 from mlsecops.datasets import FEATURES
 from mlsecops.signing import encode64
+from scripts.serving_access_qualification import credentials
 
 
 class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_global_ready_overload_releases_client_ticket_without_refund(self):
+        config = credentials()
+        config["clients"][0]["burst"] = 1
+        access = serving_access.Access(config, clock=lambda: 1000)
+        self.app = serving_http.create_app(self.engine, clients=access)
+        headers = [(b"authorization", ("Bearer " + "a" * 64).encode())]
+        for _ in range(8):
+            await self.app.state.slots.acquire()
+        try:
+            self.assertEqual(
+                (await self.invoke(path="/readyz", method="GET", headers=headers))[0], 503
+            )
+        finally:
+            for _ in range(8):
+                self.app.state.slots.release()
+        self.assertEqual(access.buckets["a" * 32].inflight, 0)
+        self.assertEqual((await self.invoke(path="/readyz", method="GET", headers=headers))[0], 429)
+        self.engine.check.assert_not_called()
+
+    async def test_clock_failure_returns_503_and_trust_fence_precedes_quota(self):
+        clock = Mock(return_value=1000)
+        access = serving_access.Access(credentials(), clock=clock)
+        self.app = serving_http.create_app(self.engine, clients=access)
+        headers = [(b"authorization", ("Bearer " + "a" * 64).encode())]
+        clock.return_value = 999
+        for path, method in (("/readyz", "GET"), ("/v1/predict", "POST")):
+            status, result, received = await self.invoke(path=path, method=method, headers=headers)
+            self.assertEqual((status, received), (503, 0))
+            self.assertNotIn("quota_clock", str(result))
+        self.engine.check.assert_not_called()
+        self.engine.predict.assert_not_called()
+        access = serving_access.Access(credentials(), clock=lambda: 1000)
+        retained = access.acquire("a" * 32)
+        self.app = serving_http.create_app(self.engine, clients=access)
+        self.engine.response_budget.side_effect = Rejected("expired")
+        self.assertEqual((await self.invoke(headers=headers))[0], 503)
+        retained.release()
+
+    async def test_deadline_retains_client_ticket_after_response_and_until_task_completion(self):
+        access = serving_access.Access(credentials(), clock=lambda: 1000)
+        self.app = serving_http.create_app(self.engine, clients=access)
+        entered, release = threading.Event(), threading.Event()
+        generation = threading.Event()
+        budget = serving.ResponseBudget(generation, time.monotonic() + 0.08)
+        self.engine.response_budget.side_effect = lambda: budget
+        self.engine.expire.side_effect = lambda selected: selected.set()
+        headers = [
+            (b"authorization", ("Bearer " + "a" * 64).encode()),
+            (b"content-type", b"application/json"),
+        ]
+
+        def predict(*arguments, **keywords):
+            entered.set()
+            release.wait(3)
+            return {"predictions": []}
+
+        self.engine.predict.side_effect = predict
+        try:
+            self.assertEqual((await self.invoke(headers=headers))[0], 503)
+            self.assertTrue(entered.is_set())
+            with self.assertRaises(serving_access.Limited):
+                access.acquire("a" * 32)
+        finally:
+            release.set()
+        for _ in range(100):
+            if not self.app.state.pending:
+                break
+            await asyncio.sleep(0.01)
+        self.assertFalse(self.app.state.pending)
+        access.acquire("a" * 32).release()
+
+    async def test_client_quota_precedes_body_and_does_not_charge_other_identity(self):
+        config = credentials()
+        config["clients"][0]["burst"] = 1
+        access = serving_access.Access(config, clock=lambda: 1000)
+        self.app = serving_http.create_app(self.engine, clients=access)
+        first = [
+            (b"authorization", ("Bearer " + "a" * 64).encode()),
+            (b"content-type", b"application/json"),
+        ]
+        second = [
+            (b"authorization", ("Bearer " + "b" * 64).encode()),
+            (b"content-type", b"application/json"),
+        ]
+        self.assertEqual((await self.invoke(body={}, headers=first))[0], 422)
+        status, result, received = await self.invoke(headers=first + [(b"x-client-id", b"b" * 32)])
+        self.assertEqual((status, received, result["error"]["code"]), (429, 0, "client_limited"))
+        self.assertEqual((await self.invoke(headers=second))[0], 200)
+        self.assertEqual((await self.invoke(headers=first * 2))[0], 401)
+        self.assertEqual((await self.invoke(path="/readyz", method="GET", headers=first))[0], 429)
+        self.assertEqual((await self.invoke(path="/livez", method="GET", headers=[]))[0], 200)
+
+    async def test_cancelled_http_keeps_client_ticket_until_executor_completion(self):
+        access = serving_access.Access(credentials(), clock=lambda: 1000)
+        self.app = serving_http.create_app(self.engine, clients=access)
+        entered, release = threading.Event(), threading.Event()
+        headers = [
+            (b"authorization", ("Bearer " + "a" * 64).encode()),
+            (b"content-type", b"application/json"),
+        ]
+
+        def predict(*arguments, **keywords):
+            entered.set()
+            release.wait(3)
+            return {"predictions": []}
+
+        self.engine.predict.side_effect = predict
+        task = asyncio.create_task(self.invoke(headers=headers))
+        try:
+            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual((await self.invoke(headers=headers))[0], 429)
+            self.assertEqual(len(self.app.state.pending), 1)
+        finally:
+            release.set()
+            if not task.done():
+                await task
+        for _ in range(100):
+            if not self.app.state.pending:
+                break
+            await asyncio.sleep(0.01)
+        self.assertFalse(self.app.state.pending)
+        self.assertEqual((await self.invoke(headers=headers))[0], 200)
+
     async def test_fenced_generation_precedes_overload_and_body_consumption(self):
         generation = threading.Event()
         generation.set()
@@ -360,6 +487,27 @@ class ServingConfigurationContracts(unittest.TestCase):
             path.write_bytes(canonical({**config, "token_file": "relative-token"}))
             with self.assertRaises(Rejected):
                 serving_http.configured(path)
+            secret.write_bytes(canonical(credentials()))
+            multi = {key: value for key, value in config.items() if key != "token_file"}
+            multi["principals_file"] = str(secret)
+            path.write_bytes(canonical(multi))
+            with patch.object(serving_http, "create_app") as create:
+                serving_http.configured(path)
+                access = create.call_args.kwargs["clients"]
+                self.assertEqual(access.authenticate(["Bearer " + "a" * 64]), "a" * 32)
+                self.assertEqual(access.authenticate(["Bearer " + "b" * 64]), "b" * 32)
+            path.write_bytes(canonical({**multi, "token_file": str(secret)}))
+            with self.assertRaises(Rejected):
+                serving_http.configured(path)
+            path.write_bytes(canonical(multi))
+            secret.write_bytes(b" " * 65537)
+            with self.assertRaises(Rejected):
+                serving_http.configured(path)
+
+    def test_direct_client_configuration_rejects_conflicting_token_or_wrong_type(self):
+        for token, clients in (("a" * 64, serving_access.Access(credentials())), (None, {})):
+            with self.assertRaises(Rejected):
+                serving_http.create_app(Mock(), token, clients=clients)
 
     def test_cli_binds_loopback_and_does_not_enable_access_logs_or_proxy_headers(self):
         with (

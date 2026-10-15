@@ -1,5 +1,7 @@
 # Реализация R1
 
+2026-10-15 после `3c9da7a`: [client admission / ADR 0035](decisions/0035-serving-client-quotas.md), [RB-54/PB-28](operations/serving-client-troubleshooting.md). Identity allowlist и quota tickets интегрированы до body/executor, callback сохраняет ownership pending SQL. 186 local adjacent methods pass, новый access core 100% coverage; [evidence](evidence/serving-clients-2026-10-15.md). Native CI и следующие audit/privacy slices ещё нужны.
+
 2026-10-15 после `a11c719`: [near-expiry paused query](evidence/serving-expiry-2026-10-15.md), дополнение [ADR 0034](decisions/0034-serving-response-deadline.md) и [PB-27/RB-53](operations/serving-deadline-troubleshooting.md). **Native `960091f`: 62 cases pass**, genuine 8 s policy, receipt/readback binding, ACTIVE до client completion, первый 503 за 6.694990456 s до expiry и второй после expiry при pending SQL. Signed renewal/readback и explicit recovery подтверждены; production код и gates не ослаблены. Локально 170 adjacent methods pass. Следующий slice T16; full R1 не принят.
 
 CI `960091f` полностью terminal: 6 success / 4 failure. M20 723/M21 122 pass; M21 завершён `2026-10-15T17:57:43.889180Z`. Прежние image/ML failures сохранены, final approval не выдаётся. Full report hash и temporal assertions перепроверены из опубликованного evidence.

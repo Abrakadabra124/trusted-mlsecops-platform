@@ -111,6 +111,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T16
 - [ ] Privacy, quotas и audit. Зависимость: T15. Gate: M13.
+- Частичный increment 2026-10-15: [ADR 0035](../docs/decisions/0035-serving-client-quotas.md), bounded local client identity/rate/in-flight и [RB-54/PB-28](../docs/operations/serving-client-troubleshooting.md). Native evidence pending; audit/retention/cardinality и полный M13 остаются открытыми.
 - Результат: auth, per-client throttling, redaction, bounded-cardinality telemetry и trace-to-release correlation. Public evidence не содержит приватных identifiers/URLs или угадываемых hashes чувствительных значений; masking не объявляется differential privacy.
 - Проверка: test canaries не появляются в logs/evidence, чужие identity отвергаются, raw features не сохраняются по умолчанию.
 

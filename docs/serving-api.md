@@ -30,7 +30,7 @@
 | 401 | отсутствующий/неверный bearer token |
 | 413 | body превышает 64 KiB, в том числе chunked без Content-Length |
 | 422 | schema/число/версия/JSON/encoding/Content-Length/body deadline не соответствует contract |
-| 429 | заняты admission slots или Engine lock |
+| 429 | исчерпана client quota, заняты admission slots или Engine lock |
 | 503 | нет проверенной модели, trust failure, worker failure или неопределённый cleanup |
 
 Error response содержит только schema version, server request ID и bounded `error.code`. `/livez` возвращает только process liveness без авторизации, не digest или readiness. `/readyz` требует bearer и проверяет действующую worker session; docs/OpenAPI endpoints отключены. Ответы prediction/readiness/error используют `Cache-Control: no-store`.
@@ -66,7 +66,30 @@ Token генерировать криптографически случайно
 uv run --locked python -m mlsecops.serving_http --config .runtime/serving/config.json --port 8080
 ```
 
-CLI всегда слушает `127.0.0.1`, не предоставляет `--host`, не включает access log или доверие к forwarded headers. Local HTTP не защищает от привилегированного host attacker. Remote/TLS ingress, scoped service identity, per-client quotas/audit и production deployment ещё не квалифицированы.
+CLI всегда слушает `127.0.0.1`, не предоставляет `--host`, не включает access log или доверие к forwarded headers. Local HTTP не защищает от привилегированного host attacker. Remote/TLS ingress, полноценный audit и production deployment ещё не квалифицированы.
+
+### Несколько локальных клиентов и quotas
+
+Вместо `token_file` можно передать `principals_file` с absolute path к отдельному private JSON (до 64 KiB). Оба поля одновременно запрещены. Файл имеет `schema_version: 1` и массив `clients` из 1-32 объектов:
+
+```json
+{
+  "schema_version": 1,
+  "clients": [{
+    "principal_id": "<random 32 lowercase hex characters>",
+    "token": "<random 64 lowercase hex characters>",
+    "requests_per_second": 20,
+    "burst": 40,
+    "max_in_flight": 4
+  }]
+}
+```
+
+Это шаблон, не готовые credentials. Генерировать IDs/tokens криптографически случайно, хранить owner-only и вне Git. Rate/burst - целые 1-1000, in-flight - 1-4. Unknown fields, duplicate IDs/tokens и bool/floats запрещены. Identity определяется bearer credential, не клиентским заголовком или IP. Файл читается только при старте; [RB-54/PB-28](operations/serving-client-troubleshooting.md) описывает rotation/recovery и ограничения.
+
+Один principal делит quota между predict/ready; `/livez` не расходует её и не делает ML. Legacy `token_file` теперь имеет limits **20 requests/s, burst 40, 4 in-flight**, без режима unlimited. Один запрос расходует один token независимо от batch, invalid body или global overload; 100-row/64-KiB bounds сохраняются. 429 `client_limited` возвращается до body/executor; это rate либо in-flight denial. 503 по trust/deadline имеет приоритет. Pending task сохраняет client ticket даже после HTTP timeout/cancel, поэтому 429 не лечится обнулением счётчика.
+
+Quotas process-local: Engine reload не сбрасывает их, restart сбрасывает. Это не multi-replica rate limit или гарантия доступности других клиентов при общей неисправности runtime. [ADR 0035](decisions/0035-serving-client-quotas.md), [evidence](evidence/serving-clients-2026-10-15.md). Full M13 privacy/audit остаётся открыт.
 
 Startup failure оставляет API живым, но `/readyz` и predictions возвращают 503. Автоматического trust bypass/reload на HTTP endpoint нет. Для нового разрешённого release подготовить проверенную конфигурацию и контролируемо перезапустить сервис; не редактировать SQL head вручную. [PB-25/RB-48/RB-49](operations/serving-troubleshooting.md) описывает диагностику и обязательную проверку конечного состояния.
 
