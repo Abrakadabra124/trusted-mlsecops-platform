@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 private audit journal core - 2026-10-15
+
+[ADR 0036](docs/decisions/0036-serving-audit-journal.md): fixed-field private events, bounded pending including active I/O, binary exclusive file, per-record fsync и explicit unconfirmed state. Исправлены воспроизведённые input/close/start races, byte accounting Windows и huge-timeout normalization. [RB-55/PB-29](docs/operations/serving-audit-troubleshooting.md), [evidence](docs/evidence/serving-audit-2026-10-15.md). HTTP/retention/canary integration и full M13 ещё не реализованы; journal core не считается готовой production telemetry.
+
 ## R1 bounded client admission - 2026-10-15
 
 [ADR 0035](docs/decisions/0035-serving-client-quotas.md): private multi-client config, per-client integer rate/in-flight limits и retained tickets. Legacy token теперь ограничен 20/s, burst 40, in-flight 4; режим unlimited не добавлен. [RB-54/PB-28](docs/operations/serving-client-troubleshooting.md) и [evidence](docs/evidence/serving-clients-2026-10-15.md). **Native 687a7c7: 67 actual-candidate cases pass**, quota window 0.002959852 s, точные admissions [2,2,4], trust/recovery и source preservation. Локально 186 methods pass, access core coverage 100%. Failed `f273fd5` сохранён: исправлен cadence диагностического polling, не защитные thresholds. Полный M13/R1 открыт.

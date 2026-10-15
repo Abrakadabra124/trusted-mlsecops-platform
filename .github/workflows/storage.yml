@@ -128,6 +128,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-serving --fail-under=85
           uv run --locked coverage run --data-file=.coverage-client-access --source=mlsecops.serving_access -m unittest scripts.serving_access_qualification scripts.serving_http_qualification
           uv run --locked coverage report --data-file=.coverage-client-access --fail-under=100
+      - name: Private audit journal bounds, durability and lifecycle contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit -m unittest scripts.serving_audit_qualification
+          uv run --locked coverage report --data-file=.coverage-serving-audit --fail-under=95
       - name: Disposable actual HTTP and isolated ONNX serving with current SQL trust
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable --worker-image trusted-mlsecops:dev
       - name: Candidate qualification permission and actual HTTP matrix contracts

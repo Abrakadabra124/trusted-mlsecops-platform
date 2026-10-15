@@ -6,6 +6,8 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
+Новый T16 slice после `1e8bb1f`: [private audit journal core](docs/evidence/serving-audit-2026-10-15.md), [ADR 0036](docs/decisions/0036-serving-audit-journal.md), [RB-55/PB-29](docs/operations/serving-audit-troubleshooting.md). Ограниченные queue/disk bytes, accepted/durable/unconfirmed и retained writer lifecycle. Это ещё **не HTTP audit**: ASGI correlation, retention/rotation и all-output canaries остаются обязательной следующей работой; полные M13/R1 не закрыты.
+
 T16 increment: [bounded client admission](docs/evidence/serving-clients-2026-10-15.md), [ADR 0035](docs/decisions/0035-serving-client-quotas.md), [RB-54/PB-28](docs/operations/serving-client-troubleshooting.md). **Native 687a7c7: 67 actual-candidate cases pass**. Quota statuses 422/429/422/429, refill 200/200, admissions [2,2,4]; retained tickets после cancellation и явные legacy limits. Первый outage 503 за 59.777709753 s, затем pause/expiry, explicit recovery/revoke и source preservation подтверждены. [Failed f273fd5](docs/evidence/serving-clients-f273fd5-failure.md) сохранён: исправлен cadence диагностики, не защитные пороги. Локально 186 methods pass; audit/retention/cardinality и полный M13/R1 остаются открытыми.
 
 Все 10 workflows `687a7c7` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished `2026-10-15T19:01:27.001856Z`. [Matrix и sanitized report](docs/evidence/serving-clients-2026-10-15.md) сохраняют image audit, poisoning, evasion и paired robustness failures. Следующий T16 slice - bounded private audit, retention/sink failure и canary/cardinality tests, не увеличение квот и не фиктивный final approval.
