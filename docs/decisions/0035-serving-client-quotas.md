@@ -1,6 +1,6 @@
 # ADR 0035: bounded local client admission
 
-Дата: 2026-10-15. Статус: implementation in progress. Scope: T16 identity/quotas, не полный M13.
+Дата: 2026-10-15. Статус: implemented, scoped native qualification на `687a7c7`. Scope: T16 identity/quotas, не полный M13. [Evidence](../evidence/serving-clients-2026-10-15.md) сохраняет исходный native failure и correction.
 
 ## Контракт
 
