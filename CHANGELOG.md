@@ -2,7 +2,7 @@
 
 ## R1 bounded client admission - 2026-10-15
 
-[ADR 0035](docs/decisions/0035-serving-client-quotas.md): private multi-client config, per-client integer rate/in-flight limits и retained tickets. Legacy token теперь ограничен 20/s, burst 40, in-flight 4; режим unlimited не добавлен. [RB-54/PB-28](docs/operations/serving-client-troubleshooting.md) и [evidence](docs/evidence/serving-clients-2026-10-15.md). Локально 186 methods pass, access core coverage 100%; native проверка pending, полный M13/R1 открыт.
+[ADR 0035](docs/decisions/0035-serving-client-quotas.md): private multi-client config, per-client integer rate/in-flight limits и retained tickets. Legacy token теперь ограничен 20/s, burst 40, in-flight 4; режим unlimited не добавлен. [RB-54/PB-28](docs/operations/serving-client-troubleshooting.md) и [evidence](docs/evidence/serving-clients-2026-10-15.md). Локально 186 methods pass, access core coverage 100%. Native `f273fd5`: fixture profile pass, actual-candidate outage fail из-за слишком частого диагностического polling. Trace сохранён, cadence correction и regression добавлены; повторный native run ещё нужен, полный M13/R1 открыт.
 
 ## R1 near-expiry serving qualification - 2026-10-15
 

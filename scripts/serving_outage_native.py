@@ -244,7 +244,7 @@ def exercise(
                 if denials >= 2 and status == 503 and started >= anchor["deadline"]:
                     break
                 remaining = anchor["deadline"] - time.monotonic()
-                time.sleep(2 if remaining > 2.1 else 0.005)
+                time.sleep(2 if remaining > 2.1 else 0.05)
             trace["assessment"] = assess(anchor, trace["records"])
             write_json(output, trace)
             confirmed("trust-outage-expired-readiness-503", request("/readyz")[0] == 503)

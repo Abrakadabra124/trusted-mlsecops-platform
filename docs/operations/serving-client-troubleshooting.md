@@ -34,6 +34,8 @@ uv run --locked python -m scripts.candidate_serving_native --state .runtime --co
 4. Полный runner продолжает worker/trust outage, pause/expiry, explicit recovery, signed revoke и owned cleanup. Quota pass не заменяет остальные проверки и не даёт release_ready=true.
 5. Сверить exact source revision, source_dirty=false, unique case labels и terminal workflow status. Native result публикуется отдельно от локальных mocks; до завершения CI считается pending.
 
+Известная диагностическая ошибка `f273fd5`: частый polling trust-outage исчерпал primary client quota и дал 429, хотя первый 503 уложился в 60 s. [Failed trace](../evidence/serving-clients-f273fd5-failure.md) сохраняет все наблюдения. Исправлен сам polling: около deadline не менее 50 ms паузы после каждого ответа. Не повышать quotas и не разрешать 429 в outage assessment ради pass. Повторять полный disposable runner с новой code revision, не переименовывать старый failed report. Это конфликт двух проверок в лаборатории, не production-инцидент.
+
 ## Контролируемое изменение и восстановление
 
 Credential rotation требует замены private файла и controlled restart; файл не перечитывается каждым запросом. До restart прекратить admission на уровне вызывающего клиента, дождаться завершения owned operations/cleanup. Не очищать Python executor и не обнулять buckets при ещё работающем SQL. При неопределённом cleanup следовать RB-53, не создавать параллельный serving process.

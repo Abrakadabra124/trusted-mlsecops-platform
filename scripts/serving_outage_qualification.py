@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from mlsecops import trust
+from mlsecops import serving_access, trust
 from mlsecops.contracts import Rejected, read_json
 from scripts import serving_outage_native as outage
 from scripts import trust_qualification as fixtures
@@ -246,7 +246,7 @@ class ServingOutageContracts(unittest.TestCase):
         self.assertFalse(outage.response_valid(503, prediction, expected, [0.5]))
 
     def test_exercise_preserves_failed_timing_and_recovers_with_fresh_read(self):
-        for cleanup_delay, recovery_unavailable in ((0, False), (0.3, False), (0, True)):
+        for cleanup_delay, recovery_unavailable in ((0, False), (0.5, False), (0, True)):
             with (
                 self.subTest(cleanup_delay=cleanup_delay),
                 tempfile.TemporaryDirectory() as temporary,
@@ -268,6 +268,21 @@ class ServingOutageContracts(unittest.TestCase):
                 result = {**identity, "predictions": [{"decision": "score", "score": 0.5}]}
                 unavailable = False
                 recovered = False
+                access = serving_access.Access(
+                    {
+                        "schema_version": 1,
+                        "clients": [
+                            {
+                                "principal_id": "a" * 32,
+                                "token": "a" * 64,
+                                "requests_per_second": 20,
+                                "burst": 40,
+                                "max_in_flight": 4,
+                            }
+                        ],
+                    },
+                    clock=lambda: int(self.fixture.monotonic * 1_000_000_000),
+                )
 
                 def request(path, body=None):
                     nonlocal unavailable
@@ -282,11 +297,17 @@ class ServingOutageContracts(unittest.TestCase):
                         except trust.Unavailable:
                             pass
                         self.lease.check(policy_sha256="a" * 64, artifacts=[], keys=[])
+                        if self.fixture.monotonic >= self.lease.deadline - 0.25:
+                            raise Rejected("serving_response_deadline")
                     except Rejected:
                         unavailable = True
                         self.fixture.advance(cleanup_delay)
                         engine.worker = None
                         return 503, error
+                    try:
+                        access.acquire("a" * 32).release()
+                    except serving_access.Limited:
+                        return 429, {"error": {"code": "client_limited"}}
                     return 200, result
 
                 def activate():
@@ -346,6 +367,11 @@ class ServingOutageContracts(unittest.TestCase):
                             outage.exercise(engine, request, {}, **arguments)["status"], "pass"
                         )
                 report = read_json(output)
+                self.assertNotIn(429, [record["http_status"] for record in report["records"]])
+                if cleanup_delay:
+                    self.assertIn(
+                        "first_http_503_exceeds_60_seconds", report["assessment"]["failures"]
+                    )
                 self.assertEqual(
                     report["status"],
                     "inconclusive" if recovery_unavailable else "fail" if cleanup_delay else "pass",
