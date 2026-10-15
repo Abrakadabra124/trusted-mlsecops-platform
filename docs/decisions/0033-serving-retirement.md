@@ -1,6 +1,6 @@
 # ADR 0033: Отказ в inference не ждёт удаления Docker worker
 
-Дата: 2026-10-15. Статус: implemented, native requalification pending. Scope: same Engine для production Reader и qualification Reader, без изменения политики доверия.
+Дата: 2026-10-15. Статус: implemented, native component requalification pass на `e9120e0`. Scope: same Engine для production Reader и qualification Reader, без изменения политики доверия. Полные M11/M12 ещё открыты.
 
 ## Наблюдение
 
@@ -28,6 +28,6 @@
 
 ## Проверка и ограничения
 
-Failure-first test подтверждает, что synchronous cleanup блокировал отказ. Новые regressions покрывают немедленный отказ при удержанном cleanup, запрет reload, повторное activation после завершения, failed thread start и failed cleanup с retained handle. Native clean-checkout replay ещё нужен; одно статическое ревью не заменяет его.
+Failure-first test подтверждает, что synchronous cleanup блокировал отказ. Новые regressions покрывают немедленный отказ при удержанном cleanup, запрет reload, повторное activation после завершения, failed thread start и failed cleanup с retained handle. [Native clean-checkout replay `e9120e0`](../evidence/http-trust-outage-2026-10-15.md) подтвердил 46 cases, первый HTTP 503 через 59.995078784 s и explicit recovery. Отдельные transport failure regressions проверяют Channel/Worker без Docker; observed network-stop не заменяет все возможные отказовые сценарии.
 
 Нет гарантии жёсткого realtime на произвольно зависшем host. Native outage останавливает authority, не моделирует все network blackholes или зависший SQL. Timeout свежего trust read, transport scheduling и production deployment требуют отдельных сценариев полной M11/M12 acceptance. Background cleanup failure пока виден как not-ready и explicit cleanup rejection; полноценная audit/alert delivery остаётся T29.

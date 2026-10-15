@@ -10,7 +10,7 @@
 
 ## Запустить рабочий пример
 
-Для испытания настоящего upstream candidate добавлен [PB-26](docs/operations/candidate-serving-troubleshooting.md): неизменённый signed proposal -> отдельный qualification permit -> isolated ONNX/HTTP -> source readback. **39/39 native cases pass в clean-checkout CI `0a47b7b`**. Более строгий [HTTP outage slice](docs/evidence/http-trust-outage-2026-10-15.md) на `2905e70` обнаружил late 503 60.082361397 s; runtime correction проверена локально, новый CI ещё нужен. Permit не заменяет release approval и не скрывает failed gates.
+Для испытания настоящего upstream candidate добавлен [PB-26](docs/operations/candidate-serving-troubleshooting.md): неизменённый signed proposal -> отдельный qualification permit -> isolated ONNX/HTTP -> source readback. **46/46 native cases pass в clean-checkout CI `e9120e0`**, первый 503 при trust outage через 59.995078784 s, проверенный recovery. [Evidence](docs/evidence/http-trust-outage-2026-10-15.md) сохраняет прежний late-denial failure и исправление cleanup. Один lab trace не гарантирует все network faults; полный M11/M12 открыт, permit не заменяет release approval.
 
 Для promotion journal добавлен [явный backup v2 и независимый restore](docs/operations/promotion-recovery-troubleshooting.md): общий snapshot CAS/journal, внешний backup-id pin и maintenance при import. [Evidence и ограничения](docs/evidence/promotion-recovery-2026-10-14.md). Восстановленная БД не становится автоматически trusted serving.
 

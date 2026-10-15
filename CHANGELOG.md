@@ -2,7 +2,7 @@
 
 ## R1 immediate serving invalidation - 2026-10-15
 
-Native outage на `2905e70` выявил поздний HTTP 503, 60.082361397 s. [Failed trace](docs/evidence/http-trust-outage-2905e70.md) сохранён. [ADR 0033](docs/decisions/0033-serving-retirement.md) отделяет denial от cleanup, сохраняет retirement ownership и блокирует activation до удаления прежнего worker. Исправлен synchronous cleanup также внутри Worker.send/Channel.exchange. Локально 146 adjacent methods pass, 56 serving methods/94% coverage; native correction пока не подтверждена.
+Native outage на `2905e70` выявил поздний HTTP 503, 60.082361397 s. [Failed trace](docs/evidence/http-trust-outage-2905e70.md) сохранён. [ADR 0033](docs/decisions/0033-serving-retirement.md) отделяет denial от cleanup, сохраняет retirement ownership и блокирует activation до удаления прежнего worker. Исправлены Worker.send/Channel.exchange. Локально 146 methods pass, 56 serving methods/94% coverage. **Native correction `e9120e0`: 46 cases pass, первый 503 59.995078784 s**, source preservation/recovery подтверждены. [Evidence](docs/evidence/http-trust-outage-2026-10-15.md); full M11/M12 ещё открыт.
 
 ## R1 HTTP trust-outage diagnostic slice - 2026-10-15
 

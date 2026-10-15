@@ -101,6 +101,8 @@ Recovery increment после a65ee56: opt-in backup manifest v2 включае�
 
 HTTP outage slice после `cdea4236` реализуется отдельным diagnostic module поверх того же actual-candidate Reader/Engine. Не менять production lease ради удобного теста. Сначала локальные trace/ownership/recovery negatives, затем clean-checkout native CI с сохранением fail/inconclusive и обновлением PB-26/RB-52; при позднем HTTP отказе исследовать runtime cleanup, не вычитать его из measured latency.
 
+Результат: `2905e70` сохранил late 503 failure; `e9120e0` после lifecycle correction подтвердил 46 actual-candidate cases и 59.995078784 s. Следующий короткий slice: failure-first slow/blackholed trust read при приближении lease expiry, явный response deadline с сохранением bounded in-flight ownership/cleanup и controlled + owned native fault injection. Остановленный контейнер даёт быстрый connection refusal и не проверяет этот класс отказа. Не увеличивать 60 s, не выдавать ~4.9 ms запаса единственного прогона за SLO; сверять no-ML-after-deadline и фактический клиентский отказ отдельно. Затем продолжать T16 privacy/quotas/audit и общую M11/M12 acceptance без фиктивного release approval.
+
 ## Неделя 10: Нагрузка и ML monitoring
 
 **Задачи:** T17, T18. Измерить latency/throughput/resource usage по фиксированному профилю. Добавить data/prediction/label-quality reports, trust alerts и telemetry health. Проверить clean windows, drift injection и delayed labels; feedback отправлять только в quarantine.
