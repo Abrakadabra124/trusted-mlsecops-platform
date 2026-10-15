@@ -34,3 +34,9 @@ Pause/restore сериализуются отдельным guard; `closed` за
 `250 ms` - инженерный запас, не real-time SLA. Планировщик, event loop, сериализация и сеть не дают абсолютной гарантии доставки клиенту к наносекунде. Native приёмка отдельно измеряет окончание чтения HTTP-ответа клиентом: stopped-authority <=60 s от последнего verified read; paused established query <=10.25 s от запроса и до прежнего lease deadline. Нельзя вычитать cleanup/transport latency из результата. Не доказаны все packet-loss/blackhole сценарии, bounded startup/shutdown бесконечно зависшего DB, root rotation, production Reader end-to-end rollback или общий R1 release.
 
 Операционная процедура: [RB-53/PB-27](../operations/serving-deadline-troubleshooting.md).
+
+## Дополнение: expiry-bound native профиль
+
+После `a11c719` [отдельный профиль](../evidence/serving-expiry-2026-10-15.md) выпускает signed same-policy successor на 8 s в той же disposable authority. Receipt связывается с verified baseline read; approval deadline должен быть позже signed expiry, а lease remaining - меньше 8 s. Это проверяет именно более короткий trust budget, не универсальный 10 s timeout. Первый клиентский 503 обязан завершиться до обоих expiry. Второй запрос начинается после signed expiry, пока SQL ещё paused/ACTIVE. Затем unpause -> drain -> отсутствие auto-recovery -> signed successor renewal -> ещё 503 -> explicit verified activation -> новая version/hash и прежние goldens.
+
+Для обоих paused профилей отдельный read-only observer фиксирует ACTIVE **до** client-completed response. Одного чтения ACTIVE после ответа недостаточно: SQL мог перейти в ACTIVE позже. Observer имеет stop/join и failure-first lifecycle checks; отсутствие временного доказательства отклоняет опыт. Это усиление диагностического proof, не изменение production trust verifier или способ продлить lease. Clock и expiry не подменяются в native CI.

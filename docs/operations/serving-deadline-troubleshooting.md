@@ -40,6 +40,18 @@ uv run --locked python -m scripts.candidate_serving_native --state .runtime --co
 5. После завершения SQL ждёт Engine lock, выполняет retained drain и проверяет отсутствие старого worker. Проверяет, что восстановление authority само по себе не вернуло predictions. Late successful read может изменить Lease, но не event fence.
 6. Только explicit verified activation создаёт новый worker. Повторяются fresh trust read, identity/golden checks, signed revoke и сохранность source. Final report обязан сохранять `release_ready=false`, `full_M12=inconclusive`: qualification не разрешает release.
 
+## Дополнительный профиль PB-27: истекающая policy
+
+Та же команда candidate qualification теперь планирует ещё один опыт после основного 10 s paused-query. Controller подписывает новую policy version с lifetime 8 s только в disposable authority. Отдельный файл `http-expiring-query.json` и runtime key `http_expiring_query` сохраняют его независимо от `http-paused-query.json` / `http_paused_query`. Не запускать такую публикацию вручную против working authority.
+
+До fault проверяются receipt version/hash, короткий lease и более поздний approval. Оба профиля теперь требуют `active_observed.monotonic` между началом HTTP и завершением ответа; просто `libpq_query_active_at_denial=true` недостаточно. При отсутствии/позднем observer evidence сохранить inconclusive, не повторять update автоматически под новым key.
+
+Проверяется именно timestamp из сохранённого denial snapshot, не более новое поле observer. Если короткая policy истекла ещё до baseline 200, trace всё равно должен содержать profile, expected receipt и status=inconclusive; отсутствие `last_verified` в таком отчёте ожидаемо. Не принимать наличие stdout key или успешное создание файла за pass. Stdout keys совпадают с runtime keys обоих профилей.
+
+В expiry-профиле сравнить client-finished timestamp с lease deadline и `policy_expires_at`. Проверить второй 503 с `post_expiry.started_wall >= policy_expires_at` и незавершённым ACTIVE query. Только после unpause/drain разрешена signed renewal. Она должна вернуть следующую version, новый document hash, reused=false; recovery read обязан подтвердить именно этот receipt. Success публикации без такого readback не доказывает восстановление.
+
+Ошибка early wake или late response не исправляется сдвигом часов, сокращением исходного trace или увеличением порога. Уже прошедший expiry требует не дополнительного ожидания, а проверки фактического времени следующего запроса. Статус новой native проверки и исправления находятся в [expiry evidence](../evidence/serving-expiry-2026-10-15.md).
+
 ## Неуспех, rollback и эскалация
 
 - При pause/ownership/read-completion failure сохранить partial sanitized trace. Если ownership изменился, запрещено unpause чужого ресурса; оператор разбирает расхождение по full IDs. Не делать global prune/reset, не трогать source volumes.

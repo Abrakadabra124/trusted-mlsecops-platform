@@ -241,6 +241,7 @@ def qualify(root, state, image, *, trust_port=15446):
         with ExitStack() as services:
             outage = {}
             paused = {}
+            expiry = {}
 
             def exercise(engine, request, body):
                 http_matrix(engine, request, body, confirmed)
@@ -272,6 +273,22 @@ def qualify(root, state, image, *, trust_port=15446):
                         confirmed=confirmed,
                     )
                 )
+                short_policy = trust_authority.update(authority, policy_hash, key, lifetime=8)
+                expiry.update(
+                    exercise_pause(
+                        engine,
+                        request,
+                        body,
+                        authority=authority,
+                        port=trust_port,
+                        client=trust_client,
+                        expected=scores,
+                        output=safe_child(destination, "http-expiring-query.json"),
+                        confirmed=confirmed,
+                        expiry_receipt=short_policy,
+                        renew=lambda: trust_authority.update(authority, policy_hash, key),
+                    )
+                )
 
             request, body, runtime = check_http(
                 services,
@@ -283,6 +300,7 @@ def qualify(root, state, image, *, trust_port=15446):
             )
             runtime["http_trust_outage"] = outage
             runtime["http_paused_query"] = paused
+            runtime["http_expiring_query"] = expiry
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

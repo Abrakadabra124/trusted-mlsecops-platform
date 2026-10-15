@@ -57,4 +57,6 @@ Storage CI также повторил M03 431/M07 97, trust 45, Reader 18 и co
 
 ## Границы
 
+Уточнение последующего [expiry increment](serving-expiry-2026-10-15.md): в `ed87e97` ACTIVE наблюдался после завершения клиентского ответа, без отдельного timestamp его более раннего состояния. Это не доказывает строго, что ACTIVE уже был до HTTP completion; timestamps самих ответов, cleanup и recovery остаются проверенными. Новый concurrent observer и fresh native run нужны для более сильного временного утверждения. Исторический report не переписывается.
+
 Внешняя модель по решению пользователя не использовалась. Review - scoped same-model, не полный security audit. Нельзя переносить результаты старого `e9120e0` на новые bytes. Старые image/ML failures не считаются устранёнными; thresholds, signatures и release approval не обходятся. Actual candidate остаётся qualification-only.
