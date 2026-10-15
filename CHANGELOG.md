@@ -2,7 +2,7 @@
 
 ## R1 near-expiry serving qualification - 2026-10-15
 
-[Expiry profile](docs/evidence/serving-expiry-2026-10-15.md) для подлинной краткоживущей signed trust policy: deadline до expiry, отказ после expiry, renewal/readback и explicit recovery. Concurrent observer устраняет неоднозначность ACTIVE, прочитанного лишь после HTTP completion. Default и expiry traces разделены; native результаты до CI не заявляются. [PB-27/RB-53](docs/operations/serving-deadline-troubleshooting.md).
+[Expiry profile](docs/evidence/serving-expiry-2026-10-15.md) для подлинной краткоживущей signed trust policy: deadline до expiry, отказ после expiry, renewal/readback и explicit recovery. Concurrent observer устраняет неоднозначность ACTIVE, прочитанного лишь после HTTP completion; исправлены race сохранённого snapshot и потеря early-failure evidence. **Native `960091f`: 62 cases pass**, near-expiry 503 за 6.694990456 s, последующий 503 при всё ещё pending SQL, explicit recovery с version 3. 170 local methods pass. [PB-27/RB-53](docs/operations/serving-deadline-troubleshooting.md); полный R1 не принят.
 
 ## R1 response deadline и generation fence - 2026-10-15
 

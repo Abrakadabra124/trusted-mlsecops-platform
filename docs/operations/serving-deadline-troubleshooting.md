@@ -42,7 +42,9 @@ uv run --locked python -m scripts.candidate_serving_native --state .runtime --co
 
 ## Дополнительный профиль PB-27: истекающая policy
 
-Та же команда candidate qualification теперь планирует ещё один опыт после основного 10 s paused-query. Controller подписывает новую policy version с lifetime 8 s только в disposable authority. Отдельный файл `http-expiring-query.json` и runtime key `http_expiring_query` сохраняют его независимо от `http-paused-query.json` / `http_paused_query`. Не запускать такую публикацию вручную против working authority.
+Та же команда candidate qualification выполняет ещё один опыт после основного 10 s paused-query. Controller подписывает новую policy version с lifetime 8 s только в disposable authority. Отдельный файл `http-expiring-query.json` и runtime key `http_expiring_query` сохраняют его независимо от `http-paused-query.json` / `http_paused_query`. Не запускать такую публикацию вручную против working authority.
+
+Процедура проверена в clean-checkout storage CI `960091f`: 62 candidate cases, near-expiry HTTP 503 за 6.694990456 s, повторный 503 после expiry при pending query, renewal/readback version 3 и explicit recovery. [Evidence](../evidence/serving-expiry-2026-10-15.md) содержит точные timestamps и bindings. Это disposable lab, не production recovery exercise.
 
 До fault проверяются receipt version/hash, короткий lease и более поздний approval. Оба профиля теперь требуют `active_observed.monotonic` между началом HTTP и завершением ответа; просто `libpq_query_active_at_denial=true` недостаточно. При отсутствии/позднем observer evidence сохранить inconclusive, не повторять update автоматически под новым key.
 

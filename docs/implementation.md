@@ -1,6 +1,8 @@
 # Реализация R1
 
-2026-10-15 после `a11c719`: [near-expiry paused query](evidence/serving-expiry-2026-10-15.md), дополнение [ADR 0034](decisions/0034-serving-response-deadline.md) и [PB-27/RB-53](operations/serving-deadline-troubleshooting.md). Genuine 8 s policy, receipt/readback binding, concurrent ACTIVE timestamps, post-expiry 503 и signed renewal. Native проверка ещё нужна; production код и gates не ослаблены.
+2026-10-15 после `a11c719`: [near-expiry paused query](evidence/serving-expiry-2026-10-15.md), дополнение [ADR 0034](decisions/0034-serving-response-deadline.md) и [PB-27/RB-53](operations/serving-deadline-troubleshooting.md). **Native `960091f`: 62 cases pass**, genuine 8 s policy, receipt/readback binding, ACTIVE до client completion, первый 503 за 6.694990456 s до expiry и второй после expiry при pending SQL. Signed renewal/readback и explicit recovery подтверждены; production код и gates не ослаблены. Локально 170 adjacent methods pass. Следующий slice T16; full R1 не принят.
+
+CI `960091f` полностью terminal: 6 success / 4 failure. M20 723/M21 122 pass; M21 завершён `2026-10-15T17:57:43.889180Z`. Прежние image/ML failures сохранены, final approval не выдаётся. Full report hash и temporal assertions перепроверены из опубликованного evidence.
 
 2026-10-15: [response deadline / ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53/PB-27](operations/serving-deadline-troubleshooting.md). Failure-first HTTP/Engine tests и owned paused-query harness для установленного TLS-соединения. **Native `ed87e97`: 52 actual-candidate cases pass**, paused SQL 503 за 10.002350314 s при ACTIVE query, stopped-authority 59.748078461 s. [Evidence](evidence/serving-deadline-2026-10-15.md) сохраняет гонки, 163 local methods и ограничения. Native pause у короткого expiry ещё не выполнен; full R1 остаётся открыт.
 
