@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import sys
+import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -74,21 +75,51 @@ def create_app(engine, token):
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.slots = asyncio.Semaphore(8)
+    app.state.pending = set()
 
-    async def execute(operation, deferred, *arguments):
-        task = asyncio.create_task(asyncio.to_thread(operation, *arguments))
+    def remaining(budget):
         try:
-            return await asyncio.shield(task)
-        except asyncio.CancelledError:
-            deferred[0] = True
-
-            def finished(future):
-                with suppress(Exception, asyncio.CancelledError):
-                    future.result()
-                app.state.slots.release()
-
-            task.add_done_callback(finished)
+            original = budget.remaining()
+            current = engine.response_budget()
+            if current.generation is not budget.generation:
+                raise Rejected("serving_generation_changed")
+            return min(original, current.remaining())
+        except Rejected:
+            engine.expire(budget.generation)
             raise
+
+    async def await_result(task, budget, body_deadline=None):
+        while True:
+            timeout = remaining(budget)
+            if body_deadline is not None:
+                body_remaining = body_deadline - time.monotonic()
+                if body_remaining <= 0:
+                    raise TimeoutError("http_body_deadline")
+                timeout = min(timeout, body_remaining)
+            completed, _ = await asyncio.wait((task,), timeout=min(0.05, timeout))
+            if completed:
+                remaining(budget)
+                return task.result()
+
+    async def execute(operation, deferred, budget, *arguments):
+        remaining(budget)
+        task = asyncio.create_task(
+            asyncio.to_thread(operation, *arguments, generation=budget.generation)
+        )
+        app.state.pending.add(task)
+        deferred[0] = True
+
+        def finished(future):
+            app.state.pending.discard(future)
+            with suppress(Exception, asyncio.CancelledError):
+                future.result()
+            if budget.generation.is_set():
+                with suppress(Exception):
+                    engine.expire(budget.generation)
+            app.state.slots.release()
+
+        task.add_done_callback(finished)
+        return await await_result(task, budget)
 
     def error(status, code, request_id):
         return JSONResponse(
@@ -96,6 +127,19 @@ def create_app(engine, token):
             status_code=status,
             headers={"Cache-Control": "no-store"},
         )
+
+    class VerifiedResponse(JSONResponse):
+        def __init__(self, content, budget, code):
+            super().__init__(content, headers={"Cache-Control": "no-store"})
+            self.budget, self.code, self.request_id = budget, code, content["request_id"]
+
+        async def __call__(self, scope, receive, send):
+            try:
+                remaining(self.budget)
+            except Exception:
+                await error(503, self.code, self.request_id)(scope, receive, send)
+                return
+            await super().__call__(scope, receive, send)
 
     def authenticated(request):
         values = request.headers.getlist("authorization")
@@ -114,17 +158,20 @@ def create_app(engine, token):
         request_id = secrets.token_hex(16)
         if not authenticated(request):
             return error(401, "unauthorized", request_id)
+        try:
+            budget = engine.response_budget()
+            remaining(budget)
+        except Exception:
+            return error(503, "not_ready", request_id)
         if app.state.slots.locked():
             return error(503, "not_ready", request_id)
         await app.state.slots.acquire()
         deferred = [False]
         try:
-            result = await execute(engine.check, deferred)
+            result = await execute(engine.check, deferred, budget)
             if result.get("ready") is not True:
                 raise Rejected("http_not_ready")
-            return JSONResponse(
-                {**result, "request_id": request_id}, headers={"Cache-Control": "no-store"}
-            )
+            return VerifiedResponse({**result, "request_id": request_id}, budget, "not_ready")
         except Exception:
             return error(503, "not_ready", request_id)
         finally:
@@ -136,20 +183,38 @@ def create_app(engine, token):
         request_id = secrets.token_hex(16)
         if not authenticated(request):
             return error(401, "unauthorized", request_id)
+        try:
+            budget = engine.response_budget()
+            remaining(budget)
+        except Exception:
+            return error(503, "model_unavailable", request_id)
         if app.state.slots.locked():
             return error(429, "overloaded", request_id)
         await app.state.slots.acquire()
         deferred = [False]
         try:
             try:
-                features = await asyncio.wait_for(read_body(request), timeout=5)
+                remaining(budget)
+                body_task = asyncio.create_task(read_body(request))
+                try:
+                    features = await await_result(body_task, budget, time.monotonic() + 5)
+                finally:
+                    if not body_task.done():
+                        body_task.cancel()
+                    with suppress(Exception, asyncio.CancelledError):
+                        await body_task
             except BodyLimit:
+                remaining(budget)
                 return error(413, "body_too_large", request_id)
-            except (Rejected, TimeoutError):
+            except TimeoutError:
+                remaining(budget)
                 return error(422, "invalid_request", request_id)
-            result = await execute(engine.predict, deferred, features)
-            return JSONResponse(
-                {**result, "request_id": request_id}, headers={"Cache-Control": "no-store"}
+            except Rejected:
+                remaining(budget)
+                return error(422, "invalid_request", request_id)
+            result = await execute(engine.predict, deferred, budget, features)
+            return VerifiedResponse(
+                {**result, "request_id": request_id}, budget, "model_unavailable"
             )
         except Rejected as failure:
             if str(failure) == "serving_busy":

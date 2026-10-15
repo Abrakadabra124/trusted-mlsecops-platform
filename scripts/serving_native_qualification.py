@@ -1,7 +1,9 @@
+import threading
+import time
 import unittest
 from unittest.mock import Mock
 
-from mlsecops import release_authorization, release_bundle
+from mlsecops import release_authorization, release_bundle, serving
 from mlsecops.contracts import digest
 from mlsecops.model import predict, session
 from scripts import promotion_qualification as fixtures
@@ -41,6 +43,10 @@ class ServingNativeHarnessContracts(unittest.TestCase):
 
     def test_real_loopback_http_helper_serves_and_shuts_down(self):
         engine = Mock()
+        generation = threading.Event()
+        engine.response_budget.side_effect = lambda: serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
         engine.check.return_value = {"ready": True}
         with site(engine) as request:
             self.assertEqual(request("/livez", authorized=False), (200, {"status": "alive"}))

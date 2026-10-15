@@ -357,7 +357,10 @@ class DockerLifecycleContracts(unittest.TestCase):
     def test_real_worker_exchange_failure_reaches_engine_before_cleanup_finishes(self):
         reader = Mock(image=self.image)
         reader.load.return_value = Mock(
-            model=b"controlled", model_sha256=digest(b"controlled"), subject_sha256="a" * 64
+            model=b"controlled",
+            model_sha256=digest(b"controlled"),
+            subject_sha256="a" * 64,
+            expires_at=int(time.time()) + 3600,
         )
         engine = serving.Engine(reader)
         self.addCleanup(engine.close)

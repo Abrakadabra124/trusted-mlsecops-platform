@@ -35,6 +35,10 @@
 
 Error response содержит только schema version, server request ID и bounded `error.code`. `/livez` возвращает только process liveness без авторизации, не digest или readiness. `/readyz` требует bearer и проверяет действующую worker session; docs/OpenAPI endpoints отключены. Ответы prediction/readiness/error используют `Cache-Control: no-store`.
 
+## Deadline и незавершённые операции
+
+После auth фиксируется общий response budget <=10 s, дополнительно ограниченный trust lease и approval expiry с запасом 250 ms. Текущий более короткий lease учитывается во время ожидания и после serialization; прежний budget не продлевается. Expired/fenced generation даёт 503 до body/overload. HTTP timeout не отменяет синхронный SQL thread: pending task и один из 8 slots сохраняются до его завершения, поздний результат не возвращает поколение в ready. Требуется explicit verified reload после восстановления и cleanup. Это не real-time delivery SLA и не bounded shutdown guarantee. [ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53](operations/serving-deadline-troubleshooting.md).
+
 ## Конфигурация
 
 Сохранить private JSON вне Git, например `.runtime/serving/config.json`. Полный набор полей:

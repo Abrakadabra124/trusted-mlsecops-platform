@@ -135,5 +135,7 @@ jobs:
           uv run --locked python -m unittest scripts.candidate_serving_native_qualification
           uv run --locked coverage run --data-file=.coverage-http-outage --source=scripts.serving_outage_native -m unittest scripts.serving_outage_qualification
           uv run --locked coverage report --data-file=.coverage-http-outage --fail-under=90
+          uv run --locked coverage run --data-file=.coverage-paused-query --source=scripts.serving_pause_native -m unittest scripts.serving_pause_qualification
+          uv run --locked coverage report --data-file=.coverage-paused-query --fail-under=90
       - name: Unchanged actual candidate in isolated HTTP qualification without release approval
         run: uv run --locked python -m scripts.candidate_serving_native --state .runtime --confirm-disposable

@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [HTTP deadline и зависшее доверие, RB-53/PB-27](operations/serving-deadline-troubleshooting.md). Sticky generation fence, retained pending operations, paused established SQL query и unpause-before-drain. [Evidence](evidence/serving-deadline-2026-10-15.md) отделяет controlled от native проверки.
+
 - [Actual candidate qualification, PB-26/RB-50/RB-51/RB-52](operations/candidate-serving-troubleshooting.md). Source/permit binding, expiry, key separation, owned-authority outage, timestamped HTTP trace и online recovery. [Candidate evidence](evidence/candidate-serving-2026-10-15.md) и [outage evidence](evidence/http-trust-outage-2026-10-15.md) отделяют contracts от native результатов. Qualification не разрешает release.
 
 - [Serving API, PB-25/RB-48/RB-49](operations/serving-troubleshooting.md). Liveness versus readiness, auth/schema/overload, worker deadline/cleanup, cancellation accounting, thread-start failure, resource-profile mismatch и verified reload. [Evidence](evidence/serving-api-2026-10-14.md) не смешивает component fixture с полным ML release.

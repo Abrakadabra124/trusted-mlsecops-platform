@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 response deadline и generation fence - 2026-10-15
+
+[ADR 0034](docs/decisions/0034-serving-response-deadline.md): fixed HTTP budget, current shorter lease, monotonic approval expiry, per-activation fence и retained pending slots после timeout/cancel. Добавлены negative races и owned paused-query diagnostic, [RB-53/PB-27](docs/operations/serving-deadline-troubleshooting.md). [Evidence](docs/evidence/serving-deadline-2026-10-15.md); native CI и полный M11/M12 не подменяются controlled tests.
+
 ## R1 immediate serving invalidation - 2026-10-15
 
 Native outage на `2905e70` выявил поздний HTTP 503, 60.082361397 s. [Failed trace](docs/evidence/http-trust-outage-2905e70.md) сохранён. [ADR 0033](docs/decisions/0033-serving-retirement.md) отделяет denial от cleanup, сохраняет retirement ownership и блокирует activation до удаления прежнего worker. Исправлены Worker.send/Channel.exchange. Локально 146 methods pass, 56 serving methods/94% coverage. **Native correction `e9120e0`: 46 cases pass, первый 503 59.995078784 s**, source preservation/recovery подтверждены. [Evidence](docs/evidence/http-trust-outage-2026-10-15.md); full M11/M12 ещё открыт.

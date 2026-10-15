@@ -1,9 +1,26 @@
+import math
 import threading
+import time
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 
 from mlsecops import advisory
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.serving_runtime import Worker
+
+
+@dataclass(frozen=True)
+class ResponseBudget:
+    generation: threading.Event
+    deadline: float
+
+    def remaining(self):
+        if type(self.deadline) not in (int, float) or not math.isfinite(self.deadline):
+            raise Rejected("serving_response_deadline_invalid")
+        remaining = self.deadline - time.monotonic()
+        if self.generation.is_set() or remaining <= 0:
+            raise Rejected("serving_response_deadline")
+        return remaining
 
 
 class Engine:
@@ -16,6 +33,40 @@ class Engine:
         self.lock = threading.Lock()
         self.stopped = threading.Event()
         self.heartbeat = None
+        generation = threading.Event()
+        generation.set()
+        self.admission = ResponseBudget(generation, 0)
+
+    @property
+    def generation(self):
+        return self.admission.generation
+
+    def require_generation(self):
+        if self.generation.is_set() or self.stopped.is_set():
+            raise Rejected("serving_generation_fenced")
+
+    def response_budget(self):
+        admission = self.admission
+        if admission.generation.is_set() or self.stopped.is_set():
+            raise Rejected("serving_generation_fenced")
+        if self.loaded is None or self.worker is None:
+            raise Rejected("serving_not_ready")
+        deadline = self.reader.trust.deadline
+        if type(deadline) not in (int, float) or not math.isfinite(deadline):
+            raise Rejected("serving_response_deadline_invalid")
+        return ResponseBudget(
+            admission.generation,
+            min(time.monotonic() + 10, deadline - 0.25, admission.deadline - 0.25),
+        )
+
+    def expire(self, generation):
+        generation.set()
+        if self.lock.acquire(blocking=False):
+            try:
+                if self.generation is generation:
+                    self.invalidate()
+            finally:
+                self.lock.release()
 
     @contextmanager
     def exclusive(self):
@@ -29,6 +80,7 @@ class Engine:
             self.lock.release()
 
     def clear(self):
+        self.generation.set()
         self.loaded = None
         self.reap()
         if self.worker is not None:
@@ -50,6 +102,7 @@ class Engine:
         self.cleanup = None
 
     def invalidate(self):
+        self.generation.set()
         self.loaded = None
         if self.worker is None:
             return
@@ -105,12 +158,20 @@ class Engine:
                     heartbeat = threading.Thread(target=self.maintain, daemon=True)
                     heartbeat.start()
                     self.heartbeat = heartbeat
+                monotonic = time.monotonic()
+                wall = time.time()
+                if type(loaded.expires_at) is not int or loaded.expires_at <= wall:
+                    raise Rejected("serving_release_expired")
+                self.admission = ResponseBudget(
+                    threading.Event(), monotonic + loaded.expires_at - wall
+                )
                 return self.identity()
             except Exception:
                 self.clear()
                 raise Rejected("serving_activation_rejected") from None
 
     def identity(self):
+        self.require_generation()
         return {
             "ready": True,
             "bundle_sha256": self.loaded.subject_sha256,
@@ -118,33 +179,43 @@ class Engine:
         }
 
     def require_current(self):
+        self.require_generation()
         if self.loaded is None or self.worker is None:
             raise Rejected("serving_not_ready")
         self.reader.check(self.loaded)
+        self.require_generation()
         self.worker.ping()
+        self.require_generation()
 
-    def check(self):
+    def check(self, *, generation=None):
         with self.exclusive():
+            if generation is not None and generation is not self.generation:
+                raise Rejected("serving_generation_changed")
             if self.loaded is None:
                 raise Rejected("serving_not_ready")
             try:
                 self.require_current()
                 self.reader.check(self.loaded)
+                self.require_generation()
                 return self.identity()
             except Exception:
                 self.invalidate()
                 raise Rejected("serving_readiness_rejected") from None
 
-    def predict(self, features):
+    def predict(self, features, *, generation=None):
         advisory.validate(features)
         features = decode(canonical(features))
         with self.exclusive():
+            if generation is not None and generation is not self.generation:
+                raise Rejected("serving_generation_changed")
             if self.loaded is None:
                 raise Rejected("serving_not_ready")
             try:
                 self.require_current()
                 predictions = advisory.decide(features, self.worker.predict)
+                self.require_generation()
                 self.reader.check(self.loaded)
+                self.require_generation()
                 identity = self.identity()
                 return {
                     "schema_version": 1,
@@ -163,6 +234,7 @@ class Engine:
 
     def close(self):
         self.stopped.set()
+        self.generation.set()
         self.drain()
         with self.lock:
             self.clear()

@@ -1,4 +1,5 @@
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -10,9 +11,13 @@ from mlsecops.contracts import Rejected, digest
 class ServingCoreContracts(unittest.TestCase):
     def setUp(self):
         self.loaded = SimpleNamespace(
-            model=b"model", model_sha256=digest(b"model"), subject_sha256="a" * 64
+            model=b"model",
+            model_sha256=digest(b"model"),
+            subject_sha256="a" * 64,
+            expires_at=int(time.time()) + 3600,
         )
         self.reader = Mock(image="sha256:" + "b" * 64)
+        self.reader.trust.deadline = time.monotonic() + 60
         self.reader.load.return_value = self.loaded
         self.worker = Mock(
             image=self.reader.image, binding={"model_sha256": self.loaded.model_sha256}
@@ -29,6 +34,80 @@ class ServingCoreContracts(unittest.TestCase):
             with self.assertRaisesRegex(Rejected, "serving_not_ready"):
                 operation()
         self.constructor.assert_not_called()
+
+    def test_response_budget_bounds_and_expired_generation_cannot_fence_new_activation(self):
+        with self.assertRaises(Rejected):
+            self.engine.response_budget()
+        self.engine.activate()
+        original = self.engine.response_budget()
+        self.assertLessEqual(original.remaining(), 10)
+        self.reader.trust.deadline = time.monotonic() + 0.2
+        near_expiry = self.engine.response_budget()
+        with self.assertRaises(Rejected):
+            near_expiry.remaining()
+        self.reader.trust.deadline = time.monotonic() + 60
+        self.engine.activate()
+        current = self.engine.generation
+        self.engine.expire(original.generation)
+        self.assertFalse(current.is_set())
+        self.assertTrue(original.generation.is_set())
+        self.assertTrue(self.engine.check()["ready"])
+
+    def test_queued_old_generation_cannot_execute_or_invalidate_new_worker(self):
+        self.engine.activate()
+        old = self.engine.response_budget()
+        self.engine.activate()
+        closes = self.worker.close.call_count
+        for operation in (
+            lambda: self.engine.check(generation=old.generation),
+            lambda: self.engine.predict([[0.5] * 6], generation=old.generation),
+        ):
+            with self.assertRaisesRegex(Rejected, "serving_generation_changed"):
+                operation()
+        self.assertEqual(self.worker.close.call_count, closes)
+        self.assertFalse(self.engine.generation.is_set())
+        self.assertTrue(self.engine.check()["ready"])
+
+    def test_release_expiry_limits_response_budget_and_clock_rollback_cannot_extend_it(self):
+        self.loaded.expires_at = int(time.time()) + 2
+        self.engine.activate()
+        budget = self.engine.response_budget()
+        self.assertLessEqual(budget.remaining(), 2)
+        with patch.object(serving.time, "time", return_value=1):
+            self.assertLessEqual(self.engine.response_budget().deadline, budget.deadline)
+
+    def test_fenced_generation_discards_slow_trust_read_before_predicting(self):
+        self.engine.activate()
+        generation = self.engine.generation
+        entered, release = threading.Event(), threading.Event()
+        errors = []
+
+        def check(loaded):
+            entered.set()
+            release.wait(3)
+
+        def predict():
+            try:
+                self.engine.predict([[0.5] * 6])
+            except Rejected as error:
+                errors.append(str(error))
+
+        self.reader.check.side_effect = check
+        caller = threading.Thread(target=predict)
+        caller.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            self.engine.expire(generation)
+            self.assertTrue(generation.is_set())
+            with self.assertRaises(Rejected):
+                self.engine.response_budget()
+        finally:
+            release.set()
+            caller.join(2)
+        self.assertEqual(errors, ["serving_prediction_rejected"])
+        self.worker.predict.assert_not_called()
+        self.engine.drain()
+        self.assertIsNone(self.engine.loaded)
 
     def test_same_bytes_pinned_image_and_mixed_abstain(self):
         self.engine.activate()

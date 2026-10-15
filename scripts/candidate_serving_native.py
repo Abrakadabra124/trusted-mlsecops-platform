@@ -38,6 +38,7 @@ from scripts.release_reader_native import disposable
 from scripts.serving_native import check_http, site
 from scripts.serving_outage_native import ObservedLease
 from scripts.serving_outage_native import exercise as exercise_outage
+from scripts.serving_pause_native import exercise as exercise_pause
 
 
 def http_matrix(engine, request, body, confirmed):
@@ -239,6 +240,7 @@ def qualify(root, state, image, *, trust_port=15446):
             )
         with ExitStack() as services:
             outage = {}
+            paused = {}
 
             def exercise(engine, request, body):
                 http_matrix(engine, request, body, confirmed)
@@ -257,6 +259,19 @@ def qualify(root, state, image, *, trust_port=15446):
                         confirmed=confirmed,
                     )
                 )
+                paused.update(
+                    exercise_pause(
+                        engine,
+                        request,
+                        body,
+                        authority=authority,
+                        port=trust_port,
+                        client=trust_client,
+                        expected=scores,
+                        output=safe_child(destination, "http-paused-query.json"),
+                        confirmed=confirmed,
+                    )
+                )
 
             request, body, runtime = check_http(
                 services,
@@ -267,6 +282,7 @@ def qualify(root, state, image, *, trust_port=15446):
                 exercise=exercise,
             )
             runtime["http_trust_outage"] = outage
+            runtime["http_paused_query"] = paused
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

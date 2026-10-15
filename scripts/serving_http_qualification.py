@@ -2,20 +2,165 @@ import asyncio
 import io
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from mlsecops import serving_http
+from mlsecops import serving, serving_http
 from mlsecops.contracts import Rejected, canonical, decode
 from mlsecops.datasets import FEATURES
 from mlsecops.signing import encode64
 
 
 class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_fenced_generation_precedes_overload_and_body_consumption(self):
+        generation = threading.Event()
+        generation.set()
+        self.engine.response_budget.side_effect = None
+        self.engine.response_budget.return_value = serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
+        for _ in range(8):
+            await self.app.state.slots.acquire()
+        status, _, received = await self.invoke()
+        self.assertEqual((status, received), (503, 0))
+        self.engine.predict.assert_not_called()
+
+    async def test_body_read_uses_same_response_deadline(self):
+        generation = threading.Event()
+        self.engine.response_budget.side_effect = None
+        self.engine.response_budget.return_value = serving.ResponseBudget(
+            generation, time.monotonic() + 0.05
+        )
+        self.engine.expire.side_effect = lambda selected: selected.set()
+
+        async def slow_body(request):
+            await asyncio.sleep(1)
+            return [[0.5] * len(FEATURES)]
+
+        started = time.monotonic()
+        with patch.object(serving_http, "read_body", side_effect=slow_body):
+            status, _, _ = await self.invoke()
+        self.assertEqual(status, 503)
+        self.assertLess(time.monotonic() - started, 0.5)
+        self.assertTrue(generation.is_set())
+        self.engine.predict.assert_not_called()
+        self.assertEqual(self.app.state.slots._value, 8)
+
+    async def test_generation_is_checked_after_response_serialization(self):
+        generation = threading.Event()
+        self.engine.response_budget.side_effect = None
+        self.engine.response_budget.return_value = serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
+        render = serving_http.JSONResponse.render
+
+        def fence_during_serialization(response, content):
+            if "predictions" in content:
+                generation.set()
+            return render(response, content)
+
+        with patch.object(serving_http.JSONResponse, "render", fence_during_serialization):
+            status, content, _ = await self.invoke()
+        self.assertEqual(status, 503)
+        self.assertNotIn("predictions", content)
+
+    async def test_shortened_live_lease_is_rechecked_after_serialization(self):
+        generation = threading.Event()
+        self.engine.response_budget.side_effect = None
+        self.engine.response_budget.return_value = serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
+        render = serving_http.JSONResponse.render
+
+        def shorten_during_serialization(response, content):
+            if "predictions" in content:
+                self.engine.response_budget.return_value = serving.ResponseBudget(
+                    generation, time.monotonic() - 0.01
+                )
+            return render(response, content)
+
+        with patch.object(serving_http.JSONResponse, "render", shorten_during_serialization):
+            status, content, _ = await self.invoke()
+        self.assertEqual(status, 503)
+        self.assertNotIn("predictions", content)
+
+    async def test_shortened_lease_interrupts_wait_without_releasing_running_work(self):
+        entered, release, generation = (threading.Event() for _ in range(3))
+        self.engine.response_budget.side_effect = None
+        self.engine.response_budget.return_value = serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
+        self.engine.expire.side_effect = lambda selected: selected.set()
+
+        def blocked(features, *, generation):
+            entered.set()
+            release.wait(3)
+            return {"predictions": []}
+
+        self.engine.predict.side_effect = blocked
+        request = asyncio.create_task(self.invoke())
+        try:
+            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+            self.engine.response_budget.return_value = serving.ResponseBudget(
+                generation, time.monotonic() + 0.05
+            )
+            await asyncio.sleep(0.2)
+            self.assertTrue(request.done(), "shorter lease ignored during wait")
+            self.assertEqual((await request)[0], 503)
+            self.assertEqual(len(self.app.state.pending), 1)
+            self.assertEqual(self.app.state.slots._value, 7)
+        finally:
+            release.set()
+            await asyncio.gather(request, return_exceptions=True)
+
+    async def test_deadline_returns_503_but_retains_pending_task_and_slot(self):
+        entered, release = threading.Event(), threading.Event()
+        generation = threading.Event()
+        budget = serving.ResponseBudget(generation, time.monotonic() + 0.05)
+        self.engine.response_budget.return_value = budget
+        self.engine.response_budget.side_effect = None
+        self.engine.expire.side_effect = lambda selected: selected.set()
+
+        def blocked(features, *, generation):
+            entered.set()
+            release.wait(3)
+            return {"schema_version": 1, "predictions": [{"score": 0.123, "raw": "PRIVATE-CANARY"}]}
+
+        self.engine.predict.side_effect = blocked
+        request = asyncio.create_task(self.invoke())
+        try:
+            for _ in range(100):
+                if entered.is_set():
+                    break
+                await asyncio.sleep(0.005)
+            self.assertTrue(entered.is_set())
+            await asyncio.sleep(0.1)
+            self.assertTrue(request.done(), "HTTP denial waits for synchronous trust read")
+            status, content, _ = await request
+            self.assertEqual(status, 503)
+            self.assertNotIn("PRIVATE-CANARY", canonical(content).decode())
+            self.assertTrue(generation.is_set())
+            self.assertEqual(len(self.app.state.pending), 1)
+            self.assertEqual(self.app.state.slots._value, 7)
+        finally:
+            release.set()
+            await asyncio.gather(request, return_exceptions=True)
+        for _ in range(100):
+            if not self.app.state.pending:
+                break
+            await asyncio.sleep(0.005)
+        self.assertFalse(self.app.state.pending)
+        self.assertEqual(self.app.state.slots._value, 8)
+
     async def asyncSetUp(self):
         self.engine = Mock()
+        generation = threading.Event()
+        self.engine.response_budget.side_effect = lambda: serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
         self.engine.check.return_value = {"ready": True, "bundle_sha256": "a" * 64}
         self.engine.predict.return_value = {
             "schema_version": 1,
@@ -79,7 +224,9 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         status, result, _ = await self.invoke()
         self.assertEqual(status, 200)
         self.assertRegex(result["request_id"], r"^[a-f0-9]{32}$")
-        self.engine.predict.assert_called_once_with([[0.5] * len(FEATURES)])
+        self.engine.predict.assert_called_once()
+        self.assertEqual(self.engine.predict.call_args.args, ([[0.5] * len(FEATURES)],))
+        self.assertIsInstance(self.engine.predict.call_args.kwargs["generation"], threading.Event)
 
     async def test_no_auth_or_wrong_auth_does_not_consume_body(self):
         for headers in ([], [(b"authorization", b"Bearer PRIVATE-CANARY")]):
@@ -159,7 +306,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
     async def test_cancelled_request_keeps_slot_until_inference_thread_finishes(self):
         entered, release = threading.Event(), threading.Event()
 
-        def blocked(features):
+        def blocked(features, *, generation):
             entered.set()
             release.wait(3)
             raise Rejected("PRIVATE-CANARY")
