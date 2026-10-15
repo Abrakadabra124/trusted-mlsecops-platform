@@ -248,6 +248,7 @@ def exercise(
             trace["assessment"] = assess(anchor, trace["records"])
             write_json(output, trace)
             confirmed("trust-outage-expired-readiness-503", request("/readyz")[0] == 503)
+            engine.drain()
             confirmed(
                 "trust-outage-owned-worker-cleaned",
                 engine.worker is None

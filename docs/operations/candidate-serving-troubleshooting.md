@@ -100,3 +100,9 @@ Readback опирается на отдельные запросы списка 
 Если authority восстановлена, но загрузка не проходит, проверить expiry и revoke set. Истёкший permit требует новой qualification campaign от свежих материалов. Отозванную модель нельзя вернуть старым backup. Повторить весь PB-26 на новом disposable стенде, сохранив failed trace; rollback к неподписанному/отозванному состоянию запрещён.
 
 **Эскалация:** identity mismatch, неизвестные остаточные ресурсы, неверная подпись, ML после deadline, clock jump или поздний 503. До выяснения причины fail/inconclusive сохраняется. Controlled tests проверяют ownership/failure cleanup; сбой реального Docker daemon этим не считается проверенным.
+
+### Встреченный failure и исправление lifecycle
+
+На `2905e70` первый client-visible 503 получен через 60.082361397 s. Полный failed trace сохранён в evidence, successful recovery не скрывает нарушение. Код выполнял synchronous worker cleanup перед HTTP отказом; controlled blocking-close regression воспроизвёл эту зависимость. [ADR 0033](../decisions/0033-serving-retirement.md) вводит немедленную invalidation и отдельный retained retirement worker.
+
+503 теперь не означает, что Docker container уже удалён. Перед activation/завершением стенда нужен explicit drain и проверка отсутствия своего полного container ID; сам native runner это выполняет. `serving_cleanup_pending` запрещает reload до завершения thread; `serving_cleanup_unconfirmed` сохраняет handle после ошибки удаления/start. Не запускать параллельные cleanup/reload вручную и не стирать state ради ready. При длительном pending проверить доступность разрешённого Docker и ownership, сохранить evidence, затем повторить scoped cleanup. Неудачный start retirement thread также требует cleanup retained worker, а не join не запущенного thread. Новая реализация ещё требует native replay.

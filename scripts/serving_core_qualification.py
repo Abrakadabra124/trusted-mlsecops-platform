@@ -1,3 +1,4 @@
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -89,8 +90,81 @@ class ServingCoreContracts(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "serving_prediction_rejected"):
             self.engine.predict([[0.5] * 6])
         self.worker.predict.assert_called_once()
+        self.engine.drain()
         self.worker.close.assert_called_once()
         self.assertIsNone(self.engine.loaded)
+
+    def test_revocation_denial_does_not_wait_for_slow_cleanup_and_blocks_reload(self):
+        self.engine.activate()
+        self.reader.check.side_effect = Rejected("expired")
+        cleanup_entered, release_cleanup, response_returned = (threading.Event() for _ in range(3))
+        errors = []
+
+        def cleanup():
+            cleanup_entered.set()
+            if not release_cleanup.wait(5):
+                raise RuntimeError("controlled-cleanup-deadline")
+
+        def predict():
+            try:
+                self.engine.predict([[0.5] * 6])
+            except Rejected as error:
+                errors.append(str(error))
+            finally:
+                response_returned.set()
+
+        self.worker.close.side_effect = cleanup
+        caller = threading.Thread(target=predict)
+        caller.start()
+        try:
+            self.assertTrue(cleanup_entered.wait(1))
+            self.assertTrue(response_returned.wait(1), "denial waits for Docker cleanup")
+            self.assertEqual(errors, ["serving_prediction_rejected"])
+            self.assertIsNone(self.engine.loaded)
+            self.assertIsNone(self.engine.worker)
+            with self.assertRaises(Rejected):
+                self.engine.check()
+            with self.assertRaises(Rejected):
+                self.engine.activate()
+            self.assertEqual(self.constructor.call_count, 1)
+        finally:
+            release_cleanup.set()
+            caller.join(2)
+        self.engine.drain()
+        self.reader.check.side_effect = None
+        self.engine.activate()
+        self.assertTrue(self.engine.check()["ready"])
+
+    def test_retirement_thread_start_failure_retains_worker_for_explicit_recovery(self):
+        self.engine.activate()
+        self.reader.check.side_effect = Rejected("expired")
+        with patch.object(threading.Thread, "start", side_effect=RuntimeError("PRIVATE-CANARY")):
+            with self.assertRaisesRegex(Rejected, "^serving_cleanup_unconfirmed$"):
+                self.engine.predict([[0.5] * 6])
+        self.assertIsNone(self.engine.loaded)
+        self.assertIsNone(self.engine.worker)
+        self.assertIs(self.engine.retiring, self.worker)
+        self.worker.close.assert_not_called()
+        self.engine.drain()
+        self.assertIsNone(self.engine.retiring)
+        self.worker.close.assert_called_once()
+
+    def test_retirement_failure_retains_handle_and_close_retries(self):
+        self.engine.activate()
+        self.reader.check.side_effect = Rejected("expired")
+        self.worker.close.side_effect = OSError("PRIVATE-CANARY")
+        try:
+            with self.assertRaises(Rejected):
+                self.engine.predict([[0.5] * 6])
+            self.engine.cleanup.join(2)
+            with self.assertRaisesRegex(Rejected, "^serving_cleanup_unconfirmed$"):
+                self.engine.drain()
+            self.assertIs(self.engine.retiring, self.worker)
+            self.assertIsNone(self.engine.loaded)
+        finally:
+            self.worker.close.side_effect = None
+        self.engine.close()
+        self.assertIsNone(self.engine.retiring)
 
     def test_abstention_still_requires_current_trust_and_live_worker(self):
         self.engine.activate()

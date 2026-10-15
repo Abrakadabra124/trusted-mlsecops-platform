@@ -170,6 +170,7 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
     started = time.monotonic()
     confirmed("stopped-worker-inference-503", request("/v1/predict", body)[0] == 503)
     elapsed = time.monotonic() - started
+    engine.drain()
     query = ["docker", "container", "ls", "--all", "--quiet", "--filter", f"id={identifier}"]
     confirmed("deadline-removes-only-owned-worker", elapsed < 40 and not command(query))
     confirmed("failed-worker-readiness-503", request("/readyz")[0] == 503)

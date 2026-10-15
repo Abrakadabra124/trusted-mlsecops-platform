@@ -6,7 +6,7 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
-Новый slice после `cdea4236`: [timestamped HTTP trust outage и online recovery](docs/evidence/http-trust-outage-2026-10-15.md), [RB-52](docs/operations/candidate-serving-troubleshooting.md). Локальные contracts проходят; native CI новой ревизии ещё нужен. Deadline и failed gates не ослаблены.
+Новый slice после `cdea4236`: [timestamped HTTP trust outage и online recovery](docs/evidence/http-trust-outage-2026-10-15.md), [RB-52](docs/operations/candidate-serving-troubleshooting.md). **Native `2905e70` выявил первый 503 через 60.082361397 s, deadline failure сохранён.** Synchronous cleanup задерживал отказ; [ADR 0033](docs/decisions/0033-serving-retirement.md) отделяет invalidation от retained cleanup. Исправленный runtime ещё требует CI. Deadline и failed gates не ослаблены.
 
 После `afdc05c` добавлен [ADR 0032](docs/decisions/0032-candidate-serving-qualification.md): immutable upstream proposal, отдельный короткий qualification permit и read-only HTTP replay на реальных model bytes. Production approval и all-pass fixtures не используются как разрешение выпуска. Локально 129 methods pass, qualification Reader 94% coverage; исправлены review expiry race, Base64 key alias, startup cleanup и stale report. **На `0a47b7b` clean-checkout storage CI подтвердил 39/39 actual-candidate checks**, golden consistency error 0.0, stopped-worker denial 2.089667247 s, signed model revoke -> HTTP 503 и сохранность source. [PB-26/RB-50/RB-51](docs/operations/candidate-serving-troubleshooting.md), [evidence](docs/evidence/candidate-serving-2026-10-15.md). Qualification не разрешает выпуск, полный M12/R1 остаётся открыт.
 

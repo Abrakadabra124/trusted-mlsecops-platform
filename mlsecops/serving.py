@@ -11,6 +11,8 @@ class Engine:
         self.reader = reader
         self.loaded = None
         self.worker = None
+        self.retiring = None
+        self.cleanup = None
         self.lock = threading.Lock()
         self.stopped = threading.Event()
         self.heartbeat = None
@@ -28,12 +30,60 @@ class Engine:
 
     def clear(self):
         self.loaded = None
+        self.reap()
         if self.worker is not None:
             try:
                 self.worker.close()
             except Exception:
                 raise Rejected("serving_cleanup_unconfirmed") from None
             self.worker = None
+
+    def reap(self):
+        if self.cleanup is not None and self.cleanup.is_alive():
+            raise Rejected("serving_cleanup_pending")
+        if self.retiring is not None:
+            try:
+                self.retiring.close()
+            except Exception:
+                raise Rejected("serving_cleanup_unconfirmed") from None
+            self.retiring = None
+        self.cleanup = None
+
+    def invalidate(self):
+        self.loaded = None
+        if self.worker is None:
+            return
+        if self.retiring is not None:
+            raise Rejected("serving_cleanup_unconfirmed")
+        worker = self.worker
+        self.retiring, self.worker = worker, None
+
+        def retire():
+            try:
+                worker.close()
+            except Exception:
+                return
+            with self.lock:
+                if self.retiring is worker:
+                    self.retiring = None
+
+        try:
+            self.cleanup = threading.Thread(target=retire, daemon=True)
+            self.cleanup.start()
+        except Exception:
+            raise Rejected("serving_cleanup_unconfirmed") from None
+
+    def drain(self):
+        with self.lock:
+            cleanup = self.cleanup
+        if (
+            cleanup is not None
+            and cleanup.ident is not None
+            and cleanup is not threading.current_thread()
+        ):
+            cleanup.join(timeout=45)
+        with self.lock:
+            self.reap()
 
     def activate(self):
         with self.exclusive():
@@ -82,7 +132,7 @@ class Engine:
                 self.reader.check(self.loaded)
                 return self.identity()
             except Exception:
-                self.clear()
+                self.invalidate()
                 raise Rejected("serving_readiness_rejected") from None
 
     def predict(self, features):
@@ -103,7 +153,7 @@ class Engine:
                     "predictions": predictions,
                 }
             except Exception:
-                self.clear()
+                self.invalidate()
                 raise Rejected("serving_prediction_rejected") from None
 
     def maintain(self):
@@ -113,6 +163,7 @@ class Engine:
 
     def close(self):
         self.stopped.set()
+        self.drain()
         with self.lock:
             self.clear()
         if self.heartbeat is not None and self.heartbeat is not threading.current_thread():

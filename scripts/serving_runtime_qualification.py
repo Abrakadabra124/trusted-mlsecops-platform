@@ -2,16 +2,29 @@ import copy
 import importlib.metadata
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
 
+from mlsecops import serving, serving_runtime
 from mlsecops import serving_protocol as protocol
-from mlsecops import serving_runtime
-from mlsecops.contracts import Rejected, canonical
+from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.serving_runtime import Channel
 
 
 class BoundedPipeContracts(unittest.TestCase):
+    def test_failed_transport_is_disabled_before_process_wait(self):
+        process = Mock()
+        process.poll.return_value = 0
+        channel = Channel(process)
+        with self.assertRaisesRegex(Rejected, "serving_transport_failed"):
+            channel.exchange({}, timeout=1)
+        self.assertTrue(channel.closed)
+        process.wait.assert_not_called()
+        channel.close()
+        process.wait.assert_called_once_with(timeout=3)
+
     def test_closed_channel_does_not_consume_pending_requests(self):
         channel = serving_runtime.Channel(Mock())
         channel.closed = True
@@ -114,7 +127,7 @@ class BoundedPipeContracts(unittest.TestCase):
         with self.assertRaises(Rejected):
             channel.exchange({}, timeout=1)
 
-    def test_hang_partial_and_excessive_output_kill_process(self):
+    def test_hang_partial_and_excessive_output_disable_then_explicitly_reap_process(self):
         sources = (
             "import time;time.sleep(30)",
             "import sys,time;sys.stdout.write('{');sys.stdout.flush();time.sleep(30)",
@@ -129,6 +142,8 @@ class BoundedPipeContracts(unittest.TestCase):
                 with self.assertRaisesRegex(Rejected, "^serving_transport_failed$"):
                     channel.exchange({}, timeout=0.3)
                 self.assertLess(time.monotonic() - started, 4)
+                self.assertTrue(channel.closed)
+                channel.close()
                 self.assertIsNotNone(process.poll())
 
     def test_timeout_validation_precedes_pipe_write(self):
@@ -308,17 +323,75 @@ class DockerLifecycleContracts(unittest.TestCase):
                 worker.start()
             worker.close()
 
-    def test_invalid_reply_closes_and_remove_failure_keeps_retry_handle(self):
+    def test_invalid_reply_disables_exchange_before_explicit_cleanup_retry(self):
         worker = serving_runtime.Worker(b"controlled", self.image).start()
         self.corrupt = True
         self.remove_failure = True
-        with self.assertRaisesRegex(Rejected, "serving_cleanup_unconfirmed"):
+        with self.assertRaisesRegex(Rejected, "serving_exchange_rejected"):
             worker.ping()
+        self.channel.close.assert_not_called()
         self.assertTrue(worker.closed)
         self.assertEqual(worker.container, self.identifier)
+        with self.assertRaisesRegex(Rejected, "serving_worker_closed"):
+            worker.ping()
+        with self.assertRaisesRegex(Rejected, "serving_cleanup_unconfirmed"):
+            worker.close()
         self.remove_failure = False
         worker.close()
         self.assertIsNone(worker.container)
+
+    def test_real_channel_failure_reaches_worker_before_process_cleanup(self):
+        worker = serving_runtime.Worker(b"controlled", self.image).start()
+        process = Mock()
+        process.poll.return_value = 0
+        worker.channel = Channel(process)
+        with self.assertRaisesRegex(Rejected, "serving_exchange_rejected"):
+            worker.ping()
+        self.assertTrue(worker.closed)
+        self.assertTrue(worker.channel.closed)
+        process.wait.assert_not_called()
+        worker.close()
+        process.wait.assert_called_once_with(timeout=3)
+        self.assertFalse(self.exists)
+
+    def test_real_worker_exchange_failure_reaches_engine_before_cleanup_finishes(self):
+        reader = Mock(image=self.image)
+        reader.load.return_value = Mock(
+            model=b"controlled", model_sha256=digest(b"controlled"), subject_sha256="a" * 64
+        )
+        engine = serving.Engine(reader)
+        self.addCleanup(engine.close)
+        engine.activate()
+        self.corrupt = True
+        entered, release, returned = (threading.Event() for _ in range(3))
+        errors = []
+
+        def cleanup():
+            entered.set()
+            release.wait(5)
+
+        def predict():
+            try:
+                engine.predict([[0.5] * 6])
+            except Rejected as error:
+                errors.append(str(error))
+            finally:
+                returned.set()
+
+        self.channel.close.side_effect = cleanup
+        caller = threading.Thread(target=predict)
+        caller.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            self.assertTrue(returned.wait(1), "Worker.send still waits for cleanup")
+            self.assertEqual(errors, ["serving_prediction_rejected"])
+            self.assertIsNone(engine.loaded)
+            self.assertIsNone(engine.worker)
+        finally:
+            release.set()
+            caller.join(2)
+        engine.drain()
+        self.assertFalse(self.exists)
 
     def test_initial_load_failure_keeps_owned_container_for_cleanup_retry(self):
         worker = serving_runtime.Worker(b"controlled", self.image)

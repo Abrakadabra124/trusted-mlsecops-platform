@@ -63,7 +63,7 @@ class Channel:
                 raise Rejected("serving_transport_invalid")
             return result
         except Exception:
-            self.close()
+            self.closed = True
             raise Rejected("serving_transport_failed") from None
         finally:
             if acquired:
@@ -207,7 +207,7 @@ class Worker:
             reply = self.channel.exchange(request, timeout=timeout)
             return protocol.verify_reply(request, reply)
         except Exception:
-            self.close()
+            self.closed = True
             raise Rejected("serving_exchange_rejected") from None
 
     def predict(self, features):
