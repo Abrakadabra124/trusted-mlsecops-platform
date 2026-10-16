@@ -2,7 +2,7 @@
 
 ## R1 private serving context - 2026-10-16
 
-Неделя 9, T16: [ADR 0038](docs/decisions/0038-serving-audit-context.md), immutable versioned release/qualification context из verified readers, generation-bound Engine result и private HTTP handoff. Permit не подменяет selection; public JSON прежний. Local 168 adjacent methods pass, новый module 100%; native pending. Добавлены пять native context cases и [RB-57/PB-31](docs/operations/serving-context-troubleshooting.md). Полный M13/R1 не закрыт.
+Неделя 9, T16: [ADR 0038](docs/decisions/0038-serving-audit-context.md), immutable versioned release/qualification context из verified readers, generation-bound Engine result и private HTTP handoff. Permit не подменяет selection; public JSON прежний. Local 169 adjacent methods pass, новый module 100%; [native 503b68b attempt 2](docs/evidence/serving-context-2026-10-16.md) 72 cases pass. Исправлены test retirement ordering и привязка SQL pause probe к новому dispatch. [RB-57/PB-31](docs/operations/serving-context-troubleshooting.md) сохраняет проблемы и процедуры. CI 6 success / 4 failure; первый M07 connection failure не объяснён successful rerun. Полный M13/R1 не закрыт.
 
 ## R1 explicit audit branch coverage - 2026-10-16
 

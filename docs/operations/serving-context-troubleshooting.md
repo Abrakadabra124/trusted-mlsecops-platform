@@ -14,6 +14,8 @@
 
 Следующий CI `9326fcd` прошёл context/unit/controlled serving, но actual-candidate matrix отказала на paused SQL: fault hook всё ещё оборачивал `predict`, тогда как HTTP вызывает `predict_result`. SQL не был остановлен, entered=false, ACTIVE отсутствовал, вернулся 200. Это ошибка подключения диагностического воздействия, не наблюдавшийся обход deadline под настоящим SQL outage. Hook перенесён на фактический метод. Новый loopback HTTP regression до исправления получил run call count 0, после - 1 и selected=true внутри reader. Controlled test намеренно не делает Docker pause и сохраняет inconclusive, поэтому не подменяет native проверку. [Failed excerpts](../evidence/serving-context-9326fcd-partial.md) сохраняют исходный отказ.
 
+На `503b68b` attempt 1 остановился раньше serving: M07 concurrency получил `storage_connection_rejected`. [Исходный report](../evidence/serving-context-503b68b-attempt1.md) сохранён. Причина не установлена; один ограниченный fresh-run повтор не является исправлением SQL. При повторении перейти к [RB-27](qualification-environment-troubleshooting.md), не ослаблять assertions и не повторять до зелёного автоматически.
+
 ## PB-31: диагностика
 
 Из корня проекта, сначала read-only:
@@ -29,7 +31,7 @@ gh run list --commit (git rev-parse HEAD) --limit 20 --json databaseId,name,stat
 Следующие команды создают только controlled temporary test resources и coverage file. Loopback HTTP helper не равен production validation:
 
 ```powershell
-uv run --locked python -m unittest scripts.serving_context_qualification scripts.release_reader_qualification scripts.candidate_serving_reader_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.candidate_serving_native_qualification scripts.serving_native_qualification
+uv run --locked python -m unittest scripts.serving_context_qualification scripts.release_reader_qualification scripts.candidate_serving_reader_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.candidate_serving_native_qualification scripts.serving_native_qualification scripts.serving_pause_qualification
 uv run --locked coverage run --data-file=.coverage-serving-context --source=mlsecops.serving_context -m unittest scripts.serving_context_qualification
 uv run --locked coverage report --data-file=.coverage-serving-context --fail-under=100
 uv run --locked python scripts/check_docs.py
@@ -49,5 +51,7 @@ Expected: методы pass, отдельный context module 100%, docs pass. 
 Rollback: не выполнять reset/prune или удаление spool. При регрессии запретить promotion, исправить commit, повторить scoped CI. Развёртывание предыдущей revision требует обычной release/trust проверки; эта процедура не разрешает live rollback на компьютере пользователя. Recovery против реального deployment здесь не выполнялся.
 
 ## Конечное состояние и эскалация
+
+Проверенное состояние: [503b68b attempt 2](../evidence/serving-context-2026-10-16.md), 72 actual-candidate cases pass, включая пять context checks и настоящую SQL pause. Local 169 adjacent methods pass. История ошибок и первый M07 connection failure сохранены; причина последнего не установлена.
 
 Проверить exact revision, local contracts, пять native context cases и соседние quota/deadline/outage сценарии. Public JSON сохраняет прежние поля без permit/proposal/selection. Native report должен быть clean-source и `release_ready=false` для qualification. M13 открыт до ASGI events, sink admission policy и all-output canaries. Escalate при неизвестном verified reference, повторном mismatch или утечке refs; передавать очищенные case labels/status, не payload.

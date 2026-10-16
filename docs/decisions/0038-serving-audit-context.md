@@ -1,6 +1,6 @@
 # ADR 0038: private generation-bound serving context
 
-Дата: 2026-10-16. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Статус: implemented, local contracts pass; native qualification pending. Продолжает [ADR 0037](0037-audit-retention.md), не закрывает M13.
+Дата: 2026-10-16. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Статус: implemented, local contracts pass; [native 503b68b attempt 2](../evidence/serving-context-2026-10-16.md) 72 cases pass. Продолжает [ADR 0037](0037-audit-retention.md), не закрывает M13.
 
 ## Требование и решение
 
@@ -29,13 +29,14 @@ Frozen защищает от обычного присваивания и раз
 ## Проверка
 
 - Failure-first: до HTTP integration десять subcases двух routes получили 200 вместо требуемого 503. После реализации проходят.
-- Local Windows: 168 adjacent methods pass без skips; context module 31 statements и 4 branch exits покрыты полностью. Это не общий M18.
+- Local Windows после исправлений: 169 adjacent methods pass без skips; context module 31 statements и 4 branch exits покрыты полностью. Это не общий M18.
 - Проверены frozen refs, disjoint scope, malformed refs, reader mutation, activation mismatch, failed recheck, old generation, private fields/headers и финальный deadline fallback.
-- `candidate_serving_native.context_matrix` добавляет пять actual-candidate проверок: distinct scope, ready/predict generation binding, отсутствие private refs и прежний public shape. До нового CI наличие кода не считается native evidence.
+- `candidate_serving_native.context_matrix` добавляет пять actual-candidate проверок: distinct scope, ready/predict generation binding, отсутствие private refs и прежний public shape. Native 503b68b attempt 2 подтвердил их в matrix из 72 cases; полный report сохранён и перечитан.
 - Scoped same-model design и implementation review завершены без замечаний; внешняя модель по решению владельца не использовалась. Backend retention не изменён.
 - Диагностика: [RB-57/PB-31](../operations/serving-context-troubleshooting.md).
 - Первый CI `7151864` выявил race test loop с async retirement; test теперь вызывает drain и проверяет завершение cleanup перед следующей activation. [Evidence](../evidence/serving-context-2026-10-16.md) сохраняет failed attempt. Production code не ослаблен; native исправленного commit ожидается.
 - CI `9326fcd` выполнил пять context cases, но выявил старый fault-injection adapter на predict вместо predict_result. Исправлено wiring, добавлен настоящий loopback dispatch regression без имитации native pause pass. Полный native suite до следующего CI не принят.
+- Итог: native 503b68b attempt 2 прошёл все 72 cases с действительным ACTIVE/pending SQL и deadline denial. Ранний M07 connection failure первого attempt сохранён как unexplained reliability debt, не исправление context code.
 
 ## Первичные источники
 

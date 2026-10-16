@@ -6,11 +6,13 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
-T16 context increment: [ADR 0038](docs/decisions/0038-serving-audit-context.md), immutable release/qualification types, verified reader refs, generation-bound Engine result и private HTTP handoff без изменения public JSON. Local 168 adjacent tests pass, context module 100%; native нового кода ещё не проверен. [RB-57/PB-31](docs/operations/serving-context-troubleshooting.md) добавлен. HTTP audit events/sink admission и полный M13/R1 остаются открытыми.
+T16 context increment: [ADR 0038](docs/decisions/0038-serving-audit-context.md), immutable release/qualification types, verified reader refs, generation-bound Engine result и private HTTP handoff без изменения public JSON. **Native 503b68b: 72 cases pass**, Storage attempt 2; local 169 adjacent tests pass, context module 100%. [Evidence и полный report](docs/evidence/serving-context-2026-10-16.md), [RB-57/PB-31](docs/operations/serving-context-troubleshooting.md). HTTP audit events/sink admission и полный M13/R1 остаются открытыми.
+
+Все 10 CI 503b68b terminal: **6 success / 4 failure** с учётом Storage attempt 2. M20 723/M21 122 pass, M21 finished 2026-10-16T18:02:07.852424Z. Image/poisoning/evasion/paired failures сохраняют запрет release. Storage attempt 1 дополнительно failed на M07 `storage_connection_rejected`; повтор того же commit прошёл, но причина первого отказа неизвестна и reliability debt не закрыт.
 
 Первая CI-попытка `7151864` failed на race нового test loop: не дождался asynchronous worker retirement перед повторной activation. Test исправлен явным drain без изменения runtime; [evidence](docs/evidence/serving-context-2026-10-16.md) сохраняет failure и controlled reproduction. Native actual-candidate нового increment ещё не выполнен.
 
-Вторая попытка `9326fcd`: пять native context cases pass, но actual-candidate suite failed/inconclusive на неактивированном paused SQL probe. Adapter всё ещё перехватывал старый predict; исправлен на predict_result, добавлен failure-first loopback regression. [Failed evidence](docs/evidence/serving-context-9326fcd-partial.md) не принимается как outage pass. Новый полный native прогон ожидается.
+Вторая попытка `9326fcd`: пять native context cases pass, но actual-candidate suite failed/inconclusive на неактивированном paused SQL probe. Adapter всё ещё перехватывал старый predict; исправлен на predict_result, добавлен failure-first loopback regression. [Failed evidence](docs/evidence/serving-context-9326fcd-partial.md) не принимается как outage pass. Новый полный native прогон 503b68b attempt 2 подтвердил исправленный сценарий с реальным ACTIVE/pending SQL.
 
 T16 quality increment после `5a4ab26`: [отдельный branch gate и fault tests](docs/evidence/audit-branches-2026-10-16.md), **native 42ce792 pass**. Core 76/80 branches = 95%, retention 102/102 = 100%; это отдельные branch counts, не смешанная колонка Cover. Linux: 61 audit tests + 10 checker tests без skips, actual-candidate regression 67 pass. Production audit modules не изменены. Критерий покрытия подтверждён для двух модулей, не для всей платформы; полные T16/M13/M18/R1 остаются открытыми.
 
