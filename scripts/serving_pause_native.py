@@ -219,9 +219,11 @@ def exercise(
             anchor = engine.reader.trust.observation()
         trace["last_verified"] = anchor
         with injection(authority, port, client) as probe:
-            original = engine.predict
+            original = engine.predict_result
             with patch.object(
-                engine, "predict", lambda *args, **kwargs: probe.run(original, *args, **kwargs)
+                engine,
+                "predict_result",
+                lambda *args, **kwargs: probe.run(original, *args, **kwargs),
             ):
                 started_wall, started = time.time(), time.monotonic()
                 if near_expiry:

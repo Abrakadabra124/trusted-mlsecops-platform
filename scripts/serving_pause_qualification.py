@@ -11,10 +11,68 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from mlsecops.contracts import Rejected, read_json
+from mlsecops.datasets import FEATURES
+from scripts import serving_core_qualification as core
 from scripts import serving_pause_native as pause
+from scripts.serving_native import site
 
 
 class ServingPauseContracts(unittest.TestCase):
+    def test_fault_selection_wraps_actual_http_prediction_dispatch(self):
+        fixture = core.ServingCoreContracts()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        with tempfile.TemporaryDirectory() as directory:
+            probe = pause.PausedQuery(Path(directory) / "client", {"container_id": "owned"})
+            selected = []
+            fixture.reader.check.side_effect = lambda loaded: selected.append(
+                getattr(probe.local, "selected", False)
+            )
+            fixture.reader.trust.observation.return_value = {
+                "version": 1,
+                "document_sha256": "a" * 64,
+                "sequence": 1,
+                "wall": time.time(),
+                "monotonic": time.monotonic(),
+                "deadline": time.monotonic() + 60,
+            }
+
+            @contextmanager
+            def injection(*arguments):
+                yield probe
+
+            def confirmed(name, condition):
+                if not condition:
+                    raise Rejected(name)
+
+            with (
+                site(fixture.engine) as request,
+                patch.object(pause, "injection", injection),
+                patch.object(pause, "command") as command,
+                patch.object(probe, "run", wraps=probe.run) as run,
+                redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaisesRegex(Rejected, "paused-established-query"):
+                    pause.exercise(
+                        fixture.engine,
+                        request,
+                        {"schema_version": 1, "instances": [dict.fromkeys(FEATURES, 0.5)]},
+                        authority="unused",
+                        port=15449,
+                        client="unused",
+                        expected=[0.75],
+                        output=Path(directory) / "trace.json",
+                        confirmed=confirmed,
+                    )
+                run.assert_called_once()
+                self.assertIs(run.call_args.args[0].__func__, core.serving.Engine.predict_result)
+                self.assertTrue(any(selected))
+                command.assert_not_called()
+            trace = read_json(Path(directory) / "trace.json")
+            self.assertEqual(trace["status"], "inconclusive")
+            self.assertFalse(trace["denial"]["connected_read_entered"])
+            self.assertEqual(trace["denial"]["http_status"], 200)
+
     def setUp(self):
         self.owned = {"container_id": "a" * 64, "port": 15449}
         self.connection = Mock()

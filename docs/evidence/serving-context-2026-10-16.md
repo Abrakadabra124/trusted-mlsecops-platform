@@ -40,7 +40,15 @@ Ruff check/format pass, 208 files. Docs checker перед code commit: 392 file
 
 Исправлен test lifecycle: после каждой rejected operation вызывается `engine.drain()` и проверяется отсутствие cleanup/retiring. Production code неизменен. Controlled Worker.close delay 0.05 s воспроизводит исходную ошибку; исправленный test проходит 20 повторений. Context suite повторно 7 pass, 31 statements / 4 branch exits, 100%. Требуется fresh CI исправленного commit, не простой rerun flaky test.
 
+Исправление опубликовано как `9326fcde917c92a4a34aa06c2a21b8720a55e47f`. Повторная Windows regression: 168 methods pass без skips, 28.167 s. Scoped review drain/fence ordering замечаний не нашёл. Все десять workflows первой revision были terminal до следующего push: 5 success / 5 failure, включая дополнительный исправляемый Storage failure. [Kubernetes 7151864](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38937731827): M20 723 pass, M21 122 pass, завершение M21 2026-10-16T17:27:31.242179Z. Эти результаты не являются новым прогоном 9326fcd.
+
 Пять context cases добавлены к actual-candidate matrix; наличие кода пока не считается native evidence. Исторические результаты `42ce792` не подменяют новый прогон.
+
+### Вторая попытка: 9326fcd
+
+[Storage](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38939866993), job 117104507602: context/unit и controlled native HTTP/ONNX/TLS прошли. Пять новых context cases actual candidate pass, но полный workflow **failure**: paused SQL probe всё ещё оборачивал old `predict`, которого HTTP больше не вызывает. `connected_read_entered=false`, ACTIVE отсутствует, HTTP 200; qualification корректно завершилась отказом, а не фиктивным pass. [Очищенные excerpts](serving-context-9326fcd-partial.md) сохранены.
+
+Hook исправлен на `predict_result`. Failure-first loopback HTTP test до исправления обнаружил ноль вызовов probe.run, после - ровно один и selected=true внутри reader. Тест использует настоящий HTTP/Engine dispatch, но controlled worker и не выполняет SQL/container pause: намеренно проверяет inconclusive, не выдаёт себя за native outage. Pause suite: 15 pass, Cover 94%; для полного actual-candidate результата требуется следующая fresh revision. Пороги ACTIVE/pending/deadline/fence не ослаблены.
 
 ## Следующий scope
 

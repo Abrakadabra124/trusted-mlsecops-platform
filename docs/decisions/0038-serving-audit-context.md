@@ -35,6 +35,7 @@ Frozen защищает от обычного присваивания и раз
 - Scoped same-model design и implementation review завершены без замечаний; внешняя модель по решению владельца не использовалась. Backend retention не изменён.
 - Диагностика: [RB-57/PB-31](../operations/serving-context-troubleshooting.md).
 - Первый CI `7151864` выявил race test loop с async retirement; test теперь вызывает drain и проверяет завершение cleanup перед следующей activation. [Evidence](../evidence/serving-context-2026-10-16.md) сохраняет failed attempt. Production code не ослаблен; native исправленного commit ожидается.
+- CI `9326fcd` выполнил пять context cases, но выявил старый fault-injection adapter на predict вместо predict_result. Исправлено wiring, добавлен настоящий loopback dispatch regression без имитации native pause pass. Полный native suite до следующего CI не принят.
 
 ## Первичные источники
 

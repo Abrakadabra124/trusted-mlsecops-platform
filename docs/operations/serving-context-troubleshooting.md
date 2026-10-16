@@ -12,6 +12,8 @@
 
 Первый Linux CI `7151864` нашёл отдельную гонку нового test loop: после rejected recheck worker ещё удалялся в background, а следующая iteration уже вызывала activate и получала `serving_cleanup_pending`. Исправлен test lifecycle: перед следующей activation вызывается `engine.drain()` и проверяется отсутствие cleanup/retiring. Production refusal не менялся. Controlled delay 0.05 s в Worker.close воспроизвёл старый отказ; после исправления 20 повторений проходят. Не лечить такой отказ sleep/retry или отключением ownership fence в runtime.
 
+Следующий CI `9326fcd` прошёл context/unit/controlled serving, но actual-candidate matrix отказала на paused SQL: fault hook всё ещё оборачивал `predict`, тогда как HTTP вызывает `predict_result`. SQL не был остановлен, entered=false, ACTIVE отсутствовал, вернулся 200. Это ошибка подключения диагностического воздействия, не наблюдавшийся обход deadline под настоящим SQL outage. Hook перенесён на фактический метод. Новый loopback HTTP regression до исправления получил run call count 0, после - 1 и selected=true внутри reader. Controlled test намеренно не делает Docker pause и сохраняет inconclusive, поэтому не подменяет native проверку. [Failed excerpts](../evidence/serving-context-9326fcd-partial.md) сохраняют исходный отказ.
+
 ## PB-31: диагностика
 
 Из корня проекта, сначала read-only:
@@ -42,6 +44,7 @@ Expected: методы pass, отдельный context module 100%, docs pass. 
 3. **Model/bundle mismatch:** сохранить bounded private incident record, запретить success. Повторить проверку материалов и worker binding на новом disposable стенде, не менять digest вручную.
 4. **Old generation / expired lease:** старый ответ нельзя перепривязать к новой модели. Завершить 503, восстановить доверие по [RB-53](serving-deadline-troubleshooting.md), явно activate и отправить новый запрос. Автоматический restart здесь не реализован.
 5. **HTTP pass, audit file пуст:** increment не пишет HTTP events. Не создавать фиктивные записи и не выдавать handoff за end-to-end audit.
+6. **Fault scenario вернул 200 без ACTIVE:** сначала проверить, был ли реально выбран probe на текущем dispatch method. Не объявлять это обходом deadline и не принимать как success. Исправить wiring, затем заново получить entered/ACTIVE/pending/503/fence evidence в disposable CI. Не удалять строгие assertion ради зелёного pipeline.
 
 Rollback: не выполнять reset/prune или удаление spool. При регрессии запретить promotion, исправить commit, повторить scoped CI. Развёртывание предыдущей revision требует обычной release/trust проверки; эта процедура не разрешает live rollback на компьютере пользователя. Recovery против реального deployment здесь не выполнялся.
 

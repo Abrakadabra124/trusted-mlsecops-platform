@@ -10,6 +10,8 @@ T16 context increment: [ADR 0038](docs/decisions/0038-serving-audit-context.md),
 
 Первая CI-попытка `7151864` failed на race нового test loop: не дождался asynchronous worker retirement перед повторной activation. Test исправлен явным drain без изменения runtime; [evidence](docs/evidence/serving-context-2026-10-16.md) сохраняет failure и controlled reproduction. Native actual-candidate нового increment ещё не выполнен.
 
+Вторая попытка `9326fcd`: пять native context cases pass, но actual-candidate suite failed/inconclusive на неактивированном paused SQL probe. Adapter всё ещё перехватывал старый predict; исправлен на predict_result, добавлен failure-first loopback regression. [Failed evidence](docs/evidence/serving-context-9326fcd-partial.md) не принимается как outage pass. Новый полный native прогон ожидается.
+
 T16 quality increment после `5a4ab26`: [отдельный branch gate и fault tests](docs/evidence/audit-branches-2026-10-16.md), **native 42ce792 pass**. Core 76/80 branches = 95%, retention 102/102 = 100%; это отдельные branch counts, не смешанная колонка Cover. Linux: 61 audit tests + 10 checker tests без skips, actual-candidate regression 67 pass. Production audit modules не изменены. Критерий покрытия подтверждён для двух модулей, не для всей платформы; полные T16/M13/M18/R1 остаются открытыми.
 
 Все 10 CI `42ce792` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished `2026-10-16T16:53:43.755852Z`. [Полная matrix и сохранённый report](docs/evidence/audit-branches-2026-10-16.md) фиксируют code/source binding, branch gate и актуальные image/ML failures. Следующий scope: immutable versioned audit context и ASGI send semantics, не фиктивный release approval.
