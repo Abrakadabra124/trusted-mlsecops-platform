@@ -32,4 +32,6 @@ Blind glob cleanup и обычный rotating logging handler не дают пр
 
 ## Остаточный scope
 
+Verification update `42ce792`: [native branch gate](../evidence/audit-branches-2026-10-16.md) подтвердил core 76/80 branches = 95% и retention 102/102 = 100%, 61 audit + 10 checker tests без skips. Backend code не менялся; добавлены fault tests и отдельный per-module measurement. Это закрытие критериев покрытия двух модулей, не полного M18.
+
 ASGI actual-send correlation, versioned candidate/release contexts, all-output canaries, cardinality и полный M13 ещё обязательны. Audit storage не является signed non-repudiation ledger; malicious host administrator/same-UID writer, storage firmware и physical erasure вне доказанного контроля. Failed/interrupted spool требует отдельного восстановления, не тихого обхода сменой path.

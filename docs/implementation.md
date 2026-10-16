@@ -1,6 +1,8 @@
 # Реализация R1
 
-T16 quality increment после `5a4ab26`: [branch coverage evidence](evidence/audit-branches-2026-10-16.md), отдельные >=95% branch exits по двум audit-модулям и negative fault tests. Production audit modules не менялись; local checker 10 tests/100%, native qualification пока не завершена. Полный M18 не подменяется pass двух модулей.
+T16 quality increment после `5a4ab26`: [native 42ce792](evidence/audit-branches-2026-10-16.md), core **76/80 branches = 95%**, retention **102/102 = 100%**. Production audit modules не менялись; Linux 61 audit + 10 checker tests pass без skips, serving regression 67 pass. Windows adjacent 202 methods / 179 pass / 23 skips. Полный M18 не подменяется pass двух модулей; HTTP audit integration ещё впереди.
+
+CI `42ce792` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished 2026-10-16T16:53:43.755852 UTC. [Evidence](evidence/audit-branches-2026-10-16.md) сохраняет точную matrix, sanitized actual-candidate report и нарушения image/ML gates. Native proof относится к code commit, не к последующему docs-only checkpoint.
 
 2026-10-16, неделя 9 «Serving и privacy», T16: [ADR 0037](decisions/0037-audit-retention.md), bounded retained storage и [RB-56/PB-30](operations/audit-retention-troubleshooting.md). **Native b2b3bf6: 51 tests pass / 0 skips**, core/retention Cover 97%/93%, actual-candidate regression 67 pass. [Evidence](evidence/audit-retention-2026-10-16.md) сохраняет failure-first, Windows/native различие и повторно проверенный sanitized report. Legacy single-file mode не меняется автоматически. HTTP correlation/canaries, crash/reboot reconciliation, M18 branch coverage и весь T16/M13/R1 остаются открытыми.
 

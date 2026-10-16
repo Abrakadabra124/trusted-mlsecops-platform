@@ -2,7 +2,9 @@
 
 ## R1 explicit audit branch coverage - 2026-10-16
 
-Неделя 9, T16: [branch-only checker](docs/evidence/audit-branches-2026-10-16.md), >=95% независимо для core/retention, missing/zero/non-branch measurement fail closed. Добавлены negative fault tests без изменения production audit modules, обновлён RB-56/PB-30. Local checker 10 tests/100%; native qualification pending, не full M13/M18/R1 acceptance.
+Неделя 9, T16: [branch-only checker](docs/evidence/audit-branches-2026-10-16.md), >=95% независимо для core/retention, missing/zero/non-branch measurement fail closed. Добавлены negative fault tests без изменения production audit modules, обновлён RB-56/PB-30. Native `42ce792`: core 76/80 branches = 95%, retention 102/102 = 100%, 61 audit + 10 checker tests pass без skips; actual-candidate regression 67 pass. Это не full M13/M18/R1 acceptance.
+
+Все 10 workflows terminal: 6 success / 4 failure; M20 723/M21 122 pass. Сохранён sanitized candidate report, canonical hash и trace invariants перепроверены из файла. Image/poisoning/evasion/paired failures остаются release blockers. План следующего HTTP slice уточняет private context и разницу между queue acceptance, durable acknowledgement и ASGI send completion.
 
 ## R1 opt-in audit retention - 2026-10-16
 

@@ -32,6 +32,8 @@ uv run --locked coverage report --data-file=.coverage-serving-audit
 
 После fresh coverage run выполнить `uv run --locked python -m scripts.audit_branch_coverage .coverage-serving-audit`. Команда требует >=95% выполненных branch exits для каждого обязательного audit-модуля, выводит counts и возвращает exit 2 при fail/inconclusive. Большое суммарное Cover не отменяет отказ. Собственная проверка checker: `uv run --locked python -m unittest scripts.audit_branch_coverage_qualification`. [Evidence](../evidence/audit-branches-2026-10-16.md) отделяет local результат от native qualification.
 
+Подтверждённый native checkpoint `42ce792`: 61 audit tests и 10 checker tests без skips; core 76/80 branches = 95%, retention 102/102 = 100%. Исторический b2b3bf6 выше не имел отдельной branch приёмки; новый checker закрывает этот критерий только для двух модулей. Private canaries/HTTP correlation и весь M13/M18 не объявляются завершёнными.
+
 При missing measurement сначала повторить именно fresh run из этого checkout, не подставлять старую базу и не использовать append для накопления несовместимых runs. При branch fail смотреть конкретные непокрытые ветви и добавлять тест реального исхода; не менять порог или report exclusions. Windows POSIX skips остаются ограничением платформы, а не основанием выдавать pass. Не обнулять внутренние `partial_branches_always` Coverage.py: checker использует public clear_exclude и отдельно проверяет, что оба зарегистрированных файла без выполненных arcs дают ноль покрытия. Arbitrary сохранённая coverage database не доказывает собственную свежесть.
 
 ## Восстановление и rollback
