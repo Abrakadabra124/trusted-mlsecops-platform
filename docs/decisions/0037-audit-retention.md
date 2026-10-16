@@ -1,6 +1,6 @@
 # ADR 0037: bounded audit segments and retention
 
-Дата: 2026-10-16. Статус: proposed, implementation/qualification in progress. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0036](0036-serving-audit-journal.md), не принимает полный M13.
+Дата: 2026-10-16. Статус: implemented, corrected native qualification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0036](0036-serving-audit-journal.md), не принимает полный M13.
 
 ## Контракт
 
@@ -13,6 +13,8 @@ Defaults: segment <=1 MiB, <=16 segments, общий payload budget <=16 MiB; ev
 Writer закрывает segment по размеру или возрасту 60 s. Закрытый segment хранится минимум 300 s после последнего подтверждённого write, затем удаляется при maintenance независимо от новых requests. Под responsive I/O oldest event хранится не дольше rotation age + retention + maintenance interval. Это lab policy, не юридический срок. При clock anomaly, зависшем I/O, отказе удаления или неизвестном состоянии срок удаления не подтверждён: sticky failure, сохранение ownership/evidence и эскалация. Не удалять раньше minimum retention ради освобождения места. Значения policy уменьшаются для контролируемых tests, но не меняются без явного нового профиля при reopen.
 
 Clock: mono и wall samples ограничены integer nanoseconds; backward readings или расхождение elapsed wall/mono >1 s дают failure без purge. Boot ID привязывает persisted monotonic timestamps к одному host boot. Другой boot требует отдельного recovery/reconciliation; wall-clock jump не считается доказательством возраста данных.
+
+Persisted clock не может быть null: новый anchor допустим только для нового пустого spool. При reopen canonical bounded records проверяются потоково по отдельным строкам, без неограниченного списка lines; sequence непрерывен внутри и между retained segments, последний совпадает с manifest head. При полностью истёкших segments head остаётся доверенным локальным checkpoint в unsigned manifest, не криптографическим доказательством против host-admin modification. До fstat regular-file validation применяется O_NONBLOCK, чтобы FIFO вместо manifest не блокировал startup.
 
 `emit` не выполняет filesystem I/O. Writer делает rotation/maintenance; accepted, durable, pending и unconfirmed остаются разными состояниями. Global sequence продолжается после clean restart, session counters остаются локальными. Storage credit освобождается только после unlink и directory fsync owned closed segment. Неудачный sync не становится повторной выдачей budget. При shutdown timeout нельзя закрывать живой writer, удалять его segment или очищать lease.
 

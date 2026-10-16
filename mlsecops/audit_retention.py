@@ -43,6 +43,38 @@ def boot_id():
     return value
 
 
+def sequences(content):
+    offset = 0
+    first = previous = None
+    while offset < len(content):
+        boundary = content.find(b"\n", offset)
+        if boundary < 0 or boundary - offset + 1 > MAX_RECORD:
+            raise Rejected("audit_spool_record")
+        line = content[offset : boundary + 1]
+        record = decode(line)
+        require_fields(record, ("schema_version", "sequence", "recorded_at_ns", "event"))
+        if (
+            canonical(record) + b"\n" != line
+            or type(record["schema_version"]) is not int
+            or record["schema_version"] != 1
+            or type(record["sequence"]) is not int
+            or not 0 < record["sequence"] < 2**63
+            or type(record["recorded_at_ns"]) is not int
+            or not 0 <= record["recorded_at_ns"] < 2**63
+            or type(record["event"]) is not dict
+            or previous is not None
+            and record["sequence"] != previous + 1
+        ):
+            raise Rejected("audit_spool_sequence")
+        if first is None:
+            first = record["sequence"]
+        previous = record["sequence"]
+        offset = boundary + 1
+    if first is None:
+        raise Rejected("audit_spool_record")
+    return first, previous
+
+
 class Clock:
     def __init__(self, anchor=None):
         self.boot = boot_id()
@@ -132,7 +164,9 @@ class Spool:
         return names
 
     def _read(self, name, limit):
-        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self.directory)
+        descriptor = os.open(
+            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.directory
+        )
         try:
             metadata = os.fstat(descriptor)
             self._private(metadata)
@@ -196,10 +230,12 @@ class Spool:
             for key in ("sequence", "next_index")
         ):
             raise Rejected("audit_spool_manifest")
+        require_fields(saved["clock"], ("boot", "wall", "mono"))
         self.clock = Clock(saved["clock"])
         if type(saved["segments"]) is not list or len(saved["segments"]) > self.policy.max_segments:
             raise Rejected("audit_spool_manifest")
         self.sequence, self.next_index = saved["sequence"], saved["next_index"]
+        previous_sequence = None
         for segment in saved["segments"]:
             require_fields(segment, ("name", "size", "first", "last", "sha256", "identity"))
             if (
@@ -218,11 +254,16 @@ class Spool:
                 or any(other["name"] == segment["name"] for other in self.segments)
             ):
                 raise Rejected("audit_spool_manifest")
-            self._verify(segment)
+            first_sequence, last_sequence = self._verify(segment)
+            if previous_sequence is not None and first_sequence != previous_sequence + 1:
+                raise Rejected("audit_spool_sequence")
+            previous_sequence = last_sequence
             self.segments.append(segment)
             self.retained_bytes += segment["size"]
         if self.retained_bytes > self.budget:
             raise Rejected("audit_spool_capacity")
+        if previous_sequence is not None and previous_sequence != self.sequence:
+            raise Rejected("audit_spool_sequence")
 
     def _verify(self, segment):
         content, identity = self._read(segment["name"], self.policy.segment_bytes)
@@ -232,6 +273,7 @@ class Spool:
             or hashlib.sha256(content).hexdigest() != segment["sha256"]
         ):
             raise Rejected("audit_spool_identity")
+        return sequences(content)
 
     def _inventory(self):
         expected = {".lease", *(segment["name"] for segment in self.segments)}
@@ -279,12 +321,11 @@ class Spool:
             or not content.endswith(b"\n")
         ):
             raise Rejected("audit_spool_record")
-        record = decode(content)
+        first_sequence, last_sequence = sequences(content)
         if (
-            canonical(record) + b"\n" != content
-            or self.sequence >= 2**63 - 1
-            or type(record.get("sequence")) is not int
-            or record["sequence"] != self.sequence + 1
+            self.sequence >= 2**63 - 1
+            or first_sequence != last_sequence
+            or first_sequence != self.sequence + 1
         ):
             raise Rejected("audit_spool_sequence")
         now = self.clock.sample()["mono"]
@@ -327,7 +368,7 @@ class Spool:
             size=self.active["size"] + len(content), last=completed, sha256=self.hasher.hexdigest()
         )
         self.retained_bytes += len(content)
-        self.sequence = record["sequence"]
+        self.sequence = last_sequence
 
     def close(self, *, clean):
         if self.directory is None:

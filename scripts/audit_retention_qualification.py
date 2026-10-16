@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import os
 import tempfile
 import threading
@@ -15,6 +16,16 @@ from scripts.serving_audit_qualification import event
 
 
 class PolicyContracts(unittest.TestCase):
+    def test_open_for_validation_cannot_block_before_file_type_check(self):
+        spool = audit_retention.Spool.__new__(audit_retention.Spool)
+        spool.directory = 71
+        system = SimpleNamespace(
+            O_RDONLY=0, O_NOFOLLOW=1, O_NONBLOCK=2, open=Mock(side_effect=OSError("probe"))
+        )
+        with patch.object(audit_retention, "os", system), self.assertRaises(OSError):
+            spool._read("manifest.json", 65536)
+        self.assertTrue(system.open.call_args.args[1] & system.O_NONBLOCK)
+
     def test_each_inventory_scan_has_an_independent_directory_cursor(self):
         spool = audit_retention.Spool.__new__(audit_retention.Spool)
         spool.directory = 71
@@ -134,6 +145,94 @@ def record(sequence):
     )
 
 
+class ManifestContracts(unittest.TestCase):
+    def test_sequence_parser_rejects_malformed_or_unbounded_records(self):
+        self.assertEqual(audit_retention.sequences(record(3) + record(4)), (3, 4))
+        bad_records = [b"", record(1).rstrip(b"\n"), b"\n", b"x" * 2049 + b"\n"]
+        for key, value in (
+            ("schema_version", True),
+            ("schema_version", 2),
+            ("sequence", True),
+            ("sequence", 0),
+            ("sequence", 2**63),
+            ("recorded_at_ns", -1),
+            ("recorded_at_ns", True),
+            ("event", None),
+        ):
+            entry = decode(record(1))
+            entry[key] = value
+            bad_records.append(canonical(entry) + b"\n")
+        for content in bad_records:
+            with self.subTest(length=len(content)), self.assertRaises(Rejected):
+                audit_retention.sequences(content)
+
+    def test_null_clock_cannot_bootstrap_a_persisted_manifest(self):
+        spool = audit_retention.Spool.__new__(audit_retention.Spool)
+        spool.policy, spool.budget, spool.segments, spool.retained_bytes = (
+            audit_retention.Policy(),
+            2**24,
+            [],
+            0,
+        )
+        saved = {
+            "schema_version": 1,
+            "policy": {
+                "segment_bytes": 2**20,
+                "max_segments": 16,
+                "rotate_seconds": 60,
+                "retain_seconds": 300,
+            },
+            "budget": 2**24,
+            "clock": None,
+            "sequence": 7,
+            "next_index": 2,
+            "segments": [],
+        }
+        with patch.object(audit_retention, "Clock"), self.assertRaises(Rejected):
+            spool._load(canonical(saved))
+
+    def test_manifest_head_must_match_retained_record_sequences(self):
+        for sequences, head in (([1, 2], 1), ([1, 1], 1), ([1, 3], 3)):
+            with self.subTest(sequences=sequences, head=head):
+                content = b"".join(record(sequence) for sequence in sequences)
+                spool = audit_retention.Spool.__new__(audit_retention.Spool)
+                spool.policy, spool.budget, spool.segments, spool.retained_bytes = (
+                    audit_retention.Policy(),
+                    2**24,
+                    [],
+                    0,
+                )
+                saved = {
+                    "schema_version": 1,
+                    "policy": {
+                        "segment_bytes": 2**20,
+                        "max_segments": 16,
+                        "rotate_seconds": 60,
+                        "retain_seconds": 300,
+                    },
+                    "budget": 2**24,
+                    "clock": {"boot": "test", "wall": 100, "mono": 100},
+                    "sequence": head,
+                    "next_index": 1,
+                    "segments": [
+                        {
+                            "name": "0000000000000001.jsonl",
+                            "size": len(content),
+                            "first": 1,
+                            "last": 2,
+                            "identity": [10, 20],
+                            "sha256": hashlib.sha256(content).hexdigest(),
+                        }
+                    ],
+                }
+                with (
+                    patch.object(audit_retention, "Clock"),
+                    patch.object(spool, "_read", return_value=(content, [10, 20])),
+                    self.assertRaises(Rejected),
+                ):
+                    spool._load(canonical(saved))
+
+
 @unittest.skipUnless(os.name == "posix", "native retained filesystem requires Linux CI")
 class NativeRetention(unittest.TestCase):
     def setUp(self):
@@ -166,11 +265,63 @@ class NativeRetention(unittest.TestCase):
             self.assertEqual(spool._names(), {".lease"})
         spool.close(clean=True)
 
+    def test_real_clock_idle_expiry_respects_minimum_retention(self):
+        policy = audit_retention.Policy(2048, 4, 1, 1)
+        with patch.object(audit_retention, "time", time):
+            journal = serving_audit.Journal(self.root, max_bytes=8192, retention=policy)
+            journal.start()
+            try:
+                journal.emit(event())
+                deadline = time.monotonic() + 2
+                while journal.status()["durable"] != 1 and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                self.assertEqual(journal.status()["durable"], 1)
+                earliest = journal._spool.active["last"] + 1_000_000_000
+                deadline = time.monotonic() + 3
+                while list(self.root.glob("*.jsonl")) and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                self.assertEqual(list(self.root.glob("*.jsonl")), [])
+                self.assertGreaterEqual(time.monotonic_ns(), earliest)
+                self.assertTrue(journal.status()["healthy"])
+            finally:
+                journal.close()
+
+    def test_fifo_manifest_is_rejected_without_waiting_for_a_writer(self):
+        fifo = self.root / "manifest.json"
+        os.mkfifo(fifo, mode=0o600)
+        finished = threading.Event()
+        outcomes = []
+
+        def open_spool():
+            try:
+                self.spool()
+                outcomes.append("unexpected_success")
+            except Rejected:
+                outcomes.append("rejected")
+            finally:
+                finished.set()
+
+        thread = threading.Thread(target=open_spool, daemon=True)
+        thread.start()
+        try:
+            self.assertTrue(finished.wait(1), "validation blocked before rejecting FIFO")
+            self.assertEqual(outcomes, ["rejected"])
+        finally:
+            if not finished.is_set():
+                descriptor = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+                os.close(descriptor)
+            thread.join(2)
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(fifo.exists())
+
     def test_corrupt_manifest_or_changed_policy_never_purges_data(self):
         changes = (
             ("schema_version", True),
             ("budget", 8193),
             ("sequence", -1),
+            ("sequence", 0),
+            ("sequence", 2),
+            ("clock", None),
             ("next_index", -1),
             ("segments", {}),
             (

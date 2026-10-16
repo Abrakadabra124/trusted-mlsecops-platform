@@ -42,5 +42,7 @@ Rollback experimental backend выполняется только в disposable 
 - Закрытый backend обязан явно отклонять операции: `dir_fd=None` недопустимо использовать как продолжение прежнего owned directory. Добавлен отдельный closed guard.
 - Design review уточнил startup ordering и handoff point. Exclusive ownership берётся до snapshot; после handoff старый writer не изменяет новые owner files, даже при cleanup error.
 - Shared directory cursor при повторном `scandir(fd)` давал пустой второй inventory в controlled regression. Каждый scan теперь получает независимый fd-relative directory descriptor; Linux suite отдельно проверяет повторный native inventory.
+- Второй review обнаружил принятие null clock и рассогласованного sequence head в manifest. Controlled tests воспроизвели оба обхода. Reopen теперь требует сохранённый clock и сверяет непрерывные record sequences с head до admission. Это validation, не подпись manifest.
+- Специальный файл FIFO вместо manifest нельзя сначала открыть блокирующим способом, а потом проверять тип. O_NONBLOCK позволяет отказать до ожидания постороннего writer; native test проверяет ограниченное завершение и сохранность FIFO.
 
 Подтверждённые платформы, количество tests и native CI status находятся в evidence. Не считать этот документ доказательством уже выполненных native сценариев.

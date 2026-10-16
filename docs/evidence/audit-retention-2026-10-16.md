@@ -18,4 +18,14 @@ Windows после первого implementation review: **45 methods, 29 pass /
 
 Implementation review выявил shared directory cursor у повторного `scandir(fd)`. Controlled regression сначала получил пустой второй inventory вместо `.lease`. Теперь каждый bounded scan открывает независимый `.` относительно owned directory FD; отдельный native regression добавлен для Linux. Это исправление подтверждено controlled test, но исходный дефект не воспроизводился в локальном Linux runtime, который не запускался.
 
+## Корректирующий review после первого CI
+
+На `e67223996ddfa7be5d4ae6d19f81c179fe0134c4` [storage CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38926452268), job `117059112163`, завершён success: **45 tests pass**, serving_audit coverage **97%**, audit_retention **92%**, actual-candidate regression **67 cases pass**, release_ready=false. Это исторический первый прогон, не qualification исправлений ниже. Candidate campaign `636ff75401b54c08b1d6c71704a0dabc`.
+
+Второй review нашёл два новых validation defects: null clock принимался как новый anchor; manifest head мог отставать от фактических records и повторно выдать sequence. Controlled RED cases воспроизвели clock bypass, duplicate head, duplicate/gapped records. Исправления требуют persisted clock и проверяют bounded canonical lines, непрерывность sequences и exact head. Дополнительно проверен O_NONBLOCK при чтении: FIFO не должен блокировать до fstat. Native FIFO и real-clock idle-expiry tests добавлены, но ещё не выполнены в corrected Linux CI.
+
+Заключительный review 3/3 завершён без новых конкретных воспроизводимых дефектов в заявленном контракте. Внешняя модель не использовалась. Три bounded implementation review cycles закончены; это не независимый человеческий security audit.
+
+Corrected local Windows checkpoint: **51 methods, 33 pass / 18 explicit native skips**, 2.194 s. Смежная suite перед добавлением последнего Linux-only timer test: **236 methods, 219 pass / 17 skips**, 34.286 s. Coverage checkpoint на 50 methods: serving_audit **98%**, audit_retention **44%**; native threshold по-прежнему не считается пройденным на Windows. Ruff и docs checker проходят: 383 files, 148 Markdown documents, 1069 local links, включая локальные пользовательские instructions. Native corrected qualification pending.
+
 Рабочие Docker/WSL/Kubernetes и enterprise foundation не изменялись. В `AGENTS.md` и `GOAL.md` обнаружены отдельные пользовательские изменения правил отчётности: они соблюдаются, но не включаются автоматически в code commit этого increment.
