@@ -1,6 +1,6 @@
 # ADR 0037: bounded audit segments and retention
 
-Дата: 2026-10-16. Статус: implemented, corrected native qualification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0036](0036-serving-audit-journal.md), не принимает полный M13.
+Дата: 2026-10-16. Статус: implemented, corrected native component qualification pass на b2b3bf6; [evidence](../evidence/audit-retention-2026-10-16.md). Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0036](0036-serving-audit-journal.md), не принимает полный M13 или M18 branch coverage.
 
 ## Контракт
 
@@ -10,7 +10,7 @@
 
 Defaults: segment <=1 MiB, <=16 segments, общий payload budget <=16 MiB; event <=2 KiB и pending <=64 сохраняются. Metadata отдельно bounded: manifest <=64 KiB, temporary manifest <=64 KiB, lease фиксированного размера. Это bounds содержимого файлов, не точный расход блоков filesystem; filesystem quota и физическое secure erase не реализованы.
 
-Writer закрывает segment по размеру или возрасту 60 s. Закрытый segment хранится минимум 300 s после последнего подтверждённого write, затем удаляется при maintenance независимо от новых requests. Под responsive I/O oldest event хранится не дольше rotation age + retention + maintenance interval. Это lab policy, не юридический срок. При clock anomaly, зависшем I/O, отказе удаления или неизвестном состоянии срок удаления не подтверждён: sticky failure, сохранение ownership/evidence и эскалация. Не удалять раньше minimum retention ради освобождения места. Значения policy уменьшаются для контролируемых tests, но не меняются без явного нового профиля при reopen.
+Writer закрывает segment по размеру или возрасту 60 s. Закрытый segment хранится минимум 300 s после последнего подтверждённого write, затем удаляется при maintenance независимо от новых requests. Плановое окно от durable write до удаления старейшего события складывается из rotation age, retention и maintenance interval, плюс фактические задержки I/O и scheduling. Это не доказанный максимальный срок от admission и не hard deadline для filesystem. Lab policy не является юридическим сроком. При clock anomaly, зависшем I/O, отказе удаления или неизвестном состоянии срок удаления не подтверждён: sticky failure для обнаруженных ошибок, сохранение ownership/evidence и эскалация. Зависший syscall может ещё не вернуть ошибку; timeout ожидания не означает завершения writer. Не удалять раньше minimum retention ради освобождения места. Значения policy уменьшаются для контролируемых tests, но не меняются без явного нового профиля при reopen.
 
 Clock: mono и wall samples ограничены integer nanoseconds; backward readings или расхождение elapsed wall/mono >1 s дают failure без purge. Boot ID привязывает persisted monotonic timestamps к одному host boot. Другой boot требует отдельного recovery/reconciliation; wall-clock jump не считается доказательством возраста данных.
 

@@ -24,7 +24,7 @@ uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlseco
 uv run --locked coverage report --data-file=.coverage-serving-audit
 ```
 
-На Windows POSIX cases явно skipped; результат не принимается за native qualification. CI отдельно проверяет serving_audit coverage >=95% и audit_retention >=90%; локальный процент покрытия другого OS не переносится по аналогии.
+На Windows POSIX cases явно skipped; результат не принимается за native qualification. CI отдельно проверяет serving_audit coverage >=95% и audit_retention >=90%; локальный процент покрытия другого OS не переносится по аналогии. Это component thresholds итогового Cover, не завершённая M18 приёмка >=95% branch coverage. На `b2b3bf6` native suite прошла 51 test без skips, Cover 97%/93%; непокрытые branches остаются обязательной работой до финальной приёмки.
 
 Матрица: byte/age rotation; idle expiry; cap без eviction молодых данных; продолжение sequence/age/budget после clean restart; unknown files, изменённый hash, symlink/hardlink и parent rename; конкурентные writers; failure fsync/unlink/manifest; interleaved startup и handoff cleanup. Проверить конечные bytes и отсутствие изменения чужих sentinel files, не только exit code команды.
 

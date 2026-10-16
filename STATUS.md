@@ -1,12 +1,14 @@
 # Статус и границы доказательств
 
-Дата текущей реализации: **2026-10-15**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
+Дата текущей реализации: **2026-10-16**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
 Реализованы и проверены в synthetic local scope: **M02, M03, M06, M07, M20, M21**. Закрыты T03, T04, T26; 26 задач остаются открытыми. Gate pass не закрывает автоматически более широкую задачу: T07/T08/T09/T10/T27 ещё имеют lifecycle-зависимости. Evidence привязано к commits, не является общей M18-приёмкой одного release. M21 принят на `04b5e78`; image security gate и M08 остаются failure. Полный R1 ещё не принят. Разделы ниже сохраняют историю предыдущих increments.
 
 ## Испытание actual candidate без фиктивного release approval
 
-2026-10-16, неделя 9 «Serving и privacy», T16: [retention/rotation](docs/decisions/0037-audit-retention.md) реализованы как opt-in Linux backend, **native qualification не завершена**. [RB-56/PB-30](docs/operations/audit-retention-troubleshooting.md) и [evidence](docs/evidence/audit-retention-2026-10-16.md) отделяют local contracts от обязательной проверки filesystem, restart и failure ordering. HTTP correlation/canaries, crash/reboot reconciliation и полный M13/R1 остаются открытыми.
+2026-10-16, неделя 9 «Serving и privacy», T16: [retention/rotation](docs/decisions/0037-audit-retention.md) реализованы как opt-in Linux backend. **Native b2b3bf6: 51 tests pass / 0 skips**, Cover core 97% / retention 93%; существующий actual-candidate serving 67 cases pass, release_ready=false. [RB-56/PB-30](docs/operations/audit-retention-troubleshooting.md) и [evidence](docs/evidence/audit-retention-2026-10-16.md) фиксируют filesystem, same-boot restart и failure ordering. HTTP correlation/canaries, crash/reboot reconciliation, M18 branch coverage и полный M13/R1 остаются открытыми. Cover не является отдельным процентом branch coverage.
+
+Все 10 workflows `b2b3bf6` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished `2026-10-16T16:18:23.736830Z`. [Текущая matrix](docs/evidence/audit-retention-2026-10-16.md) сохраняет image, poisoning, evasion и paired failures. Code qualification привязана к b2b3bf6, docs-only публикация не является новым runtime прогоном или release approval.
 
 Новый T16 slice после `1e8bb1f`: [private audit journal core](docs/evidence/serving-audit-2026-10-15.md), [ADR 0036](docs/decisions/0036-serving-audit-journal.md), [RB-55/PB-29](docs/operations/serving-audit-troubleshooting.md). Ограниченные queue/disk bytes, accepted/durable/unconfirmed и retained writer lifecycle. Это ещё **не HTTP audit**: ASGI correlation, retention/rotation и all-output canaries остаются обязательной следующей работой; полные M13/R1 не закрыты.
 
