@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Private context handoff, RB-57/PB-31](operations/serving-context-troubleshooting.md). Release/qualification separation, generation binding и 503 diagnostics без раскрытия private refs; HTTP event sink ещё не подключён.
+
 - [Retained audit storage, RB-56/PB-30](operations/audit-retention-troubleshooting.md). Rotation/expiry, same-boot restart, guard ownership и неизвестное состояние после interruption. [Evidence](evidence/audit-retention-2026-10-16.md) отделяет локальные contracts от native qualification.
 
 - [Private audit journal core, RB-55/PB-29](operations/serving-audit-troubleshooting.md). Accepted/durable/unconfirmed, bounded queue/disk, retained writer ownership и safe failure handling. [Evidence](evidence/serving-audit-2026-10-15.md) не заменяет будущую HTTP/M13 qualification.

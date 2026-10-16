@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from mlsecops import serving_context
 from mlsecops.contracts import Rejected, read_json, write_json
 from scripts import candidate_serving_native as native
 from scripts import serving_core_qualification as core
@@ -40,6 +41,9 @@ class CandidateServingHarnessContracts(unittest.TestCase):
         fixture = core.ServingCoreContracts()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.loaded.audit_context = serving_context.QualificationContext(
+            "d" * 64, "e" * 64, fixture.loaded.subject_sha256, fixture.loaded.model_sha256
+        )
         cases = []
 
         def confirmed(name, condition):
@@ -52,7 +56,10 @@ class CandidateServingHarnessContracts(unittest.TestCase):
                 "instances": [dict.fromkeys(native.FEATURES, 0.5)],
             }
             native.http_matrix(fixture.engine, request, body, confirmed)
-        self.assertEqual(len(cases), 14)
+            native.context_matrix(
+                fixture.engine, request, body, confirmed, fixture.loaded.audit_context
+            )
+        self.assertEqual(len(cases), 19)
         self.assertEqual(len(cases), len(set(cases)))
         self.assertIsNone(fixture.engine.worker)
 

@@ -111,6 +111,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T16
 - [ ] Privacy, quotas и audit. Зависимость: T15. Gate: M13.
+- [Context handoff / ADR 0038](../docs/decisions/0038-serving-audit-context.md): implemented, local 168 adjacent tests pass / context 100%, native pending. Release и qualification разделены, private refs не добавляются в HTTP JSON; ASGI event production/admission/canaries ещё не реализованы.
 - [Branch quality slice](../docs/evidence/audit-branches-2026-10-16.md): native 42ce792, core 76/80 branches = 95%, retention 102/102 = 100%; Linux 61 audit + 10 checker tests без skips, serving regression 67 pass. Независимый per-module branch gate обязателен в CI; весь T16/M18 не закрыт.
 - [Retention / ADR 0037](../docs/decisions/0037-audit-retention.md): opt-in bounded Linux spool, общий payload budget и clean restart; [native b2b3bf6](../docs/evidence/audit-retention-2026-10-16.md): исторические 51 tests pass / 0 skips, core/retention Cover 97%/93%, serving regression 67 pass. Отдельный branch критерий двух модулей закрыт следующим increment выше; crash/reboot reconciliation и HTTP correlation/canaries остаются открытыми.
 - [Audit core / ADR 0036](../docs/decisions/0036-serving-audit-journal.md) добавляет bounded private spool и failure ownership, не HTTP integration. Следом нужны retention/rotation, ASGI correlation и all-output canaries; T16 остаётся открыт.

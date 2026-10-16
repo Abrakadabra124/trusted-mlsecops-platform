@@ -4,7 +4,15 @@ import re
 import threading
 from dataclasses import dataclass, field
 
-from mlsecops import material_bundle, release_bundle, release_policy, signing, storage, trust
+from mlsecops import (
+    material_bundle,
+    release_bundle,
+    release_policy,
+    serving_context,
+    signing,
+    storage,
+    trust,
+)
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 from scripts.candidate_lineage_native import KNOWN_OWNERS, OWNERS
 
@@ -59,8 +67,16 @@ class QualifiedCandidate:
     model: bytes = field(repr=False)
     artifacts: frozenset[str] = field(repr=False)
     keys: frozenset[str] = field(repr=False)
+    permit_sha256: str = field(repr=False)
+    proposal_sha256: str = field(repr=False)
     scope: str = field(default=KIND, init=False)
     release_ready: bool = field(default=False, init=False)
+
+    @property
+    def audit_context(self):
+        return serving_context.QualificationContext(
+            self.permit_sha256, self.proposal_sha256, self.subject_sha256, self.model_sha256
+        )
 
 
 class CandidateReader:
@@ -197,6 +213,8 @@ class CandidateReader:
                 verified["model"],
                 artifacts,
                 keys,
+                digest(canonical(permit)),
+                permit["proposal_sha256"],
             )
             self.trust.refresh()
             self.permission()

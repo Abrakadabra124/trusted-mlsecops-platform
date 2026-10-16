@@ -6,6 +6,8 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
+T16 context increment: [ADR 0038](docs/decisions/0038-serving-audit-context.md), immutable release/qualification types, verified reader refs, generation-bound Engine result и private HTTP handoff без изменения public JSON. Local 168 adjacent tests pass, context module 100%; native нового кода ещё не проверен. [RB-57/PB-31](docs/operations/serving-context-troubleshooting.md) добавлен. HTTP audit events/sink admission и полный M13/R1 остаются открытыми.
+
 T16 quality increment после `5a4ab26`: [отдельный branch gate и fault tests](docs/evidence/audit-branches-2026-10-16.md), **native 42ce792 pass**. Core 76/80 branches = 95%, retention 102/102 = 100%; это отдельные branch counts, не смешанная колонка Cover. Linux: 61 audit tests + 10 checker tests без skips, actual-candidate regression 67 pass. Production audit modules не изменены. Критерий покрытия подтверждён для двух модулей, не для всей платформы; полные T16/M13/M18/R1 остаются открытыми.
 
 Все 10 CI `42ce792` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished `2026-10-16T16:53:43.755852Z`. [Полная matrix и сохранённый report](docs/evidence/audit-branches-2026-10-16.md) фиксируют code/source binding, branch gate и актуальные image/ML failures. Следующий scope: immutable versioned audit context и ASGI send semantics, не фиктивный release approval.

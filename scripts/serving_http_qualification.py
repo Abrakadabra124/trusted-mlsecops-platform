@@ -8,7 +8,7 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from mlsecops import serving, serving_access, serving_http
+from mlsecops import serving, serving_access, serving_context, serving_http
 from mlsecops.contracts import Rejected, canonical, decode
 from mlsecops.datasets import FEATURES
 from mlsecops.signing import encode64
@@ -16,6 +16,82 @@ from scripts.serving_access_qualification import credentials
 
 
 class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_private_context_is_not_serialized_or_taken_from_headers(self):
+        snapshots = []
+        render = serving_http.JSONResponse.render
+
+        def capture(response, content):
+            if "predictions" in content or content.get("ready"):
+                snapshots.append(response.audit_context)
+            return render(response, content)
+
+        for path, method in (("/readyz", "GET"), ("/v1/predict", "POST")):
+            with patch.object(serving_http.JSONResponse, "render", capture):
+                status, content, _ = await self.invoke(
+                    path=path,
+                    method=method,
+                    headers=[
+                        (b"authorization", ("Bearer " + self.token).encode()),
+                        (b"content-type", b"application/json"),
+                        (b"x-selection-sha256", b"f" * 64),
+                    ],
+                )
+            self.assertEqual(status, 200)
+            serialized = canonical(content).decode()
+            for private in ("d" * 64, "e" * 64, "f" * 64, "audit_context", "permit_sha256"):
+                self.assertNotIn(private, serialized)
+        self.assertEqual(snapshots, [self.audit_context, self.audit_context])
+
+    async def test_missing_context_stale_generation_or_identity_mismatch_cannot_succeed(self):
+        for path, method, operation, payload in (
+            ("/readyz", "GET", self.engine.check_result, self.engine.check.return_value),
+            ("/v1/predict", "POST", self.engine.predict_result, self.engine.predict.return_value),
+        ):
+            for variant in (
+                "plain-dict",
+                "missing-context",
+                "old-generation",
+                "wrong-model",
+                "wrong-bundle",
+            ):
+
+                def invalid(*args, generation, variant=variant):
+                    content = dict(payload)
+                    if variant == "plain-dict":
+                        return content
+                    context = None if variant == "missing-context" else self.audit_context
+                    if variant == "wrong-model":
+                        content["model_sha256"] = "f" * 64
+                    if variant == "wrong-bundle":
+                        content["bundle_sha256"] = "f" * 64
+                    if variant == "old-generation":
+                        generation = threading.Event()
+                    return serving.ServingResult(content, context, generation)
+
+                operation.side_effect = invalid
+                with self.subTest(path=path, variant=variant):
+                    status, content, _ = await self.invoke(path=path, method=method)
+                    self.assertEqual(status, 503)
+                    self.assertNotIn("predictions", content)
+                    self.assertNotIn("ready", content)
+
+    async def test_final_deadline_denial_clears_response_context(self):
+        responses = []
+        render = serving_http.JSONResponse.render
+
+        def fence(response, content):
+            if "predictions" in content:
+                responses.append(response)
+                response.budget.generation.set()
+            return render(response, content)
+
+        with patch.object(serving_http.JSONResponse, "render", fence):
+            status, content, _ = await self.invoke()
+        self.assertEqual(status, 503)
+        self.assertNotIn("predictions", content)
+        self.assertEqual(len(responses), 1)
+        self.assertIsNone(responses[0].audit_context)
+
     async def test_global_ready_overload_releases_client_ticket_without_refund(self):
         config = credentials()
         config["clients"][0]["burst"] = 1
@@ -70,7 +146,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         def predict(*arguments, **keywords):
             entered.set()
             release.wait(3)
-            return {"predictions": []}
+            return self.engine.predict.return_value
 
         self.engine.predict.side_effect = predict
         try:
@@ -120,7 +196,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         def predict(*arguments, **keywords):
             entered.set()
             release.wait(3)
-            return {"predictions": []}
+            return self.engine.predict.return_value
 
         self.engine.predict.side_effect = predict
         task = asyncio.create_task(self.invoke(headers=headers))
@@ -288,12 +364,28 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         self.engine.response_budget.side_effect = lambda: serving.ResponseBudget(
             generation, time.monotonic() + 10
         )
-        self.engine.check.return_value = {"ready": True, "bundle_sha256": "a" * 64}
+        self.audit_context = serving_context.QualificationContext(
+            "d" * 64, "e" * 64, "a" * 64, "c" * 64
+        )
+        self.engine.check.return_value = {
+            "ready": True,
+            "bundle_sha256": "a" * 64,
+            "model_sha256": "c" * 64,
+        }
         self.engine.predict.return_value = {
             "schema_version": 1,
             "bundle_sha256": "a" * 64,
+            "model_sha256": "c" * 64,
             "predictions": [{"decision": "score", "score": 0.75, "reason": None}],
         }
+        self.engine.check_result.side_effect = lambda *, generation: serving.ServingResult(
+            self.engine.check(generation=generation), self.audit_context, generation
+        )
+        self.engine.predict_result.side_effect = lambda features, *, generation: (
+            serving.ServingResult(
+                self.engine.predict(features, generation=generation), self.audit_context, generation
+            )
+        )
         self.token = "b" * 64
         self.app = serving_http.create_app(self.engine, self.token)
         self.context = self.app.router.lifespan_context(self.app)

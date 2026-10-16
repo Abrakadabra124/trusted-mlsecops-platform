@@ -106,6 +106,14 @@ class CandidateReaderContracts(unittest.TestCase):
         self.assertEqual(loaded.model, self.verified["model"])
         self.assertEqual(loaded.subject_sha256, self.verified["subject_sha256"])
         self.assertFalse(loaded.release_ready)
+        context = loaded.audit_context
+        self.assertEqual(context.kind, "candidate-qualification")
+        self.assertEqual(context.permit_sha256, digest(canonical(self.permit)))
+        self.assertEqual(context.proposal_sha256, self.permit["proposal_sha256"])
+        self.assertEqual(context.bundle_sha256, loaded.subject_sha256)
+        self.assertEqual(context.model_sha256, loaded.model_sha256)
+        self.assertFalse(context.release_ready)
+        self.assertFalse(hasattr(context, "selection_sha256"))
         self.assertEqual(loaded.scope, qualification.KIND)
         self.assertEqual(self.package, before)
         self.assertEqual(reader.check(loaded)["version"], 1)
@@ -113,6 +121,12 @@ class CandidateReaderContracts(unittest.TestCase):
             loaded.model = b"changed"
         self.assertNotIn("reports", self.permit)
         self.assertNotIn("required_gates", self.permit)
+        reader.reference = "f" * 64
+        reader.policy = "e" * 64
+        reader.permit.clear()
+        self.assertEqual(loaded.audit_context, context)
+        with self.assertRaises(Rejected):
+            reader.check(loaded)
 
     def test_source_report_binds_unchanged_signed_proposal_not_latest_alias(self):
         report = {

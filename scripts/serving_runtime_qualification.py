@@ -7,7 +7,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from mlsecops import serving, serving_runtime
+from mlsecops import serving, serving_context, serving_runtime
 from mlsecops import serving_protocol as protocol
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.serving_runtime import Channel
@@ -361,6 +361,7 @@ class DockerLifecycleContracts(unittest.TestCase):
             model_sha256=digest(b"controlled"),
             subject_sha256="a" * 64,
             expires_at=int(time.time()) + 3600,
+            audit_context=serving_context.ReleaseContext("c" * 64, "a" * 64, digest(b"controlled")),
         )
         engine = serving.Engine(reader)
         self.addCleanup(engine.close)

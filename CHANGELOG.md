@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 private serving context - 2026-10-16
+
+Неделя 9, T16: [ADR 0038](docs/decisions/0038-serving-audit-context.md), immutable versioned release/qualification context из verified readers, generation-bound Engine result и private HTTP handoff. Permit не подменяет selection; public JSON прежний. Local 168 adjacent methods pass, новый module 100%; native pending. Добавлены пять native context cases и [RB-57/PB-31](docs/operations/serving-context-troubleshooting.md). Полный M13/R1 не закрыт.
+
 ## R1 explicit audit branch coverage - 2026-10-16
 
 Неделя 9, T16: [branch-only checker](docs/evidence/audit-branches-2026-10-16.md), >=95% независимо для core/retention, missing/zero/non-branch measurement fail closed. Добавлены negative fault tests без изменения production audit modules, обновлён RB-56/PB-30. Native `42ce792`: core 76/80 branches = 95%, retention 102/102 = 100%, 61 audit + 10 checker tests pass без skips; actual-candidate regression 67 pass. Это не full M13/M18/R1 acceptance.

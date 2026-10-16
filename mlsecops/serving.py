@@ -4,7 +4,7 @@ import time
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 
-from mlsecops import advisory
+from mlsecops import advisory, serving_context
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.serving_runtime import Worker
 
@@ -23,10 +23,18 @@ class ResponseBudget:
         return remaining
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class ServingResult:
+    payload: dict
+    audit_context: serving_context.ReleaseContext | serving_context.QualificationContext
+    generation: threading.Event
+
+
 class Engine:
     def __init__(self, reader):
         self.reader = reader
         self.loaded = None
+        self.audit_context = None
         self.worker = None
         self.retiring = None
         self.cleanup = None
@@ -82,6 +90,7 @@ class Engine:
     def clear(self):
         self.generation.set()
         self.loaded = None
+        self.audit_context = None
         self.reap()
         if self.worker is not None:
             try:
@@ -104,6 +113,7 @@ class Engine:
     def invalidate(self):
         self.generation.set()
         self.loaded = None
+        self.audit_context = None
         if self.worker is None:
             return
         if self.retiring is not None:
@@ -153,7 +163,13 @@ class Engine:
                     raise Rejected("serving_loaded_identity")
                 self.worker.ping()
                 self.reader.check(loaded)
+                context = serving_context.bind(
+                    loaded.audit_context,
+                    bundle_sha256=loaded.subject_sha256,
+                    model_sha256=loaded.model_sha256,
+                )
                 self.loaded = loaded
+                self.audit_context = context
                 if self.heartbeat is None:
                     heartbeat = threading.Thread(target=self.maintain, daemon=True)
                     heartbeat.start()
@@ -188,6 +204,18 @@ class Engine:
         self.require_generation()
 
     def check(self, *, generation=None):
+        return self.check_result(generation=generation).payload
+
+    def result(self, payload):
+        self.require_generation()
+        context = serving_context.bind(
+            self.audit_context,
+            bundle_sha256=payload["bundle_sha256"],
+            model_sha256=payload["model_sha256"],
+        )
+        return ServingResult(payload, context, self.generation)
+
+    def check_result(self, *, generation=None):
         with self.exclusive():
             if generation is not None and generation is not self.generation:
                 raise Rejected("serving_generation_changed")
@@ -197,12 +225,15 @@ class Engine:
                 self.require_current()
                 self.reader.check(self.loaded)
                 self.require_generation()
-                return self.identity()
+                return self.result(self.identity())
             except Exception:
                 self.invalidate()
                 raise Rejected("serving_readiness_rejected") from None
 
     def predict(self, features, *, generation=None):
+        return self.predict_result(features, generation=generation).payload
+
+    def predict_result(self, features, *, generation=None):
         advisory.validate(features)
         features = decode(canonical(features))
         with self.exclusive():
@@ -217,12 +248,14 @@ class Engine:
                 self.reader.check(self.loaded)
                 self.require_generation()
                 identity = self.identity()
-                return {
-                    "schema_version": 1,
-                    "bundle_sha256": identity["bundle_sha256"],
-                    "model_sha256": identity["model_sha256"],
-                    "predictions": predictions,
-                }
+                return self.result(
+                    {
+                        "schema_version": 1,
+                        "bundle_sha256": identity["bundle_sha256"],
+                        "model_sha256": identity["model_sha256"],
+                        "predictions": predictions,
+                    }
+                )
             except Exception:
                 self.invalidate()
                 raise Rejected("serving_prediction_rejected") from None

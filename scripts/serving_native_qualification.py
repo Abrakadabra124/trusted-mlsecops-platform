@@ -4,7 +4,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
-from mlsecops import release_authorization, release_bundle, serving, serving_access
+from mlsecops import release_authorization, release_bundle, serving, serving_access, serving_context
 from mlsecops.contracts import Rejected, digest
 from mlsecops.model import predict, session
 from scripts import promotion_qualification as fixtures
@@ -13,9 +13,26 @@ from scripts.serving_access_qualification import credentials
 from scripts.serving_native import bind_real_runtime, site
 
 
+def engine_fixture():
+    engine = Mock()
+    context = serving_context.ReleaseContext("c" * 64, "b" * 64, "a" * 64)
+
+    def result(operation, *arguments, generation):
+        payload = {
+            "model_sha256": context.model_sha256,
+            "bundle_sha256": context.bundle_sha256,
+            **operation(*arguments, generation=generation),
+        }
+        return serving.ServingResult(payload, context, generation)
+
+    engine.check_result.side_effect = lambda **kw: result(engine.check, **kw)
+    engine.predict_result.side_effect = lambda *args, **kw: result(engine.predict, *args, **kw)
+    return engine
+
+
 class ServingNativeHarnessContracts(unittest.TestCase):
     def test_check_http_preserves_accounting_across_default_credential_wrapper(self):
-        engine = Mock()
+        engine = engine_fixture()
         generation = threading.Event()
         engine.response_budget.side_effect = lambda: serving.ResponseBudget(
             generation, time.monotonic() + 10
@@ -58,7 +75,7 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         self.assertIn("foreign-client-identity-401", cases)
 
     def test_valid_slow_inference_cannot_hide_cross_client_charge(self):
-        engine = Mock()
+        engine = engine_fixture()
         generation = threading.Event()
         engine.response_budget.side_effect = lambda: serving.ResponseBudget(
             generation, time.monotonic() + 10
@@ -102,7 +119,7 @@ class ServingNativeHarnessContracts(unittest.TestCase):
     def test_native_quota_boundary_detects_cross_charge_without_slow_inference_false_failure(self):
         for cross_charge in (False, True):
             with self.subTest(cross_charge=cross_charge):
-                engine = Mock()
+                engine = engine_fixture()
                 generation = threading.Event()
                 engine.response_budget.side_effect = lambda: serving.ResponseBudget(
                     generation, time.monotonic() + 10
@@ -183,7 +200,7 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         self.assertEqual(receipt["subject_sha256"], decision["subject_sha256"])
 
     def test_real_loopback_http_helper_serves_and_shuts_down(self):
-        engine = Mock()
+        engine = engine_fixture()
         generation = threading.Event()
         engine.response_budget.side_effect = lambda: serving.ResponseBudget(
             generation, time.monotonic() + 10
@@ -196,7 +213,7 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         self.assertGreaterEqual(engine.close.call_count, 1)
 
     def test_real_loopback_two_clients_have_separate_rate_limits(self):
-        engine = Mock()
+        engine = engine_fixture()
         generation = threading.Event()
         engine.response_budget.side_effect = lambda: serving.ResponseBudget(
             generation, time.monotonic() + 10

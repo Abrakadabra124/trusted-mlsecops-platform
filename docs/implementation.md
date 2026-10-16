@@ -1,5 +1,7 @@
 # Реализация R1
 
+T16 context increment: [ADR 0038](decisions/0038-serving-audit-context.md), отдельные immutable release/qualification refs из verified readers, snapshot поколения под engine lock, typed internal result и private HTTP response attribute. Public JSON не расширяется private fields. Local 168 adjacent methods pass; новый module 100% (31 statements, 4 branch exits). Native CI pending, пять context cases добавлены к actual-candidate matrix. [RB-57/PB-31](operations/serving-context-troubleshooting.md) фиксирует fixture integration defect и диагностику. ASGI events, sink admission и M13 не объявлены выполненными.
+
 T16 quality increment после `5a4ab26`: [native 42ce792](evidence/audit-branches-2026-10-16.md), core **76/80 branches = 95%**, retention **102/102 = 100%**. Production audit modules не менялись; Linux 61 audit + 10 checker tests pass без skips, serving regression 67 pass. Windows adjacent 202 methods / 179 pass / 23 skips. Полный M18 не подменяется pass двух модулей; HTTP audit integration ещё впереди.
 
 CI `42ce792` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished 2026-10-16T16:53:43.755852 UTC. [Evidence](evidence/audit-branches-2026-10-16.md) сохраняет точную matrix, sanitized actual-candidate report и нарушения image/ML gates. Native proof относится к code commit, не к последующему docs-only checkpoint.

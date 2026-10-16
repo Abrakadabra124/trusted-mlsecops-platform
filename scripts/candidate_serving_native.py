@@ -41,6 +41,53 @@ from scripts.serving_outage_native import exercise as exercise_outage
 from scripts.serving_pause_native import exercise as exercise_pause
 
 
+def context_matrix(engine, request, body, confirmed, context):
+    confirmed(
+        "context-candidate-not-release-selection",
+        context.kind == "candidate-qualification"
+        and context.schema_version == 1
+        and not context.release_ready
+        and not hasattr(context, "selection_sha256"),
+    )
+    for name, operation in (
+        ("ready", engine.check_result),
+        ("prediction", lambda: engine.predict_result([[0.5] * len(FEATURES)])),
+    ):
+        result = operation()
+        confirmed(
+            "context-" + name + "-generation-bound",
+            result.audit_context == context
+            and result.generation is engine.generation
+            and not result.generation.is_set()
+            and result.payload["model_sha256"] == context.model_sha256
+            and result.payload["bundle_sha256"] == context.bundle_sha256,
+        )
+    ready_status, ready = request("/readyz")
+    predict_status, predicted = request("/v1/predict", body)
+    serialized = canonical([ready, predicted]).decode()
+    confirmed(
+        "context-private-references-not-public",
+        ready_status == predict_status == 200
+        and all(
+            value not in serialized
+            for value in (
+                context.permit_sha256,
+                context.proposal_sha256,
+                "audit_context",
+                "selection_sha256",
+                "permit_sha256",
+                "proposal_sha256",
+            )
+        ),
+    )
+    confirmed(
+        "context-public-shape-unchanged",
+        set(ready) == {"ready", "bundle_sha256", "model_sha256", "request_id"}
+        and set(predicted)
+        == {"schema_version", "bundle_sha256", "model_sha256", "request_id", "predictions"},
+    )
+
+
 def http_matrix(engine, request, body, confirmed):
     row = body["instances"][0]
     invalid = (
@@ -244,6 +291,7 @@ def qualify(root, state, image, *, trust_port=15446):
             expiry = {}
 
             def exercise(engine, request, body):
+                context_matrix(engine, request, body, confirmed, loaded.audit_context)
                 http_matrix(engine, request, body, confirmed)
                 if loaded.expires_at - math.ceil(time.time()) < 100:
                     raise Rejected("candidate_outage_proposal_window_too_short")

@@ -12,6 +12,7 @@ from mlsecops import (
     release_authorization,
     release_bundle,
     release_policy,
+    serving_context,
     storage,
     trust,
 )
@@ -30,6 +31,12 @@ class VerifiedRelease:
     artifacts: frozenset[str] = field(repr=False)
     keys: frozenset[str] = field(repr=False)
     release_ready: bool = field(default=False, init=False)
+
+    @property
+    def audit_context(self):
+        return serving_context.ReleaseContext(
+            self.request_sha256, self.subject_sha256, self.model_sha256
+        )
 
 
 def document(client, reference, limit):

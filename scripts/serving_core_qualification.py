@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from mlsecops import serving
+from mlsecops import serving, serving_context
 from mlsecops.contracts import Rejected, digest
 
 
@@ -15,6 +15,7 @@ class ServingCoreContracts(unittest.TestCase):
             model_sha256=digest(b"model"),
             subject_sha256="a" * 64,
             expires_at=int(time.time()) + 3600,
+            audit_context=serving_context.ReleaseContext("c" * 64, "a" * 64, digest(b"model")),
         )
         self.reader = Mock(image="sha256:" + "b" * 64)
         self.reader.trust.deadline = time.monotonic() + 60

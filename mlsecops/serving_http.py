@@ -12,7 +12,15 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from mlsecops import advisory, release_reader, serving, serving_access, trust, trust_authority
+from mlsecops import (
+    advisory,
+    release_reader,
+    serving,
+    serving_access,
+    serving_context,
+    trust,
+    trust_authority,
+)
 from mlsecops.contracts import Rejected, bounded_read, decode, require_fields
 from mlsecops.datasets import FEATURES
 
@@ -132,14 +140,27 @@ def create_app(engine, token=None, *, clients=None):
         )
 
     class VerifiedResponse(JSONResponse):
-        def __init__(self, content, budget, code):
-            super().__init__(content, headers={"Cache-Control": "no-store"})
-            self.budget, self.code, self.request_id = budget, code, content["request_id"]
+        def __init__(self, result, budget, code, request_id):
+            if (
+                type(result) is not serving.ServingResult
+                or result.generation is not budget.generation
+            ):
+                raise Rejected("http_result_binding")
+            self.audit_context = serving_context.bind(
+                result.audit_context,
+                bundle_sha256=result.payload["bundle_sha256"],
+                model_sha256=result.payload["model_sha256"],
+            )
+            self.budget, self.code, self.request_id = budget, code, request_id
+            super().__init__(
+                {**result.payload, "request_id": request_id}, headers={"Cache-Control": "no-store"}
+            )
 
         async def __call__(self, scope, receive, send):
             try:
                 remaining(self.budget)
             except Exception:
+                self.audit_context = None
                 await error(503, self.code, self.request_id)(scope, receive, send)
                 return
             await super().__call__(scope, receive, send)
@@ -172,10 +193,10 @@ def create_app(engine, token=None, *, clients=None):
                 return error(503, "not_ready", request_id)
             await app.state.slots.acquire()
             acquired = True
-            result = await execute(engine.check, deferred, budget, ticket)
-            if result.get("ready") is not True:
+            result = await execute(engine.check_result, deferred, budget, ticket)
+            if result.payload.get("ready") is not True:
                 raise Rejected("http_not_ready")
-            return VerifiedResponse({**result, "request_id": request_id}, budget, "not_ready")
+            return VerifiedResponse(result, budget, "not_ready", request_id)
         except Exception:
             return error(503, "not_ready", request_id)
         finally:
@@ -227,10 +248,8 @@ def create_app(engine, token=None, *, clients=None):
             except Rejected:
                 remaining(budget)
                 return error(422, "invalid_request", request_id)
-            result = await execute(engine.predict, deferred, budget, ticket, features)
-            return VerifiedResponse(
-                {**result, "request_id": request_id}, budget, "model_unavailable"
-            )
+            result = await execute(engine.predict_result, deferred, budget, ticket, features)
+            return VerifiedResponse(result, budget, "model_unavailable", request_id)
         except Rejected as failure:
             if str(failure) == "serving_busy":
                 return error(429, "overloaded", request_id)
