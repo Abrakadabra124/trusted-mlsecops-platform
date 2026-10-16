@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 explicit audit branch coverage - 2026-10-16
+
+Неделя 9, T16: [branch-only checker](docs/evidence/audit-branches-2026-10-16.md), >=95% независимо для core/retention, missing/zero/non-branch measurement fail closed. Добавлены negative fault tests без изменения production audit modules, обновлён RB-56/PB-30. Local checker 10 tests/100%; native qualification pending, не full M13/M18/R1 acceptance.
+
 ## R1 opt-in audit retention - 2026-10-16
 
 Неделя 9, T16: [ADR 0037](docs/decisions/0037-audit-retention.md), bounded Linux segments, background maintenance и clean same-boot restart без reset sequence/age/budget. Добавлены [RB-56/PB-30](docs/operations/audit-retention-troubleshooting.md) и negative tests. [Native b2b3bf6](docs/evidence/audit-retention-2026-10-16.md): 51 tests pass без skip, core/retention Cover 97%/93%, actual-candidate regression 67 pass. Исправлены shared directory cursor, null persisted clock, sequence-head mismatch и потенциально блокирующее чтение FIFO. HTTP audit/M13, M18 branch coverage и автоматический crash/reboot recovery не заявляются.

@@ -1,6 +1,8 @@
 import copy
 import hashlib
+import io
 import os
+import stat
 import tempfile
 import threading
 import time
@@ -16,6 +18,72 @@ from scripts.serving_audit_qualification import event
 
 
 class PolicyContracts(unittest.TestCase):
+    def test_wrong_policy_type_and_unsupported_platform_never_create_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for policy in (None, {}, Mock()):
+                with (
+                    self.subTest(policy=type(policy)),
+                    self.assertRaisesRegex(Rejected, "audit_retention_policy"),
+                ):
+                    audit_retention.Spool(root, policy, 8192)
+            with (
+                patch.object(audit_retention, "os", SimpleNamespace(name="nt")),
+                self.assertRaisesRegex(Rejected, "audit_retention_platform"),
+            ):
+                audit_retention.Spool(root, audit_retention.Policy(2048), 8192)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_invalid_boot_identifier_does_not_establish_a_clock_anchor(self):
+        for value in (b"", b"unknown\n", b"0" * 38):
+            with (
+                self.subTest(value=value),
+                patch("builtins.open", return_value=io.BytesIO(value)),
+                self.assertRaisesRegex(Rejected, "audit_retention_clock"),
+            ):
+                audit_retention.boot_id()
+
+    def test_bounded_read_rejects_oversize_growth_and_truncation_and_closes_descriptor(self):
+        for size, limit, chunks in ((3, 2, []), (-1, 2, []), (1, 1, [b"ab"]), (2, 2, [b"a", b""])):
+            spool = audit_retention.Spool.__new__(audit_retention.Spool)
+            spool.directory = 70
+            system = SimpleNamespace(
+                O_RDONLY=0,
+                O_NOFOLLOW=1,
+                O_NONBLOCK=2,
+                open=Mock(return_value=71),
+                close=Mock(),
+                fstat=Mock(
+                    return_value=SimpleNamespace(
+                        st_mode=stat.S_IFREG | 0o600,
+                        st_uid=1000,
+                        st_nlink=1,
+                        st_size=size,
+                    )
+                ),
+                geteuid=lambda: 1000,
+                read=Mock(side_effect=chunks),
+            )
+            with (
+                self.subTest(size=size, limit=limit),
+                patch.object(audit_retention, "os", system),
+                self.assertRaisesRegex(Rejected, "audit_spool_size"),
+            ):
+                spool._read("manifest.json", limit)
+            system.close.assert_called_once_with(71)
+            self.assertEqual(system.read.call_count, len(chunks))
+
+    def test_write_without_progress_never_spins_or_claims_success(self):
+        spool = audit_retention.Spool.__new__(audit_retention.Spool)
+        for written in (0, -1, True, 4, None):
+            with (
+                self.subTest(written=written),
+                patch.object(audit_retention.os, "write", return_value=written) as writer,
+                self.assertRaisesRegex(Rejected, "audit_spool_write"),
+            ):
+                spool._write_all(71, b"abc")
+            writer.assert_called_once_with(71, b"abc")
+
     def test_open_for_validation_cannot_block_before_file_type_check(self):
         spool = audit_retention.Spool.__new__(audit_retention.Spool)
         spool.directory = 71
@@ -257,6 +325,100 @@ class NativeRetention(unittest.TestCase):
         )
         self.addCleanup(lambda: spool.close(clean=False))
         return spool
+
+    def test_bad_record_or_sequence_cannot_change_existing_bytes(self):
+        spool = self.spool()
+        spool.write(record(1))
+        path = self.root / spool.active["name"]
+        for content in (
+            None,
+            b"",
+            b"{}",
+            b"x" * 2049 + b"\n",
+            record(1),
+            record(3),
+            record(2) + record(3),
+        ):
+            before = path.read_bytes()
+            with self.subTest(kind=type(content)), self.assertRaises(Rejected):
+                spool.write(content)
+            self.assertEqual((spool.sequence, spool.retained_bytes), (1, len(before)))
+            self.assertEqual(path.read_bytes(), before)
+        spool.close(clean=True)
+
+    def test_reopen_denies_cross_segment_gap_and_over_budget_without_deleting_bytes(self):
+        for change in ("gap", "budget", "duplicate"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                spool = audit_retention.Spool(root, self.policy, 8192)
+                for sequence in range(1, 13):
+                    spool.write(record(sequence))
+                spool.close(clean=True)
+                manifest = root / "manifest.json"
+                saved = decode(manifest.read_bytes())
+                if change == "gap":
+                    segment = saved["segments"][1]
+                    path = root / segment["name"]
+                    rows = [decode(line) for line in path.read_bytes().splitlines()]
+                    for row in rows:
+                        row["sequence"] += 1
+                    content = b"".join(canonical(row) + b"\n" for row in rows)
+                    path.write_bytes(content)
+                    segment.update(size=len(content), sha256=hashlib.sha256(content).hexdigest())
+                elif change == "budget":
+                    saved["budget"] = 2048
+                else:
+                    saved["segments"][1] = copy.deepcopy(saved["segments"][0])
+                manifest.write_bytes(canonical(saved))
+                before = {path.name: path.read_bytes() for path in root.iterdir()}
+                with self.assertRaisesRegex(Rejected, "audit_spool_open"):
+                    audit_retention.Spool(root, self.policy, 2048 if change == "budget" else 8192)
+                self.assertEqual({name: (root / name).read_bytes() for name in before}, before)
+                self.assertTrue((root / ".lease").exists())
+
+    def test_changed_manifest_is_not_accepted_as_the_owned_snapshot(self):
+        spool = self.spool()
+        spool.write(record(1))
+        spool.close(clean=True)
+        resumed = self.spool()
+        manifest = self.root / "manifest.json"
+        original = manifest.read_bytes()
+        manifest.write_bytes(original + b" ")
+        self.elapsed = 3_000_000_000
+        with self.assertRaisesRegex(Rejected, "audit_spool_manifest"):
+            resumed.maintain()
+        self.assertEqual(manifest.read_bytes(), original + b" ")
+        self.assertEqual(resumed.retained_bytes, len(record(1)))
+        self.assertEqual(len(list(self.root.glob("*.jsonl"))), 1)
+
+    def test_clean_close_rejects_oversized_manifest_without_releasing_guard(self):
+        spool = self.spool()
+        spool.write(record(1))
+        with patch.object(audit_retention, "MAX_MANIFEST", 16):
+            with self.assertRaisesRegex(Rejected, "audit_spool_manifest"):
+                spool.close(clean=True)
+        self.assertIsNone(spool.directory)
+        self.assertFalse(spool.released)
+        self.assertTrue((self.root / ".lease").exists())
+        self.assertFalse((self.root / ".next").exists())
+        self.assertFalse((self.root / "manifest.json").exists())
+
+    def test_lease_change_before_handoff_never_unlinks_replacement(self):
+        spool = self.spool()
+        spool.write(record(1))
+        original = os.replace
+        foreign = b"FOREIGN".ljust(32, b"_")
+
+        def replace(*args, **kwargs):
+            original(*args, **kwargs)
+            (self.root / ".lease").write_bytes(foreign)
+
+        with patch.object(audit_retention.os, "replace", replace):
+            with self.assertRaisesRegex(Rejected, "audit_spool_identity"):
+                spool.close(clean=True)
+        self.assertFalse(spool.released)
+        self.assertEqual((self.root / ".lease").read_bytes(), foreign)
+        self.assertEqual(len(list(self.root.glob("*.jsonl"))), 1)
 
     def test_repeated_native_inventory_does_not_reuse_directory_cursor(self):
         spool = self.spool()
@@ -628,6 +790,21 @@ class NativeRetention(unittest.TestCase):
 
 
 class RetainedJournalContracts(unittest.TestCase):
+    def test_invalid_reclaimed_credit_is_sticky_and_never_changes_reservation(self):
+        for credit in (True, -1, 2049):
+            spool = Mock(retained_bytes=2048, sequence=19)
+            spool.maintain.return_value = credit
+            with patch.object(audit_retention, "Spool", return_value=spool):
+                journal = serving_audit.Journal(
+                    Path.cwd(), max_bytes=2048, retention=audit_retention.Policy()
+                )
+                journal.start()
+                with self.assertRaisesRegex(Rejected, "audit_failed"):
+                    journal.close()
+            self.assertEqual(journal.status()["reserved_bytes"], 2048)
+            self.assertEqual(journal.status()["failure"], "sink_failed")
+            spool.close.assert_called_once_with(clean=False)
+
     def test_reclaimed_bytes_allow_new_records_without_resetting_sequence(self):
         spool = Mock(retained_bytes=2048, sequence=19)
         spool.maintain.side_effect = [2048] + [0] * 100

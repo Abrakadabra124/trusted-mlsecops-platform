@@ -6,6 +6,8 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
+T16 quality increment после `5a4ab26`: [отдельный branch gate и fault tests](docs/evidence/audit-branches-2026-10-16.md), **новая native qualification pending**. Требуются >=95% branch exits по каждому audit-модулю, не прежняя смешанная колонка Cover. Production audit modules не изменены. Локально checker 10 tests/100%; POSIX skips не дают Linux acceptance.
+
 2026-10-16, неделя 9 «Serving и privacy», T16: [retention/rotation](docs/decisions/0037-audit-retention.md) реализованы как opt-in Linux backend. **Native b2b3bf6: 51 tests pass / 0 skips**, Cover core 97% / retention 93%; существующий actual-candidate serving 67 cases pass, release_ready=false. [RB-56/PB-30](docs/operations/audit-retention-troubleshooting.md) и [evidence](docs/evidence/audit-retention-2026-10-16.md) фиксируют filesystem, same-boot restart и failure ordering. HTTP correlation/canaries, crash/reboot reconciliation, M18 branch coverage и полный M13/R1 остаются открытыми. Cover не является отдельным процентом branch coverage.
 
 Все 10 workflows `b2b3bf6` terminal: **6 success / 4 failure**, M20 723/M21 122 pass; M21 finished `2026-10-16T16:18:23.736830Z`. [Текущая matrix](docs/evidence/audit-retention-2026-10-16.md) сохраняет image, poisoning, evasion и paired failures. Code qualification привязана к b2b3bf6, docs-only публикация не является новым runtime прогоном или release approval.

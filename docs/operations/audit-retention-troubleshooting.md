@@ -28,6 +28,12 @@ uv run --locked coverage report --data-file=.coverage-serving-audit
 
 Матрица: byte/age rotation; idle expiry; cap без eviction молодых данных; продолжение sequence/age/budget после clean restart; unknown files, изменённый hash, symlink/hardlink и parent rename; конкурентные writers; failure fsync/unlink/manifest; interleaved startup и handoff cleanup. Проверить конечные bytes и отсутствие изменения чужих sentinel files, не только exit code команды.
 
+### Отдельный branch gate
+
+После fresh coverage run выполнить `uv run --locked python -m scripts.audit_branch_coverage .coverage-serving-audit`. Команда требует >=95% выполненных branch exits для каждого обязательного audit-модуля, выводит counts и возвращает exit 2 при fail/inconclusive. Большое суммарное Cover не отменяет отказ. Собственная проверка checker: `uv run --locked python -m unittest scripts.audit_branch_coverage_qualification`. [Evidence](../evidence/audit-branches-2026-10-16.md) отделяет local результат от native qualification.
+
+При missing measurement сначала повторить именно fresh run из этого checkout, не подставлять старую базу и не использовать append для накопления несовместимых runs. При branch fail смотреть конкретные непокрытые ветви и добавлять тест реального исхода; не менять порог или report exclusions. Windows POSIX skips остаются ограничением платформы, а не основанием выдавать pass. Не обнулять внутренние `partial_branches_always` Coverage.py: checker использует public clear_exclude и отдельно проверяет, что оба зарегистрированных файла без выполненных arcs дают ноль покрытия. Arbitrary сохранённая coverage database не доказывает собственную свежесть.
+
 ## Восстановление и rollback
 
 Поддержанный restart: подтверждённый clean close, тот же host boot, тот же private directory и exact policy/budget, immutable manifest/inventory. Новый writer захватывает собственный exclusive guard до чтения manifest. Сохранённые файлы продолжают расходовать общий budget; нумерация и возраст не обнуляются.
