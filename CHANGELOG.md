@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 opt-in audit retention - 2026-10-16
+
+Неделя 9, T16: [ADR 0037](docs/decisions/0037-audit-retention.md), bounded Linux segments, background maintenance и clean same-boot restart без reset sequence/age/budget. Добавлены [RB-56/PB-30](docs/operations/audit-retention-troubleshooting.md) и negative tests. [Native qualification](docs/evidence/audit-retention-2026-10-16.md) пока не завершена; HTTP audit/M13 и автоматический crash/reboot recovery не заявляются.
+
 ## R1 private audit journal core - 2026-10-15
 
 [ADR 0036](docs/decisions/0036-serving-audit-journal.md): fixed-field private events, bounded pending including active I/O, binary exclusive file, per-record fsync и explicit unconfirmed state. Исправлены воспроизведённые input/close/start races, byte accounting Windows и huge-timeout normalization. [RB-55/PB-29](docs/operations/serving-audit-troubleshooting.md), [evidence](docs/evidence/serving-audit-2026-10-15.md). HTTP/retention/canary integration и full M13 ещё не реализованы; journal core не считается готовой production telemetry.

@@ -6,6 +6,8 @@
 
 ## Испытание actual candidate без фиктивного release approval
 
+2026-10-16, неделя 9 «Serving и privacy», T16: [retention/rotation](docs/decisions/0037-audit-retention.md) реализованы как opt-in Linux backend, **native qualification не завершена**. [RB-56/PB-30](docs/operations/audit-retention-troubleshooting.md) и [evidence](docs/evidence/audit-retention-2026-10-16.md) отделяют local contracts от обязательной проверки filesystem, restart и failure ordering. HTTP correlation/canaries, crash/reboot reconciliation и полный M13/R1 остаются открытыми.
+
 Новый T16 slice после `1e8bb1f`: [private audit journal core](docs/evidence/serving-audit-2026-10-15.md), [ADR 0036](docs/decisions/0036-serving-audit-journal.md), [RB-55/PB-29](docs/operations/serving-audit-troubleshooting.md). Ограниченные queue/disk bytes, accepted/durable/unconfirmed и retained writer lifecycle. Это ещё **не HTTP audit**: ASGI correlation, retention/rotation и all-output canaries остаются обязательной следующей работой; полные M13/R1 не закрыты.
 
 **Native 0841786 подтверждён:** audit 21 tests без skip, coverage 97%; actual-candidate regression 67 cases pass. Все 10 CI terminal: **6 success / 4 failure**, M20 723/M21 122 pass, M21 finished `2026-10-15T19:44:36.040866Z`. [Matrix и полный sanitized report](docs/evidence/serving-audit-2026-10-15.md) сохраняют отдельные image/ML failures и release_ready=false. Локально Windows 206 pass / 1 native POSIX skip; audit core 98%. [Следующий T16 slice](tasks/plan.md) не подменяет candidate permit настоящим approval и не включает неподтверждённую retention.

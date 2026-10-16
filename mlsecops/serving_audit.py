@@ -5,6 +5,7 @@ import threading
 import time
 from pathlib import Path
 
+from mlsecops import audit_retention
 from mlsecops.contracts import Rejected, canonical
 
 MAX_RECORD = 2048
@@ -65,7 +66,7 @@ def checked(value):
 
 
 class Journal:
-    def __init__(self, path, *, capacity=64, max_bytes=MAX_BYTES):
+    def __init__(self, path, *, capacity=64, max_bytes=MAX_BYTES, retention=None):
         if (
             type(capacity) is not int
             or not 1 <= capacity <= 64
@@ -82,6 +83,13 @@ class Journal:
         self._failure = None
         self._closing = self._closed = False
         self._descriptor = None
+        self._spool = None
+        self._base_sequence = 0
+        if retention is not None:
+            self._spool = audit_retention.Spool(path, retention, max_bytes)
+            self._reserved = self._spool.retained_bytes
+            self._base_sequence = self._spool.sequence
+            return
         try:
             path = Path(path)
             if not path.is_absolute():
@@ -129,9 +137,9 @@ class Journal:
                 observed = time.time_ns()
                 if type(observed) is not int or not self._clock <= observed < 2**63:
                     raise Rejected("audit_clock_invalid")
-                if self._accepted >= 2**63 - 1:
+                if self._accepted >= 2**63 - 1 - self._base_sequence:
                     raise Rejected("audit_sequence_exhausted")
-                sequence = self._accepted + 1
+                sequence = self._base_sequence + self._accepted + 1
                 content = (
                     canonical(
                         {
@@ -150,7 +158,7 @@ class Journal:
                 if self._reserved + len(content) > self._max_bytes:
                     raise Rejected("audit_capacity_exhausted")
                 self._queue.put_nowait(content)
-                self._accepted = sequence
+                self._accepted += 1
                 self._pending += 1
                 self._reserved += len(content)
                 self._clock = observed
@@ -164,6 +172,9 @@ class Journal:
                 raise Rejected("audit_producer_failed") from None
 
     def _write(self, content):
+        if self._spool is not None:
+            self._spool.write(content)
+            return
         offset = 0
         while offset < len(content):
             written = os.write(self._descriptor, content[offset:])
@@ -172,9 +183,18 @@ class Journal:
             offset += written
         os.fsync(self._descriptor)
 
+    def _maintain(self):
+        if self._spool is not None:
+            reclaimed = self._spool.maintain()
+            with self.lock:
+                if type(reclaimed) is not int or not 0 <= reclaimed <= self._reserved:
+                    raise Rejected("audit_retention_accounting")
+                self._reserved -= reclaimed
+
     def _run(self):
         try:
             while True:
+                self._maintain()
                 try:
                     content = self._queue.get(timeout=0.05)
                 except queue.Empty:
@@ -203,11 +223,16 @@ class Journal:
     def _finish(self):
         with self.lock:
             descriptor, self._descriptor = self._descriptor, None
-        if descriptor is None:
+            spool, self._spool = self._spool, None
+            clean = not self._failure and self._accepted == self._durable
+        if descriptor is None and spool is None:
             return
         try:
-            os.close(descriptor)
-        except OSError:
+            if spool is not None:
+                spool.close(clean=clean)
+            else:
+                os.close(descriptor)
+        except Exception:
             with self.lock:
                 self._failure = self._failure or "close_failed"
         finally:
@@ -249,4 +274,5 @@ class Journal:
                 "pending": self._pending,
                 "unconfirmed": self._accepted - self._durable - self._pending,
                 "durable_bytes": self._durable_bytes,
+                "reserved_bytes": self._reserved,
             }

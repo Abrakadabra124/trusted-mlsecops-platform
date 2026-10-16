@@ -35,6 +35,11 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Private audit and retained storage lifecycle contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit,mlsecops.audit_retention -m unittest scripts.serving_audit_qualification scripts.audit_retention_qualification
+          uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/serving_audit.py' --fail-under=95
+          uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/audit_retention.py' --fail-under=90
       - name: Holdout claim diagnostics and redaction contracts
         run: |
           uv run --locked coverage run --data-file=.coverage-holdout-diagnostics --source=mlsecops.holdout_diagnostics -m unittest scripts.holdout_budget_qualification.BudgetDiagnosticContracts
@@ -128,10 +133,6 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-serving --fail-under=85
           uv run --locked coverage run --data-file=.coverage-client-access --source=mlsecops.serving_access -m unittest scripts.serving_access_qualification scripts.serving_http_qualification
           uv run --locked coverage report --data-file=.coverage-client-access --fail-under=100
-      - name: Private audit journal bounds, durability and lifecycle contracts
-        run: |
-          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit -m unittest scripts.serving_audit_qualification
-          uv run --locked coverage report --data-file=.coverage-serving-audit --fail-under=95
       - name: Disposable actual HTTP and isolated ONNX serving with current SQL trust
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable --worker-image trusted-mlsecops:dev
       - name: Candidate qualification permission and actual HTTP matrix contracts

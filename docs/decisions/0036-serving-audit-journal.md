@@ -2,6 +2,8 @@
 
 Дата: 2026-10-15. Статус: core implementation, HTTP integration pending. Scope: T16, не полный M13/M23. [RB-55/PB-29](../operations/serving-audit-troubleshooting.md), [evidence](../evidence/serving-audit-2026-10-15.md).
 
+Дополнение 2026-10-16: [ADR 0037](0037-audit-retention.md) развивает отдельный opt-in retained mode. Описанный здесь single-file mode сохраняет прежние bounds и отсутствие автоматического удаления; это история первого core increment, не утверждение о закрытии T16.
+
 ## Вопросы оператора и границы
 
 Нужно различать: событие принято в очередь или подтверждено записью; закрыт writer или ещё выполняет I/O; был ли потерян audit; к какому проверенному release относится запрос. Этот increment реализует storage/lifecycle первых трёх вопросов. Четвёртый требует последующей привязки к настоящему Engine и ASGI (Asynchronous Server Gateway Interface), не только проверки формы hash.

@@ -2,6 +2,8 @@
 
 Ответственный: platform operator; disclosure/retention решает security/data owner. Scope: [ADR 0036](../decisions/0036-serving-audit-journal.md). Компонент ещё не включён в serving HTTP; [evidence](../evidence/serving-audit-2026-10-15.md) не является полной M13-приёмкой.
 
+Этот runbook относится к legacy single-file Journal без параметра retention. Отдельный opt-in retained mode и границы его проверки описаны в [RB-56/PB-30](audit-retention-troubleshooting.md); его нельзя автоматически включать для прежнего файла.
+
 ## RB-55: диагностика без изменения рабочего runtime
 
 1. Зафиксировать revision, UTC и bounded status: healthy/closed/failure/accepted/durable/pending/unconfirmed/durable_bytes. Не публиковать файл, path, request/principal IDs, release refs или исходное исключение. Наличие завершённой JSON-строки не доказывает успешный fsync.

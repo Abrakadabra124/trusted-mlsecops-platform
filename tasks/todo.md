@@ -111,6 +111,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 
 ## T16
 - [ ] Privacy, quotas и audit. Зависимость: T15. Gate: M13.
+- [Retention / ADR 0037](../docs/decisions/0037-audit-retention.md): opt-in bounded Linux spool, общий payload budget и clean restart; [qualification](../docs/evidence/audit-retention-2026-10-16.md) ещё не завершена. Crash/reboot reconciliation, HTTP correlation и canaries не объявляются готовыми.
 - [Audit core / ADR 0036](../docs/decisions/0036-serving-audit-journal.md) добавляет bounded private spool и failure ownership, не HTTP integration. Следом нужны retention/rotation, ASGI correlation и all-output canaries; T16 остаётся открыт.
 - Частичный increment 2026-10-15: [ADR 0035](../docs/decisions/0035-serving-client-quotas.md), bounded local client identity/rate/in-flight и [RB-54/PB-28](../docs/operations/serving-client-troubleshooting.md). [Native 687a7c7](../docs/evidence/serving-clients-2026-10-15.md): 67 actual-candidate cases pass, quota/refill/accounting и trust recovery подтверждены после исправления диагностического polling. Audit/retention/cardinality и полный M13 остаются открытыми.
 - Результат: auth, per-client throttling, redaction, bounded-cardinality telemetry и trace-to-release correlation. Public evidence не содержит приватных identifiers/URLs или угадываемых hashes чувствительных значений; masking не объявляется differential privacy.
