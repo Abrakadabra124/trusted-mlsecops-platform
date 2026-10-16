@@ -10,6 +10,8 @@
 
 При реализации unit fixtures возвращали старые dictionaries без model/context. После перехода HTTP на typed result пять harness cases перестали получать 200. Исправлены fixtures без ослабления production boundary. Это тестовый integration defect, не production incident. После исправления 168 adjacent tests pass.
 
+Первый Linux CI `7151864` нашёл отдельную гонку нового test loop: после rejected recheck worker ещё удалялся в background, а следующая iteration уже вызывала activate и получала `serving_cleanup_pending`. Исправлен test lifecycle: перед следующей activation вызывается `engine.drain()` и проверяется отсутствие cleanup/retiring. Production refusal не менялся. Controlled delay 0.05 s в Worker.close воспроизвёл старый отказ; после исправления 20 повторений проходят. Не лечить такой отказ sleep/retry или отключением ownership fence в runtime.
+
 ## PB-31: диагностика
 
 Из корня проекта, сначала read-only:

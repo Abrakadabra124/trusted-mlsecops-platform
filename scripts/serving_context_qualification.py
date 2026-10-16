@@ -106,6 +106,9 @@ class ContextEngineContracts(unittest.TestCase):
                 operation()
             self.assertIsNone(self.engine.audit_context)
             self.assertTrue(self.engine.generation.is_set())
+            self.engine.drain()
+            self.assertIsNone(self.engine.cleanup)
+            self.assertIsNone(self.engine.retiring)
 
     def test_completed_snapshot_stays_bound_to_old_generation_not_new_activation(self):
         self.engine.activate()

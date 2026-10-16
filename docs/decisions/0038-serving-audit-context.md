@@ -34,6 +34,7 @@ Frozen защищает от обычного присваивания и раз
 - `candidate_serving_native.context_matrix` добавляет пять actual-candidate проверок: distinct scope, ready/predict generation binding, отсутствие private refs и прежний public shape. До нового CI наличие кода не считается native evidence.
 - Scoped same-model design и implementation review завершены без замечаний; внешняя модель по решению владельца не использовалась. Backend retention не изменён.
 - Диагностика: [RB-57/PB-31](../operations/serving-context-troubleshooting.md).
+- Первый CI `7151864` выявил race test loop с async retirement; test теперь вызывает drain и проверяет завершение cleanup перед следующей activation. [Evidence](../evidence/serving-context-2026-10-16.md) сохраняет failed attempt. Production code не ослаблен; native исправленного commit ожидается.
 
 ## Первичные источники
 
