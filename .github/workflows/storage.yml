@@ -39,7 +39,8 @@ jobs:
         run: |
           uv run --locked coverage run --data-file=.coverage-audit-branch-checker --source=scripts.audit_branch_coverage -m unittest scripts.audit_branch_coverage_qualification
           uv run --locked coverage report --data-file=.coverage-audit-branch-checker --fail-under=100
-          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit,mlsecops.audit_retention -m unittest scripts.serving_audit_qualification scripts.audit_retention_qualification
+          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit,mlsecops.audit_retention,mlsecops.audit_event -m unittest scripts.serving_audit_qualification scripts.audit_retention_qualification scripts.audit_admission_qualification scripts.audit_event_qualification
+          uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/audit_event.py' --fail-under=100
           uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/serving_audit.py' --fail-under=95
           uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/audit_retention.py' --fail-under=90
           uv run --locked python -m scripts.audit_branch_coverage .coverage-serving-audit

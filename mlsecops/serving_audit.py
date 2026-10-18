@@ -5,11 +5,12 @@ import threading
 import time
 from pathlib import Path
 
-from mlsecops import audit_retention
+from mlsecops import audit_event, audit_retention
 from mlsecops.contracts import Rejected, canonical
 
 MAX_RECORD = 2048
 MAX_BYTES = 16 * 1024 * 1024
+REQUEST_EVENTS = 4
 FIELDS = {"request_id", "principal_id", "route", "stage", "status", "release"}
 REFERENCES = {"selection_sha256", "bundle_sha256", "model_sha256"}
 REJECTIONS = {
@@ -27,6 +28,8 @@ def hexadecimal(value, length):
 
 
 def checked(value):
+    if type(value) is dict and "schema_version" in value:
+        return audit_event.checked(value)
     if type(value) is not dict or len(value) != len(FIELDS) or value.keys() != FIELDS:
         raise Rejected("audit_event_invalid")
     result = {key: value[key] for key in FIELDS}
@@ -85,6 +88,8 @@ class Journal:
         self._descriptor = None
         self._spool = None
         self._base_sequence = 0
+        self._reservations = {}
+        self._held = 0
         if retention is not None:
             self._spool = audit_retention.Spool(path, retention, max_bytes)
             self._reserved = self._spool.retained_bytes
@@ -128,10 +133,57 @@ class Journal:
                 self._finish()
             raise Rejected("audit_thread_start") from None
 
-    def emit(self, value):
+    def _available(self):
+        if (
+            self._closing
+            or self._closed
+            or self._failure
+            or self.thread is None
+            or not self.thread.is_alive()
+        ):
+            raise Rejected("audit_unavailable")
+
+    def reserve(self):
         with self.lock:
-            if self._closing or self._closed or self._failure or self.thread is None:
-                raise Rejected("audit_unavailable")
+            self._available()
+            if (
+                len(self._reservations) >= self._capacity // REQUEST_EVENTS
+                or self._pending + self._held + REQUEST_EVENTS > self._capacity
+                or self._reserved + (self._held + REQUEST_EVENTS) * MAX_RECORD > self._max_bytes
+            ):
+                raise Rejected("audit_admission_full")
+            ticket = object()
+            self._reservations[ticket] = []
+            self._held += REQUEST_EVENTS
+            return ticket
+
+    def release(self, ticket):
+        with self.lock:
+            if type(ticket) is object and ticket in self._reservations:
+                sequences = self._reservations.pop(ticket)
+                self._held -= REQUEST_EVENTS - len(sequences)
+
+    def confirmed(self, ticket, sequence):
+        with self.lock:
+            self._available()
+            if (
+                type(ticket) is not object
+                or ticket not in self._reservations
+                or type(sequence) is not int
+                or sequence not in self._reservations[ticket]
+            ):
+                raise Rejected("audit_reservation_invalid")
+            return sequence <= self._base_sequence + self._durable
+
+    def emit(self, value, *, ticket=None):
+        with self.lock:
+            self._available()
+            if ticket is not None and (
+                type(ticket) is not object
+                or ticket not in self._reservations
+                or len(self._reservations[ticket]) >= REQUEST_EVENTS
+            ):
+                raise Rejected("audit_reservation_invalid")
             try:
                 entry = checked(value)
                 observed = time.time_ns()
@@ -153,6 +205,12 @@ class Journal:
                 )
                 if len(content) > MAX_RECORD:
                     raise Rejected("audit_record_too_large")
+                held = self._held - (ticket is not None)
+                if self._reservations and (
+                    self._pending + held >= self._capacity
+                    or self._reserved + held * MAX_RECORD + len(content) > self._max_bytes
+                ):
+                    raise Rejected("audit_admission_full")
                 if self._pending >= self._capacity:
                     raise Rejected("audit_queue_full")
                 if self._reserved + len(content) > self._max_bytes:
@@ -162,8 +220,13 @@ class Journal:
                 self._pending += 1
                 self._reserved += len(content)
                 self._clock = observed
+                if ticket is not None:
+                    self._reservations[ticket].append(sequence)
+                    self._held -= 1
                 return sequence
             except Rejected as error:
+                if str(error) == "audit_admission_full":
+                    raise
                 code = str(error) if str(error) in REJECTIONS else "audit_producer_failed"
                 self._failure = code
                 raise Rejected(code) from None
@@ -246,6 +309,8 @@ class Journal:
             raise Rejected("audit_close_timeout_invalid")
         with self.lock:
             self._closing = True
+            if self._reservations:
+                self._failure = self._failure or "reservations_open"
             thread = self.thread
         if thread is not None and thread.ident is not None:
             thread.join(timeout)
@@ -275,4 +340,7 @@ class Journal:
                 "unconfirmed": self._accepted - self._durable - self._pending,
                 "durable_bytes": self._durable_bytes,
                 "reserved_bytes": self._reserved,
+                "held_bytes": self._held * MAX_RECORD,
+                "held_slots": self._held,
+                "reservations": len(self._reservations),
             }
