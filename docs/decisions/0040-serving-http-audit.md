@@ -1,6 +1,6 @@
 # ADR 0040: audit admission и фактический HTTP lifecycle
 
-Дата: 2026-10-18. Статус: implemented, native qualification pending. Scope: неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0039](0039-audit-admission.md); не принимает полный M13/R1.
+Дата: 2026-10-18; native verification 2026-10-19 Europe/Moscow. Статус: implemented, native HTTP qualification pass на `281e902`. Scope: неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0039](0039-audit-admission.md); не принимает полный M13/R1.
 
 ## Требование и решение
 

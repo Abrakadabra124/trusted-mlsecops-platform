@@ -1,6 +1,6 @@
 # RB-59 / PB-33: HTTP audit admission, send lifecycle и cleanup
 
-Scope: [ADR 0040](../decisions/0040-serving-http-audit.md), disposable reference serving. Ответственный: владелец serving/audit controller и оператор стенда. Это инструкция по диагностике реализованного компонента, не отчёт о production-инциденте. [Evidence](../evidence/serving-http-audit-2026-10-18.md) отделяет выполненные проверки от pending native acceptance.
+Scope: [ADR 0040](../decisions/0040-serving-http-audit.md), disposable reference serving. Ответственный: владелец serving/audit controller и оператор стенда. Это инструкция по диагностике реализованного компонента, не отчёт о production-инциденте. [Evidence](../evidence/serving-http-audit-2026-10-18.md) фиксирует native HTTP qualification `281e902`: 48 tests / 0 skips, middleware 100%, 74 candidate cases. Full M13 acceptance остаётся открытой.
 
 ## RB-59: сначала read-only диагностика
 

@@ -2,7 +2,7 @@
 
 ## R1 HTTP audit lifecycle - 2026-10-18
 
-Неделя 9, T16: mandatory journal admission, durable own intent до 200, actual ASGI start/body/abort, shared HTTP/executor quota lifetime и deferred owned retained lifecycle. [ADR 0040](docs/decisions/0040-serving-http-audit.md), [RB-59/PB-33](docs/operations/serving-http-audit-troubleshooting.md), [local evidence](docs/evidence/serving-http-audit-2026-10-18.md). Required config field `audit_directory`; injected journal остаётся caller-owned. Local 48 HTTP methods / 2 platform skips, новый module 100%. Actual candidate audit pair counters добавлены, native run pending. Windows concurrent real-fsync qualification inconclusive; full M13/R1 не принят.
+Неделя 9, T16: mandatory journal admission, durable own intent до 200, actual ASGI start/body/abort, shared HTTP/executor quota lifetime и deferred owned retained lifecycle. [ADR 0040](docs/decisions/0040-serving-http-audit.md), [RB-59/PB-33](docs/operations/serving-http-audit-troubleshooting.md), [evidence](docs/evidence/serving-http-audit-2026-10-18.md). Required config field `audit_directory`; injected journal остаётся caller-owned. **Native 281e902, verified 2026-10-19 Europe/Moscow: 48 HTTP / 77 audit tests без skips, middleware 100%, 74 candidate cases и audit pair 8/8 pass.** CI 6 success / 4 failure, M20 723/M21 122 pass. Windows concurrent real-fsync qualification inconclusive; full M13/R1 не принят.
 
 ## R1 audit admission component - 2026-10-18
 
