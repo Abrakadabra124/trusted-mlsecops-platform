@@ -16,10 +16,15 @@ from scripts.serving_audit_qualification import event
 @contextmanager
 def journal_fixture(**options):
     with tempfile.TemporaryDirectory() as temporary:
-        journal = serving_audit.Journal(Path(temporary) / "audit.jsonl", **options)
+        path = (
+            Path(temporary)
+            if options.get("retention") is not None
+            else Path(temporary) / "audit.jsonl"
+        )
+        journal = serving_audit.Journal(path, **options)
         journal.start()
         try:
-            yield journal, Path(temporary) / "audit.jsonl"
+            yield journal, path
         finally:
             with suppress(Rejected):
                 journal.close()

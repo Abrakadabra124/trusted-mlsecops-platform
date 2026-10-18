@@ -31,7 +31,7 @@
 | 413 | body превышает 64 KiB, в том числе chunked без Content-Length |
 | 422 | schema/число/версия/JSON/encoding/Content-Length/body deadline не соответствует contract |
 | 429 | исчерпана client quota, заняты admission slots или Engine lock |
-| 503 | нет проверенной модели, trust failure, worker failure или неопределённый cleanup |
+| 503 | нет проверенной модели, trust failure, worker failure, audit unavailable или неопределённый cleanup |
 
 Error response содержит только schema version, server request ID и bounded `error.code`. `/livez` возвращает только process liveness без авторизации, не digest или readiness. `/readyz` требует bearer и проверяет действующую worker session; docs/OpenAPI endpoints отключены. Ответы prediction/readiness/error используют `Cache-Control: no-store`.
 
@@ -54,6 +54,7 @@ Error response содержит только schema version, server request ID �
   "minimum_sequence": 1,
   "trust_root": "<externally pinned authority public key>",
   "minimum_trust_version": 1,
+  "audit_directory": "<absolute owned private Linux directory for retained audit>",
   "token_file": "<absolute private file containing 64 lowercase hex characters>"
 }
 ```
@@ -91,7 +92,15 @@ CLI всегда слушает `127.0.0.1`, не предоставляет `--
 
 Quotas process-local: Engine reload не сбрасывает их, restart сбрасывает. Это не multi-replica rate limit или гарантия доступности других клиентов при общей неисправности runtime. [ADR 0035](decisions/0035-serving-client-quotas.md), [evidence](evidence/serving-clients-2026-10-15.md). Full M13 privacy/audit остаётся открыт.
 
-Startup failure оставляет API живым, но `/readyz` и predictions возвращают 503. Автоматического trust bypass/reload на HTTP endpoint нет. Для нового разрешённого release подготовить проверенную конфигурацию и контролируемо перезапустить сервис; не редактировать SQL head вручную. [PB-25/RB-48/RB-49](operations/serving-troubleshooting.md) описывает диагностику и обязательную проверку конечного состояния.
+Engine cold-start rejection оставляет API живым, но `/readyz` и predictions возвращают 503. Ошибка конфигурации или открытия owned audit journal не даёт серверу стартовать; liveness в этом случае не обещается. Автоматического trust bypass/reload на HTTP endpoint нет. Для нового разрешённого release подготовить проверенную конфигурацию и контролируемо перезапустить сервис; не редактировать SQL head вручную. [PB-25/RB-48/RB-49](operations/serving-troubleshooting.md) описывает диагностику и обязательную проверку конечного состояния.
+
+## Обязательный protected-request audit
+
+`audit_directory` - absolute path к owned private Linux retained storage. Writer открывается только при запуске lifespan и закрывается после Engine cleanup; конфигурация сама не создаёт файлов. Для программного API допустим отдельный уже запущенный injected `Journal`, который закрывает его владелец, не приложение. Отсутствие journal в `create_app` даёт protected 503 до body/executor, а не silent fallback. Windows single-file tests не квалифицируют production retention.
+
+Перед отправкой 200 записывается собственный intent с проверенным private context; приложение ждёт его fsync в пределах прежнего budget и повторно проверяет deadline/generation. Actual start/completed фиксируются после ASGI send, cancel не превращается в completed. Успешный send не доказывает получение клиентом. После network send отказ sink даёт evidence gap и запрет следующих admissions, не возможность отозвать уже отправленный ответ.
+
+Уже выданные global/client slots сохраняются до завершения BOTH HTTP и executor, в том числе при зависшей отправке audit-denied 503. `/livez`, anonymous auth и отказы до global admission не создают audit entries. При восьми admitted audit waiters проверяется headroom health с Uvicorn limit 16; произвольный connection flood этим не исключается. [ADR 0040](decisions/0040-serving-http-audit.md), [RB-59/PB-33](operations/serving-http-audit-troubleshooting.md), [evidence](evidence/serving-http-audit-2026-10-18.md). All-output canaries, export/cardinality и полный M13 остаются незавершёнными.
 
 ## Воспроизведение
 

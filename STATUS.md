@@ -1,5 +1,7 @@
 # Статус и границы доказательств
 
+T16 HTTP increment 2026-10-18: [ADR 0040](docs/decisions/0040-serving-http-audit.md) подключает обязательный audit к protected HTTP, durable intent до 200, actual send/cancellation и совместное владение HTTP/executor. Local: 48 HTTP methods / 2 Linux skips, middleware 100%; 77 journal methods / 24 platform skips. [Evidence](docs/evidence/serving-http-audit-2026-10-18.md), [RB-59/PB-33](docs/operations/serving-http-audit-troubleshooting.md). Native CI нового increment pending; Windows concurrent real-fsync headroom inconclusive. Следом all-output canaries/cardinality и полная M13 correlation. T16/R1 остаются открытыми; нижние checkpoints относятся к своим commits.
+
 T16 update 2026-10-18: [ADR 0039](docs/decisions/0039-audit-admission.md) реализует bounded audit reservations, owned durability ack и strict event schema 2. **Native CI 01ec902: 77 audit tests / 0 skips, schema 100%, journal 94/98 branches, retention 102/102; 72 serving regression cases pass.** Все 10 workflows terminal: 6 success / 4 failure, M20 723/M21 122 pass. [Evidence и полная матрица](docs/evidence/audit-admission-2026-10-18.md), [RB-58/PB-32](docs/operations/audit-admission-troubleshooting.md). HTTP producer/admission пока не подключён; это компонент, не полный M13/R1. Image/ML failures и прежний M07 reliability debt сохранены.
 
 Дата текущей реализации: **2026-10-16**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).

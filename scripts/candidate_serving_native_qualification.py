@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from mlsecops import serving_context
 from mlsecops.contracts import Rejected, read_json, write_json
@@ -15,6 +15,23 @@ from scripts.serving_native import site
 
 
 class CandidateServingHarnessContracts(unittest.TestCase):
+    def test_audit_idle_requires_healthy_confirmed_and_drained_state(self):
+        idle = {"healthy": True, "unconfirmed": 0, "pending": 0, "reservations": 0}
+        request = Mock()
+        for changed in ({"healthy": False}, {"unconfirmed": 1}):
+            request.audit_status.return_value = {**idle, **changed}
+            with self.assertRaisesRegex(Rejected, "candidate_audit_unavailable"):
+                native.audit_idle(request)
+        for field in ("pending", "reservations"):
+            request.audit_status.return_value = {**idle, field: 1}
+            with patch.object(native.time, "monotonic", side_effect=[0, 5]):
+                with self.assertRaisesRegex(Rejected, "candidate_audit_pending"):
+                    native.audit_idle(request)
+        request.audit_status.side_effect = [{**idle, "pending": 1}, idle]
+        with patch.object(native.time, "sleep") as sleep:
+            self.assertEqual(native.audit_idle(request), idle)
+        sleep.assert_called_once_with(0.01)
+
     def owned_workspace(self, state):
         write_json(
             state / "workspace.json",
@@ -56,10 +73,13 @@ class CandidateServingHarnessContracts(unittest.TestCase):
                 "instances": [dict.fromkeys(native.FEATURES, 0.5)],
             }
             native.http_matrix(fixture.engine, request, body, confirmed)
-            native.context_matrix(
+            audit = native.context_matrix(
                 fixture.engine, request, body, confirmed, fixture.loaded.audit_context
             )
-        self.assertEqual(len(cases), 19)
+            self.assertEqual(audit["accepted_delta"], 8)
+            self.assertEqual(audit["durable_delta"], 8)
+            self.assertFalse(audit["release_ready"])
+        self.assertEqual(len(cases), 21)
         self.assertEqual(len(cases), len(set(cases)))
         self.assertIsNone(fixture.engine.worker)
 

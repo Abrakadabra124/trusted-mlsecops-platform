@@ -1,5 +1,7 @@
 # RB-58 / PB-32: audit admission, pending durability и versioned events
 
+Этот runbook описывает backend на исходном component increment `01ec902`. Подключённый позднее HTTP lifecycle и его текущие ограничения описаны отдельно в [RB-59/PB-33](serving-http-audit-troubleshooting.md).
+
 Scope: [ADR 0039](../decisions/0039-audit-admission.md), journal component. HTTP producer пока не подключён. Не интерпретировать этот runbook как подтверждение живого service audit или полной M13 privacy acceptance.
 
 ## RB-58: диагностика

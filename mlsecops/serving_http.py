@@ -14,10 +14,13 @@ from fastapi.responses import JSONResponse
 
 from mlsecops import (
     advisory,
+    audit_retention,
     release_reader,
     serving,
     serving_access,
+    serving_audit,
     serving_context,
+    serving_http_audit,
     trust,
     trust_authority,
 )
@@ -66,24 +69,43 @@ async def read_body(request):
     return features
 
 
-def create_app(engine, token=None, *, clients=None):
+def create_app(engine, token=None, *, clients=None, audit=None, audit_path=None):
     if clients is None:
         clients = serving_access.Access.single(token)
     elif token is not None or not isinstance(clients, serving_access.Access):
         raise Rejected("http_clients_conflict")
+    if audit is not None and type(audit) is not serving_audit.Journal:
+        raise Rejected("http_audit_configuration")
+    if audit_path is not None and (
+        audit is not None
+        or not isinstance(audit_path, (str, Path))
+        or not Path(audit_path).is_absolute()
+    ):
+        raise Rejected("http_audit_configuration")
 
     @asynccontextmanager
     async def lifespan(app):
+        managed = None
         try:
+            if audit_path is not None:
+                managed = serving_audit.Journal(audit_path, retention=audit_retention.Policy())
+                managed.start()
+                app.state.audit = managed
             try:
                 await asyncio.to_thread(engine.activate)
             except Rejected:
                 pass
             yield
         finally:
-            await asyncio.to_thread(engine.close)
+            try:
+                await asyncio.to_thread(engine.close)
+            finally:
+                if managed is not None:
+                    await asyncio.to_thread(managed.close)
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(serving_http_audit.Middleware)
+    app.state.audit = audit
     app.state.slots = asyncio.Semaphore(8)
     app.state.pending = set()
 
@@ -111,12 +133,13 @@ def create_app(engine, token=None, *, clients=None):
                 remaining(budget)
                 return task.result()
 
-    async def execute(operation, deferred, budget, ticket, *arguments):
+    async def execute(operation, deferred, budget, delivery, *arguments):
         remaining(budget)
         task = asyncio.create_task(
             asyncio.to_thread(operation, *arguments, generation=budget.generation)
         )
         app.state.pending.add(task)
+        delivery.worker_pending = True
         deferred[0] = True
 
         def finished(future):
@@ -126,8 +149,8 @@ def create_app(engine, token=None, *, clients=None):
             if budget.generation.is_set():
                 with suppress(Exception):
                     engine.expire(budget.generation)
-            app.state.slots.release()
-            ticket.release()
+            delivery.worker_pending = False
+            delivery.release_resources()
 
         task.add_done_callback(finished)
         return await await_result(task, budget)
@@ -138,6 +161,23 @@ def create_app(engine, token=None, *, clients=None):
             status_code=status,
             headers={"Cache-Control": "no-store"},
         )
+
+    def admit_audit(request, request_id, principal, route, budget, code, ticket):
+        def release():
+            app.state.slots.release()
+            ticket.release()
+
+        request.scope[serving_http_audit.SCOPE_KEY] = serving_http_audit.Delivery(
+            app.state.audit,
+            request_id,
+            principal,
+            route,
+            lambda: remaining(budget),
+            lambda: error(503, code, request_id),
+            release,
+        )
+        request.scope[serving_http_audit.SCOPE_KEY].start()
+        return request.scope[serving_http_audit.SCOPE_KEY]
 
     class VerifiedResponse(JSONResponse):
         def __init__(self, result, budget, code, request_id):
@@ -163,6 +203,7 @@ def create_app(engine, token=None, *, clients=None):
                 self.audit_context = None
                 await error(503, self.code, self.request_id)(scope, receive, send)
                 return
+            scope[serving_http_audit.SCOPE_KEY].context = self.audit_context
             await super().__call__(scope, receive, send)
 
     @app.get("/livez")
@@ -193,14 +234,17 @@ def create_app(engine, token=None, *, clients=None):
                 return error(503, "not_ready", request_id)
             await app.state.slots.acquire()
             acquired = True
-            result = await execute(engine.check_result, deferred, budget, ticket)
+            delivery = admit_audit(
+                request, request_id, principal, "ready", budget, "not_ready", ticket
+            )
+            result = await execute(engine.check_result, deferred, budget, delivery)
             if result.payload.get("ready") is not True:
                 raise Rejected("http_not_ready")
             return VerifiedResponse(result, budget, "not_ready", request_id)
         except Exception:
             return error(503, "not_ready", request_id)
         finally:
-            if not deferred[0]:
+            if not deferred[0] and serving_http_audit.SCOPE_KEY not in request.scope:
                 ticket.release()
                 if acquired:
                     app.state.slots.release()
@@ -229,6 +273,9 @@ def create_app(engine, token=None, *, clients=None):
                 return error(429, "overloaded", request_id)
             await app.state.slots.acquire()
             acquired = True
+            delivery = admit_audit(
+                request, request_id, principal, "predict", budget, "model_unavailable", ticket
+            )
             try:
                 remaining(budget)
                 body_task = asyncio.create_task(read_body(request))
@@ -248,7 +295,7 @@ def create_app(engine, token=None, *, clients=None):
             except Rejected:
                 remaining(budget)
                 return error(422, "invalid_request", request_id)
-            result = await execute(engine.predict_result, deferred, budget, ticket, features)
+            result = await execute(engine.predict_result, deferred, budget, delivery, features)
             return VerifiedResponse(result, budget, "model_unavailable", request_id)
         except Rejected as failure:
             if str(failure) == "serving_busy":
@@ -257,7 +304,7 @@ def create_app(engine, token=None, *, clients=None):
         except Exception:
             return error(503, "model_unavailable", request_id)
         finally:
-            if not deferred[0]:
+            if not deferred[0] and serving_http_audit.SCOPE_KEY not in request.scope:
                 ticket.release()
                 if acquired:
                     app.state.slots.release()
@@ -280,9 +327,15 @@ def configured(path):
             "minimum_sequence",
             "trust_root",
             "minimum_trust_version",
+            "audit_directory",
             credential_field,
         ),
     )
+    if (
+        not isinstance(config["audit_directory"], str)
+        or not Path(config["audit_directory"]).is_absolute()
+    ):
+        raise Rejected("http_audit_configuration")
     secret = Path(config[credential_field])
     if not secret.is_absolute() or os.name == "posix" and secret.stat().st_mode & 0o077:
         raise Rejected("http_token_permissions")
@@ -313,7 +366,7 @@ def configured(path):
         },
         trust_lease=lease,
     )
-    return create_app(serving.Engine(reader), clients=clients)
+    return create_app(serving.Engine(reader), clients=clients, audit_path=config["audit_directory"])
 
 
 def main():

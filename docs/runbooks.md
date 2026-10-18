@@ -1,8 +1,10 @@
 # Эксплуатационные процедуры
 
-- [Audit admission и durability, RB-58/PB-32](operations/audit-admission-troubleshooting.md). Bounded reservations, owned ack, pending writer и mixed event versions; HTTP integration ещё не выполнена.
+- [HTTP audit lifecycle, RB-59/PB-33](operations/serving-http-audit-troubleshooting.md). Fail-closed admission, owned intent, actual send/cancel, pending quota ownership и safe recovery; [evidence](evidence/serving-http-audit-2026-10-18.md) сохраняет Windows fsync limitation и pending native validation.
 
-- [Private context handoff, RB-57/PB-31](operations/serving-context-troubleshooting.md). Release/qualification separation, generation binding и 503 diagnostics без раскрытия private refs; HTTP event sink ещё не подключён.
+- [Audit admission и durability, RB-58/PB-32](operations/audit-admission-troubleshooting.md). Bounded reservations, owned ack, pending writer и mixed event versions; HTTP integration рассматривается отдельно в RB-59.
+
+- [Private context handoff, RB-57/PB-31](operations/serving-context-troubleshooting.md). Release/qualification separation, generation binding и 503 diagnostics без раскрытия private refs; HTTP event sink рассматривается отдельно в RB-59.
 
 - [Retained audit storage, RB-56/PB-30](operations/audit-retention-troubleshooting.md). Rotation/expiry, same-boot restart, guard ownership и неизвестное состояние после interruption. [Evidence](evidence/audit-retention-2026-10-16.md) отделяет локальные contracts от native qualification.
 

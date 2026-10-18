@@ -1,14 +1,25 @@
 import http.client
+import os
 import secrets
 import socket
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path
 
 import uvicorn
 
-from mlsecops import release_bundle, serving, serving_access, serving_http, signing
+from mlsecops import (
+    audit_retention,
+    release_bundle,
+    serving,
+    serving_access,
+    serving_audit,
+    serving_http,
+    signing,
+)
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.datasets import FEATURES
 from mlsecops.inventory import command
@@ -69,14 +80,34 @@ def bind_real_runtime(fixture, image):
 
 
 @contextmanager
-def site(engine, *, clients=None):
+def site(engine, *, clients=None, audit=None):
+    if audit is not None:
+        with _site(engine, clients=clients, audit=audit) as request:
+            yield request
+        return
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary)
+        journal = serving_audit.Journal(
+            path if os.name == "posix" else path / "audit.jsonl",
+            retention=audit_retention.Policy() if os.name == "posix" else None,
+        )
+        journal.start()
+        try:
+            with _site(engine, clients=clients, audit=journal) as request:
+                yield request
+        finally:
+            journal.close()
+
+
+@contextmanager
+def _site(engine, *, clients, audit):
     if clients is None:
         token = secrets.token_hex(32)
         access = serving_access.Access.single(token)
     else:
         access = serving_access.Access(clients)
         token = clients["clients"][0]["token"]
-    app = serving_http.create_app(engine, clients=access)
+    app = serving_http.create_app(engine, clients=access, audit=audit)
     server = uvicorn.Server(
         uvicorn.Config(
             app,
@@ -86,6 +117,7 @@ def site(engine, *, clients=None):
             server_header=False,
             log_level="warning",
             timeout_keep_alive=1,
+            limit_concurrency=16,
         )
     )
     with socket.socket() as listener:
@@ -130,6 +162,7 @@ def site(engine, *, clients=None):
                 return [snapshot[principal] for principal in principals] + [sum(snapshot.values())]
 
             request.admissions = admissions
+            request.audit_status = audit.status
             yield request
         finally:
             server.should_exit = True
@@ -191,6 +224,7 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
     }
     transport = services.enter_context(site(engine, clients=clients))
     request = partial(transport, credential=clients["clients"][2]["token"])
+    request.audit_status = transport.audit_status
     features, expected = golden
     body = {
         "schema_version": 1,

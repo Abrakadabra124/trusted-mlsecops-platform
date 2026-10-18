@@ -2,6 +2,7 @@ import threading
 import time
 import unittest
 from contextlib import ExitStack
+from functools import partial
 from unittest.mock import Mock, patch
 
 from mlsecops import release_authorization, release_bundle, serving, serving_access, serving_context
@@ -40,6 +41,12 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         engine.check.return_value = {"ready": True}
         engine.loaded.model_sha256, engine.loaded.subject_sha256 = "a" * 64, "b" * 64
         cases = []
+        wrapped = []
+
+        def credential_wrapper(transport, **keywords):
+            request = partial(transport, **keywords)
+            wrapped.append((request, transport))
+            return request
 
         def predict(features, **keywords):
             return {
@@ -65,12 +72,16 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         engine.predict.side_effect = predict
         with (
             patch.object(serving_native.serving, "Engine", return_value=engine),
+            patch.object(serving_native, "partial", side_effect=credential_wrapper),
             ExitStack() as services,
         ):
             with self.assertRaisesRegex(Rejected, "stop_before_container_probe"):
                 serving_native.check_http(
                     services, Mock(), ([[0.5] * 6], [0.75]), confirmed, rejected
                 )
+            request, transport = wrapped[0]
+            self.assertIs(request.audit_status, transport.audit_status)
+            self.assertTrue(request.audit_status()["healthy"])
         self.assertIn("client-admission-accounting", cases)
         self.assertIn("foreign-client-identity-401", cases)
 

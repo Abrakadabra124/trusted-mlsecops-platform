@@ -41,7 +41,21 @@ from scripts.serving_outage_native import exercise as exercise_outage
 from scripts.serving_pause_native import exercise as exercise_pause
 
 
+def audit_idle(request):
+    deadline = time.monotonic() + 5
+    while True:
+        state = request.audit_status()
+        if not state["healthy"] or state["unconfirmed"]:
+            raise Rejected("candidate_audit_unavailable")
+        if state["pending"] == state["reservations"] == 0:
+            return state
+        if time.monotonic() >= deadline:
+            raise Rejected("candidate_audit_pending")
+        time.sleep(0.01)
+
+
 def context_matrix(engine, request, body, confirmed, context):
+    before = audit_idle(request)
     confirmed(
         "context-candidate-not-release-selection",
         context.kind == "candidate-qualification"
@@ -86,6 +100,17 @@ def context_matrix(engine, request, body, confirmed, context):
         and set(predicted)
         == {"schema_version", "bundle_sha256", "model_sha256", "request_id", "predictions"},
     )
+    after = audit_idle(request)
+    accepted, durable = after["accepted"] - before["accepted"], after["durable"] - before["durable"]
+    confirmed("audit-http-pair-accepted", accepted == 8)
+    confirmed("audit-http-pair-durable", durable == 8 and after["held_slots"] == 0)
+    return {
+        "scope": "actual-candidate-http-audit-pair-not-full-M13",
+        "status": "pass",
+        "accepted_delta": accepted,
+        "durable_delta": durable,
+        "release_ready": False,
+    }
 
 
 def http_matrix(engine, request, body, confirmed):
@@ -289,9 +314,10 @@ def qualify(root, state, image, *, trust_port=15446):
             outage = {}
             paused = {}
             expiry = {}
+            audit = {}
 
             def exercise(engine, request, body):
-                context_matrix(engine, request, body, confirmed, loaded.audit_context)
+                audit.update(context_matrix(engine, request, body, confirmed, loaded.audit_context))
                 http_matrix(engine, request, body, confirmed)
                 if loaded.expires_at - math.ceil(time.time()) < 100:
                     raise Rejected("candidate_outage_proposal_window_too_short")
@@ -349,6 +375,7 @@ def qualify(root, state, image, *, trust_port=15446):
             runtime["http_trust_outage"] = outage
             runtime["http_paused_query"] = paused
             runtime["http_expiring_query"] = expiry
+            runtime["http_audit"] = audit
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

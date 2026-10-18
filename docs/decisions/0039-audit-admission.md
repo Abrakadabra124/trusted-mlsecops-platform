@@ -1,5 +1,7 @@
 # ADR 0039: audit admission и versioned events перед HTTP producer
 
+Историческая граница этого component: HTTP producer реализуется следующим [ADR 0040](0040-serving-http-audit.md). Формулировки о неподключённом HTTP ниже относятся к исходному admission increment `01ec902`.
+
 Дата: 2026-10-18. Статус: реализованы journal API и event schema; HTTP integration ещё не выполнена. Продолжает [ADR 0036](0036-serving-audit-journal.md), [ADR 0037](0037-audit-retention.md) и [ADR 0038](0038-serving-audit-context.md). Не закрывает M13 или R1.
 
 ## Требование

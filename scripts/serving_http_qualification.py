@@ -8,7 +8,7 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from mlsecops import serving, serving_access, serving_context, serving_http
+from mlsecops import serving, serving_access, serving_audit, serving_context, serving_http
 from mlsecops.contracts import Rejected, canonical, decode
 from mlsecops.datasets import FEATURES
 from mlsecops.signing import encode64
@@ -96,7 +96,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         config = credentials()
         config["clients"][0]["burst"] = 1
         access = serving_access.Access(config, clock=lambda: 1000)
-        self.app = serving_http.create_app(self.engine, clients=access)
+        self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         headers = [(b"authorization", ("Bearer " + "a" * 64).encode())]
         for _ in range(8):
             await self.app.state.slots.acquire()
@@ -114,7 +114,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
     async def test_clock_failure_returns_503_and_trust_fence_precedes_quota(self):
         clock = Mock(return_value=1000)
         access = serving_access.Access(credentials(), clock=clock)
-        self.app = serving_http.create_app(self.engine, clients=access)
+        self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         headers = [(b"authorization", ("Bearer " + "a" * 64).encode())]
         clock.return_value = 999
         for path, method in (("/readyz", "GET"), ("/v1/predict", "POST")):
@@ -125,14 +125,14 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         self.engine.predict.assert_not_called()
         access = serving_access.Access(credentials(), clock=lambda: 1000)
         retained = access.acquire("a" * 32)
-        self.app = serving_http.create_app(self.engine, clients=access)
+        self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         self.engine.response_budget.side_effect = Rejected("expired")
         self.assertEqual((await self.invoke(headers=headers))[0], 503)
         retained.release()
 
     async def test_deadline_retains_client_ticket_after_response_and_until_task_completion(self):
         access = serving_access.Access(credentials(), clock=lambda: 1000)
-        self.app = serving_http.create_app(self.engine, clients=access)
+        self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         entered, release = threading.Event(), threading.Event()
         generation = threading.Event()
         budget = serving.ResponseBudget(generation, time.monotonic() + 0.08)
@@ -167,7 +167,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         config = credentials()
         config["clients"][0]["burst"] = 1
         access = serving_access.Access(config, clock=lambda: 1000)
-        self.app = serving_http.create_app(self.engine, clients=access)
+        self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         first = [
             (b"authorization", ("Bearer " + "a" * 64).encode()),
             (b"content-type", b"application/json"),
@@ -186,7 +186,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancelled_http_keeps_client_ticket_until_executor_completion(self):
         access = serving_access.Access(credentials(), clock=lambda: 1000)
-        self.app = serving_http.create_app(self.engine, clients=access)
+        self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         entered, release = threading.Event(), threading.Event()
         headers = [
             (b"authorization", ("Bearer " + "a" * 64).encode()),
@@ -387,7 +387,12 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.token = "b" * 64
-        self.app = serving_http.create_app(self.engine, self.token)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.journal = serving_audit.Journal(Path(temporary.name) / "audit.jsonl")
+        self.journal.start()
+        self.addCleanup(self.journal.close, timeout=5)
+        self.app = serving_http.create_app(self.engine, self.token, audit=self.journal)
         self.context = self.app.router.lifespan_context(self.app)
         await self.context.__aenter__()
         self.addAsyncCleanup(self.context.__aexit__, None, None, None)
@@ -566,9 +571,27 @@ class ServingConfigurationContracts(unittest.TestCase):
                 "expected_serving_image": "sha256:" + "c" * 64,
                 "minimum_sequence": 2,
                 "minimum_trust_version": 3,
+                "audit_directory": str(directory / "audit"),
                 "token_file": str(secret),
             }
             path = directory / "config.json"
+            without_audit = {
+                key: value for key, value in config.items() if key != "audit_directory"
+            }
+            path.write_bytes(canonical(without_audit))
+            with self.assertRaises(Rejected):
+                serving_http.configured(path)
+            for invalid in (None, False, 0, "", [], {}, "relative-audit"):
+                with self.subTest(audit_directory=invalid):
+                    path.write_bytes(canonical({**config, "audit_directory": invalid}))
+                    with (
+                        patch.object(serving_http.serving, "Engine") as engine,
+                        patch.object(serving_http.serving_audit, "Journal") as journal,
+                    ):
+                        with self.assertRaises(Rejected):
+                            serving_http.configured(path)
+                        engine.assert_not_called()
+                        journal.assert_not_called()
             path.write_bytes(canonical(config))
             with patch.object(serving_http.serving, "Engine") as engine:
                 app = serving_http.configured(path)

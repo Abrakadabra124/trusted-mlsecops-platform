@@ -1,5 +1,9 @@
 # История исследовательского проекта
 
+## R1 HTTP audit lifecycle - 2026-10-18
+
+Неделя 9, T16: mandatory journal admission, durable own intent до 200, actual ASGI start/body/abort, shared HTTP/executor quota lifetime и deferred owned retained lifecycle. [ADR 0040](docs/decisions/0040-serving-http-audit.md), [RB-59/PB-33](docs/operations/serving-http-audit-troubleshooting.md), [local evidence](docs/evidence/serving-http-audit-2026-10-18.md). Required config field `audit_directory`; injected journal остаётся caller-owned. Local 48 HTTP methods / 2 platform skips, новый module 100%. Actual candidate audit pair counters добавлены, native run pending. Windows concurrent real-fsync qualification inconclusive; full M13/R1 не принят.
+
 ## R1 audit admission component - 2026-10-18
 
 Native verification `01ec902`: 77 audit tests / 0 skips, event 100%, core 94/98 branches, retention 102/102, 72 serving regression cases pass. Все 10 workflows terminal: 6 success / 4 failure. M20 723/M21 122 pass, image/ML failures не скрыты; [полная матрица](docs/evidence/audit-admission-2026-10-18.md).
