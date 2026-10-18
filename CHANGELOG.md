@@ -2,6 +2,8 @@
 
 ## R1 audit admission component - 2026-10-18
 
+Native verification `01ec902`: 77 audit tests / 0 skips, event 100%, core 94/98 branches, retention 102/102, 72 serving regression cases pass. Все 10 workflows terminal: 6 success / 4 failure. M20 723/M21 122 pass, image/ML failures не скрыты; [полная матрица](docs/evidence/audit-admission-2026-10-18.md).
+
 Неделя 9, T16: [ADR 0039](docs/decisions/0039-audit-admission.md), резерв четырёх events на request, общий byte/queue cap, bounded ticket metadata, fsync-bound owned acknowledgement и event schema 2 для release/qualification contexts. Исправлено воспроизведённое окно sticky overload после полного расходования hold. [RB-58/PB-32](docs/operations/audit-admission-troubleshooting.md), [component evidence](docs/evidence/audit-admission-2026-10-18.md). HTTP integration, ASGI cancellation и M13 остаются следующей работой, не готовой функцией.
 
 ## R1 private serving context - 2026-10-16

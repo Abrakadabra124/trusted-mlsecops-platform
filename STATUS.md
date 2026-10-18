@@ -1,6 +1,6 @@
 # Статус и границы доказательств
 
-T16 update 2026-10-18: [ADR 0039](docs/decisions/0039-audit-admission.md) реализует bounded audit reservations, owned durability ack и strict event schema 2 с отдельным qualification context. Локально 77 audit methods: 53 выполнены, 24 platform skips; event module 100%, journal 96/98 branch exits. 169 adjacent serving methods pass. [Evidence](docs/evidence/audit-admission-2026-10-18.md), [RB-58/PB-32](docs/operations/audit-admission-troubleshooting.md). Новый Linux CI ещё не выполнен. HTTP producer/admission пока не подключён; это промежуточный компонент, не полный M13/R1.
+T16 update 2026-10-18: [ADR 0039](docs/decisions/0039-audit-admission.md) реализует bounded audit reservations, owned durability ack и strict event schema 2. **Native CI 01ec902: 77 audit tests / 0 skips, schema 100%, journal 94/98 branches, retention 102/102; 72 serving regression cases pass.** Все 10 workflows terminal: 6 success / 4 failure, M20 723/M21 122 pass. [Evidence и полная матрица](docs/evidence/audit-admission-2026-10-18.md), [RB-58/PB-32](docs/operations/audit-admission-troubleshooting.md). HTTP producer/admission пока не подключён; это компонент, не полный M13/R1. Image/ML failures и прежний M07 reliability debt сохранены.
 
 Дата текущей реализации: **2026-10-16**. Стадия: **R1 in progress, developer preview**. R0.2 research/design остаётся исторической основой. Изменения: [CHANGELOG](CHANGELOG.md).
 
