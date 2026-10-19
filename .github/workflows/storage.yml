@@ -35,6 +35,13 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Closed private audit public export and independent source verification
+        run: |
+          uv run --locked python -c "import sys; assert sys.platform == 'linux', 'audit snapshot native qualification requires Linux'"
+          uv run --locked coverage run --data-file=.coverage-audit-export --source=mlsecops.audit_export,mlsecops.audit_snapshot,scripts.audit_export_probe -m unittest scripts.audit_export_qualification scripts.audit_snapshot_qualification scripts.audit_export_probe_qualification scripts.audit_export_site_qualification
+          uv run --locked coverage report --data-file=.coverage-audit-export --include='mlsecops/audit_export.py' --fail-under=95
+          uv run --locked coverage report --data-file=.coverage-audit-export --include='mlsecops/audit_snapshot.py' --fail-under=95
+          uv run --locked coverage report --data-file=.coverage-audit-export --include='scripts/audit_export_probe.py' --fail-under=100
       - name: Bounded serving metrics and independent export schema
         run: |
           uv run --locked coverage run --data-file=.coverage-serving-metrics --source=mlsecops.serving_metrics,scripts.serving_metrics_probe -m unittest scripts.serving_metrics_qualification scripts.serving_metrics_probe_qualification scripts.candidate_serving_native_qualification

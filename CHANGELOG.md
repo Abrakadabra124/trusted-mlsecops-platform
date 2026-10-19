@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 bounded public audit export - 2026-10-19
+
+- Отдельный Linux reader закрытого private spool с exclusive lease, verified immutable bytes и без writer rotation/manifest rewrite.
+- Fixed public projection с проверкой event transitions/retained boundaries, constant diagnostics и process guard; independent schema/accounting/canary probe.
+- Post-close fixture callback, actual-candidate integration, failure-first tests и Linux CI gate. [ADR 0045](docs/decisions/0045-public-audit-export.md), [RB-64/PB-38](docs/operations/audit-export-troubleshooting.md), [точный verification status](docs/evidence/audit-export-2026-10-19.md). Full M13/R1 не объявлены готовыми.
+
 ## R1 controller process privacy - 2026-10-19
 
 - Guard пяти runtime CLI, constant errors/cancellation, private argparse, read-only publisher/scorer snapshot и явная M20 проверка.

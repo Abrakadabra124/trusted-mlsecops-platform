@@ -33,6 +33,7 @@ from mlsecops.contracts import (
 from mlsecops.datasets import FEATURES
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.prediction_protocol import PredictionBatch
+from scripts.audit_export_probe import exercise as export_audit
 from scripts.candidate_serving_reader import KIND, CandidateReader, bind_proposal
 from scripts.release_reader_native import disposable
 from scripts.serving_metrics_probe import scan as scan_metrics
@@ -335,6 +336,18 @@ def qualify(root, state, image, *, trust_port=15446):
             expiry = {}
             audit = {}
             privacy = {}
+            public_audit = {}
+
+            def closed_audit(path):
+                public_audit.update(export_audit(path))
+                confirmed(
+                    "closed-audit-public-export-schema-counters-and-canaries",
+                    public_audit["status"] == "pass",
+                )
+                confirmed(
+                    "closed-audit-export-not-release-approval",
+                    public_audit["release_ready"] is False,
+                )
 
             def exercise(engine, request, body):
                 audit.update(context_matrix(engine, request, body, confirmed, loaded.audit_context))
@@ -393,12 +406,14 @@ def qualify(root, state, image, *, trust_port=15446):
                 confirmed,
                 rejected,
                 exercise=exercise,
+                audit_export=closed_audit,
             )
             runtime["http_trust_outage"] = outage
             runtime["http_paused_query"] = paused
             runtime["http_expiring_query"] = expiry
             runtime["http_audit"] = audit
             runtime["http_privacy"] = privacy
+            runtime["public_audit_window"] = public_audit
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

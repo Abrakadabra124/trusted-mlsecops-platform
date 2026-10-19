@@ -80,10 +80,12 @@ def bind_real_runtime(fixture, image):
 
 
 @contextmanager
-def site(engine, *, clients=None, audit=None):
+def site(engine, *, clients=None, audit=None, audit_export=None):
     from scripts.serving_privacy_probe import scan_owned_audit
 
     if audit is not None:
+        if audit_export is not None:
+            raise Rejected("serving_native_export_ownership")
         with _site(engine, clients=clients, audit=audit) as request:
             yield request
         return
@@ -100,6 +102,8 @@ def site(engine, *, clients=None, audit=None):
                 yield request
         finally:
             journal.close()
+        if audit_export is not None:
+            audit_export(path)
 
 
 @contextmanager
@@ -223,7 +227,7 @@ def check_clients(request, body, tokens, confirmed):
     }
 
 
-def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
+def check_http(services, reader, golden, confirmed, rejected, *, exercise=None, audit_export=None):
     engine = serving.Engine(reader)
     clients = {
         "schema_version": 1,
@@ -238,7 +242,7 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
             for rate, burst in ((1, 1), (1, 1), (20, 40))
         ],
     }
-    transport = services.enter_context(site(engine, clients=clients))
+    transport = services.enter_context(site(engine, clients=clients, audit_export=audit_export))
     request = partial(transport, credential=clients["clients"][2]["token"])
     request.audit_status = transport.audit_status
     request.audit_scan = transport.audit_scan
