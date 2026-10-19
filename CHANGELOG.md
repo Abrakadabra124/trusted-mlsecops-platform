@@ -5,7 +5,7 @@
 - Explicit FastAPI native telemetry disable и strict routes без отражающего query/Host redirect.
 - Bounded privacy probe: 12 HTTP cases, controlled providers/captures, scan owned audit, finite summary без canaries; actual-candidate integration без подмены approval/model.
 - Исправлены detector false pass для truncated response и full feature object; сохранены failure-first tests и 100% probe gate.
-- [ADR 0041](docs/decisions/0041-serving-output-privacy.md), [RB-60/PB-34](docs/operations/serving-privacy-troubleshooting.md), [evidence](docs/evidence/serving-privacy-2026-10-19.md). Local verification pass, native pending; полный M13/R1 не принят.
+- [ADR 0041](docs/decisions/0041-serving-output-privacy.md), [RB-60/PB-34](docs/operations/serving-privacy-troubleshooting.md), [evidence](docs/evidence/serving-privacy-2026-10-19.md). Native 621d355: 17 privacy tests / 0 skips, probe 100%, 77 candidate cases pass; полный M13/R1 не принят.
 
 ## R1 HTTP audit lifecycle - 2026-10-18
 

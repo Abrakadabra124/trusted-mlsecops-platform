@@ -53,7 +53,7 @@ uv run --locked python scripts/check_docs.py
 
 Expected: privacy 17 methods / 0 skips, probe 100% statements/branches, native harness contracts без failures. Это локальные contract/loopback tests, не native candidate. Не повторять чистый прогон без изменения кода или нового основания.
 
-3. После approved commit/push дождаться всех 10 CI terminal. В Storage проверить именно новую revision и attempt: privacy step, actual candidate `http_privacy`, 12 requests, 36 confirmed events, nonzero audit files, no ambient signals, `release_ready=false`. Ожидаются три новых case IDs сверх прежних 74, но 77 не считается доказанным до actual run.
+3. После approved commit/push дождаться всех 10 CI terminal. В Storage проверить именно новую revision и attempt: privacy step, actual candidate `http_privacy`, 12 requests, 36 confirmed events, nonzero audit files, no ambient signals, `release_ready=false`. На `621d355` подтверждены 77 unique cases (прежние 74 плюс три privacy cases), 3 audit files; нельзя переносить этот pass на другую revision без проверки.
 4. Проверить вместе с privacy прежние auth/quota/expiry/outage/correlation результаты. Один успешный privacy command не заменяет все M-gates. Не rerun/cancel вслепую, не скрывать failed image/ML workflows.
 5. Публиковать только очищенный finite summary, версии/digests и ссылки на точные CI runs. Проверить сохранённый файл evidence, а не только stdout команды. Raw capture и journal остаются private.
 

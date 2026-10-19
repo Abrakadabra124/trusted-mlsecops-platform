@@ -1,6 +1,6 @@
 # План перехода DevSecOps -> MLSecOps
 
-Текущий slice T16 (2026-10-19): existing serving output privacy по [ADR 0041](../docs/decisions/0041-serving-output-privacy.md). Локально проверены 17 privacy methods и bounded probe; native integration pending. Далее: подтвердить новую candidate matrix в CI, затем определить approved metrics/cardinality, worker outputs и полный public export/correlation. Полные M13/R1 не закрывать по одному privacy summary; [evidence](../docs/evidence/serving-privacy-2026-10-19.md).
+Текущий slice T16 (2026-10-19): existing serving output privacy по [ADR 0041](../docs/decisions/0041-serving-output-privacy.md). **Native 621d355: 17 privacy methods и 77 actual-candidate cases pass**, новый summary 12 requests/36 durable events, release_ready=false. [Evidence/CI matrix](../docs/evidence/serving-privacy-2026-10-19.md) сохраняет все 10 terminal runs: 6 success / 4 failure, M20 723/M21 122 pass и четыре image/ML failures. Далее: завершить разбор CI, затем approved metrics/cardinality, worker outputs и полный public export/correlation. Полные M13/R1 по этому slice не закрывать.
 
 ## Как читать план
 

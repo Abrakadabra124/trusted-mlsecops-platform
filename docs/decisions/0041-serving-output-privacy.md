@@ -1,6 +1,6 @@
 # ADR 0041: явная privacy boundary для существующего serving
 
-Дата: 2026-10-19. Статус: implemented, local qualification pass; native actual-candidate verification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0040](0040-serving-http-audit.md), не принимает полный M13/R1.
+Дата: 2026-10-19. Статус: implemented, local и native qualification pass на `621d355` (77 actual-candidate cases). Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0040](0040-serving-http-audit.md), не принимает полный M13/R1.
 
 ## Требование и обнаруженная проблема
 
