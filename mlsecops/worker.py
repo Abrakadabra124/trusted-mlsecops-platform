@@ -5,10 +5,7 @@ import sys
 from pathlib import Path
 
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
-from mlsecops.datasets import arrays, validate_features
-from mlsecops.model import inspect_model, predict, session
-from mlsecops.prediction_protocol import response, validate_request
-from mlsecops.signing import encode64
+from mlsecops.process_privacy import enforce as enforce_privacy
 
 MAX_PROTOCOL = 16 * 1024 * 1024
 
@@ -18,6 +15,10 @@ def train(request):
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
+
+    from mlsecops.datasets import arrays, validate_features
+    from mlsecops.model import predict, session
+    from mlsecops.signing import encode64
 
     require_fields(request, ("action", "train", "seed", "features"))
     if request["action"] not in ("train", "research-robust-train"):
@@ -68,6 +69,9 @@ def train(request):
 
 
 def predict_request(request):
+    from mlsecops.model import predict, session
+    from mlsecops.prediction_protocol import response, validate_request
+
     content = validate_request(request)
     runtime, scan = session(content)
     return response(request, predict(runtime, request["features"]), scan)
@@ -82,6 +86,7 @@ def execute(request):
         return predict_request(request)
     if request.get("action") == "inspect":
         from mlsecops import artifact_intake
+        from mlsecops.model import inspect_model
 
         content = artifact_intake.validate_request(request)
         try:
@@ -95,11 +100,17 @@ def execute(request):
     raise Rejected("unknown_worker_action")
 
 
+class PrivateArguments(argparse.ArgumentParser):
+    def error(self, message):
+        raise Rejected("worker_arguments_invalid")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Offline bounded training/prediction worker")
-    parser.add_argument("--request-file", type=Path)
-    arguments = parser.parse_args()
     try:
+        enforce_privacy()
+        parser = PrivateArguments(description="Offline bounded training/prediction worker")
+        parser.add_argument("--request-file", type=Path)
+        arguments = parser.parse_args()
         if arguments.request_file:
             with gzip.open(arguments.request_file, "rb") as source:
                 content = source.read(MAX_PROTOCOL + 1)
@@ -111,8 +122,8 @@ def main():
             raise Rejected("worker_output_too_large")
         sys.stdout.buffer.write(output)
         return 0
-    except (Rejected, OSError, EOFError) as error:
-        sys.stderr.write(f"Worker rejected: {error}\n")
+    except Exception:
+        sys.stderr.write("worker_rejected\n")
         return 1
 
 

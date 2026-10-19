@@ -1,5 +1,12 @@
 # История исследовательского проекта
 
+## R1 worker process privacy - 2026-10-19
+
+- Linux guard задаёт и перечитывает dumpability/core limits до чтения payload и загрузки ML runtime; Docker worker argv/readback дополнены core=0:0.
+- CLI/argument/file/runtime import errors дают постоянную диагностику без private paths или exception text; lazy imports закрывают pre-main traceback path.
+- Failure-first tests, 100% guard gate и disposable native Linux abort/readback test; Windows native skip не считается pass.
+- [ADR 0042](docs/decisions/0042-worker-process-privacy.md), [RB-61/PB-35](docs/operations/worker-privacy-troubleshooting.md), [evidence](docs/evidence/worker-privacy-2026-10-19.md). Native pending, полный M13/R1 открыт.
+
 ## R1 serving output privacy - 2026-10-19
 
 - Explicit FastAPI native telemetry disable и strict routes без отражающего query/Host redirect.

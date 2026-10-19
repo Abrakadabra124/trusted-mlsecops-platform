@@ -2,8 +2,8 @@ import io
 import unittest
 from unittest.mock import patch
 
+from mlsecops import model, serving_worker
 from mlsecops import serving_protocol as protocol
-from mlsecops import serving_worker
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.signing import encode64
 from scripts import model_contract_qualification as fixtures
@@ -36,7 +36,7 @@ class ServingSessionContracts(unittest.TestCase):
         first = protocol.request(self.load, "predict", self.features)
         second = protocol.request(self.load, "predict", self.features)
         ping = protocol.request(self.load, "ping")
-        with patch.object(serving_worker, "load_model", wraps=serving_worker.load_model) as load:
+        with patch.object(model, "session", wraps=model.session) as load:
             status, replies, diagnostic = self.transcript([self.load, first, second, ping])
         self.assertEqual((status, diagnostic, load.call_count), (0, "", 1))
         for request, reply in zip((self.load, first, second, ping), replies, strict=True):
@@ -63,7 +63,7 @@ class ServingSessionContracts(unittest.TestCase):
         for changes in mutations:
             with (
                 self.subTest(changes=tuple(changes)),
-                patch.object(serving_worker, "load_model") as load,
+                patch.object(model, "session") as load,
             ):
                 status, replies, diagnostic = self.transcript([{**self.load, **changes}])
                 self.assertEqual((status, replies), (1, []))

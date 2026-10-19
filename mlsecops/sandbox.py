@@ -59,6 +59,8 @@ def run_worker(image, request, timeout=600):
         "/tmp:rw,noexec,nosuid,size=64m",
         "--log-driver",
         "none",
+        "--ulimit",
+        "core=0:0",
         image,
         "python",
         "-m",

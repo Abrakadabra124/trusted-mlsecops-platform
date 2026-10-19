@@ -123,6 +123,8 @@ def create_arguments(image, session):
         "/tmp:rw,noexec,nosuid,size=32m",
         "--log-driver",
         "none",
+        "--ulimit",
+        "core=0:0",
         image,
         "python",
         "-m",
@@ -132,6 +134,7 @@ def create_arguments(image, session):
 
 def verify_container(value, image, session):
     host, config = value["HostConfig"], value["Config"]
+    core = [limit for limit in (host.get("Ulimits") or []) if limit.get("Name") == "core"]
     if (
         value["Image"] != image
         or config["User"] != "65532:65532"
@@ -152,6 +155,8 @@ def verify_container(value, image, session):
         or "ALL" not in host["CapDrop"]
         or "no-new-privileges" not in host["SecurityOpt"]
         or host["LogConfig"]["Type"] != "none"
+        or core != [{"Name": "core", "Soft": 0, "Hard": 0}]
+        or any(type(core[0][name]) is not int for name in ("Soft", "Hard"))
         or host["Tmpfs"] != {"/tmp": "rw,noexec,nosuid,size=32m"}
         or any(
             mount["Type"] != "tmpfs" or mount["Destination"] != "/tmp" for mount in value["Mounts"]

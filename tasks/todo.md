@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T16 worker increment: безопасная диагностика CLI/import и Linux core/dumpability guard реализованы, локально проверены; [native pending](../docs/evidence/worker-privacy-2026-10-19.md). Не закрывает весь worker/controller output scope или M13. [RB-61/PB-35](../docs/operations/worker-privacy-troubleshooting.md).
+
 T16 update 2026-10-19: [existing output privacy](../docs/evidence/serving-privacy-2026-10-19.md) проверена на native 621d355: 17 privacy tests / 0 skips, 77 actual-candidate cases, 12 privacy requests / 36 durable events. Все 10 CI terminal: 6 success / 4 failure, M20 723/M21 122 pass; четыре image/ML failures сохраняются. T16 открыта: worker channels/metrics/cardinality/export/full correlation не закрыты; [RB-60/PB-34](../docs/operations/serving-privacy-troubleshooting.md).
 
 T03, T04 и T26 завершены для synthetic-only профиля; остальные **26 задач открыты**, реализация начата 2026-10-07. Результаты и границы каждой приёмки в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, M03, M06, M07, M20 и M21, а неподключённые полные проверки возвращают inconclusive. Эти gates не закрывают автоматически более широкий T07-T10/T27 lifecycle. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.

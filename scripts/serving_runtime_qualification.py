@@ -164,6 +164,7 @@ class BoundedPipeContracts(unittest.TestCase):
             ("--pids-limit", "64"),
             ("--security-opt", "no-new-privileges"),
             ("--log-driver", "none"),
+            ("--ulimit", "core=0:0"),
         ):
             self.assertEqual(arguments[arguments.index(flag) + 1], value)
         self.assertIn("--read-only", arguments)
@@ -210,6 +211,7 @@ class DockerLifecycleContracts(unittest.TestCase):
                 "CapDrop": ["ALL"],
                 "SecurityOpt": ["no-new-privileges"],
                 "LogConfig": {"Type": "none"},
+                "Ulimits": [{"Name": "core", "Soft": 0, "Hard": 0}],
                 "Tmpfs": {"/tmp": "rw,noexec,nosuid,size=32m"},
             },
         }
@@ -299,6 +301,11 @@ class DockerLifecycleContracts(unittest.TestCase):
             ("CapDrop", []),
             ("SecurityOpt", []),
             ("LogConfig", {"Type": "json-file"}),
+            ("Ulimits", None),
+            ("Ulimits", [{"Name": "core", "Soft": 1, "Hard": 1}]),
+            ("Ulimits", [{"Name": "core", "Soft": False, "Hard": 0}]),
+            ("Ulimits", [{"Name": "core", "Soft": 0, "Hard": -1}]),
+            ("Ulimits", [{"Name": "core", "Soft": 0, "Hard": 0}] * 2),
             ("Tmpfs", {}),
         )
         original = copy.deepcopy(self.observed["HostConfig"])

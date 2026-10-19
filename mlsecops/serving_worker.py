@@ -2,10 +2,8 @@ import importlib.metadata
 import signal
 import sys
 
-from mlsecops import serving_protocol as protocol
 from mlsecops.contracts import Rejected, canonical
-from mlsecops.model import predict
-from mlsecops.model import session as load_model
+from mlsecops.process_privacy import enforce as enforce_privacy
 
 
 def serve(source, destination, diagnostic, arm_timeout=lambda: None):
@@ -19,6 +17,10 @@ def serve(source, destination, diagnostic, arm_timeout=lambda: None):
         destination.flush()
 
     try:
+        from mlsecops import serving_protocol as protocol
+        from mlsecops.model import predict
+        from mlsecops.model import session as load_model
+
         arm_timeout()
         initial = protocol.frame(source, protocol.MAX_LOAD)
         content = protocol.validate(initial)
@@ -58,6 +60,11 @@ def serve(source, destination, diagnostic, arm_timeout=lambda: None):
 
 
 def main():
+    try:
+        enforce_privacy()
+    except Rejected:
+        sys.stderr.write("serving_worker_rejected\n")
+        return 1
     return serve(sys.stdin.buffer, sys.stdout.buffer, sys.stderr, lambda: signal.alarm(120))
 
 
