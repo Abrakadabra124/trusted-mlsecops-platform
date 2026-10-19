@@ -4,7 +4,9 @@
 
 ## Статус
 
-Реализовано локально, native CI и публикация этого increment ещё не подтверждены. Не переносить результаты f0d0542 на новый код. Полные M13/T16/R1 открыты; image/ML blockers и прежний M07 reliability debt сохраняются.
+**Native verified 54cbe5028ad0e042f23cfc96ada18a64b543704f**. [Полный report и все terminal CI](audit-correlation-54cbe50-native.md): 64 correlation tests / 0 skips / 100% coverage, 47 export tests / 0 skips; 81 actual-candidate case pass. Все 10 workflows завершены с первой попытки: 6 success / 4 failure. Полные M13/T16/R1 открыты; image/ML blockers и прежний M07 reliability debt сохраняются.
+
+Actual qualification: 332 events / 58 correlated HTTP 200 / 25 requests without context; public window 83 completed, 0 unresolved. Отдельный controlled signed release: 56 events / 8 correlated HTTP 200 / 6 without context. Никакого approval реального candidate не создавалось; в обоих reports release_ready=false. Private graph не публикуется. Полные отчёты, exact digests, native timings и ограничения доступны по ссылке выше.
 
 ## Реализация
 
@@ -22,11 +24,13 @@
 - Frozen source lock, Ruff check/format и git diff whitespace проверены. Windows не доказывает Linux ownership, no-follow, fsync и process guards.
 - AGENTS.md и GOAL.md содержат исходные пользовательские изменения; в патч реализации не входят. Локальная инфраструктура не изменялась.
 
-## Оставшаяся проверка
+## Review и оставшаяся работа
 
 Same-model review завершён в пределах трёх циклов, внешняя модель не использовалась по выбору владельца. Первый цикл уточнил byte/source approval и payload/envelope semantics. Второй обнаружил mutable deepcopy bypass и false pass после retention полных начальных requests; оба RED tests падали до исправления. Третий цикл повторил 15 tests без failures/skips и не нашёл actionable issues в изменённой границе. Это не независимая внешняя security certification.
 
-Native coverage/contracts, actual-candidate/controlled-release summaries, все terminal CI и привязка опубликованного evidence к точному SHA пока ожидаются.
+Native проверки выполнены на 54cbe50, source_dirty=false. Reports/counters и outage assessment независимо перепроверены локально, complete workflow matrix сохранена. M03 431/M07 97/M06 18/M20 725/M21 122 pass в своих scoped profiles; они не являются единой release acceptance.
+
+Следующий increment: единая карта output channels и недостающие сквозные canary checks для stdout/stderr/logs/traces/metrics/public evidence, затем отдельный M13 acceptance runner с candidate/source binding и честными pass/fail/inconclusive. Наличие компонентных проверок ещё не закрывает эту приёмку. M07 first-attempt pass здесь не устраняет неизвестную причину прошлого connection rejection.
 
 ## Границы гарантии
 

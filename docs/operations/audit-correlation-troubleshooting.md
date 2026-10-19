@@ -2,6 +2,8 @@
 
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [ADR 0046](../decisions/0046-private-audit-correlation.md), [evidence](../evidence/audit-correlation-2026-10-19.md).
 
+Проверено в disposable Linux CI на [54cbe50](../evidence/audit-correlation-54cbe50-native.md): 64 contracts без skips, 100% focused coverage, actual 81 cases и controlled release 40 cases. Оба post-close correlation callbacks прошли. Полный M13 и production rollback не считаются принятыми.
+
 ## Что делает проверка
 
 Внутренний context v2 связывает входные bytes и разрешение на источник, dataset envelope, training metadata, evaluation envelope, модель и release authorization либо qualification permit с конкретным запросом. Эти ссылки остаются в приватном журнале. Public export сохраняет прежние фиксированные счётчики. Run здесь - content-addressed metadata выполнения, не имя pipeline и не выдуманный MLflow ID.

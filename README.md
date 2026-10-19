@@ -2,7 +2,7 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
-T16: [приватная source-to-request корреляция](docs/operations/audit-correlation-troubleshooting.md) связывает signed data lineage, training metadata, evaluation и отдельное release approval либо qualification permit с запросом. Public API/export не раскрывают эту цепочку. [Проверки и ограничения](docs/evidence/audit-correlation-2026-10-19.md); native результат нового increment пока не заявлен, полный R1 не принят.
+T16: [приватная source-to-request корреляция](docs/operations/audit-correlation-troubleshooting.md) связывает signed data lineage, training metadata, evaluation и отдельное release approval либо qualification permit с запросом. Public API/export не раскрывают эту цепочку. **[Native 54cbe50: 64 tests / 100%, 81 actual-candidate case](docs/evidence/audit-correlation-54cbe50-native.md)**; все 10 CI terminal, 6 success / 4 failure. Image/ML failures сохраняют запрет release, полный M13/R1 не принят.
 
 T16: [публичный экспорт закрытого audit journal](docs/operations/audit-export-troubleshooting.md) формирует только строгую сводку без request/principal IDs и private references. [Точный статус проверки](docs/evidence/audit-export-2026-10-19.md) отделяет Windows unit checks от Linux filesystem/CLI и actual-candidate evidence. Это не полная M13-приёмка и не release approval.
 

@@ -1,6 +1,6 @@
 # ADR 0046: private source-to-request correlation
 
-Дата: 2026-10-19. Статус: implemented, native qualification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0045](0045-public-audit-export.md); полный M13/R1 пока не принят. [Evidence](../evidence/audit-correlation-2026-10-19.md), [RB-65/PB-39](../operations/audit-correlation-troubleshooting.md).
+Дата: 2026-10-19. Статус: implemented, native verified 54cbe50. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0045](0045-public-audit-export.md); полный M13/R1 пока не принят. [Полный native report/CI](../evidence/audit-correlation-54cbe50-native.md), [RB-65/PB-39](../operations/audit-correlation-troubleshooting.md).
 
 ## Требование и фактический пробел
 
