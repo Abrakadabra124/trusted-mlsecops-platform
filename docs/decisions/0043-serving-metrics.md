@@ -1,6 +1,6 @@
 # ADR 0043: ограниченные метрики serving без request identities
 
-Дата: 2026-10-19. Статус: implemented, локальная qualification пройдена; actual-candidate native qualification ещё не выполнена. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0041](0041-serving-output-privacy.md) и [ADR 0042](0042-worker-process-privacy.md); не принимает полный M13/R1. [Evidence](../evidence/serving-metrics-2026-10-19.md), [RB-62/PB-36](../operations/serving-metrics-troubleshooting.md).
+Дата: 2026-10-19. Статус: implemented, native verified на 93de1b6: 35 metrics tests / 0 skips / 100%, 78 actual-candidate cases и 69 approved samples. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0041](0041-serving-output-privacy.md) и [ADR 0042](0042-worker-process-privacy.md); не принимает полный M13/R1. [Evidence, failed attempt и обе matrix](../evidence/serving-metrics-2026-10-19.md), [RB-62/PB-36](../operations/serving-metrics-troubleshooting.md).
 
 ## Требование
 

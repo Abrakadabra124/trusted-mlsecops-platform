@@ -4,7 +4,7 @@
 
 - Добавлены 69 fixed samples без request identities, private collector и opt-in operator scrape с независимыми quotas и send deadline.
 - Исправлены обнаруженные failure-first проверками outer-500/disconnect semantics, раннее освобождение ticket, неограниченные error sends и mismatch transport headers.
-- Добавлены independent parser/canary gate, cold-import multiprocess tests, CI и [RB-62/PB-36](docs/operations/serving-metrics-troubleshooting.md). [Evidence](docs/evidence/serving-metrics-2026-10-19.md): локальная проверка pass с Windows skips, native pending; полный M13/R1 не принят.
+- Добавлены independent parser/canary gate, cold-import multiprocess tests, CI и [RB-62/PB-36](docs/operations/serving-metrics-troubleshooting.md). [Native 93de1b6](docs/evidence/serving-metrics-2026-10-19.md): 35 metrics tests / 0 skips / 100%, 78 candidate cases pass; 10 terminal CI: 6 success / 4 failure. Source-lock mismatch исправлен без изменения frozen data; failed attempt сохранён. Полный M13/R1 не принят.
 
 ## R1 worker process privacy - 2026-10-19
 

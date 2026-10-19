@@ -51,6 +51,8 @@ uv run --locked python scripts/check_docs.py
 
 ## Восстановление и rollback
 
+PB-36 проверен на native 93de1b6: 35 metrics tests / 0 skips / 100%, 78 actual-candidate cases, 69 approved samples. Source-lock defect воспроизведён и исправлен без изменения dataset output; [оба attempts и terminal matrix](../evidence/serving-metrics-2026-10-19.md) сохранены. Это доказательство процедуры qualification, не runtime rollback production.
+
 Тестами проверены завершение/cancellation/timeout и освобождение slots, а не production recovery. При повреждении измерений не сбрасывать audit/trust/approval state. Если новый exporter мешает обслуживанию, согласованно убрать только metrics_token_file из private конфигурации и перезапустить собственный serving процесс по его lifecycle procedure: endpoint станет 404, счётчики обнулятся. Это операционный вариант, не автоматический выполненный rollback; на живой инфраструктуре здесь не проверен.
 
 Credential rotation требует нового случайного private token, обновления оператора и контролируемого restart. Сначала подтвердить владельца процесса и сохранить нужные audit/evidence; не удалять единственную копию, не ослаблять TLS/lease/pins. При неизвестной утечке credential, persistent diagnostic growth или неосвобождённых slots эскалировать security/platform owner и не принимать M13. Полный platform export/controller privacy, monitoring deployment и M14 performance остаются отдельной работой.

@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Serving metrics и bounded scrape, RB-62/PB-36](operations/serving-metrics-troubleshooting.md). Operator identity/quotas, final-send/disconnect semantics, independent schema/canary checks и safe rollback; [evidence](evidence/serving-metrics-2026-10-19.md) разделяет local pass и pending native.
+- [Serving metrics и bounded scrape, RB-62/PB-36](operations/serving-metrics-troubleshooting.md). Operator identity/quotas, final-send/disconnect, schema/canary checks, source-lock correction и safe rollback; [native 93de1b6 evidence](evidence/serving-metrics-2026-10-19.md): 35 metrics tests, 78 candidate cases, 69 approved samples. Полные M13/R1 остаются открытыми.
 
 - [Worker startup diagnostics и core policy, RB-61/PB-35](operations/worker-privacy-troubleshooting.md). Guard до input/runtime imports, constant errors и native wait-status proof; [evidence](evidence/worker-privacy-2026-10-19.md) сохраняет Windows skip и pending Linux qualification.
 
