@@ -21,7 +21,7 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_child, write_json
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.sandbox import resolve_image
-from scripts import serving_native
+from scripts import audit_correlation_probe, serving_native
 
 
 @contextmanager
@@ -190,12 +190,33 @@ def qualify(root, state, image=None):
                 "serving_sequence_replay",
             )
             if image is not None:
+                correlation = {}
+                selection = decode(storage.get(serving, "releases", loaded.request_sha256))
+                proof = decode(
+                    storage.get(serving, "releases", selection["authorization_reference"])
+                )
+                expected_context = audit_correlation_probe.release(
+                    fixture.arguments["package"],
+                    options["context"],
+                    selection,
+                    proof,
+                    options["trusted_root"],
+                )
+
+                def closed_audit(path):
+                    correlation.update(audit_correlation_probe.exercise(path, expected_context))
+                    confirmed(
+                        "closed-controlled-release-audit-primary-material-correlation",
+                        correlation["status"] == "pass",
+                    )
+
                 runtime_reader = release_reader.Reader(
                     serving, **options, trust_lease=lease(), minimum_sequence=1
                 )
                 http, body, runtime = serving_native.check_http(
-                    services, runtime_reader, golden, confirmed, rejected
+                    services, runtime_reader, golden, confirmed, rejected, audit_export=closed_audit
                 )
+                runtime["http_correlation"] = correlation
             trust_authority.update(authority, policy, key, revoked_artifacts=[loaded.model_sha256])
             if image is not None:
                 confirmed("actual-revocation-http-503", http("/v1/predict", body)[0] == 503)

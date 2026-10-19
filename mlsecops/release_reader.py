@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import psycopg
 
 from mlsecops import (
+    audit_lineage,
     promotion,
     promotion_state,
     release_authorization,
@@ -30,12 +31,22 @@ class VerifiedRelease:
     model: bytes = field(repr=False)
     artifacts: frozenset[str] = field(repr=False)
     keys: frozenset[str] = field(repr=False)
+    lineage: audit_lineage.Lineage = field(repr=False)
+    authorization_sha256: str = field(repr=False)
+    assurance_sha256: str = field(repr=False)
+    approval_sha256: str = field(repr=False)
     release_ready: bool = field(default=False, init=False)
 
     @property
     def audit_context(self):
-        return serving_context.ReleaseContext(
-            self.request_sha256, self.subject_sha256, self.model_sha256
+        return serving_context.ReleaseTrace(
+            self.request_sha256,
+            self.subject_sha256,
+            self.model_sha256,
+            lineage=self.lineage,
+            authorization_sha256=self.authorization_sha256,
+            assurance_sha256=self.assurance_sha256,
+            approval_sha256=self.approval_sha256,
         )
 
 
@@ -213,6 +224,12 @@ class Reader:
                 package["capsule"]["objects"][("candidates", model_reference)],
                 frozenset(scope["artifacts"]),
                 frozenset(scope["keys"]),
+                audit_lineage.from_verified_package(
+                    package, manifest, self.context["trust"]["curator"]
+                ),
+                proof,
+                decision["assurance_sha256"],
+                decision["approval_sha256"],
             )
             self.trust.refresh()
             final_sequence, final_reference, final_clock = self.snapshot()

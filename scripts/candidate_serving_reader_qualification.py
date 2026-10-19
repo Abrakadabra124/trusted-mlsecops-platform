@@ -1,13 +1,13 @@
 import copy
 import tempfile
 import unittest
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, asdict
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops import release_bundle, release_policy, signing, storage, trust
-from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.contracts import Rejected, canonical, decode, digest
 from scripts import candidate_serving_reader as qualification
 from scripts import release_bundle_qualification as fixtures
 from scripts.candidate_lineage_qualification import alternate_public_encoding
@@ -127,6 +127,42 @@ class CandidateReaderContracts(unittest.TestCase):
         self.assertEqual(loaded.audit_context, context)
         with self.assertRaises(Rejected):
             reader.check(loaded)
+
+    def test_private_trace_matches_primary_sources_without_inventing_release_approval(self):
+        context = self.bundle.materials.context
+        objects = self.package["capsule"]["objects"]
+        record = decode(objects[("candidates", context["candidate_reference"])])
+        metadata = decode(objects[("candidates", record["metadata_object"])])
+        statement = signing.verify(
+            decode(objects[("manifests", record["dataset_reference"])]),
+            "stored-dataset",
+            context["trust"]["curator"],
+        )
+        provenance = signing.verify(
+            decode(objects[("lineage", statement["lineage_object"])]),
+            "data-lineage",
+            context["trust"]["curator"],
+        )
+        loaded = self.reader().load()
+        trace = loaded.audit_context
+        self.assertEqual(trace.schema_version, 2)
+        self.assertEqual(
+            asdict(trace.lineage),
+            {
+                "source_revision": metadata["source_revision"],
+                "source_fingerprint": metadata["source_fingerprint"],
+                "source_sha256": provenance["source_sha256"],
+                "source_approval_sha256": statement["source_approval_digest"],
+                "dataset_sha256": record["dataset_reference"],
+                "lineage_sha256": statement["lineage_object"],
+                "run_sha256": record["metadata_object"],
+                "evaluation_sha256": context["evaluation_reference"],
+            },
+        )
+        for forbidden in ("authorization_sha256", "assurance_sha256", "approval_sha256"):
+            self.assertFalse(hasattr(trace, forbidden))
+        self.assertEqual(trace.permit_sha256, digest(canonical(self.permit)))
+        self.assertFalse(trace.release_ready)
 
     def test_source_report_binds_unchanged_signed_proposal_not_latest_alias(self):
         report = {

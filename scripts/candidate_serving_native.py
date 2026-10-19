@@ -33,6 +33,7 @@ from mlsecops.contracts import (
 from mlsecops.datasets import FEATURES
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.prediction_protocol import PredictionBatch
+from scripts import audit_correlation_probe
 from scripts.audit_export_probe import exercise as export_audit
 from scripts.candidate_serving_reader import KIND, CandidateReader, bind_proposal
 from scripts.release_reader_native import disposable
@@ -62,7 +63,7 @@ def context_matrix(engine, request, body, confirmed, context):
     confirmed(
         "context-candidate-not-release-selection",
         context.kind == "candidate-qualification"
-        and context.schema_version == 1
+        and context.schema_version == 2
         and not context.release_ready
         and not hasattr(context, "selection_sha256"),
     )
@@ -337,8 +338,17 @@ def qualify(root, state, image, *, trust_port=15446):
             audit = {}
             privacy = {}
             public_audit = {}
+            correlation = {}
+            expected_context = audit_correlation_probe.candidate(
+                package, context, envelope, qualification_public, public["approver"]
+            )
 
             def closed_audit(path):
+                correlation.update(audit_correlation_probe.exercise(path, expected_context))
+                confirmed(
+                    "closed-audit-private-primary-material-correlation",
+                    correlation["status"] == "pass",
+                )
                 public_audit.update(export_audit(path))
                 confirmed(
                     "closed-audit-public-export-schema-counters-and-canaries",
@@ -414,6 +424,7 @@ def qualify(root, state, image, *, trust_port=15446):
             runtime["http_audit"] = audit
             runtime["http_privacy"] = privacy
             runtime["public_audit_window"] = public_audit
+            runtime["http_correlation"] = correlation
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

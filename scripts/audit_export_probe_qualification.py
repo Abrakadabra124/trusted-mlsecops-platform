@@ -1,11 +1,13 @@
 import copy
 import subprocess
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical
 from scripts import audit_export_probe
+from scripts.audit_correlation_qualification import trace
 from scripts.audit_export_probe import scan
 from scripts.audit_export_qualification import encoded, records
 
@@ -24,6 +26,22 @@ def public():
 
 
 class PublicProbeContracts(unittest.TestCase):
+    def test_nested_private_lineage_values_are_positive_control_canaries(self):
+        source = [encoded(records(bound=asdict(trace("candidate"))))]
+        with (
+            patch.object(audit_export_probe.audit_snapshot, "read_closed", return_value=source),
+            patch.object(
+                audit_export_probe.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 0, canonical(public()) + b"\n", b""),
+            ),
+            patch.object(audit_export_probe, "scan", wraps=scan) as observed,
+        ):
+            self.assertEqual(audit_export_probe.exercise(Path("unused")), public())
+        for value in asdict(trace("candidate").lineage).values():
+            self.assertIn(value.encode(), source[0])
+            self.assertIn(value.encode(), observed.call_args.kwargs["private"])
+
     def test_context_on_two_event_abort_and_four_event_unresolved_are_impossible(self):
         for incomplete in (False, True):
             value = public()

@@ -1,7 +1,7 @@
 import re
 from dataclasses import asdict
 
-from mlsecops import serving_context
+from mlsecops import audit_lineage, serving_context
 from mlsecops.contracts import Rejected
 
 FIELDS = {"schema_version", "request_id", "principal_id", "route", "stage", "status", "context"}
@@ -51,7 +51,7 @@ def checked_context(value):
     if (
         type(value) is not dict
         or type(value.get("schema_version")) is not int
-        or value["schema_version"] != 1
+        or value["schema_version"] not in (1, 2)
         or value.get("release_ready") is not False
     ):
         raise Rejected("audit_event_invalid")
@@ -59,15 +59,24 @@ def checked_context(value):
     if kind == "release-selection":
         context_type = serving_context.ReleaseContext
         references = {"selection_sha256", "bundle_sha256", "model_sha256"}
+        if value["schema_version"] == 2:
+            context_type = serving_context.ReleaseTrace
+            references |= {"authorization_sha256", "assurance_sha256", "approval_sha256"}
     elif kind == "candidate-qualification":
         context_type = serving_context.QualificationContext
         references = {"permit_sha256", "proposal_sha256", "bundle_sha256", "model_sha256"}
+        if value["schema_version"] == 2:
+            context_type = serving_context.QualificationTrace
     else:
         raise Rejected("audit_event_invalid")
-    if value.keys() != references | {"schema_version", "kind", "release_ready"}:
+    lineage_fields = {"lineage"} if value["schema_version"] == 2 else set()
+    if value.keys() != references | lineage_fields | {"schema_version", "kind", "release_ready"}:
         raise Rejected("audit_event_invalid")
     try:
-        context = context_type(**{key: value[key] for key in references})
+        arguments = {key: value[key] for key in references}
+        if lineage_fields:
+            arguments["lineage"] = audit_lineage.checked(value["lineage"])
+        context = context_type(**arguments)
     except Rejected:
         raise Rejected("audit_event_invalid") from None
     return asdict(context)

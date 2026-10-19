@@ -1,5 +1,7 @@
 # План перехода DevSecOps -> MLSecOps
 
+Следующий increment T16: [ADR 0046](../docs/decisions/0046-private-audit-correlation.md), private verified lineage context v2 -> production/qualification readers -> generation-bound journal -> independent correlation probe -> unchanged public export -> native evidence и RB-65/PB-39. Legacy v1 не считается full correlation; actual qualification не подменяет release approval. Пока в работе, full M13 и все исходные gates сохраняются.
+
 Public export T16: [ADR 0045](../docs/decisions/0045-public-audit-export.md), [native f0d0542](../docs/evidence/audit-export-2026-10-19.md): 46 tests / 0 skips, 80 actual-candidate cases, 332 events / 83 completed / 0 unresolved. 10 CI terminal, latest attempts 6 success / 4 failure. Storage attempt 1 M07 connection rejection сохранён; attempt 2 pass не закрывает reliability debt. Следующая зависимость: private source/run/report/approval/release/request correlation и remaining all-output privacy. Полные M13/T16/R1 и image/ML blockers открыты.
 
 Metrics slice T16: [ADR 0043](../docs/decisions/0043-serving-metrics.md), **native 93de1b6: 35 metrics tests / 0 skips / 100%, 78 candidate cases pass, 69 approved samples**. [Evidence](../docs/evidence/serving-metrics-2026-10-19.md) содержит полный report, failed source-lock attempt и итог всех 10 CI: 6 success / 4 failure. Следующий шаг: remaining controller/output privacy и end-to-end public export/correlation по M13, не новый повтор metrics review. Полные M13/T16/R1 открыты; image/ML gates не ослаблять.

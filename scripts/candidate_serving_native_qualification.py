@@ -11,6 +11,7 @@ from mlsecops import serving_context
 from mlsecops.contracts import Rejected, read_json, write_json
 from scripts import candidate_serving_native as native
 from scripts import serving_core_qualification as core
+from scripts.audit_correlation_qualification import lineage
 from scripts.serving_native import site
 
 
@@ -58,8 +59,12 @@ class CandidateServingHarnessContracts(unittest.TestCase):
         fixture = core.ServingCoreContracts()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
-        fixture.loaded.audit_context = serving_context.QualificationContext(
-            "d" * 64, "e" * 64, fixture.loaded.subject_sha256, fixture.loaded.model_sha256
+        fixture.loaded.audit_context = serving_context.QualificationTrace(
+            "d" * 64,
+            "e" * 64,
+            fixture.loaded.subject_sha256,
+            fixture.loaded.model_sha256,
+            lineage=lineage(),
         )
         cases = []
 

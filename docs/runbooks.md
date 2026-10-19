@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Private source-to-request correlation, RB-65/PB-39](operations/audit-correlation-troubleshooting.md). Exact payload/envelope hashes, legacy/mismatch/unresolved windows, отдельные release/qualification authorities и безопасный rollback; [evidence](evidence/audit-correlation-2026-10-19.md).
+
 - [Public audit export, RB-64/PB-38](operations/audit-export-troubleshooting.md). Closed-spool ownership, bounded projection, incomplete windows и безопасный cleanup; [evidence](evidence/audit-export-2026-10-19.md). Не repair stale lease и не полный M13.
 
 - [Controller privacy, lifecycle и cleanup, RB-63/PB-37](operations/controller-privacy-troubleshooting.md). Constant CLI/lifespan diagnostics, native readback, partial/ambiguous reader startup и cancellation; [native fe1437e evidence](evidence/controller-privacy-2026-10-19.md): 18 + 70 tests / 0 skips, actual controller snapshot и owned CLI SIGINT. Полный M13 не принят.

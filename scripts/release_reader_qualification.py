@@ -1,7 +1,7 @@
 import copy
 import unittest
 from contextlib import contextmanager
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, asdict
 from unittest.mock import MagicMock, patch
 
 import psycopg
@@ -96,6 +96,44 @@ class ReleaseReaderContracts(unittest.TestCase):
                 reader.load()
             with self.assertRaisesRegex(Rejected, "serving_release_not_current"):
                 reader.check(loaded)
+
+    def test_private_trace_binds_primary_source_run_report_and_authorization(self):
+        package, context = self.arguments["package"], self.arguments["context"]
+        objects = package["capsule"]["objects"]
+        record = decode(objects[("candidates", context["candidate_reference"])])
+        metadata = decode(objects[("candidates", record["metadata_object"])])
+        statement = signing.verify(
+            decode(objects[("manifests", record["dataset_reference"])]),
+            "stored-dataset",
+            context["trust"]["curator"],
+        )
+        provenance = signing.verify(
+            decode(objects[("lineage", statement["lineage_object"])]),
+            "data-lineage",
+            context["trust"]["curator"],
+        )
+        with self.transport() as writes:
+            loaded = self.reader().load()
+        trace = loaded.audit_context
+        self.assertEqual(trace.schema_version, 2)
+        self.assertEqual(
+            asdict(trace.lineage),
+            {
+                "source_revision": metadata["source_revision"],
+                "source_fingerprint": metadata["source_fingerprint"],
+                "source_sha256": provenance["source_sha256"],
+                "source_approval_sha256": statement["source_approval_digest"],
+                "dataset_sha256": record["dataset_reference"],
+                "lineage_sha256": statement["lineage_object"],
+                "run_sha256": record["metadata_object"],
+                "evaluation_sha256": context["evaluation_reference"],
+            },
+        )
+        self.assertEqual(trace.authorization_sha256, self.selection["authorization_reference"])
+        for name in ("assurance_sha256", "approval_sha256"):
+            self.assertEqual(getattr(trace, name), self.authorization["decision"][name])
+        self.assertEqual(writes, [])
+        self.assertFalse(trace.release_ready)
 
     def test_unapproved_structural_selection_never_returns_model(self):
         self.replace_authorization(assurance_envelope=None)

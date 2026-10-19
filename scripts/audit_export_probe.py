@@ -77,6 +77,7 @@ def exercise(path):
                 for name, value in event["context"].items()
                 if name.endswith("_sha256")
             )
+            needles.update(value.encode() for value in event["context"].get("lineage", {}).values())
         if event["stage"] in ("response_completed", "aborted"):
             terminals["completed" if event["stage"] == "response_completed" else "aborted"] += 1
     result = subprocess.run(

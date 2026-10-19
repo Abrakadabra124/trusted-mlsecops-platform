@@ -2,6 +2,8 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
+T16: [приватная source-to-request корреляция](docs/operations/audit-correlation-troubleshooting.md) связывает signed data lineage, training metadata, evaluation и отдельное release approval либо qualification permit с запросом. Public API/export не раскрывают эту цепочку. [Проверки и ограничения](docs/evidence/audit-correlation-2026-10-19.md); native результат нового increment пока не заявлен, полный R1 не принят.
+
 T16: [публичный экспорт закрытого audit journal](docs/operations/audit-export-troubleshooting.md) формирует только строгую сводку без request/principal IDs и private references. [Точный статус проверки](docs/evidence/audit-export-2026-10-19.md) отделяет Windows unit checks от Linux filesystem/CLI и actual-candidate evidence. Это не полная M13-приёмка и не release approval.
 
 Новый increment: [локальный inference API](docs/serving-api.md) связывает [проверенный Reader](docs/decisions/0030-current-release-reader.md) с постоянным изолированным ONNX worker, before/after-inference trust checks, named features, body limits и явными отказами. Полная M12/R1 приёмка ещё не пройдена; positive native fixture не разрешает реальный candidate с failed gates. [PB-25/RB-48/RB-49](docs/operations/serving-troubleshooting.md), [evidence и ограничения](docs/evidence/serving-api-2026-10-14.md).

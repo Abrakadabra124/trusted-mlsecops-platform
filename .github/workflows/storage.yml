@@ -35,6 +35,11 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Private source-to-request correlation and independent primary materials
+        run: |
+          uv run --locked coverage run --data-file=.coverage-audit-correlation --source=mlsecops.audit_lineage,mlsecops.serving_context,mlsecops.audit_event,scripts.audit_correlation_probe -m unittest scripts.audit_correlation_qualification scripts.audit_correlation_probe_qualification scripts.serving_context_qualification scripts.audit_event_qualification scripts.release_reader_qualification scripts.candidate_serving_reader_qualification
+          uv run --locked coverage report --data-file=.coverage-audit-correlation --include='mlsecops/audit_lineage.py,mlsecops/serving_context.py,mlsecops/audit_event.py' --fail-under=100
+          uv run --locked coverage report --data-file=.coverage-audit-correlation --include='scripts/audit_correlation_probe.py' --fail-under=100
       - name: Closed private audit public export and independent source verification
         run: |
           uv run --locked python -c "import sys; assert sys.platform == 'linux', 'audit snapshot native qualification requires Linux'"
@@ -60,7 +65,7 @@ jobs:
         run: |
           uv run --locked coverage run --data-file=.coverage-audit-branch-checker --source=scripts.audit_branch_coverage -m unittest scripts.audit_branch_coverage_qualification
           uv run --locked coverage report --data-file=.coverage-audit-branch-checker --fail-under=100
-          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit,mlsecops.audit_retention,mlsecops.audit_event -m unittest scripts.serving_audit_qualification scripts.audit_retention_qualification scripts.audit_admission_qualification scripts.audit_event_qualification
+          uv run --locked coverage run --data-file=.coverage-serving-audit --source=mlsecops.serving_audit,mlsecops.audit_retention,mlsecops.audit_event -m unittest scripts.serving_audit_qualification scripts.audit_retention_qualification scripts.audit_admission_qualification scripts.audit_event_qualification scripts.audit_correlation_qualification
           uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/audit_event.py' --fail-under=100
           uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/serving_audit.py' --fail-under=95
           uv run --locked coverage report --data-file=.coverage-serving-audit --include='mlsecops/audit_retention.py' --fail-under=90
@@ -158,7 +163,7 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-privacy --fail-under=100
           uv run --locked coverage run --data-file=.coverage-http-audit --source=mlsecops.serving_http_audit -m unittest scripts.serving_http_qualification scripts.serving_http_audit_qualification
           uv run --locked coverage report --data-file=.coverage-http-audit --fail-under=100
-          uv run --locked coverage run --data-file=.coverage-serving-context --source=mlsecops.serving_context -m unittest scripts.serving_context_qualification
+          uv run --locked coverage run --data-file=.coverage-serving-context --source=mlsecops.serving_context -m unittest scripts.serving_context_qualification scripts.audit_correlation_qualification
           uv run --locked coverage report --data-file=.coverage-serving-context --fail-under=100
           uv run --locked coverage run --data-file=.coverage-serving --source=mlsecops.serving_protocol,mlsecops.serving_worker,mlsecops.serving_runtime,mlsecops.serving,mlsecops.serving_http -m unittest scripts.serving_session_qualification scripts.serving_runtime_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.serving_native_qualification
           uv run --locked coverage report --data-file=.coverage-serving --fail-under=85

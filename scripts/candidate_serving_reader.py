@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass, field
 
 from mlsecops import (
+    audit_lineage,
     material_bundle,
     release_bundle,
     release_policy,
@@ -69,13 +70,18 @@ class QualifiedCandidate:
     keys: frozenset[str] = field(repr=False)
     permit_sha256: str = field(repr=False)
     proposal_sha256: str = field(repr=False)
+    lineage: audit_lineage.Lineage = field(repr=False)
     scope: str = field(default=KIND, init=False)
     release_ready: bool = field(default=False, init=False)
 
     @property
     def audit_context(self):
-        return serving_context.QualificationContext(
-            self.permit_sha256, self.proposal_sha256, self.subject_sha256, self.model_sha256
+        return serving_context.QualificationTrace(
+            self.permit_sha256,
+            self.proposal_sha256,
+            self.subject_sha256,
+            self.model_sha256,
+            lineage=self.lineage,
         )
 
 
@@ -215,6 +221,9 @@ class CandidateReader:
                 keys,
                 digest(canonical(permit)),
                 permit["proposal_sha256"],
+                audit_lineage.from_verified_package(
+                    package, verified["manifest"], self.context["trust"]["curator"]
+                ),
             )
             self.trust.refresh()
             self.permission()
