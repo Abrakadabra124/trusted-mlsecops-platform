@@ -25,6 +25,9 @@ uv run --locked python -c "import sys; print(sys.version); print(sys.platform)"
 | Core flag true, неверный signal или появились файлы | Не выполнен native negative contract | Остановить acceptance; не удалять evidence ради зелёного запуска |
 | `serving_load_failed` до attach | Docker inspect core limit отсутствует/изменён/дублирован | Проверить owned container configuration; не передавать payload до исправления |
 | Runtime import failure | Проверить pinned image/dependencies без публикации traceback | Пересобрать из проверенного checkout в disposable CI; не ставить случайную версию пакета |
+| Workflows долго queued / нет native report | Проверить тот же run/job и официальный status provider | Не создавать дубли/не отменять; queue и observer timeout не являются terminal failure |
+| `AttributeError` для `worker.inspect_model` в test | Сверить patch target с lazy import внутри execute | Подменять `model.inspect_model`; не возвращать ранний runtime import ради теста |
+| `WinError 1314` при symlink fixture | Проверить platform и конкретный failed test | Сохранить environmental error; выполнить полную suite на disposable Linux, не отключать symlink denial |
 
 Constant diagnostics намеренно не позволяют отличить приватные причины по публичному stderr. Уточнять причину через отдельные controlled tests, revision и finite stage results, а не возвращая raw error в API/log.
 
@@ -36,6 +39,7 @@ Constant diagnostics намеренно не позволяют отличить
 ```powershell
 uv run --locked coverage run --data-file=.coverage-process-privacy --source=mlsecops.process_privacy -m unittest scripts.process_privacy_qualification scripts.worker_privacy_qualification scripts.serving_runtime_qualification scripts.serving_session_qualification
 uv run --locked coverage report --data-file=.coverage-process-privacy --fail-under=100
+uv run --locked python -m unittest scripts.artifact_intake_qualification.ArtifactIntakeContracts.test_unknown_scanner_rejection_is_redacted
 uv run --locked python scripts/check_docs.py
 ```
 
@@ -50,6 +54,10 @@ Expected на Windows: один явно обозначенный native Linux s
 CLI tests воспроизвели раскрытие unknown arguments, file-path OSError и exception text, отсутствие guard до input и незапрещённые Docker core limits. Review выявил дополнительный путь: ImportError до main печатал traceback; fresh subprocess regression сначала failed для обоих entrypoints, затем runtime imports перенесены под защищённый вызов.
 
 Второй review выявил ранний import ctypes: его native loader тоже мог выдавать traceback до enforce. Импорт перенесён внутрь protected guard. Отдельный fresh-process negative test без подмены всего guard подтвердил red -> green; kernel policy при этом не менялась.
+
+2026-10-19 API показывал af7253e queued на фоне [официального инцидента Actions](https://www.githubstatus.com/incidents/8tzbpcnl75jp), но позднее получены logs с более ранними завершёнными tests. Read-only продолжение: `gh run view 39283688533 --repo Abrakadabra124/trusted-mlsecops-platform --json status,conclusion,jobs` и аналогичная проверка IDs из evidence. Сверять run status, job steps и временные метки logs отдельно; queued/in_progress snapshot не доказывает, что worker ещё не запущен или продолжает работу. Не исправлять runtime или менять timeout по одному такому snapshot. Причинная связь конкретного рассогласования с инцидентом не доказана.
+
+Тот же CI обнаружил пропущенный patch target после lazy imports. Focused test сначала воспроизвёл AttributeError, после замены worker на model прошёл без изменения ожидаемой redaction. Полная локальная artifact suite встретила отдельный Windows symlink permission error; focused pass не выдаётся за full-suite pass. После terminal старых runs публиковать correction отдельным commit, проверить Developer/Intake/M21/Tracking/Image и сохранить оба поколения evidence. Старый image scan skipped нельзя заменять историческими CVE counts.
 
 При несовместимости platform/ABI остановить qualification, сохранить revision и error category, исследовать на собственном disposable Linux fixture. При отсутствии guard защищённый startup не разрешается. Не менять kernel policy чужих процессов, не давать worker CAP_SYS_RESOURCE/SYS_PTRACE и не отключать проверки ради запуска.
 

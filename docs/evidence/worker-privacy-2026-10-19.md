@@ -1,6 +1,6 @@
 # T16: worker diagnostics и process core privacy
 
-Дата: 2026-10-19. Статус: implemented, local contracts verified, native pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Основа `daf42074bb45aeaa438a3ee32bb9a4c221662685`. [ADR 0042](../decisions/0042-worker-process-privacy.md), [RB-61/PB-35](../operations/worker-privacy-troubleshooting.md).
+Дата: 2026-10-19. Статус: native kernel/serving verified на af7253e, intake test regression found, исправление требует новой CI-проверки. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Основа `daf42074bb45aeaa438a3ee32bb9a4c221662685`. [ADR 0042](../decisions/0042-worker-process-privacy.md), [RB-61/PB-35](../operations/worker-privacy-troubleshooting.md).
 
 ## Failure-first
 
@@ -19,4 +19,45 @@
 
 Design cycle1 нашёл actionable import-before-main boundary; implementation cycle2 выявил аналогичный путь при загрузке ctypes до enforce. Оба замечания воспроизведены и исправлены; final cycle3 завершён без новых actionable findings по read-only inspection. Это не независимое повторение тестов и не native proof. Внешняя модель не использовалась по выбору владельца. Новый artifact не переоткрывает завершённый HTTP privacy review.
 
-Storage CI должен подтвердить реальный Linux guard/readback и fork/SIGABRT wait status без core flag/owned files, затем unchanged actual candidate и прежние M-gates. Native syscall test не меняет host core_pattern и не создаёт baseline core dump. До native результата этот документ не принимает worker kernel privacy. После native проверки остаются controller memory/core policy, arbitrary third-party streams, all-output/public export/cardinality и полный M13/R1.
+Storage CI подтвердил реальный Linux guard/readback и fork/SIGABRT wait status без core flag/owned files, unchanged actual candidate и M03/M07. Native syscall test не меняет host core_pattern и не создаёт baseline core dump. Controller memory/core policy, arbitrary third-party streams, all-output/public export/cardinality и полный M13/R1 остаются открытыми. Отдельная intake regression ниже не скрывается успешным Storage job.
+
+## Native evidence af7253e
+
+Code commit `af7253e91a6709800b9d9e1e7febf0f34cd2e427` опубликован в main. [Полный sanitized report и kernel receipt](worker-privacy-af7253e-native.md) сохранены из Storage job **118163593269**, run **39283688533**, attempt 1. Candidate canonical SHA-256: `d3544f54f36b5bb85af11f1b0cb32513af589a1dae05354b0c74cab115daa3fd`.
+
+- Native worker privacy: **13 tests / 0 skips, 0.362 s**, guard 19 statements / 6 branches, 100%. Dumpability 1 -> 0, core limits [0,0], SIGABRT 6, core_dumped=false, owned_files=0. Receipt сохраняет release_ready=false.
+- Existing serving privacy: **17 tests / 0 skips, 1.265 s**; HTTP audit **48 / 0 skips, 4.598 s**; journal **77 / 0 skips, 3.750 s**; serving **81 / 0 skips, 15.763 s**; client access **32 / 0 skips, 2.031 s**. Core audit branch counts 94/98, retention 102/102.
+- Actual candidate: **77 unique cases pass**, finished `2026-10-19T16:21:12.184010+00:00`, source_dirty=false, release_ready=false. Golden 3 rows, max error 0; stopped worker denial 2.013813627 s. Audit pair 8 accepted / 8 durable; privacy 12 requests / 36 confirmed events / 3 owned files, ambient_signals_used=false.
+- Quotas: boundary 422/429/422/429, refill 200/200, admitted deltas [2,2,4]. Outage: 44 observations, first completed 503 after **59.747452988 s**. Paused SQL: **10.002498574 s** with ACTIVE before denial and unfinished query; near-expiry signed policy: **6.689870448 s**, before signed expiry, renewal/readback version 3. Сохранённые traces повторно проверены локальным assessor, без сетевых или SQL вызовов.
+- Worker image: `sha256:4ee6e46110f48213a77e7c9c32fc44f1c6051576789f60990a06041b446687c5`; source fingerprint: `aa9ffa0a6216e7f870370cf1e552bd626fc1971e7670726436f307da504d3916`. M03 **431 pass**, M07 **97 pass**. Kubernetes M20 **723 pass**, finished `2026-10-19T16:27:07.583421+00:00`, но M21 failed с `M21_contracts_failed`.
+
+## Найденная regression и минимальное исправление
+
+Developer CI: 36 tests, 1 error `AttributeError` в `test_unknown_scanner_rejection_is_redacted`. После lazy imports scanner больше не является module-global `worker.inspect_model`; test patch обращался к удалённому имени. Intake report содержит **65 из 66** cases, отсутствует именно этот test. M21 запускает тот же contracts aggregate, поэтому Kubernetes M21 failed; Image и Tracking остановились на `qualification_failed:acceptance-dispatch-M21`. Image package scan на этой revision **не выполнялся**; прежние CVE counts нельзя выдавать за новый scan.
+
+Локальное воспроизведение до исправления: **1 test / 1 error, 0.469 s**. Минимальное исправление меняет только patch target на `model.inspect_model`, откуда worker теперь делает lazy import. Проверки `model_profile_rejected` и отсутствия private-parser-path сохранены. После исправления focused test **1 pass, 0.459 s**. Full artifact suite: **21 tests, 20 pass / 1 environmental error, 1.027 s**; Windows запрещает создание symlink (`WinError 1314`). Тест не отключался, symlink security policy не ослаблялась. Полная Linux-проверка исправления обязательна.
+
+Poisoning остаётся fail: 10 violating / 0 inconclusive scenarios. Evasion recall drop `0.07183673469387755` превышает `0.05`; paired candidate drops `0.052244897959183675`, `0.06224066390041494`, `0.06143344709897611` также превышают порог. Это отдельные ML blockers, не следствие исправленного mock target.
+
+## CI observations и продолжение
+
+На **2026-10-19 16:25 UTC** API показывал все 10 workflows attempt 1 queued, включая Storage job. Позже получены завершённые logs с worker tests в 16:13 UTC и candidate report в 16:21 UTC. Следовательно, ранний queued snapshot не доказывает фактическое отсутствие выполнения; наблюдается рассогласование статусов и времени job logs. Rerun/cancel не выполнялись.
+
+[Официальный инцидент GitHub 8tzbpcnl75jp](https://www.githubstatus.com/incidents/8tzbpcnl75jp) опубликован 2026-10-19T15:49:25Z; Actions имеет degraded_performance, статус investigating. Provider сообщает задержки обработки workflows. Это согласуется с наблюдаемой очередью, но не является доказанным root cause конкретного job. Не менять код/timeout и не ослаблять gates из-за одного наблюдения очереди.
+
+На **2026-10-19 16:38:56 UTC** все 10 workflows terminal, attempt 1: **2 success / 8 failure**. Это зафиксированное состояние af7253e до correction, не новый all-pass.
+
+| Workflow | Run | Terminal conclusion |
+| --- | --- | --- |
+| Storage | [39283688533](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688533) | success; kernel, serving, M03/M07 |
+| Kubernetes | [39283688663](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688663) | failure; M20 pass, M21_contracts_failed |
+| Developer | [39283688644](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688644) | failure; stale scanner patch target |
+| Tracking | [39283688770](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688770) | failure; acceptance-dispatch-M21, result inconclusive |
+| Intake | [39283688551](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688551) | failure; 65/66 contract cases |
+| Documentation | [39283688430](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688430) | success |
+| Image audit | [39283688442](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688442) | failure; candidate qualification M21, package scan skipped |
+| Poisoning | [39283688619](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688619) | failure; 10 violating scenarios |
+| Evasion | [39283688594](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688594) | failure; recall drop > 0.05 |
+| Paired training | [39283688673](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39283688673) | failure; candidate recall drops > 0.05 |
+
+Истечение локального observer timeout не означает остановку CI. Полный sanitized candidate report и kernel receipt сохранены, но component pass не принимает всю revision. Исправление test target публикуется отдельным commit после terminal matrix и требует новой CI-проверки; исторический 621d355 pass не переносится на af7253e.

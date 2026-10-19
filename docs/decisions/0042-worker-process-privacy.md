@@ -1,6 +1,6 @@
 # ADR 0042: безопасная диагностика и запрет core dump в ML-worker
 
-Дата: 2026-10-19. Статус: implemented, local contracts pass, native verification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0041](0041-serving-output-privacy.md); не принимает полный M13/R1.
+Дата: 2026-10-19. Статус: implemented, native kernel/serving verified af7253e; intake test regression требует повторной compatibility CI после исправления. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0041](0041-serving-output-privacy.md); не принимает полный M13/R1.
 
 ## Требование и фактическая граница
 
@@ -27,6 +27,6 @@
 
 Failure-first CLI/argv/file/import tests, negative Docker readback и отдельный 100% gate для guard описаны в [evidence](../evidence/worker-privacy-2026-10-19.md). [RB-61/PB-35](../operations/worker-privacy-troubleshooting.md) фиксирует diagnosis/recovery.
 
-Native CI должен в отдельном disposable Linux subprocess подтвердить dumpable 1 -> 0 и limits [0,0], затем fork/SIGABRT и `WCOREDUMP=false`, signal 6, отсутствие файлов в owned temporary directory. Один returncode или пустой каталог недостаточен для вывода о pipe collector. Baseline dump не создаётся; `core_pattern`, privileged services и чужие данные не читаются/не меняются.
+Native CI af7253e в отдельном disposable Linux subprocess подтвердил dumpable 1 -> 0 и limits [0,0], затем fork/SIGABRT и `WCOREDUMP=false`, signal 6, отсутствие файлов в owned temporary directory. Один returncode или пустой каталог недостаточен для вывода о pipe collector. Baseline dump не создаётся; `core_pattern`, privileged services и чужие данные не читаются/не меняются. [Полный receipt и candidate regression](../evidence/worker-privacy-af7253e-native.md) не отменяют отдельно найденную intake test regression или failed ML gates.
 
 Не заявляются защита от privileged host, намеренного переустановления dumpability скомпрометированным native code, контроллерных core dumps, всех сторонних diagnostic streams, encrypted memory или полная M13-приёмка. Privacy report/export, approved metrics/cardinality и полная audit correlation остаются отдельной работой. Без accepted image/ML gates release запрещён.

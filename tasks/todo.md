@@ -1,6 +1,6 @@
 # Backlog реализации
 
-T16 worker increment: безопасная диагностика CLI/import и Linux core/dumpability guard реализованы, локально проверены; [native pending](../docs/evidence/worker-privacy-2026-10-19.md). Не закрывает весь worker/controller output scope или M13. [RB-61/PB-35](../docs/operations/worker-privacy-troubleshooting.md).
+T16 worker increment: безопасная диагностика CLI/import и Linux core/dumpability guard реализованы; [native af7253e](../docs/evidence/worker-privacy-2026-10-19.md): 13 tests / 0 skips, guard 100%, 77 candidate cases pass. Intake test regression исправлена локально, новая CI matrix обязательна; Windows symlink error не скрыт. Не закрывает весь worker/controller output scope или M13. [RB-61/PB-35](../docs/operations/worker-privacy-troubleshooting.md).
 
 T16 update 2026-10-19: [existing output privacy](../docs/evidence/serving-privacy-2026-10-19.md) проверена на native 621d355: 17 privacy tests / 0 skips, 77 actual-candidate cases, 12 privacy requests / 36 durable events. Все 10 CI terminal: 6 success / 4 failure, M20 723/M21 122 pass; четыре image/ML failures сохраняются. T16 открыта: worker channels/metrics/cardinality/export/full correlation не закрыты; [RB-60/PB-34](../docs/operations/serving-privacy-troubleshooting.md).
 

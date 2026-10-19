@@ -137,7 +137,7 @@ class ArtifactIntakeContracts(unittest.TestCase):
             self.inspect(executor=executor)
 
     def test_unknown_scanner_rejection_is_redacted(self):
-        with patch.object(worker, "inspect_model", side_effect=Rejected("private-parser-path")):
+        with patch.object(model, "inspect_model", side_effect=Rejected("private-parser-path")):
             with self.assertRaises(artifact_intake.IntakeFailure) as failure:
                 self.inspect()
         self.assertEqual(failure.exception.report["reason"], "model_profile_rejected")
