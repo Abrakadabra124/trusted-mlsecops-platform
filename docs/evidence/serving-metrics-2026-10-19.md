@@ -24,6 +24,12 @@ Windows, Python 3.12, uv.lock. Первоначальный adjacent прого�
 
 ## Оставшиеся границы
 
+## Первый native attempt и source correction
+
+[Полная matrix и M03 report 4c86fcb](serving-metrics-4c86fcb-native.md): **2 success / 8 failure**, все 10 terminal. Metrics gate прошёл **35 tests / 0 skips**, 100% обоих модулей; worker guard 13 tests / 0 skips, 100%. Actual-candidate steps не выполнялись: изменение uv.lock не было отражено в data.lock, source verification остановила M03. Это обнаруженный integration defect, не успешная приёмка.
+
+Локально воспроизведён source_lock_mismatch_explicit_update_required. Сравнение inputs показало только uv.lock; generated output прежний, 1 915 576 bytes / 1a96301cdec7f66ab56265db150befb99147350f0ccef6fab8dd6f2887df6473. После явного обновления только этой provenance-привязки validate_lock pass, две fresh generations побайтно равны и verified-cache pass в отдельном TemporaryDirectory без инфраструктуры. Poisoning contracts: **9 tests / 0 skips, 4.818 s**. Пороги и dataset output не изменялись; новая clean CI ещё нужна.
+
 Финальная broad regression после всех исправлений: **159 tests / 0 failures / 0 errors / 2 skips**, 27.800 s. Ruff check/format pass, documentation checker: 430 files / 177 Markdown / 1267 local links. Lock сравнен с base: единственный новый пакет prometheus-client, прежние версии не изменены. Эти результаты локальные; подтверждение native CI будет добавлено отдельно.
 
 Full M13/T16/R1 открыты. Нет доказательства client receipt, всех необнаруженных disconnects, hard realtime timeout, multi-process/HA, controller core policy, всех platform output channels, end-to-end public export/correlation, differential privacy или business utility. Исторические image/ML failures сохраняются в [предыдущей matrix](worker-privacy-2026-10-19.md); новая metrics qualification их не отменяет.
