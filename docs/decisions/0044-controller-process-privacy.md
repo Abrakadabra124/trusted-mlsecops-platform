@@ -1,6 +1,6 @@
 # ADR 0044: privacy на входе controller/transport/serving CLI
 
-Дата: 2026-10-19. Статус: implemented, native qualification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0042](0042-worker-process-privacy.md) и [ADR 0043](0043-serving-metrics.md). Не принимает полный M13.
+Дата: 2026-10-19. Статус: implemented, [native verified fe1437e](../evidence/controller-privacy-2026-10-19.md). Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0042](0042-worker-process-privacy.md) и [ADR 0043](0043-serving-metrics.md). Не принимает полный M13.
 
 ## Проверенный пробел
 

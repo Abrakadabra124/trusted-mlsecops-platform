@@ -5,7 +5,7 @@
 - Guard пяти runtime CLI, constant errors/cancellation, private argparse, read-only publisher/scorer snapshot и явная M20 проверка.
 - Uvicorn lifecycle sanitizer, прямой single-process Server с проверкой startup и наблюдаемой отменой вместо скрывающего KeyboardInterrupt convenience wrapper.
 - Transport lifecycle закрывает частичный startup, ошибки чтения, deferred cancellation и per-stream cleanup; неоднозначный bootstrap не считается завершением. Terminal cleanup failure не принимается developer qualification за успешный negative.
-- Failure-first regressions, native Linux child/SIGINT probes в CI, [ADR 0044](docs/decisions/0044-controller-process-privacy.md), [RB-63/PB-37](docs/operations/controller-privacy-troubleshooting.md), [evidence](docs/evidence/controller-privacy-2026-10-19.md). Native qualification pending; full M13/R1 открыт.
+- Failure-first regressions, native Linux child/SIGINT probes в CI, [ADR 0044](docs/decisions/0044-controller-process-privacy.md), [RB-63/PB-37](docs/operations/controller-privacy-troubleshooting.md), [native fe1437e evidence](docs/evidence/controller-privacy-2026-10-19.md). Linux 18 + 70 tests / 0 skips, actual controller snapshot, 78 candidate cases, M20 725 / M21 122 pass; CI 6 success / 4 failure. Full M13/R1 открыт.
 
 ## R1 bounded serving metrics - 2026-10-19
 

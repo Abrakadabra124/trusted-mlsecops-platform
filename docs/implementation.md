@@ -1,6 +1,6 @@
 # Реализация R1
 
-T16 controller/transport increment: [ADR 0044](decisions/0044-controller-process-privacy.md), [evidence](evidence/controller-privacy-2026-10-19.md), [RB-63/PB-37](operations/controller-privacy-troubleshooting.md). Реализованы CLI guard/constant diagnostics, read-only native snapshot, lifecycle sanitization и per-stream cleanup с deferred cancellation. Native qualification pending; full M13/T16/R1 не закрыты.
+T16 controller/transport increment: [ADR 0044](decisions/0044-controller-process-privacy.md), [native fe1437e evidence](evidence/controller-privacy-2026-10-19.md), [RB-63/PB-37](operations/controller-privacy-troubleshooting.md). Linux 18 guard + 70 lifecycle tests / 0 skips, actual publisher/scorer snapshot, native SIGINT 130; 78 candidate cases, M20 725 / M21 122 pass. Все 10 CI terminal: 6 success / 4 failure. CLI/lifecycle/cleanup scope проверен; full M13/T16/R1 и public-export/correlation не закрыты.
 
 T16 metrics increment: [ADR 0043](decisions/0043-serving-metrics.md), **native 93de1b6: 35 metrics tests / 0 skips / 100%, 78 actual-candidate cases pass**, 69 samples без request identities. [Evidence и обе CI matrix](evidence/serving-metrics-2026-10-19.md): source-lock integration defect исправлен после проверки неизменности data bytes; все 10 terminal, 6 success / 4 failure. Локальная regression 159 tests / 2 POSIX skips. [RB-62/PB-36](operations/serving-metrics-troubleshooting.md). Prometheus/Grafana не развёрнуты; full M13/T16/R1, controller/all-output/export scope и image/ML blockers не закрыты.
 

@@ -89,7 +89,7 @@ Recovery increment после a65ee56: opt-in backup manifest v2 включае�
 
 ## Неделя 9: Serving и privacy
 
-Controller/transport privacy increment: [ADR 0044](../docs/decisions/0044-controller-process-privacy.md), guard/readback/lifecycle/cleanup реализованы, [native qualification pending](../docs/evidence/controller-privacy-2026-10-19.md). Следом остаются полный all-output/public-export/correlation scope и M13, без ослабления требований.
+Controller/transport privacy increment: [ADR 0044](../docs/decisions/0044-controller-process-privacy.md), guard/readback/lifecycle/cleanup [native verified fe1437e](../docs/evidence/controller-privacy-2026-10-19.md): 18 + 70 tests / 0 skips, M20 725 / M21 122 и 78 candidate cases pass. Следом остаются полный all-output/public-export/correlation scope и M13, без ослабления требований.
 
 Реализован [API/isolated serving increment](../docs/serving-api.md): persistent session, actual-byte load handshake, before/after trust checks и bounded HTTP contract. [ADR 0031](../docs/decisions/0031-isolated-serving-api.md) и [evidence](../docs/evidence/serving-api-2026-10-14.md) отделяют fixture execution от настоящей acceptance. Далее обязательны candidate-bound full M12, HTTP outage deadline trace и T16 privacy/quotas/audit; thresholds и исходная цель не сокращены.
 
