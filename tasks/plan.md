@@ -89,6 +89,8 @@ Recovery increment после a65ee56: opt-in backup manifest v2 включае�
 
 ## Неделя 9: Serving и privacy
 
+Controller/transport privacy increment: [ADR 0044](../docs/decisions/0044-controller-process-privacy.md), guard/readback/lifecycle/cleanup реализованы, [native qualification pending](../docs/evidence/controller-privacy-2026-10-19.md). Следом остаются полный all-output/public-export/correlation scope и M13, без ослабления требований.
+
 Реализован [API/isolated serving increment](../docs/serving-api.md): persistent session, actual-byte load handshake, before/after trust checks и bounded HTTP contract. [ADR 0031](../docs/decisions/0031-isolated-serving-api.md) и [evidence](../docs/evidence/serving-api-2026-10-14.md) отделяют fixture execution от настоящей acceptance. Далее обязательны candidate-bound full M12, HTTP outage deadline trace и T16 privacy/quotas/audit; thresholds и исходная цель не сокращены.
 
 После verified native `2942255` следующий короткий этап T15 - qualification на неизменённом proposal настоящего synthetic training/evaluation, а не на пересобранной test lineage. Проверять source/model/material digests и точный release subject; сохранить отдельные qualification authority, credentials и scope. Не импортировать искусственные all-pass reports как реальную приёмку остальных gates. M12 evidence должен фиксировать actual candidate, входные материалы и HTTP checks; final promotion остаётся отдельным шагом, запрещённым при любом failed/inconclusive gate. Затем добавить timestamped HTTP trust-outage trace <=60 s; component-only trust timing не заменяет endpoint trace.

@@ -648,8 +648,9 @@ class ServingConfigurationContracts(unittest.TestCase):
     def test_cli_binds_loopback_and_does_not_enable_access_logs_or_proxy_headers(self):
         with (
             patch("sys.argv", ["serving", "--config", "controlled.json"]),
+            patch.object(serving_http, "enforce_privacy"),
             patch.object(serving_http, "configured", return_value=Mock()),
-            patch.object(serving_http.uvicorn, "run") as run,
+            patch.object(serving_http, "run_server") as run,
         ):
             self.assertEqual(serving_http.main(), 0)
             self.assertEqual(run.call_args.kwargs["host"], "127.0.0.1")
@@ -657,6 +658,7 @@ class ServingConfigurationContracts(unittest.TestCase):
             self.assertIs(run.call_args.kwargs["proxy_headers"], False)
         with (
             patch("sys.argv", ["serving", "--config", "PRIVATE-CANARY", "--port", "1"]),
+            patch.object(serving_http, "enforce_privacy"),
             redirect_stderr(io.StringIO()) as diagnostic,
         ):
             self.assertEqual(serving_http.main(), 1)

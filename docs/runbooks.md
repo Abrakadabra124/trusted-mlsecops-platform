@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Controller privacy, lifecycle и cleanup, RB-63/PB-37](operations/controller-privacy-troubleshooting.md). Constant CLI/lifespan diagnostics, native readback, partial/ambiguous reader startup и cancellation; [evidence](evidence/controller-privacy-2026-10-19.md). Native qualification pending; полный M13 не принят.
+
 - [Serving metrics и bounded scrape, RB-62/PB-36](operations/serving-metrics-troubleshooting.md). Operator identity/quotas, final-send/disconnect, schema/canary checks, source-lock correction и safe rollback; [native 93de1b6 evidence](evidence/serving-metrics-2026-10-19.md): 35 metrics tests, 78 candidate cases, 69 approved samples. Полные M13/R1 остаются открытыми.
 
 - [Worker startup diagnostics и core policy, RB-61/PB-35](operations/worker-privacy-troubleshooting.md). Guard до input/runtime imports, constant errors и native wait-status proof; [evidence](evidence/worker-privacy-2026-10-19.md) сохраняет Windows skip и pending Linux qualification.

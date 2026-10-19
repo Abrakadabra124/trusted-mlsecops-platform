@@ -28,7 +28,7 @@ from mlsecops.pipeline import evaluate_candidate, train_candidate, validate_scor
 from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.sandbox import run_worker
 from mlsecops.signing import encode64, pae, sign, verify
-from mlsecops.worker_transport import capture, unwrap
+from mlsecops.worker_transport import CleanupIncomplete, capture, unwrap
 
 
 def qualify(root, state, image):
@@ -39,6 +39,8 @@ def qualify(root, state, image):
     def rejected(identifier, operation):
         try:
             operation()
+        except CleanupIncomplete:
+            raise
         except Rejected as error:
             cases.append(
                 {"id": identifier, "expected": "reject", "actual": str(error), "status": "pass"}

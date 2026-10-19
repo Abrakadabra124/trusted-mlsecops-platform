@@ -116,6 +116,7 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 - Проверка: request limit suite, malicious paths/URLs не поддерживаются, TOCTOU и missing signature не дают ready.
 
 ## T16
+- Controller/transport privacy: [ADR 0044](../docs/decisions/0044-controller-process-privacy.md), [evidence](../docs/evidence/controller-privacy-2026-10-19.md), [RB-63/PB-37](../docs/operations/controller-privacy-troubleshooting.md). Implemented, native qualification pending; не полная M13-приёмка.
 - [ ] Privacy, quotas и audit. Зависимость: T15. Gate: M13.
 - HTTP increment, native verified 2026-10-19: [ADR 0040](../docs/decisions/0040-serving-http-audit.md), обязательный audit до body/executor, own durable intent до 200, actual send/cancel и slot lifetime. [281e902 evidence](../docs/evidence/serving-http-audit-2026-10-18.md): 48 HTTP tests / 0 skips, module 100%, 74 candidate cases, audit pair 8/8; CI 6 success / 4 failure. All-output canaries/cardinality/correlation остаются следующими. Windows concurrent real-fsync не квалифицирован. Исторические checkpoints ниже не описывают текущий HTTP code.
 - Component 2026-10-18: [audit admission](../docs/decisions/0039-audit-admission.md), четыре reserved events, owned durable ack и event schema 2. [Native 01ec902](../docs/evidence/audit-admission-2026-10-18.md): 77 methods / 0 skips, schema 100%, core 94/98 branches, retention 102/102; 72 serving regression cases pass. CI 6 success / 4 failure. Следом обязательное HTTP подключение, actual send/cancellation, sink/deadline cases и all-output privacy/cardinality. M13 не закрыт.

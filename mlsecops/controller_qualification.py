@@ -283,6 +283,10 @@ def qualify(root, state, image):
             and not observed["model_parser_loaded"],
         )
         confirmed(
+            f"{role}:kernel-privacy-readback",
+            observed.get("privacy") == {"dumpable": 0, "core_limits": [0, 0]},
+        )
+        confirmed(
             f"{role}:measured-memory-below-limit", 0 < observed["peak_memory_kib"] < 512 * 1024
         )
         confirmed(
@@ -409,6 +413,10 @@ def qualify(root, state, image):
         "parity_max_error": evaluation["report"]["validation_parity_max_error"],
         "publisher_peak_kib": publisher["process"]["peak_memory_kib"],
         "scorer_peak_kib": scorer["process"]["peak_memory_kib"],
+        "process_privacy": {
+            role: item["process"]["privacy"]
+            for role, item in (("publisher", publisher), ("scorer", scorer))
+        },
         "checks": len(cases),
         "cases": cases,
         "release_ready": False,

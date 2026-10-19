@@ -257,6 +257,7 @@ class IntakeDenialContracts(unittest.TestCase):
         output = io.StringIO()
         with (
             patch("sys.argv", ["controller", "--request", "fixture.json"]),
+            patch.object(controller, "enforce_privacy"),
             patch.object(controller, "read_json", return_value={}),
             patch.object(
                 controller, "execute", side_effect=intake_denial.RecordedDenial("1" * 64, "fail")

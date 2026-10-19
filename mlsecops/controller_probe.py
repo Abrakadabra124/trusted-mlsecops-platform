@@ -1,9 +1,11 @@
-import argparse
+import sys
 import tempfile
 from pathlib import Path
 
 from mlsecops.contracts import Rejected, atomic_write, canonical
 from mlsecops.controller_api import APIError, Client
+from mlsecops.private_cli import Arguments
+from mlsecops.process_privacy import enforce as enforce_privacy
 
 
 def probe(role):
@@ -45,11 +47,19 @@ def probe(role):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Real controller HTTPS and authentication probes")
-    parser.add_argument("--role", choices=("publisher", "scorer"), required=True)
-    arguments = parser.parse_args()
-    print(canonical(probe(arguments.role)).decode())
+    try:
+        enforce_privacy()
+        parser = Arguments(
+            prog="controller-probe", description="Real controller HTTPS and authentication probes"
+        )
+        parser.add_argument("--role", choices=("publisher", "scorer"), required=True)
+        arguments = parser.parse_args()
+        print(canonical(probe(arguments.role)).decode())
+        return 0
+    except (Exception, KeyboardInterrupt) as error:
+        print("controller_probe_rejected", file=sys.stderr)
+        return 130 if isinstance(error, KeyboardInterrupt) else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

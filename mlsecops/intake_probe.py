@@ -1,4 +1,3 @@
-import argparse
 import copy
 import re
 import sys
@@ -19,6 +18,8 @@ from mlsecops.contracts import Rejected, canonical, digest, now, read_json, requ
 from mlsecops.controller import process_state
 from mlsecops.controller_api import APIError, Client
 from mlsecops.inventory import source_fingerprint
+from mlsecops.private_cli import Arguments
+from mlsecops.process_privacy import enforce as enforce_privacy
 
 MUTATIONS = (
     "zero-inspected",
@@ -419,26 +420,25 @@ def readback(request, client):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Scoped intake qualification, not a release approval"
-    )
-    parser.add_argument("--request", type=Path, required=True)
-    parser.add_argument("--read-only", action="store_true")
-    arguments = parser.parse_args()
     try:
+        enforce_privacy()
+        parser = Arguments(
+            prog="intake-probe", description="Scoped intake qualification, not a release approval"
+        )
+        parser.add_argument("--request", type=Path, required=True)
+        parser.add_argument("--read-only", action="store_true")
+        arguments = parser.parse_args()
         request = read_json(arguments.request)
         result = readback(request, Path("/client")) if arguments.read_only else qualify(request)
         print(canonical(result).decode())
         return 0
-    except (Rejected, OSError, KeyError, TypeError, ValueError) as error:
-        reason = (
-            str(error)
-            if isinstance(error, Rejected)
-            and re.fullmatch(r"kube_intake_[a-z_]{1,80}(?::[a-z-]{1,64})?", str(error))
-            else "kube_intake_probe_incomplete"
+    except (Exception, KeyboardInterrupt) as error:
+        print(
+            canonical(
+                {"status": "fail", "reason": "kube_intake_probe_incomplete", "release_ready": False}
+            ).decode()
         )
-        print(canonical({"status": "fail", "reason": reason, "release_ready": False}).decode())
-        return 1
+        return 130 if isinstance(error, KeyboardInterrupt) else 1
 
 
 if __name__ == "__main__":

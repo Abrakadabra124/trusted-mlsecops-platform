@@ -42,8 +42,13 @@ jobs:
       - name: Worker process privacy contracts and native kernel readback
         run: |
           uv run --locked python -c "import sys; assert sys.platform == 'linux', 'native privacy qualification requires Linux'"
-          uv run --locked coverage run --data-file=.coverage-process-privacy --source=mlsecops.process_privacy -m unittest scripts.process_privacy_qualification scripts.worker_privacy_qualification
+          uv run --locked coverage run --data-file=.coverage-process-privacy --source=mlsecops.process_privacy -m unittest scripts.process_privacy_qualification scripts.worker_privacy_qualification scripts.controller_readback_qualification
           uv run --locked coverage report --data-file=.coverage-process-privacy --fail-under=100
+      - name: Controller CLI privacy and owned transport lifecycle contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-controller-privacy --source=mlsecops.private_cli,mlsecops.serving_lifecycle,mlsecops.worker_transport -m unittest scripts.controller_privacy_qualification scripts.worker_transport_privacy_qualification scripts.serving_lifecycle_qualification scripts.transport_owner_qualification scripts.serving_http_qualification scripts.intake_denial_qualification
+          uv run --locked coverage report --data-file=.coverage-controller-privacy --include='mlsecops/private_cli.py,mlsecops/serving_lifecycle.py' --fail-under=100
+          uv run --locked coverage report --data-file=.coverage-controller-privacy --include='mlsecops/worker_transport.py' --fail-under=95
       - name: Private audit and retained storage lifecycle contracts
         run: |
           uv run --locked coverage run --data-file=.coverage-audit-branch-checker --source=scripts.audit_branch_coverage -m unittest scripts.audit_branch_coverage_qualification

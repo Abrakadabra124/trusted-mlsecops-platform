@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import os
 import re
@@ -21,12 +20,15 @@ from mlsecops import (
     serving_audit,
     serving_context,
     serving_http_audit,
+    serving_lifecycle,
     serving_metrics,
     trust,
     trust_authority,
 )
 from mlsecops.contracts import Rejected, bounded_read, decode, require_fields
 from mlsecops.datasets import FEATURES
+from mlsecops.private_cli import Arguments
+from mlsecops.process_privacy import enforce as enforce_privacy
 
 MAX_BODY = 65536
 
@@ -368,7 +370,7 @@ def create_app(
                 if acquired:
                     app.state.slots.release()
 
-    return serving_metrics.Middleware(app, metrics)
+    return serving_lifecycle.Middleware(serving_metrics.Middleware(app, metrics))
 
 
 def configured(path):
@@ -443,30 +445,42 @@ def configured(path):
     )
 
 
+def run_server(app, **options):
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="on", workers=1, **options))
+    server.run()
+    if not server.started:
+        raise Rejected("serving_startup_incomplete")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Loopback-only verified Release Risk Advisor")
-    parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--port", type=int, default=8080)
-    options = parser.parse_args()
     try:
+        enforce_privacy()
+        parser = Arguments(
+            prog="serving", description="Loopback-only verified Release Risk Advisor"
+        )
+        parser.add_argument("--config", type=Path, required=True)
+        parser.add_argument("--port", type=int, default=8080)
+        options = parser.parse_args()
         if not 1024 <= options.port <= 65535:
             raise Rejected("http_port_invalid")
         app = configured(options.config)
-    except (Rejected, OSError, KeyError, TypeError, ValueError):
+        run_server(
+            app,
+            host="127.0.0.1",
+            port=options.port,
+            access_log=False,
+            proxy_headers=False,
+            server_header=False,
+            timeout_keep_alive=5,
+            limit_concurrency=16,
+            log_level="warning",
+        )
+        if getattr(app, "lifecycle_failed", False) is True:
+            raise Rejected("serving_lifecycle_rejected")
+        return 0
+    except (Exception, KeyboardInterrupt) as error:
         print("serving_configuration_rejected", file=sys.stderr)
-        return 1
-    uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=options.port,
-        access_log=False,
-        proxy_headers=False,
-        server_header=False,
-        timeout_keep_alive=5,
-        limit_concurrency=16,
-        log_level="warning",
-    )
-    return 0
+        return 130 if isinstance(error, KeyboardInterrupt) else 1
 
 
 if __name__ == "__main__":
