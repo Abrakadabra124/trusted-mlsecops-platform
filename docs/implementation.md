@@ -1,6 +1,6 @@
 # Реализация R1
 
-T16 public export: [ADR 0045](decisions/0045-public-audit-export.md), [evidence](evidence/audit-export-2026-10-19.md), [RB-64/PB-38](operations/audit-export-troubleshooting.md). Closed owned snapshot -> strict projection -> independent public/source verification -> actual-candidate report. Local verification выполнена, native acceptance pending; full all-output/private correlation и M13/R1 не закрыты.
+T16 public export: [ADR 0045](decisions/0045-public-audit-export.md), [native f0d0542 evidence](evidence/audit-export-2026-10-19.md), [RB-64/PB-38](operations/audit-export-troubleshooting.md). Closed owned snapshot -> strict projection -> independent public/source verification -> actual-candidate report: Linux 46 tests / 0 skips, 80 candidate cases; 332 events / 83 completed / 0 unresolved. CI 6 success / 4 failure, Storage attempt 2; failed M07 attempt 1 и неизвестная причина connection rejection сохранены. Full all-output/private correlation и M13/R1 не закрыты.
 
 T16 controller/transport increment: [ADR 0044](decisions/0044-controller-process-privacy.md), [native fe1437e evidence](evidence/controller-privacy-2026-10-19.md), [RB-63/PB-37](operations/controller-privacy-troubleshooting.md). Linux 18 guard + 70 lifecycle tests / 0 skips, actual publisher/scorer snapshot, native SIGINT 130; 78 candidate cases, M20 725 / M21 122 pass. Все 10 CI terminal: 6 success / 4 failure. CLI/lifecycle/cleanup scope проверен; full M13/T16/R1 и public-export/correlation не закрыты.
 

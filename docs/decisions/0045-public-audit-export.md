@@ -1,6 +1,6 @@
 # ADR 0045: bounded public audit export без приватных идентификаторов
 
-Дата: 2026-10-19. Статус: accepted design, implementation locally verified; native qualification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0044](0044-controller-process-privacy.md), не принимает полный M13.
+Дата: 2026-10-19. Статус: accepted, [native f0d0542 verified](../evidence/audit-export-f0d0542-native.md): 46 tests / 0 skips и 80 actual-candidate cases. Storage attempt 1 failed M07, attempt 2 passed; retry не устраняет неизвестный connection defect. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Продолжает [ADR 0044](0044-controller-process-privacy.md), не принимает полный M13.
 
 ## Требование и проверенный пробел
 
