@@ -81,6 +81,8 @@ def bind_real_runtime(fixture, image):
 
 @contextmanager
 def site(engine, *, clients=None, audit=None):
+    from scripts.serving_privacy_probe import scan_owned_audit
+
     if audit is not None:
         with _site(engine, clients=clients, audit=audit) as request:
             yield request
@@ -94,6 +96,7 @@ def site(engine, *, clients=None, audit=None):
         journal.start()
         try:
             with _site(engine, clients=clients, audit=journal) as request:
+                request.audit_scan = partial(scan_owned_audit, path)
                 yield request
         finally:
             journal.close()
@@ -132,7 +135,9 @@ def _site(engine, *, clients, audit):
                     raise Rejected("serving_native_startup")
                 time.sleep(0.05)
 
-            def request(path, payload=None, authorized=True, *, credential=None):
+            def request(
+                path, payload=None, authorized=True, *, credential=None, headers=None, raw=False
+            ):
                 body = (
                     payload
                     if isinstance(payload, bytes)
@@ -140,16 +145,24 @@ def _site(engine, *, clients, audit):
                     if payload is not None
                     else None
                 )
-                headers = {"Content-Type": "application/json"}
+                request_headers = {"Content-Type": "application/json", **(headers or {})}
                 if authorized:
-                    headers["Authorization"] = "Bearer " + (
+                    request_headers["Authorization"] = "Bearer " + (
                         token if credential is None else credential
                     )
                 connection = http.client.HTTPConnection("127.0.0.1", port, timeout=45)
                 try:
-                    connection.request("GET" if payload is None else "POST", path, body, headers)
+                    connection.request(
+                        "GET" if payload is None else "POST", path, body, request_headers
+                    )
                     response = connection.getresponse()
                     content = response.read(65537)
+                    if len(content) > 65536 or response.read(1):
+                        raise Rejected("serving_native_response_overflow")
+                    if response.length not in (None, 0):
+                        raise Rejected("serving_native_response_incomplete")
+                    if raw:
+                        return response.status, response.getheaders(), content
                     return response.status, decode(content, 65536)
                 finally:
                     connection.close()
@@ -163,6 +176,7 @@ def _site(engine, *, clients, audit):
 
             request.admissions = admissions
             request.audit_status = audit.status
+            request.privacy_credential = token
             yield request
         finally:
             server.should_exit = True
@@ -225,6 +239,8 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
     transport = services.enter_context(site(engine, clients=clients))
     request = partial(transport, credential=clients["clients"][2]["token"])
     request.audit_status = transport.audit_status
+    request.audit_scan = transport.audit_scan
+    request.privacy_credential = clients["clients"][2]["token"]
     features, expected = golden
     body = {
         "schema_version": 1,

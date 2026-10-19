@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Serving privacy и полнота capture, RB-60/PB-34](operations/serving-privacy-troubleshooting.md). Native telemetry/redirect controls, bounded canaries и fail-closed диагностический probe; [evidence](evidence/serving-privacy-2026-10-19.md) различает local tests и pending native candidate.
+
 - [HTTP audit lifecycle, RB-59/PB-33](operations/serving-http-audit-troubleshooting.md). Fail-closed admission, owned intent, actual send/cancel, pending quota ownership и safe recovery; [evidence](evidence/serving-http-audit-2026-10-18.md) фиксирует native 281e902 pass и отдельное Windows fsync limitation.
 
 - [Audit admission и durability, RB-58/PB-32](operations/audit-admission-troubleshooting.md). Bounded reservations, owned ack, pending writer и mixed event versions; HTTP integration рассматривается отдельно в RB-59.

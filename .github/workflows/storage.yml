@@ -133,6 +133,8 @@ jobs:
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable
       - name: Persistent serving, HTTP limits and cancellation contracts
         run: |
+          uv run --locked coverage run --data-file=.coverage-privacy --source=scripts.serving_privacy_probe -m unittest scripts.serving_privacy_qualification
+          uv run --locked coverage report --data-file=.coverage-privacy --fail-under=100
           uv run --locked coverage run --data-file=.coverage-http-audit --source=mlsecops.serving_http_audit -m unittest scripts.serving_http_qualification scripts.serving_http_audit_qualification
           uv run --locked coverage report --data-file=.coverage-http-audit --fail-under=100
           uv run --locked coverage run --data-file=.coverage-serving-context --source=mlsecops.serving_context -m unittest scripts.serving_context_qualification

@@ -39,6 +39,7 @@ from scripts.serving_native import check_http, site
 from scripts.serving_outage_native import ObservedLease
 from scripts.serving_outage_native import exercise as exercise_outage
 from scripts.serving_pause_native import exercise as exercise_pause
+from scripts.serving_privacy_probe import exercise as exercise_privacy
 
 
 def audit_idle(request):
@@ -111,6 +112,17 @@ def context_matrix(engine, request, body, confirmed, context):
         "durable_delta": durable,
         "release_ready": False,
     }
+
+
+def privacy_matrix(request, body, confirmed):
+    result = exercise_privacy(request, body)
+    confirmed("privacy-http-input-and-output-matrix", result["request_cases"] == 12)
+    confirmed(
+        "privacy-owned-audit-input-absent",
+        result["audit_events_confirmed"] == 36 and result["audit_files_scanned"] > 0,
+    )
+    confirmed("privacy-native-telemetry-disabled", not result["ambient_signals_used"])
+    return result
 
 
 def http_matrix(engine, request, body, confirmed):
@@ -315,6 +327,7 @@ def qualify(root, state, image, *, trust_port=15446):
             paused = {}
             expiry = {}
             audit = {}
+            privacy = {}
 
             def exercise(engine, request, body):
                 audit.update(context_matrix(engine, request, body, confirmed, loaded.audit_context))
@@ -364,6 +377,8 @@ def qualify(root, state, image, *, trust_port=15446):
                     )
                 )
 
+                privacy.update(privacy_matrix(request, body, confirmed))
+
             request, body, runtime = check_http(
                 services,
                 reader(),
@@ -376,6 +391,7 @@ def qualify(root, state, image, *, trust_port=15446):
             runtime["http_paused_query"] = paused
             runtime["http_expiring_query"] = expiry
             runtime["http_audit"] = audit
+            runtime["http_privacy"] = privacy
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

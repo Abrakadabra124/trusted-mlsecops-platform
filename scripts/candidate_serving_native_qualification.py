@@ -79,7 +79,10 @@ class CandidateServingHarnessContracts(unittest.TestCase):
             self.assertEqual(audit["accepted_delta"], 8)
             self.assertEqual(audit["durable_delta"], 8)
             self.assertFalse(audit["release_ready"])
-        self.assertEqual(len(cases), 21)
+            privacy = native.privacy_matrix(request, body, confirmed)
+            self.assertEqual(privacy["request_cases"], 12)
+            self.assertEqual(privacy["audit_events_confirmed"], 36)
+        self.assertEqual(len(cases), 24)
         self.assertEqual(len(cases), len(set(cases)))
         self.assertIsNone(fixture.engine.worker)
 

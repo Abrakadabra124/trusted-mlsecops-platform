@@ -1,5 +1,7 @@
 # План перехода DevSecOps -> MLSecOps
 
+Текущий slice T16 (2026-10-19): existing serving output privacy по [ADR 0041](../docs/decisions/0041-serving-output-privacy.md). Локально проверены 17 privacy methods и bounded probe; native integration pending. Далее: подтвердить новую candidate matrix в CI, затем определить approved metrics/cardinality, worker outputs и полный public export/correlation. Полные M13/R1 не закрывать по одному privacy summary; [evidence](../docs/evidence/serving-privacy-2026-10-19.md).
+
 ## Как читать план
 
 Это план **реализации**, не отчёт о завершённых неделях. R0.2 завершён, с 2026-10-07 начат R1: локальный reference с [M01-M23](../docs/acceptance.md) и 29 задачами. Уже есть developer preview, но полная приёмка не пройдена; актуальные результаты в [STATUS](../STATUS.md). Плановый ориентир сохраняется: 14-16 недель активной работы при 15-20 часах в неделю, плюс 25% календарного резерва, примерно 18-20 недель всего. Это оценка, не обещание даты; discovery, реальные данные и production-профиль могут увеличить срок. T25-T29 добавляют ориентировочно 30-50 часов к исходному scope.

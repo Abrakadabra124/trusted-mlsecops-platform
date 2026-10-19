@@ -1,3 +1,5 @@
+import http.client
+import io
 import threading
 import time
 import unittest
@@ -32,6 +34,48 @@ def engine_fixture():
 
 
 class ServingNativeHarnessContracts(unittest.TestCase):
+    def test_raw_transport_rejects_overflow_and_incomplete_framing(self):
+        original = serving_native.serving_http.create_app
+        content = b"{}" + b" " * 65537 + b"synthetic-private-tail"
+
+        def wrapped(*arguments, **keywords):
+            app = original(*arguments, **keywords)
+
+            async def respond(scope, receive, send):
+                if scope["type"] != "http":
+                    return await app(scope, receive, send)
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 404,
+                        "headers": [(b"content-length", str(len(content)).encode())],
+                    }
+                )
+                await send({"type": "http.response.body", "body": content})
+
+            return respond
+
+        with patch.object(serving_native.serving_http, "create_app", wrapped):
+            with site(engine_fixture()) as request:
+                with self.assertRaisesRegex(Rejected, "^serving_native_response_overflow$"):
+                    request("/unknown", raw=True)
+                response = http.client.HTTPResponse(
+                    Mock(
+                        makefile=Mock(
+                            return_value=io.BytesIO(
+                                b"HTTP/1.1 404 Not Found\r\nContent-Length: 64\r\n\r\n{}"
+                            )
+                        )
+                    )
+                )
+                response.begin()
+                connection = Mock(getresponse=Mock(return_value=response))
+                with patch.object(
+                    serving_native.http.client, "HTTPConnection", return_value=connection
+                ):
+                    with self.assertRaisesRegex(Rejected, "^serving_native_response_incomplete$"):
+                        request("/unknown", raw=True)
+
     def test_check_http_preserves_accounting_across_default_credential_wrapper(self):
         engine = engine_fixture()
         generation = threading.Event()
@@ -43,9 +87,10 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         cases = []
         wrapped = []
 
-        def credential_wrapper(transport, **keywords):
-            request = partial(transport, **keywords)
-            wrapped.append((request, transport))
+        def credential_wrapper(transport, *arguments, **keywords):
+            request = partial(transport, *arguments, **keywords)
+            if "credential" in keywords:
+                wrapped.append((request, transport))
             return request
 
         def predict(features, **keywords):
@@ -81,6 +126,8 @@ class ServingNativeHarnessContracts(unittest.TestCase):
                 )
             request, transport = wrapped[0]
             self.assertIs(request.audit_status, transport.audit_status)
+            self.assertIs(request.audit_scan, transport.audit_scan)
+            self.assertEqual(request.privacy_credential, request.keywords["credential"])
             self.assertTrue(request.audit_status()["healthy"])
         self.assertIn("client-admission-accounting", cases)
         self.assertIn("foreign-client-identity-401", cases)
@@ -219,6 +266,12 @@ class ServingNativeHarnessContracts(unittest.TestCase):
         engine.check.return_value = {"ready": True}
         with site(engine) as request:
             self.assertEqual(request("/livez", authorized=False), (200, {"status": "alive"}))
+            status, headers, content = request(
+                "/livez", authorized=False, headers={"X-Canary": "synthetic-probe"}, raw=True
+            )
+            self.assertEqual(status, 200)
+            self.assertIn("application/json", dict(headers)["content-type"])
+            self.assertEqual(content, b'{"status":"alive"}')
             self.assertEqual(request("/readyz")[0], 200)
             self.assertEqual(request("/readyz", authorized=False)[0], 401)
         self.assertGreaterEqual(engine.close.call_count, 1)

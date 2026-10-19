@@ -103,7 +103,20 @@ def create_app(engine, token=None, *, clients=None, audit=None, audit_path=None)
                 if managed is not None:
                     await asyncio.to_thread(managed.close)
 
-    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        redirect_slashes=False,
+        telemetry={
+            "tracing": False,
+            "metrics": False,
+            "logs": False,
+            "operation_spans": False,
+            "auto_configure": False,
+        },
+    )
     app.add_middleware(serving_http_audit.Middleware)
     app.state.audit = audit
     app.state.slots = asyncio.Semaphore(8)

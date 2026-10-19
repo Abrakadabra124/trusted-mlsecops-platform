@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T16 update 2026-10-19: [existing output privacy](../docs/evidence/serving-privacy-2026-10-19.md) реализована и локально проверена, native pending. Explicit framework boundary, strict routes и probe закрывают конкретные capture/redirect risks, но не все worker channels/metrics/cardinality/export/full correlation. T16 остаётся открытой; [RB-60/PB-34](../docs/operations/serving-privacy-troubleshooting.md).
+
 T03, T04 и T26 завершены для synthetic-only профиля; остальные **26 задач открыты**, реализация начата 2026-10-07. Результаты и границы каждой приёмки в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, M03, M06, M07, M20 и M21, а неподключённые полные проверки возвращают inconclusive. Эти gates не закрывают автоматически более широкий T07-T10/T27 lifecycle. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01

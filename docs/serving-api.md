@@ -1,5 +1,7 @@
 # Release Risk Advisor: локальный API
 
+Privacy boundary (2026-10-19): routes точные, `/v1/predict/` и `/readyz/` не перенаправляют raw query/Host, а возвращают 404. Native FastAPI traces/metrics/logs/operation spans и environment auto-configuration явно отключены. Private bounded audit остаётся обязательным; Uvicorn access logging отключён отдельно от error logging. [ADR 0041](decisions/0041-serving-output-privacy.md), [проверки и ограничения](evidence/serving-privacy-2026-10-19.md). Это не полная M13-приёмка всех каналов платформы.
+
 Реализован `mlsecops.serving_http` поверх проверенного Reader и isolated ONNX worker. Это ещё не принятый R1: реальный candidate с failed gates не должен становиться ready. Положительная native демонстрация использует отдельные test roots и явно обозначенные contract fixtures, а не фиктивное разрешение настоящего release.
 
 ## Запрос и ответ
