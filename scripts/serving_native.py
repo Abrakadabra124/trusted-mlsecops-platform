@@ -110,7 +110,8 @@ def _site(engine, *, clients, audit):
     else:
         access = serving_access.Access(clients)
         token = clients["clients"][0]["token"]
-    app = serving_http.create_app(engine, clients=access, audit=audit)
+    metrics_token = secrets.token_hex(32)
+    app = serving_http.create_app(engine, clients=access, audit=audit, metrics_token=metrics_token)
     server = uvicorn.Server(
         uvicorn.Config(
             app,
@@ -177,6 +178,7 @@ def _site(engine, *, clients, audit):
             request.admissions = admissions
             request.audit_status = audit.status
             request.privacy_credential = token
+            request.metrics_credential = metrics_token
             yield request
         finally:
             server.should_exit = True
@@ -241,6 +243,7 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None):
     request.audit_status = transport.audit_status
     request.audit_scan = transport.audit_scan
     request.privacy_credential = clients["clients"][2]["token"]
+    request.metrics_credential = transport.metrics_credential
     features, expected = golden
     body = {
         "schema_version": 1,

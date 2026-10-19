@@ -37,6 +37,16 @@ Privacy boundary (2026-10-19): routes точные, `/v1/predict/` и `/readyz/`
 
 Error response содержит только schema version, server request ID и bounded `error.code`. `/livez` возвращает только process liveness без авторизации, не digest или readiness. `/readyz` требует bearer и проверяет действующую worker session; docs/OpenAPI endpoints отключены. Ответы prediction/readiness/error используют `Cache-Control: no-store`.
 
+## Опциональные операторские метрики
+
+Добавить `metrics_token_file` с абсолютным путём к отдельному private файлу: ровно 64 lowercase hex символа, криптографически случайные, не совпадающие ни с одним data-plane token. Не печатать credential, не передавать его в командной строке, не коммитить; POSIX mode 0600, Windows ACL проверяет владелец. Без этого поля `/metrics` возвращает 404; обычные serving credentials не дают доступа к метрикам.
+
+`GET /metrics` требует `Authorization: Bearer <operator token>`, без query/body/Transfer-Encoding. Endpoint отдаёт Prometheus text 0.0.4, `Cache-Control: no-store`, максимум 16 KiB. Независимая quota: 4 requests/s, burst 8, 2 in-flight; ticket освобождается после send/cancel, cooperative deadline отправки 2 s распространяется и на отказы 401/429/503. Этот deadline не является hard realtime guarantee. Метрики доступны без ready-модели; не расходуют inference quota и сами не входят в счётчики запросов.
+
+Экспорт содержит ровно 69 series: response counter с route/outcome, duration histogram с route и 10 фиксированными buckets, diagnostic counter без labels. Routes: predict/ready/live/other; outcomes: 2xx/3xx/4xx/5xx/aborted. URL, query, features, credentials и request/principal/release IDs не экспортируются. Измеряется final ASGI send, не получение клиентом; observed disconnect до завершения даёт aborted. После restart counters обнуляются. `mlsecops_http_metrics_errors_total > 0` означает неполноту измерений, а не автоматический запрет inference.
+
+[ADR 0043](decisions/0043-serving-metrics.md), [проверки и ограничения](evidence/serving-metrics-2026-10-19.md), [RB-62/PB-36](operations/serving-metrics-troubleshooting.md). Устанавливается только Python client library, не сервис Prometheus/Grafana. Auto-instrumentation остаётся отключённой; API остаётся loopback-only.
+
 ## Deadline и незавершённые операции
 
 После auth фиксируется общий response budget <=10 s, дополнительно ограниченный trust lease и approval expiry с запасом 250 ms. Текущий более короткий lease учитывается во время ожидания и после serialization; прежний budget не продлевается. Expired/fenced generation даёт 503 до body/overload. HTTP timeout не отменяет синхронный SQL thread: pending task и один из 8 slots сохраняются до его завершения, поздний результат не возвращает поколение в ready. Требуется explicit verified reload после восстановления и cleanup. Это не real-time delivery SLA и не bounded shutdown guarantee. [ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53](operations/serving-deadline-troubleshooting.md).

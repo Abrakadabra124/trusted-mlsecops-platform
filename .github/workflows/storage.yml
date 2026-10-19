@@ -35,6 +35,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Bounded serving metrics and independent export schema
+        run: |
+          uv run --locked coverage run --data-file=.coverage-serving-metrics --source=mlsecops.serving_metrics,scripts.serving_metrics_probe -m unittest scripts.serving_metrics_qualification scripts.serving_metrics_probe_qualification scripts.candidate_serving_native_qualification
+          uv run --locked coverage report --data-file=.coverage-serving-metrics --fail-under=100
       - name: Worker process privacy contracts and native kernel readback
         run: |
           uv run --locked python -c "import sys; assert sys.platform == 'linux', 'native privacy qualification requires Linux'"
@@ -138,7 +142,7 @@ jobs:
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable
       - name: Persistent serving, HTTP limits and cancellation contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-privacy --source=scripts.serving_privacy_probe -m unittest scripts.serving_privacy_qualification
+          uv run --locked coverage run --data-file=.coverage-privacy --source=scripts.serving_privacy_probe -m unittest scripts.serving_privacy_qualification scripts.candidate_serving_native_qualification
           uv run --locked coverage report --data-file=.coverage-privacy --fail-under=100
           uv run --locked coverage run --data-file=.coverage-http-audit --source=mlsecops.serving_http_audit -m unittest scripts.serving_http_qualification scripts.serving_http_audit_qualification
           uv run --locked coverage report --data-file=.coverage-http-audit --fail-under=100

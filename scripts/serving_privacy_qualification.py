@@ -21,13 +21,15 @@ from scripts.serving_native_qualification import engine_fixture
 from scripts.serving_privacy_probe import Signals
 
 
-async def invoke(app, *, path="/livez", query=b"", headers=None, method="GET"):
+async def invoke(app, *, path="/livez", query=b"", headers=None, method="GET", send_hook=None):
     outgoing = []
 
     async def receive():
         return {"type": "http.request", "body": b"", "more_body": False}
 
     async def send(message):
+        if send_hook is not None:
+            await send_hook(message)
         outgoing.append(message)
 
     await app(

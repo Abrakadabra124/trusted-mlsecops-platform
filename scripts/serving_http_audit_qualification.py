@@ -224,6 +224,26 @@ class HttpAuditContracts(unittest.IsolatedAsyncioTestCase):
                 events = await self.events()
                 self.assertEqual([value["status"] for value in events], [None, 200, 503, 503])
                 self.assertIsNone(events[-1]["context"])
+                from scripts.serving_metrics_qualification import value
+
+                self.assertEqual(
+                    value(
+                        self.app.state.metrics,
+                        "mlsecops_http_responses_total",
+                        route="predict",
+                        outcome="5xx",
+                    ),
+                    1,
+                )
+                self.assertEqual(
+                    value(
+                        self.app.state.metrics,
+                        "mlsecops_http_responses_total",
+                        route="predict",
+                        outcome="2xx",
+                    ),
+                    0,
+                )
 
     async def test_failed_first_emit_releases_reservation_before_scope_handoff(self):
         self.audited()

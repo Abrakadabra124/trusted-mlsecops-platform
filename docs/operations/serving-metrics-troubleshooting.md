@@ -1,0 +1,54 @@
+# RB-62 / PB-36: ограниченные serving metrics и отказ scrape
+
+Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Ответственный: platform operator; изменение privacy schema согласует security owner. [ADR 0043](../decisions/0043-serving-metrics.md), [evidence](../evidence/serving-metrics-2026-10-19.md). Ниже controlled проверки разработки, не история production-инцидента.
+
+## RB-62: сначала диагностика
+
+Работать в trusted-mlsecops-platform, с Python 3.12 и закреплённым uv.lock. Не запускать и не менять локальные Docker/WSL/Kubernetes/SQL. Unit/loopback fixtures используют временные собственные ресурсы, native candidate выполняется только disposable CI.
+
+```powershell
+git status --short
+git rev-parse HEAD
+uv run --locked python -c "from importlib.metadata import version; print(version('prometheus-client'))"
+```
+
+Ожидаемая версия 0.26.0. Не выводить private config, environment, token, request body и raw logs. Не включать auto telemetry для диагностики: она может вернуть URL/headers в exporters. Прежде чем использовать credential, проверить ownership config/file и process; POSIX mode check не доказывает Windows ACL. По умолчанию endpoint выключен, новая операторская identity включается только явным metrics_token_file. Не копировать тестовые tokens в эксплуатацию.
+
+| Симптом | Проверка и установленная граница | Действие |
+| --- | --- | --- |
+| 404 на /metrics | Нет opt-in поля либо неверный path/method | Проверить конфигурацию без печати secret; не включать публичный exporter |
+| 401 | Нет ровно одного operator bearer, передан inference token | Проверить раздельную identity; не заменять её общим data token |
+| 400 | Query, body length или Transfer-Encoding | Отправлять точный GET без body/query; не повышать лимит |
+| 429 | Operator 4 rps/burst 8 либо 2 занятых send slots | Уменьшить частоту, дождаться завершения/2 s send deadline; не затрагивать inference quotas |
+| 503 | Admission clock failure или serializer/output-cap error | Проверить pinned revision и isolated contracts; не публиковать exception |
+| Counter не отражает ответы | Проверить diagnostic counter и actual final send | Handler return не равен отправленному ответу; проверить audit replacement и наружный wrapper |
+| После disconnect растёт 5xx вместо aborted | Приложение уже получило http.disconnect, но observer его потерял | Повторить failure-first contract; неизвестный транспортный разрыв не объявлять наблюдаемым |
+| Error scrape занимает connection дольше deadline | Deadline применён только после admission | Проверить 401/429/503 send paths, не подменять timeout_keep_alive активным deadline |
+| Создаются multiprocess files | Environment задан до импорта библиотеки | Холодный subprocess test с positive control; не использовать глобальные Counter/Histogram вместо private collector |
+| metrics_privacy_schema_invalid | Неизвестные labels/families, NaN, fractional counts, duplicate/missing sample, неверные cumulative buckets | Остановить acceptance, сохранить finite failure; не увеличивать whitelist без ADR |
+| metrics_privacy_output_invalid | Canary/credential в output, пустые/слишком большие bytes | Остановить публикацию артефакта, оценить воздействие; raw scrape не добавлять в Git |
+| HTTP fixture падает на headers.get | Native transport возвращает list of pairs, не dict | Проверять headers без потери duplicates; не подавлять ошибку в qualification |
+
+## PB-36: воспроизводимый прогон
+
+1. Зафиксировать commit и dirty state, сохранить пользовательские изменения. Команды ниже не трогают существующую инфраструктуру.
+2. Проверить pure collector/endpoint/probe и контролируемый loopback с canaries:
+
+```powershell
+uv run --locked coverage run --data-file=.coverage-serving-metrics --source=mlsecops.serving_metrics,scripts.serving_metrics_probe -m unittest scripts.serving_metrics_qualification scripts.serving_metrics_probe_qualification scripts.candidate_serving_native_qualification
+uv run --locked coverage report --data-file=.coverage-serving-metrics --fail-under=100
+uv run --locked python -m unittest scripts.serving_privacy_qualification scripts.serving_http_qualification scripts.serving_http_audit_qualification scripts.serving_native_qualification
+uv run --locked python scripts/check_docs.py
+```
+
+Ожидается ровно 69 approved samples, ноль canary leaks и measurement errors; negative tests должны доказать отказ, а не обход gate. Windows skips сохраняются отдельно и не заменяют Linux readback. Coverage не доказывает корректность всех состояний системы.
+
+3. После разрешённого commit/push наблюдать тот же Storage run. Новый ранний step `Bounded serving metrics and independent export schema` проверяет collector/probe. Последующий actual-candidate step включает privacy-approved-metrics-cardinality, не выдаёт release approval и сохраняет старые gates.
+4. Перед отчётом дождаться terminal состояния всех workflows этого SHA; сохранить полную matrix, unique case count, source revision/dirty flag, candidate report digest и approved_metric_series=69. Failed image/poisoning/evasion/paired gates не исключать из отчёта.
+5. Native pass относится к конкретному SHA и disposable runner. Не создавать слепые reruns или отмены при queue/API lag; продолжать наблюдение существующего run.
+
+## Восстановление и rollback
+
+Тестами проверены завершение/cancellation/timeout и освобождение slots, а не production recovery. При повреждении измерений не сбрасывать audit/trust/approval state. Если новый exporter мешает обслуживанию, согласованно убрать только metrics_token_file из private конфигурации и перезапустить собственный serving процесс по его lifecycle procedure: endpoint станет 404, счётчики обнулятся. Это операционный вариант, не автоматический выполненный rollback; на живой инфраструктуре здесь не проверен.
+
+Credential rotation требует нового случайного private token, обновления оператора и контролируемого restart. Сначала подтвердить владельца процесса и сохранить нужные audit/evidence; не удалять единственную копию, не ослаблять TLS/lease/pins. При неизвестной утечке credential, persistent diagnostic growth или неосвобождённых slots эскалировать security/platform owner и не принимать M13. Полный platform export/controller privacy, monitoring deployment и M14 performance остаются отдельной работой.

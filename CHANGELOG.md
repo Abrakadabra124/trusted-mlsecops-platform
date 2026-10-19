@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 bounded serving metrics - 2026-10-19
+
+- Добавлены 69 fixed samples без request identities, private collector и opt-in operator scrape с независимыми quotas и send deadline.
+- Исправлены обнаруженные failure-first проверками outer-500/disconnect semantics, раннее освобождение ticket, неограниченные error sends и mismatch transport headers.
+- Добавлены independent parser/canary gate, cold-import multiprocess tests, CI и [RB-62/PB-36](docs/operations/serving-metrics-troubleshooting.md). [Evidence](docs/evidence/serving-metrics-2026-10-19.md): локальная проверка pass с Windows skips, native pending; полный M13/R1 не принят.
+
 ## R1 worker process privacy - 2026-10-19
 
 - Linux guard задаёт и перечитывает dumpability/core limits до чтения payload и загрузки ML runtime; Docker worker argv/readback дополнены core=0:0.

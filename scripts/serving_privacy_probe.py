@@ -189,7 +189,7 @@ def response_contract(value, path, status):
         raise Rejected("privacy_response_schema")
 
 
-def exercise(request, body):
+def exercise(request, body, *, metrics_check=None):
     marker = secrets.token_hex(16)
     secret = secrets.token_hex(32)
     feature = 0.3183098861837907
@@ -267,6 +267,8 @@ def exercise(request, body):
             response_contract(value, path, status)
         after = drained(request)
         scanned = request.audit_scan(private_needles)
+        if metrics_check is not None:
+            metrics_check(request, private_needles)
     if (
         type(scanned) is not dict
         or set(scanned) != {"files", "bytes"}

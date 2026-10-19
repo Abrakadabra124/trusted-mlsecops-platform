@@ -10,7 +10,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from mlsecops import (
     advisory,
@@ -21,6 +21,7 @@ from mlsecops import (
     serving_audit,
     serving_context,
     serving_http_audit,
+    serving_metrics,
     trust,
     trust_authority,
 )
@@ -69,11 +70,18 @@ async def read_body(request):
     return features
 
 
-def create_app(engine, token=None, *, clients=None, audit=None, audit_path=None):
+def create_app(
+    engine, token=None, *, clients=None, audit=None, audit_path=None, metrics_token=None
+):
     if clients is None:
         clients = serving_access.Access.single(token)
     elif token is not None or not isinstance(clients, serving_access.Access):
         raise Rejected("http_clients_conflict")
+    operator = (
+        serving_metrics.operator_access(metrics_token, clients)
+        if metrics_token is not None
+        else None
+    )
     if audit is not None and type(audit) is not serving_audit.Journal:
         raise Rejected("http_audit_configuration")
     if audit_path is not None and (
@@ -118,6 +126,8 @@ def create_app(engine, token=None, *, clients=None, audit=None, audit_path=None)
         },
     )
     app.add_middleware(serving_http_audit.Middleware)
+    metrics = serving_metrics.Metrics()
+    app.state.metrics = metrics
     app.state.audit = audit
     app.state.slots = asyncio.Semaphore(8)
     app.state.pending = set()
@@ -223,6 +233,42 @@ def create_app(engine, token=None, *, clients=None, audit=None, audit_path=None)
     async def live():
         return {"status": "alive"}
 
+    if operator is not None:
+
+        @app.get("/metrics")
+        async def scrape(request: Request):
+            request_id = secrets.token_hex(16)
+            principal = operator.authenticate(request.headers.getlist("authorization"))
+            if principal is None:
+                return serving_metrics.ScrapeResponse(error(401, "unauthorized", request_id))
+            try:
+                ticket = operator.acquire(principal)
+            except serving_access.Limited:
+                return serving_metrics.ScrapeResponse(error(429, "client_limited", request_id))
+            except Rejected:
+                return serving_metrics.ScrapeResponse(error(503, "metrics_unavailable", request_id))
+            try:
+                try:
+                    if (
+                        request.scope.get("query_string")
+                        or request.headers.getlist("transfer-encoding")
+                        or request.headers.getlist("content-length") not in ([], ["0"])
+                    ):
+                        response = error(400, "invalid_request", request_id)
+                    else:
+                        response = Response(
+                            metrics.render(),
+                            media_type="text/plain; version=0.0.4; charset=utf-8",
+                            headers={"Cache-Control": "no-store"},
+                        )
+                except Exception:
+                    metrics.failed()
+                    response = error(503, "metrics_unavailable", request_id)
+                return serving_metrics.ScrapeResponse(response, ticket)
+            except BaseException:
+                ticket.release()
+                raise
+
     @app.get("/readyz")
     async def ready(request: Request):
         request_id = secrets.token_hex(16)
@@ -322,7 +368,7 @@ def create_app(engine, token=None, *, clients=None, audit=None, audit_path=None)
                 if acquired:
                     app.state.slots.release()
 
-    return app
+    return serving_metrics.Middleware(app, metrics)
 
 
 def configured(path):
@@ -342,7 +388,8 @@ def configured(path):
             "minimum_trust_version",
             "audit_directory",
             credential_field,
-        ),
+        )
+        + (("metrics_token_file",) if "metrics_token_file" in config else ()),
     )
     if (
         not isinstance(config["audit_directory"], str)
@@ -357,6 +404,15 @@ def configured(path):
         if credential_field == "principals_file"
         else serving_access.Access.single(bounded_read(secret, 65).decode("ascii").strip())
     )
+    metrics_token = None
+    if "metrics_token_file" in config:
+        metric_path = config["metrics_token_file"]
+        if type(metric_path) is not str or not Path(metric_path).is_absolute():
+            raise Rejected("metrics_credential_invalid")
+        metric_path = Path(metric_path)
+        if os.name == "posix" and metric_path.stat().st_mode & 0o077:
+            raise Rejected("http_token_permissions")
+        metrics_token = bounded_read(metric_path, 65).decode("ascii").strip()
     lease = trust.Lease(
         lambda: trust_authority.read(
             config["trust_client"], config["context"]["policy"]["environment"], config["trust_root"]
@@ -379,7 +435,12 @@ def configured(path):
         },
         trust_lease=lease,
     )
-    return create_app(serving.Engine(reader), clients=clients, audit_path=config["audit_directory"])
+    return create_app(
+        serving.Engine(reader),
+        clients=clients,
+        audit_path=config["audit_directory"],
+        metrics_token=metrics_token,
+    )
 
 
 def main():

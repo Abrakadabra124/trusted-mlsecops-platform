@@ -35,6 +35,7 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.prediction_protocol import PredictionBatch
 from scripts.candidate_serving_reader import KIND, CandidateReader, bind_proposal
 from scripts.release_reader_native import disposable
+from scripts.serving_metrics_probe import scan as scan_metrics
 from scripts.serving_native import check_http, site
 from scripts.serving_outage_native import ObservedLease
 from scripts.serving_outage_native import exercise as exercise_outage
@@ -115,14 +116,20 @@ def context_matrix(engine, request, body, confirmed, context):
 
 
 def privacy_matrix(request, body, confirmed):
-    result = exercise_privacy(request, body)
+    metrics = {}
+
+    def check_metrics(transport, needles):
+        metrics.update(scan_metrics(transport, needles))
+
+    result = exercise_privacy(request, body, metrics_check=check_metrics)
     confirmed("privacy-http-input-and-output-matrix", result["request_cases"] == 12)
     confirmed(
         "privacy-owned-audit-input-absent",
         result["audit_events_confirmed"] == 36 and result["audit_files_scanned"] > 0,
     )
     confirmed("privacy-native-telemetry-disabled", not result["ambient_signals_used"])
-    return result
+    confirmed("privacy-approved-metrics-cardinality", metrics.get("series") == 69)
+    return {**result, "approved_metric_series": metrics["series"]}
 
 
 def http_matrix(engine, request, body, confirmed):

@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Serving metrics и bounded scrape, RB-62/PB-36](operations/serving-metrics-troubleshooting.md). Operator identity/quotas, final-send/disconnect semantics, independent schema/canary checks и safe rollback; [evidence](evidence/serving-metrics-2026-10-19.md) разделяет local pass и pending native.
+
 - [Worker startup diagnostics и core policy, RB-61/PB-35](operations/worker-privacy-troubleshooting.md). Guard до input/runtime imports, constant errors и native wait-status proof; [evidence](evidence/worker-privacy-2026-10-19.md) сохраняет Windows skip и pending Linux qualification.
 
 - [Serving privacy и полнота capture, RB-60/PB-34](operations/serving-privacy-troubleshooting.md). Native telemetry/redirect controls, bounded canaries и fail-closed диагностический probe; [evidence](evidence/serving-privacy-2026-10-19.md) фиксирует native 621d355, 77 candidate cases и ограничения полной CI/M13-приёмки.

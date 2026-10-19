@@ -1,5 +1,6 @@
 import asyncio
 import io
+import os
 import tempfile
 import threading
 import time
@@ -599,6 +600,26 @@ class ServingConfigurationContracts(unittest.TestCase):
                 reader = engine.call_args.args[0]
                 self.assertEqual(reader.floor, 2)
                 self.assertEqual(reader.trust.floor, 3)
+            metrics_secret = directory / "metrics-token"
+            metrics_secret.write_text("c" * 64)
+            metrics_secret.chmod(0o600)
+            path.write_bytes(canonical({**config, "metrics_token_file": str(metrics_secret)}))
+            with patch.object(serving_http, "create_app") as create:
+                serving_http.configured(path)
+                self.assertEqual(create.call_args.kwargs["metrics_token"], "c" * 64)
+            for invalid in (None, False, "", "relative-token", []):
+                path.write_bytes(canonical({**config, "metrics_token_file": invalid}))
+                with self.assertRaises(Rejected):
+                    serving_http.configured(path)
+            path.write_bytes(canonical({**config, "metrics_token_file": str(metrics_secret)}))
+            if os.name == "posix":
+                metrics_secret.chmod(0o644)
+                with self.assertRaisesRegex(Rejected, "http_token_permissions"):
+                    serving_http.configured(path)
+                metrics_secret.chmod(0o600)
+            metrics_secret.write_bytes(b"c" * 66)
+            with self.assertRaises(Rejected):
+                serving_http.configured(path)
             path.write_bytes(canonical({**config, "token_file": "relative-token"}))
             with self.assertRaises(Rejected):
                 serving_http.configured(path)

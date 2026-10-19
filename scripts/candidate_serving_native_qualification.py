@@ -82,7 +82,8 @@ class CandidateServingHarnessContracts(unittest.TestCase):
             privacy = native.privacy_matrix(request, body, confirmed)
             self.assertEqual(privacy["request_cases"], 12)
             self.assertEqual(privacy["audit_events_confirmed"], 36)
-        self.assertEqual(len(cases), 24)
+            self.assertEqual(privacy["approved_metric_series"], 69)
+        self.assertEqual(len(cases), 25)
         self.assertEqual(len(cases), len(set(cases)))
         self.assertIsNone(fixture.engine.worker)
 
