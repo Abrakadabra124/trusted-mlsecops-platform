@@ -33,7 +33,7 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 | ID | Что осталось | Критерии / доказательство закрытия |
 | --- | --- | --- |
-| R1-B01 | Общий воспроизводимый entrypoint и полный foundation gate; сейчас M01 возвращает inconclusive | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
+| R1-B01 | Общий воспроизводимый entrypoint и полный foundation gate; M01 реализован в рабочей копии, native acceptance отсутствует | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
 | R1-B02 | Запрет выпуска по image severity; poisoning и evasion failures; paired candidate не исправил нарушения | M08/M09/M18/M22: remediation на validation без подбора final holdout, исходные frozen suites/thresholds и полный runtime/controller image scope; не scanner exceptions |
 | R1-B03 | Полная integration-приёмка прав и ограниченного обучения отсутствует | M04/M05: реальные identity/network/storage и deadline/OOM probes, сохранение работоспособности serving; существующие M20 proofs переиспользовать |
 | R1-B04 | Approval -> production Reader -> inference -> revoke ещё не принят как единая цепочка; M13 не завершён | M10-M13/M19: actual subject binding, policy/rollback/replay, configured lifecycle, privacy 429/503, service-log coverage, public projection и inventory impact; не очередное усиление вне требований |
@@ -44,7 +44,7 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 Исторический intermittent M07 connection rejection остаётся reliability debt в R1-B08: успешный retry не устанавливает причину. До финальной приёмки требуется диагностика либо явная согласованная политика надёжности, а не стирание первого отказа.
 
-Начало CP1: подтверждён и локально исправлен дефект repeat-bootstrap при missing key/trust anchor; 9 targeted methods pass, bootstrap 100% statements/branches. [Диагностика и ограничения](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap). Код остаётся в рабочей копии до интеграционного checkpoint; M01 dispatch/native proof ещё не подключены, R1-B01 не закрыт.
+CP1 implementation checkpoint: исправлен repeat-bootstrap, реализованы M01/M04/M05 dispatch и шаги существующего Kubernetes workflow. Foundation: 30 targeted methods, bootstrap/foundation/inventory 100% statements/branches; два настоящих subprocess отказа до создания state и CLI inconclusive/2 без lab prerequisites. Isolation: 18 targeted methods, новые modules 100%; actual-candidate HTTP/ONNX path подключён к concurrent training faults. 3 findings основного review исправлены: fresh native access checks, invalidation/dependency binding, полная identity matrix. [Foundation runbook](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap), [M04/M05 runbook](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Проверка конкретных fixes завершена без замечаний; native CI checkpoint ещё не завершён, R1-B01/R1-B03 остаются открытыми. Наличие реализации не заменяет реальный proof.
 
 ## Конечная последовательность и checkpoints
 

@@ -1,11 +1,20 @@
 import argparse
+import re
 import secrets
 import sys
 from pathlib import Path
 
-from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
+from mlsecops.contracts import (
+    Rejected,
+    canonical,
+    digest,
+    read_json,
+    require_fields,
+    safe_child,
+    write_json,
+)
 from mlsecops.inventory import collect
-from mlsecops.signing import ROLES, create_key
+from mlsecops.signing import ROLES, create_key, encode64, load_key
 
 
 def initialize(root, state):
@@ -21,8 +30,23 @@ def initialize(root, state):
     state.mkdir(parents=True, exist_ok=True)
     if marker.exists():
         identity = read_json(marker)
-        if identity.get("product") != "trusted-mlsecops" or identity.get("schema_version") != 1:
+        require_fields(identity, ("product", "schema_version", "workspace_id"))
+        if (
+            identity["product"] != "trusted-mlsecops"
+            or type(identity["schema_version"]) is not int
+            or identity["schema_version"] != 1
+            or type(identity["workspace_id"]) is not str
+            or re.fullmatch("[a-f0-9]{32}", identity["workspace_id"]) is None
+        ):
             raise Rejected("incompatible_workspace")
+        public = {
+            role: encode64(
+                load_key(safe_child(state, f"keys/{role}.pem")).public_key().public_bytes_raw()
+            )
+            for role in ROLES
+        }
+        if read_json(safe_child(state, "trusted-keys.json")) != public:
+            raise Rejected("key_rotation_requires_explicit_migration")
     else:
         write_json(
             marker,
@@ -32,13 +56,8 @@ def initialize(root, state):
                 "workspace_id": secrets.token_hex(16),
             },
         )
-    public = {role: create_key(state / "keys" / f"{role}.pem") for role in ROLES}
-    trusted = state / "trusted-keys.json"
-    if trusted.exists():
-        if read_json(trusted) != public:
-            raise Rejected("key_rotation_requires_explicit_migration")
-    else:
-        write_json(trusted, public)
+        public = {role: create_key(state / "keys" / f"{role}.pem") for role in ROLES}
+        write_json(state / "trusted-keys.json", public)
     for name in ("quarantine", "approved", "candidates", "evaluations", "releases", "evidence"):
         (state / name).mkdir(exist_ok=True)
     write_json(state / "inventory.json", inventory)

@@ -10,21 +10,55 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import job_document, load_image, pod_spec, verify_running_image, wait_job
 
 
-def probe(state, image, image_id, action, namespace="ml-train", address=None, deadline=60):
+def probe(
+    state, image, image_id, action, namespace="ml-train", address=None, deadline=60, *, observe=None
+):
     name = f"probe-{uuid.uuid4().hex}"
     arguments = ["mlsecops.isolation_probe", action]
     if address:
         arguments.extend(["--address", address])
     spec = pod_spec(image, NAMESPACES[namespace], arguments, memory="256Mi")
     job = job_document(name, namespace, spec, deadline)
+    created = False
+    observed_samples = []
+
+    def during_running(pod):
+        sample = observe(pod)
+        response = kubectl(
+            state,
+            ["get", "pod", pod["metadata"]["name"], "-n", namespace, "-o", "json"],
+            check=False,
+        )
+        after = decode(response.stdout) if response.returncode == 0 else {}
+        sample["running_after_response"] = after.get("metadata", {}).get("uid") == pod["metadata"][
+            "uid"
+        ] and any(
+            "running" in status.get("state", {})
+            for status in after.get("status", {}).get("containerStatuses", [])
+        )
+        observed_samples.append(sample)
+
     try:
-        kubectl(state, ["create", "-f", "-"], job)
-        condition, pod, elapsed = wait_job(state, namespace, name, deadline)
+        creation = kubectl(state, ["create", "-f", "-", "-o", "json"], job)
+        created = True
+        job_uid = decode(creation.stdout)["metadata"]["uid"]
+        condition, pod, elapsed = wait_job(
+            state, namespace, name, deadline, observe=during_running if observe else None
+        )
         verify_running_image(pod, image_id)
+        from mlsecops.boundary_qualification import isolated_spec
+
+        if not isolated_spec(spec, pod) or not any(
+            owner.get("uid") == job_uid and owner.get("controller") is True
+            for owner in pod["metadata"].get("ownerReferences", [])
+        ):
+            raise Rejected("isolation_probe_spec_or_owner_changed")
         statuses = pod["status"].get("containerStatuses", [])
         terminated = statuses[0].get("state", {}).get("terminated", {}) if statuses else {}
         result = {
             "pod_deleted": condition.get("pod_deleted", False),
+            "pod_uid": pod["metadata"]["uid"],
+            "job_uid": job_uid,
             "condition": condition["type"],
             "reason": condition.get("reason"),
             "termination": terminated.get("reason"),
@@ -32,6 +66,11 @@ def probe(state, image, image_id, action, namespace="ml-train", address=None, de
             "elapsed_seconds": elapsed,
             "pod_spec_digest": digest(canonical(pod["spec"])),
         }
+        if observe is not None:
+            result["pod_spec"] = pod["spec"]
+            result["observations"] = sum(
+                item["running_after_response"] for item in observed_samples
+            )
         if condition["type"] == "Complete":
             result["output"] = decode(
                 kubectl(
@@ -41,20 +80,21 @@ def probe(state, image, image_id, action, namespace="ml-train", address=None, de
             )
         return result
     finally:
-        kubectl(
-            state,
-            [
-                "delete",
-                "job",
-                name,
-                "-n",
-                namespace,
-                "--ignore-not-found",
-                "--wait=true",
-                "--timeout=30s",
-            ],
-            check=False,
-        )
+        if created:
+            kubectl(
+                state,
+                [
+                    "delete",
+                    "job",
+                    name,
+                    "-n",
+                    namespace,
+                    "--ignore-not-found",
+                    "--wait=true",
+                    "--timeout=30s",
+                ],
+                check=False,
+            )
 
 
 def identity_checks(state, check):

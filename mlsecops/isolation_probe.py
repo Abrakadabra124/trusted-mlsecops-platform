@@ -99,7 +99,13 @@ def main():
     elif arguments.action == "connect":
         print(canonical(connect(arguments.address, 8080)).decode())
     elif arguments.action == "deadline":
-        time.sleep(120)
+        limit = Path("/sys/fs/cgroup/memory.max").read_text().strip()
+        if limit == "max" or int(limit) > 256 * 1024**2:
+            raise Rejected("deadline_probe_requires_256Mi_or_less_cgroup")
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            sum(range(10000))
+        raise Rejected("deadline_limit_did_not_terminate_probe")
     elif arguments.action == "pids":
         print(canonical(pid_limit()).decode())
     else:
@@ -109,6 +115,7 @@ def main():
         allocations = []
         for iteration in range(40):
             allocations.append(bytearray(16 * 1024**2))
+            time.sleep(0.25)
         raise Rejected("oom_limit_did_not_terminate_probe")
     return 0
 

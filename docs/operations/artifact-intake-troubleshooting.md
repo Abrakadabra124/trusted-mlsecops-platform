@@ -92,3 +92,23 @@ uv run --locked coverage report --data-file=.coverage-bootstrap --fail-under=95
 9 methods прошли, statement/branch coverage bootstrap 100%; исходный RED дал 9 failures в 5 methods. Эти tests используют настоящие временные файлы и ключи, но controlled inventory без Docker. Это **локальное исправление CP1, ещё не опубликованное как проверенный runtime-код**; команды нового модуля доступны в рабочей копии. Полный M01/native checkpoint ещё не принят. После CP1 заменить эту отметку ссылкой на code/evidence.
 
 **Recovery / rollback:** при missing/mismatch identity не запускать serving/promotion. Владелец может восстановить согласованный backup в отдельном проверенном owned workspace и сверить trust pins по существующей процедуре recovery; здесь такая операция не выполнялась. Если подтверждённого backup нет, сохранить отказ и эскалировать owner/security reviewer, не «исправлять» trusted file. Не откатывать guard ради запуска; rollback приложения не разрешает смену ключей или удаление единственной копии.
+
+#### Продолжение CP1: исполняемый foundation gate M01
+
+**Изменение:** `mlsecops.foundation` выполняет bootstrap дважды в новых Python processes и отдельном временном owned workspace. Проверяет receipt по файлам marker/trust/policy, наличие всех role keys, hashes данных и ключей до/после; root `inventory.json` сравнивает без timestamp/free-space, вложенные файлы с таким именем не исключает. Missing PATH и несовместимый `.python-version` должны дать отказ без изменения/создания workspace. Canary проверяет сохранение данных, не ML-quality настоящего candidate.
+
+**Inventory:** bootstrap сверяет точную Python patch version и 11 прямых package pins. M01 требует clean checkout, baseline pin, versions инструментов, hashes tracked `.lock`/`lock.json`, immutable image IDs worker/storage/kind node, owned Docker containers и всех найденных Kubernetes containers, включая init/ephemeral. P0-отчёт сохраняет ограничения baseline registry, lab identities, image severity, failure domains и approval. Наличие inventory **не закрывает** CVE/remediation или остальные M-gates.
+
+**Prerequisites / владелец:** platform operator; запуск инфраструктурной команды только в разрешённом disposable hosted CI после существующих bootstrap/storage/controller steps. Локальные Docker/WSL/Kubernetes/SQL по-прежнему не запускать. Чужое окружение или потерянный ownership - причина остановки, не повод выбрать default kube context.
+
+```bash
+uv run --locked coverage run --source=mlsecops.bootstrap,mlsecops.foundation,mlsecops.inventory --data-file=.coverage-foundation -m unittest scripts.bootstrap_qualification scripts.foundation_qualification scripts.artifact_intake_qualification.ArtifactIntakeContracts.test_evidence_must_not_precede_workspace_ownership
+uv run --locked coverage report --data-file=.coverage-foundation --fail-under=95
+uv run --locked python -m mlsecops.acceptance --gate M01 --output .runtime/evidence/M01.json
+```
+
+**Read-only диагностика отказа:** проверить `M01.json` status/exit code и конкретную причину; при prerequisites missing ожидаются inconclusive/2, при нарушенном контракте fail/1. Dirty checkout не считается fresh qualification. Проверить текущие pins и inventory, не редактировать версию, digest или trust file ради pass. Новый source fingerprint включает `.python-version`; старый worker штатно отклоняется и должен быть заново собран из текущего checkout на разрешённом CI, не переименован/relabelled.
+
+**Проверено локально 2026-10-20:** 30 targeted methods, 0 skips, bootstrap/foundation/inventory 100% statement/branch coverage. Отдельно реальные Python subprocess подтвердили missing-tool и incompatible-version refusal до создания state, настоящий M01 CLI без lab prerequisites вернул inconclusive/2; инфраструктурные команды в этих путях не выполнялись. Python 3.12.15 и 11 direct dependencies совпали с pins. Candidate contracts (16 cases) и controlled M06 reconciliation прошли. Unit composition использует controlled Docker/Kubernetes responses и **не доказывает native M01**. Новый regression test обнаружил отсутствие `.python-version` в build-context allowlist; исключение добавлено, оба runtime recipes копируют pin. CI step подготовлен, code push отложен до полного CP1.
+
+**Критерий закрытия:** native M01 из clean CI checkout с текущими image IDs, hashes обоих состояний, tool/lock inventory и P0 report; сохранены fail/inconclusive ветви. Для R1-B01 также нужен общий воспроизводимый entrypoint, для CP1 - M04/M05. Повтор неизменённой матрицы и обход проверки не являются recovery; при ошибке bootstrap сохранить приватные диагностические файлы, устранить подтверждённую причину и проверить новый code checkpoint. Ни один отрицательный результат не разрешает release.

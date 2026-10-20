@@ -40,23 +40,31 @@ jobs:
           uv run --locked python -m mlsecops.cluster bootstrap
       - name: Train and evaluate with Kubernetes Jobs
         run: uv run --locked python -m mlsecops demo --backend kubernetes --versioned-data
-      - name: Private storage identities, network and persistence
-        run: |
-          uv run --locked python -m mlsecops.kube_storage
-          uv run --locked python -m mlsecops.kube_storage_qualification
+      - name: Bootstrap private storage
+        run: uv run --locked python -m mlsecops.kube_storage
       - name: Signed storage migration, interruption and artifact verification
         run: |
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.kube_storage_migration_qualification
-      - name: Scoped controller bootstrap and complete M20 acceptance
+      - name: Bootstrap scoped controllers
+        run: uv run --locked python -m mlsecops.controller_bootstrap
+      - name: Foundation contracts and fresh-process M01
         run: |
-          uv run --locked python -m mlsecops.controller_bootstrap
-          uv run --locked python -m mlsecops.acceptance --gate M20 --output .runtime/evidence/M20.json
+          uv run --locked coverage run --source=mlsecops.bootstrap,mlsecops.foundation,mlsecops.inventory --data-file=.coverage-foundation -m unittest scripts.bootstrap_qualification scripts.foundation_qualification scripts.artifact_intake_qualification.ArtifactIntakeContracts.test_evidence_must_not_precede_workspace_ownership
+          uv run --locked coverage report --data-file=.coverage-foundation --fail-under=95
+          uv run --locked python -m mlsecops.acceptance --gate M01 --output .runtime/evidence/M01.json
+      - name: CP1 access and training fault isolation
+        run: |
+          uv run --locked coverage run --source=mlsecops.isolation_gates,scripts.isolation_native --data-file=.coverage-isolation -m unittest scripts.isolation_gates_qualification
+          uv run --locked coverage report --data-file=.coverage-isolation --fail-under=95
+          uv run --locked python -m mlsecops.acceptance --gate M04 --output .runtime/evidence/M04.json
+          uv run --locked python -m mlsecops.acceptance --gate M05 --output .runtime/evidence/M05.json
       - name: Complete fresh M21 with scoped intake and independent SQL readback
         run: uv run --locked python -m mlsecops.acceptance --gate M21 --output .runtime/evidence/M21.json
       - name: Sanitized component evidence
         if: always()
         run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M01.json','foundation-qualification.json','M04.json','access-qualification.json','M05.json','training-isolation.json')]; [print(canonical(read_json(path)).decode() if path.is_file() else path.name+': no completed report') for path in paths]"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Qualification report not produced; bootstrap/build may have failed.')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-storage-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Private storage qualification report not produced.')"
           uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/evidence/kubernetes-migration-qualification.json'); print(canonical(read_json(report)).decode() if report.exists() else 'Migration qualification report not produced.')"

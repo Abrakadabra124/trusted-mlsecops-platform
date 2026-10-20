@@ -75,7 +75,7 @@ def job_document(name, namespace, spec, timeout):
     }
 
 
-def wait_job(state, namespace, name, timeout):
+def wait_job(state, namespace, name, timeout, *, observe=None):
     started = time.monotonic()
     observed = None
     while time.monotonic() - started <= timeout + 40:
@@ -103,6 +103,15 @@ def wait_job(state, namespace, name, timeout):
                 raise Rejected("unexpected_job_pod_count")
             terminal["pod_deleted"] = not pods
             return terminal, observed, round(time.monotonic() - started, 6)
+        if (
+            observe is not None
+            and pods
+            and any(
+                "running" in status.get("state", {})
+                for status in observed.get("status", {}).get("containerStatuses", [])
+            )
+        ):
+            observe(observed)
         time.sleep(1)
     raise Rejected("kubernetes_job_wait_deadline")
 

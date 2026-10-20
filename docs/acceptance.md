@@ -4,6 +4,8 @@
 
 ## Единый формат проверки
 
+CP1 2026-10-20: M01/M04/M05 dispatch реализован в рабочей копии; native acceptance ещё не подтверждена. [Foundation procedure](operations/artifact-intake-troubleshooting.md#продолжение-cp1-исполняемый-foundation-gate-m01), [isolation procedure](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Критерии и численные thresholds ниже не изменены.
+
 CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 --profile local-cpu --output .runtime/evidence/M01.json`. Runner создан в первом increment R1; пока полный gate не подключён, он сохраняет `inconclusive` и возвращает exit code 2. Это не ошибка, которую следует обходить, и не пройденная приёмка. [Документационный валидатор](../scripts/check_docs.py) остаётся отдельной проверкой.
 
 Каждый report: gate ID, status=`pass|fail|inconclusive`, timestamps, git SHA, input digests, policy digest, compute profile, test cases с expected/actual, метрики, exit codes, artifact hashes, redaction version и residual risks. Любая незавершённая обязательная проверка запрещает promotion. Evidence хранится отдельно от ключей и сырых чувствительных данных; публично публикуется только очищенная копия.

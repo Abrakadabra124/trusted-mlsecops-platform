@@ -19,7 +19,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ORT_DISABLE_TELEMETRY=1 \
     PATH="/app/.venv/bin:${PATH}"
 COPY --from=dependencies /app/.venv /app/.venv
-COPY pyproject.toml uv.lock Dockerfile ./
+COPY pyproject.toml uv.lock .python-version Dockerfile ./
 COPY mlsecops ./mlsecops
 COPY policies ./policies
 USER 65532:65532

@@ -63,3 +63,36 @@ Stale image требует rebuild, не ослабления проверки. 
 ## CI
 
 [Workflow](../.github/workflows/kubernetes.yml) повторяет bootstrap, isolation qualification и обучение/оценку из clean checkout. CLI artifacts закреплены SHA-256; remote shell scripts не исполняются. Конкретный успешный run фиксируется после проверки в [STATUS](../STATUS.md), наличие workflow не является доказательством.
+
+## CP1: M04/M05 и отказ training при настоящем inference
+
+Состояние реализации 2026-10-20: gates подключены в рабочей копии, native CI ещё не выполнен. Исторический HTTP control Pod из таблицы выше не переименован в настоящий inference. Основание работы - обязательный R1-B03, не дополнительное усиление.
+
+**M04:** [aggregator](../mlsecops/isolation_gates.py) выполняет свежие полные M20 и storage campaigns и связывает реальные API/SQL/network cases с текущими source/image, namespace UID, volume UID и dataset. Workflow вызывает эти кампании внутри M04 ровно один раз, вместо прежних отдельных шагов. Проверяются все 63 SQL/TLS cases на роль, отдельные API-denials storage ServiceAccounts, network probes, счётчик cases, hashes M20 и независимые ограничения SQL-ролей. Trainer/evaluator проверяются внутри настоящих Jobs; SQL `serving` читает releases, но не train/candidates. Сохранённый прошлый pass не заменяет новую проверку текущих прав.
+
+**M05:** [native coordinator](../scripts/isolation_native.py) использует настоящий candidate из `storage-demo.json`, существующие signed release proposal и отдельный qualification permit. Запускает тот же HTTP app и bounded ONNX worker, что существующая candidate qualification, без production approval и без замены модели fixture. Пока service работает, отдельные training Jobs выполняют CPU loop до active deadline и расходуют память до OOMKilled. ONNX worker ограничен 1 CPU/1 GiB; отрицательный training probe использует 2 CPU/256 MiB, то есть более низкий fault budget внутри разрешённого профиля.
+
+HTTP predictions проверяются до, во время и после каждого отказа: тот же model/bundle, те же predictions и тот же serving container. Для зачтённого concurrent sample API должен наблюдать тот же Pod в Running до и после HTTP response; дополнительно сохраняются UID Job/Pod, фактический Pod spec и причина завершения. Нет такого sample, неожиданный HTTP status, смена модели/worker или неверная termination - fail, не молчаливый пропуск. Это не заменяет M14 latency/load SLO.
+
+### Диагностика и безопасное повторение
+
+Ответственный - platform operator. Команды только для разрешённого disposable hosted CI, после bootstrap, storage migration и controller bootstrap данного checkout. M04 сам выполняет и сохраняет полный M20; отдельно повторять M20/storage qualification перед этой командой не нужно. Не запускать их на локальных Docker/WSL/Kubernetes/SQL и не переключаться на чужой kube context.
+
+```bash
+uv run --locked python -m mlsecops.acceptance --gate M04 --output .runtime/evidence/M04.json
+uv run --locked python -m mlsecops.acceptance --gate M05 --output .runtime/evidence/M05.json
+```
+
+1. Сначала read-only: проверить status/exit code в M04/M05, hashes/source/image и наличие prerequisite reports. Missing prerequisites означают inconclusive/2. Старый component report или успешный unit test не разрешает считать native gate пройденным.
+2. `isolation_access_*` / `isolation_resource_*`: проверить конкретную identity/case, сохранённые hashes и UID. Не удалять failed cases, не расширять RBAC/SQL права и не менять policy ради pass. Другой cluster/volume требует новой полной CP1 qualification.
+3. `training_fault_*`: проверить Running observations, HTTP response digest, Pod spec, DeadlineExceeded/OOMKilled и неизменность serving container. Отсутствие overlap не считается доказательством влияния на service, но не даёт pass. Не увеличивать budgets/thresholds без согласованного изменения контракта.
+4. После ошибки creation Job очистка не удаляет ресурс, который не был создан этой операцией. Для уже созданного Job используются его уникальное имя и namespace; native qualification завершает свои disposable serving/trust resources. При неполной очистке сохранить диагностику приватно и проверить ownership до адресного удаления. Global prune/reset запрещены.
+5. Повторять checkpoint только после установленной причины и конкретного исправления. Rollback изменения не означает разрешение release; неизменённые runtime images не relabel. Нужны новая сборка и проверка source fingerprint.
+
+Критерий закрытия R1-B03: M04/M05 pass из clean CI checkout с перечисленным evidence, а не только наличие кода. Локально проверены controlled unit cases; запуск настоящих ресурсов и окончательный статус фиксируются в STATUS после CI.
+
+### Исправления основного CP1 review
+
+Обнаружены три дефекта нового gate, не production incidents: cached M04 не обнаруживал изменённые grants; старый access pass оставался пригодным после нового отказа; обязательная matrix не требовала часть storage identity/TLS cases. Исправление: свежие полные native campaigns внутри каждой попытки M04, invalidation access report до проверки prerequisites, полный набор SQL/TLS/API/network cases и проверка count. M05 требует текущий успешный `M04.json`, hash соответствующего access report и неизменные успешные storage/authority/access/controller/isolation компоненты. Любой новый fail/inconclusive или изменённый компонент закрывает этот путь до запуска ресурсов.
+
+18 targeted methods прошли; новые gate/native coordinator modules имеют 100% statement/branch coverage. Включены regressions для нового отказа при старом pass, failed storage, отсутствующих cases и несовпадающего count. Основной review закончен, проверка этих конкретных исправлений и native CI ещё не завершены.

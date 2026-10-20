@@ -3,7 +3,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from mlsecops.contracts import Rejected, bounded_read, canonical, digest, now, read_json, write_json
+from mlsecops.contracts import (
+    Rejected,
+    bounded_read,
+    canonical,
+    digest,
+    now,
+    read_json,
+    safe_child,
+    write_json,
+)
 from mlsecops.inventory import command, source_fingerprint
 
 GATES = tuple(f"M{number:02}" for number in range(1, 24))
@@ -33,7 +42,49 @@ def report(gate, profile, root, state=None):
         "residual_risks": ["Full gate implementation and runtime evidence not yet available"],
     }
     state = Path(state) if state else root / ".runtime"
-    if gate == "M02":
+    if gate == "M01":
+        if not all(
+            (state / name).is_file() for name in ("workspace.json", "cluster.json", "kubeconfig")
+        ):
+            result["residual_risks"] = [
+                "M01 requires an explicitly bootstrapped owned lab and current worker/storage images"
+            ]
+            return result
+        from mlsecops.foundation import qualify
+
+        try:
+            evidence = qualify(root, state)
+            result.update(
+                status=evidence["status"],
+                cases=evidence["cases"],
+                exit_code=0,
+                metrics={"checks": evidence["checks"]},
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    "foundation_qualification": digest(
+                        bounded_read(state / "evidence/foundation-qualification.json")
+                    )
+                },
+            )
+            result["input_digests"].update(
+                worker_image=evidence["image_id"],
+                inventory=digest(canonical(evidence["inventory"])),
+                materials=digest(canonical(evidence["materials"])),
+            )
+        except (Rejected, OSError, subprocess.TimeoutExpired) as error:
+            unavailable = isinstance(error, (OSError, subprocess.TimeoutExpired)) or (
+                isinstance(error, Rejected)
+                and str(error).startswith(("required_tool_", "cluster_kubeconfig_unavailable"))
+            )
+            result.update(
+                status="inconclusive" if unavailable else "fail",
+                exit_code=2 if unavailable else 1,
+                residual_risks=[
+                    str(error) if isinstance(error, Rejected) else "M01 environment unavailable"
+                ],
+            )
+        result["finished_at"] = now()
+    elif gate == "M02":
         from mlsecops.data_qualification import qualify
 
         try:
@@ -89,6 +140,50 @@ def report(gate, profile, root, state=None):
             )
         except (Rejected, OSError) as error:
             result.update(status="fail", exit_code=1, residual_risks=[str(error)])
+        result["finished_at"] = now()
+    elif gate in {"M04", "M05"}:
+        if gate == "M04":
+            write_json(
+                safe_child(state, "evidence/access-qualification.json"),
+                {"status": "inconclusive", "started_at": started},
+            )
+        required = (
+            (state / "controllers/resources.json", state / "storage.json", state / "cluster.json")
+            if gate == "M04"
+            else (state / "evidence/M04.json", state / "evidence/access-qualification.json")
+        )
+        if not all(path.is_file() for path in required):
+            result["residual_risks"] = [f"{gate} requires current CP1 native component evidence"]
+            return result
+        from mlsecops.isolation_gates import qualify_access, qualify_training
+
+        qualifier = qualify_access if gate == "M04" else qualify_training
+        filename = "access-qualification.json" if gate == "M04" else "training-isolation.json"
+        try:
+            evidence = qualifier(root, state)
+            result.update(
+                status=evidence["status"],
+                cases=evidence["cases"],
+                exit_code=0,
+                metrics={"checks": evidence["checks"]},
+                residual_risks=evidence["limitations"],
+                artifact_hashes={
+                    **evidence["artifact_hashes"],
+                    "isolation_qualification": digest(bounded_read(state / "evidence" / filename)),
+                },
+            )
+            result["input_digests"].update(worker_image=evidence["image_id"])
+        except (Rejected, OSError, subprocess.TimeoutExpired) as error:
+            unavailable = isinstance(error, (OSError, subprocess.TimeoutExpired)) or (
+                isinstance(error, Rejected) and str(error).startswith("required_tool_")
+            )
+            result.update(
+                status="inconclusive" if unavailable else "fail",
+                exit_code=2 if unavailable else 1,
+                residual_risks=[
+                    str(error) if isinstance(error, Rejected) else f"{gate} environment unavailable"
+                ],
+            )
         result["finished_at"] = now()
     elif gate == "M06":
         if not all(

@@ -180,6 +180,7 @@ def qualify(
     privacy_observer=None,
     publish_report=True,
     campaign_id=None,
+    during_serving=None,
 ):
     campaign = uuid.uuid4().hex if campaign_id is None else campaign_id
     if type(campaign) is not str or re.fullmatch("[a-f0-9]{32}", campaign) is None:
@@ -389,6 +390,8 @@ def qualify(
                 )
 
             def exercise(engine, request, body):
+                if during_serving is not None:
+                    during_serving(engine, request, body)
                 audit.update(context_matrix(engine, request, body, confirmed, loaded.audit_context))
                 http_matrix(engine, request, body, confirmed)
                 if loaded.expires_at - math.ceil(time.time()) < 100:
