@@ -1,6 +1,6 @@
 # T16: fresh private serving receipt, local evidence
 
-Дата: 2026-10-20. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [ADR 0048](../decisions/0048-privacy-acceptance.md), [RB-67/PB-41](../operations/privacy-evidence-troubleshooting.md). Status: local verified component; native/CI текущего increment пока не проверены. Полный M13/T16/R1 не принят.
+Дата: 2026-10-20. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [ADR 0048](../decisions/0048-privacy-acceptance.md), [RB-67/PB-41](../operations/privacy-evidence-troubleshooting.md). Status: local verified component; далее **[native b0df48e verified](privacy-evidence-b0df48e-native.md)**, 83 cases, все 10 CI terminal: 6 success / 4 failure, attempt 1. Полный M13/T16/R1 не принят.
 
 ## Изменение
 

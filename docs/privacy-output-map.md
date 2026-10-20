@@ -2,6 +2,8 @@
 
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [Критерий M13](acceptance.md#m13), [ADR 0047](decisions/0047-serving-output-observation.md). Это карта полноты, не pass-report M13.
 
+Обновление [ADR 0048](decisions/0048-privacy-acceptance.md), [native b0df48e](evidence/privacy-evidence-b0df48e-native.md): parent проверяет signed primary и fresh private receipt; нового наблюдаемого канала этот checker не добавляет. Design review требует retained exact snapshots/HTTP linkage, production lifecycle/429/503, service-log coverage, subject composition и отдельную public projection. Эти пробелы не закрыты согласованными summaries.
+
 ## Поток данных и статус наблюдения
 
 | Канал / producer | Реализованный контроль | Подтверждение и оставшийся пробел |

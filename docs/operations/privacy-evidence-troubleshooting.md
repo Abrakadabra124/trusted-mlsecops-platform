@@ -51,4 +51,4 @@ uv run --locked python scripts/check_docs.py
 
 ## Проверенность
 
-Это инструкции по встреченным controlled test failures, не отчёт о production-инциденте. Локальные команды проверяются в evidence; native результат фиксируется отдельно. Автоматическое восстановление shared/local Docker, private primary snapshot retention, service-log observation и полный M13 остаются вне выполненного increment. Эскалировать повторную несовместимость schemas, неизвестный private output, неподтверждённую ownership/cleanup либо отсутствие обязательного primary evidence.
+Это инструкции по встреченным controlled test failures, не отчёт о production-инциденте. Локальные команды проверены в evidence; [native b0df48e](../evidence/privacy-evidence-b0df48e-native.md) подтвердил 83 cases и единственный parent marker. Все 10 CI terminal: 6 success / 4 failure, attempt 1. Автоматическое восстановление shared/local Docker, private primary snapshot retention, service-log observation и полный M13 остаются вне выполненного increment. Эскалировать повторную несовместимость schemas, неизвестный private output, неподтверждённую ownership/cleanup либо отсутствие обязательного primary evidence.

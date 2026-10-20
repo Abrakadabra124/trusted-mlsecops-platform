@@ -127,7 +127,7 @@ Checkpoint перед переходом к T16: [ed87e97 evidence](../docs/evid
 
 ### Проверяемые slices T16
 
-Fresh receipt slice [ADR 0048](../docs/decisions/0048-privacy-acceptance.md): independently verified proposal -> bounded child -> fresh private receipt admission. [Local evidence](../docs/evidence/privacy-evidence-2026-10-20.md), native pending. Это prerequisite, не полный M13. Следом exact private snapshots/HTTP linkage, production lifecycle/429/503, real service-log coverage, explicit subject composition и separate public projection.
+Fresh receipt slice [ADR 0048](../docs/decisions/0048-privacy-acceptance.md): independently verified proposal -> bounded child -> fresh private receipt admission. **[Native b0df48e verified](../docs/evidence/privacy-evidence-b0df48e-native.md)**: 83 cases, 340 events / 85 completed, CI 6 success / 4 failure, attempt 1. [Local evidence](../docs/evidence/privacy-evidence-2026-10-20.md). Это prerequisite, не полный M13. Следом exact private snapshots/HTTP linkage, production lifecycle/429/503, real service-log coverage, explicit subject composition и separate public projection.
 
 Checkpoint HTTP, native verified 2026-10-19: [ADR 0040](../docs/decisions/0040-serving-http-audit.md), обязательный producer и actual ASGI lifecycle. [281e902 evidence](../docs/evidence/serving-http-audit-2026-10-18.md): 48 HTTP methods / 0 skips, новый module 100%, 74 actual-candidate cases, retained audit pair 8/8. CI 6 success / 4 failure, M20/M21 pass. Следующий acceptance шаг - all-output canaries и cardinality с полной correlation; Windows concurrent real-fsync остаётся inconclusive. Не принимать M13 по одним counters или успешному helper test.
 

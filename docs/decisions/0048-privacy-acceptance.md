@@ -1,6 +1,6 @@
 # ADR 0048: fresh M13 privacy acceptance
 
-Дата: 2026-10-20. Статус: полный gate proposed; первый private receipt increment реализован, native validation ещё не завершена.
+Дата: 2026-10-20. Статус: полный gate proposed; первый private receipt increment принят в scoped native CI [b0df48e](../evidence/privacy-evidence-b0df48e-native.md), не полный M13.
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit».
 [M13](../acceptance.md#m13), [карта каналов](../privacy-output-map.md), [предыдущий native increment](../evidence/serving-output-2a70ffc-native.md).
 
