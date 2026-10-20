@@ -38,16 +38,16 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 - Проверка: single-byte tamper, source expiry, traversal/symlink, duplicate rows, missing object; approved версия не перезаписывается.
 
 ## T05
-- [ ] Identity и изоляция. Зависимость: T04. Gate: M04.
-- CP1: executable M04 связывает полные native API/SQL/network matrices с текущими resource/source/image identities. Основной review и проверка трёх fixes завершены; приёмка остаётся открытой до общего native CI checkpoint; [runbook](../docs/kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference).
-- Прогресс: отдельные namespaces/ServiceAccounts, реальные API denials, Cilium probes и SQL storage ACL работают. [Private cluster storage](../docs/private-cluster-storage.md) прошёл 436 component checks; полная интеграция identities, включая serving, ещё не завершена.
+- [x] Identity и изоляция. Зависимость: T04. Gate: M04.
+- CP1 `61c6849`: M04 pass / 764 cases, полные native API/SQL/network matrices связаны с текущими resource/source/image identities. Основной review и проверка трёх fixes завершены; [run и доказательства](../STATUS.md), [runbook](../docs/kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). M05 и общая R1-приёмка отдельно открыты.
+- Прогресс до CP1: отдельные namespaces/ServiceAccounts, реальные API denials, Cilium probes и SQL storage ACL. [Private cluster storage](../docs/private-cluster-storage.md) прошёл 436 component checks; теперь включён в свежую полную M04 integration вместе с serving identities.
 - [Signed migration](../docs/cluster-storage-migration.md) прошла 497 локальных checks. Следующий [controller component](../docs/scoped-controllers.md) прошёл 133: scoped RBAC/admission, API TLS и реальное обучение/оценка из отдельных Jobs. Это не закрывает полный M04.
 - Результат: role/access matrix, namespace/storage/network policies и restricted service accounts.
 - Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
 
 ## T06
 - [ ] Sandboxed training Jobs. Зависимость: T05. Gate: M05.
-- CP1, рабочая копия: M05 подключает существующий actual-candidate HTTP/ONNX serving к CPU deadline/OOM probes; сравнивает predictions и container identity до/во время/после. Не control HTTP fixture, не release approval. Native результат ещё отсутствует.
+- CP1: M05 подключает существующий actual-candidate HTTP/ONNX serving к CPU deadline/OOM probes; сравнивает predictions и container identity до/во время/после. Native `61c6849` fail на отсутствующем proposal report; исправление проверено targeted regression и требует нового native запуска. Не control HTTP fixture, не release approval.
 - Прогресс: настоящий Job backend, admission, deadline, PID/OOM/egress probes и cleanup проверены; влияние на будущий настоящий serving service ещё не измерено.
 - Результат: Job runner без host privileges, лимиты, deadlines, pinned image и cleanup.
 - Проверка: denied egress, timeout, memory exhaustion, отсутствие signing secrets и влияния на serving.

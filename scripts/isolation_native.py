@@ -130,7 +130,10 @@ def qualify(root, state, image):
         or isolation["source_fingerprint"] != access["source_fingerprint"]
     ):
         raise Rejected("training_isolation_resources_or_evidence_changed")
-    release_native.qualify(root, state, image_id)
+    proposal_path = safe_child(state, "evidence/release-native.json")
+    write_json(proposal_path, {"status": "inconclusive", "release_ready": False})
+    proposal = release_native.qualify(root, state, image_id)
+    write_json(proposal_path, proposal)
     observations = {}
 
     def during_serving(engine, request, body):

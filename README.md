@@ -4,7 +4,7 @@
 
 **Поставка R1:** [замороженные границы, обязательные блокеры и 5 checkpoints](docs/r1-delivery.md). [Будущие улучшения FI-001-FI-008](docs/future-improvements.md) выполняются только после R1 и отдельной команды владельца. Дальнейший порядок определяется delivery-планом, а не количеством завершённых компонентов.
 
-Текущий checkpoint **CP1: foundation и изоляция**. M01/M04/M05 реализованы в рабочей копии; локальные tests не заменяют native acceptance. [Порядок приёмки](docs/r1-delivery.md), [M04/M05 и training faults](docs/kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference), [фактический статус](STATUS.md). Выпуск по-прежнему запрещён до всех обязательных gates.
+Текущий checkpoint **CP1: foundation и изоляция**. Native `61c6849`: M01 pass / 10 cases, M04 pass / 764 cases; M05 отказал на передаче proposal report, исправление проверено локально и требует native проверки. [Порядок приёмки](docs/r1-delivery.md), [M04/M05 и training faults](docs/kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference), [фактический статус и полная CI-матрица](STATUS.md). Выпуск по-прежнему запрещён до всех обязательных gates.
 
 Последний подтверждённый runtime checkpoint до CP1: **[native a7a09c8 verified](docs/evidence/audit-evidence-a7a09c8-native.md)**, 85 cases. [Private primary audit packet](docs/decisions/0049-private-audit-evidence.md), independent HTTP outcomes и parent verification после child exit: 107 responses, 336 audit events / 84 completed / 0 unresolved. Все 10 CI terminal: 6 success / 4 failure. [RED/review и ограничения](docs/evidence/audit-evidence-2026-10-20.md), [RB-68/PB-42](docs/operations/audit-evidence-troubleshooting.md). Полный M13 не принят, release blockers сохраняются.
 

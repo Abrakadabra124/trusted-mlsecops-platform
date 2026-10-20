@@ -178,8 +178,10 @@ class AccessGateContracts(unittest.TestCase):
             "subject_sha256": "e" * 64,
             "candidate_reference": "f" * 64,
         }
+        proposal = {"status": "pass", "release_ready": False, "proposal_reference": "a" * 64}
 
         def candidate(root, state, image, **options):
+            self.assertEqual(read_json(state / "evidence/release-native.json"), proposal)
             options["during_serving"](None, None, None)
             return serving
 
@@ -195,7 +197,9 @@ class AccessGateContracts(unittest.TestCase):
             patch.object(
                 isolation_native, "validate_cluster", return_value={"namespace_uid": "namespace"}
             ),
-            patch.object(isolation_native.release_native, "qualify") as release,
+            patch.object(
+                isolation_native.release_native, "qualify", return_value=proposal
+            ) as release,
             patch.object(isolation_native, "exercise", return_value=observed),
             patch.object(
                 isolation_native.candidate_serving_native, "qualify", side_effect=candidate
@@ -205,6 +209,21 @@ class AccessGateContracts(unittest.TestCase):
             self.assertEqual(read_json(state / "evidence/training-isolation.json"), result)
             self.assertFalse(serving["release_ready"])
             release.assert_called_once()
+            with (
+                patch.object(
+                    isolation_native.release_native,
+                    "qualify",
+                    side_effect=Rejected("proposal_failed"),
+                ),
+                patch.object(isolation_native.candidate_serving_native, "qualify") as start,
+            ):
+                with self.assertRaisesRegex(Rejected, "proposal_failed"):
+                    isolation_native.qualify(state, state, "image")
+                self.assertEqual(
+                    read_json(state / "evidence/release-native.json"),
+                    {"status": "inconclusive", "release_ready": False},
+                )
+                start.assert_not_called()
             for fault in ("access", "resources", "candidate", "runtime"):
                 changed = copy.deepcopy(access)
                 if fault == "access":
@@ -238,7 +257,9 @@ class AccessGateContracts(unittest.TestCase):
             patch.object(
                 isolation_native, "validate_cluster", return_value={"namespace_uid": "namespace"}
             ),
-            patch.object(isolation_native.release_native, "qualify"),
+            patch.object(
+                isolation_native.release_native, "qualify", return_value={"status": "pass"}
+            ),
             patch.object(isolation_native, "exercise", return_value={"status": "pass"}),
         ):
             with patch.object(

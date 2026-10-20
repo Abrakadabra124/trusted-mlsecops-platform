@@ -22,20 +22,21 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 | Требование | Основание | Граница |
 | --- | --- | --- |
+| M01, M04 | Native `61c6849`: 10 / 764 cases, [run и статус](../STATUS.md) | M05 fail; CP1 ещё не завершён |
 | M02, M03, M06, M07, M20, M21 | Executable dispatch в [acceptance.py](../mlsecops/acceptance.py), профильные evidence в STATUS | Отдельные synthetic campaigns; ещё не общий candidate/M18 |
 | Последний интеграционный checkpoint a7a09c8 | [Полная CI-матрица](evidence/audit-evidence-a7a09c8-native.md): M03 431, M06 18, M07 97, M20 725, M21 122 cases pass | 6 success / 4 failure, release запрещён |
 | Actual candidate inference/privacy/audit | Там же: 85 cases, 107 HTTP responses, retained primary bytes и parent recheck | Qualification, не approved release и не полный M12/M13 |
 | Promotion/reader/revocation/backup/restore | Существующие native components и ранбуки из STATUS | Controlled approvals и component recovery не заменяют M10/M11/M16/M17 |
 
-Для остальных полных gates нет общей приёмки: M01, M04, M05, M08-M19, M22, M23. Наличие файлов или частичного зелёного теста не меняет этот статус.
+Для остальных полных gates нет общей приёмки: M05, M08-M19, M22, M23. Наличие файлов или частичного зелёного теста не меняет этот статус.
 
 ## Обязательные блокеры R1
 
 | ID | Что осталось | Критерии / доказательство закрытия |
 | --- | --- | --- |
-| R1-B01 | Общий воспроизводимый entrypoint и полный foundation gate; M01 реализован в рабочей копии, native acceptance отсутствует | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
+| R1-B01 | M01 принят в native `61c6849` (10 cases); общий end-to-end entrypoint ещё не принят | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
 | R1-B02 | Запрет выпуска по image severity; poisoning и evasion failures; paired candidate не исправил нарушения | M08/M09/M18/M22: remediation на validation без подбора final holdout, исходные frozen suites/thresholds и полный runtime/controller image scope; не scanner exceptions |
-| R1-B03 | Полная integration-приёмка прав и ограниченного обучения отсутствует | M04/M05: реальные identity/network/storage и deadline/OOM probes, сохранение работоспособности serving; существующие M20 proofs переиспользовать |
+| R1-B03 | M04 принят в native `61c6849` (764 cases); M05 proposal/report handoff исправлен локально, native проверка остаётся | M04/M05: реальные identity/network/storage и deadline/OOM probes, сохранение работоспособности serving; существующие M20 proofs переиспользовать |
 | R1-B04 | Approval -> production Reader -> inference -> revoke ещё не принят как единая цепочка; M13 не завершён | M10-M13/M19: actual subject binding, policy/rollback/replay, configured lifecycle, privacy 429/503, service-log coverage, public projection и inventory impact; не очередное усиление вне требований |
 | R1-B05 | Нет полной quality/security monitoring acceptance | M15/M23: два окна drift, delayed labels, clean controls, 7 event types, authentic delivery/dedup/gaps/outage; без auto-promotion |
 | R1-B06 | Не приняты load, staged rollout, compatible rollback и независимый restore | M14/M16/M17: исходные duration/count/latency/error/RTO/RPO, новый storage, golden readback и запрет revoked fallback |
@@ -44,7 +45,7 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 Исторический intermittent M07 connection rejection остаётся reliability debt в R1-B08: успешный retry не устанавливает причину. До финальной приёмки требуется диагностика либо явная согласованная политика надёжности, а не стирание первого отказа.
 
-CP1 implementation checkpoint: исправлен repeat-bootstrap, реализованы M01/M04/M05 dispatch и шаги существующего Kubernetes workflow. Foundation: 30 targeted methods, bootstrap/foundation/inventory 100% statements/branches; два настоящих subprocess отказа до создания state и CLI inconclusive/2 без lab prerequisites. Isolation: 18 targeted methods, новые modules 100%; actual-candidate HTTP/ONNX path подключён к concurrent training faults. 3 findings основного review исправлены: fresh native access checks, invalidation/dependency binding, полная identity matrix. [Foundation runbook](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap), [M04/M05 runbook](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Проверка конкретных fixes завершена без замечаний; native CI checkpoint ещё не завершён, R1-B01/R1-B03 остаются открытыми. Наличие реализации не заменяет реальный proof.
+CP1 implementation checkpoint: исправлен repeat-bootstrap, реализованы M01/M04/M05 dispatch и шаги существующего Kubernetes workflow. Foundation: 30 targeted methods и отдельная build-context regression, bootstrap/foundation/inventory 100% statements/branches; два настоящих subprocess отказа до создания state и CLI inconclusive/2 без lab prerequisites. Isolation: 18 targeted methods, новые modules 100%. Основной review и проверка трёх fixes завершены без замечаний. Native `61c6849` подтвердил M01/M04/M20, но выявил M05 proposal/report handoff defect; его RED/исправление и отдельный storage refusal сохранены в [STATUS](../STATUS.md). [Foundation runbook](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap), [M04/M05 runbook](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Native проверка исправленного M05 ещё требуется, R1-B01/R1-B03 остаются открытыми.
 
 ## Конечная последовательность и checkpoints
 
