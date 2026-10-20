@@ -52,7 +52,26 @@ def kubectl(state, arguments, value=None, timeout=60, check=True, config=None):
         check=False,
     )
     if check and result.returncode:
-        raise Rejected("kubernetes_request_failed")
+        operation = arguments[0] if arguments else "other"
+        if operation not in {"get", "create", "apply", "delete", "logs", "wait", "exec", "config"}:
+            operation = "other"
+        diagnostic = result.stderr[:8192].lower()
+        category = next(
+            (
+                category
+                for marker, category in (
+                    (b"waiting to start", "container_pending"),
+                    (b"timed out", "timeout"),
+                    (b"timeout", "timeout"),
+                    (b"(notfound)", "not_found"),
+                    (b"(forbidden)", "forbidden"),
+                    (b"connection refused", "connection_refused"),
+                )
+                if marker in diagnostic
+            ),
+            "unknown",
+        )
+        raise Rejected(f"kubernetes_request_failed:{operation}:{category}")
     return result
 
 

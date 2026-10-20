@@ -44,6 +44,10 @@ gh workflow run image-audit.yml --repo Abrakadabra124/trusted-mlsecops-platform 
 
 Если старый state отвергнут после обновления pin, это ожидаемая защита. Сохранить checkout, marker, исходный volume и signed backups; не переписывать marker и не выполнять bootstrap поверх старой истории. Rollback/migration границы заданы ADR 0050. Для tracking helper USER и policy mismatch использовать [tracking runbook](tracking-troubleshooting.md#cp2-переход-на-non-root-postgresql-image).
 
+Встреченный `91aa1b7`: developer/tracking/image workflows success, Kubernetes signed migration failure с общей причиной `kubernetes_request_failed`. Storage bootstrap и Kubernetes training/evaluation прошли; это не доказательство успешной миграции. Прежняя диагностика скрывала даже вид операции. Исправленный wrapper публикует только фиксированные operation/category: `container_pending`, `timeout`, `not_found`, `forbidden`, `connection_refused` или `unknown`; private stderr, arguments, names и SQL не публикуются. Категория является диагностической подсказкой, не доказанной причиной и не разрешением игнорировать failure.
+
+При `logs:container_pending` сначала исследовать status/termination reason собственного pod и его Job, а не считать пустые logs успешной проверкой. При `delete:timeout` проверить ownership и конечное существование Job/pods, не делать global cleanup. При `get:not_found` сопоставить lifecycle/TTL; `forbidden` требует проверки выбранной identity, не admin bypass. Transport timeout/refused требует отдельной проверки API availability. При `unknown` сохранить закрытое evidence и добавить точечную диагностику, не вывести raw stderr. Нельзя молча увеличить deadline, отключить NetworkPolicy/TLS или объявить случайный следующий pass исправлением причины.
+
 ## CP2: новый Wolfi candidate не собрался или не прошёл audit
 
 Причина изменения: повторные High/Critical findings прежних Debian candidates, не отказ работающей БД. [Новые recipes и источники](../image-candidates.md#cp2-wolfi-candidates-2026-10-20) требуют проверки для каждого нового image ID. Эта процедура не разрешает adoption.
