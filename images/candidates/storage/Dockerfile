@@ -1,4 +1,5 @@
 FROM cgr.dev/chainguard/wolfi-base@sha256:81211e15a86ea1d5357f284482af45730c51de45eaf10ad9ce205d6bfc2df323
+LABEL org.opencontainers.image.source="https://github.com/Abrakadabra124/trusted-mlsecops-platform"
 RUN apk add --no-cache \
         'apk-tools=2.14.10-r17' \
         'busybox=1.38.0-r3' \

@@ -2,9 +2,31 @@
 
 Ответственные: platform operator и security reviewer. Процедура относится к scanner evidence лаборатории, не к production-инциденту. Рабочие SQL volumes, runtime tags и foundation не меняются.
 
+## CP2: подготовка storage artifact к scoped adoption
+
+[ADR 0050](../decisions/0050-runtime-image-adoption.md) ограничивает изменение новыми R1 states, без переключения рабочих SQL volumes. Это следующий обязательный шаг R1-B02, не новый необязательный scope.
+
+Read-only перед запуском: проверить commit на `main`, [workflow](../../.github/workflows/storage-artifact.yml), pinned recipes, отсутствие секретов в Docker context и результаты candidate qualification. Изменяющее действие только на disposable hosted runner:
+
+```text
+gh workflow run storage-artifact.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref main
+```
+
+Workflow повторяет actual compatibility/restore и fresh audit. Publication gate отвергает чужие/неполные/старше двух часов reports, dirty source, несовпадающие image/recipe identities, неправильную policy и blocking findings. Оба candidate gates обязательны. Baseline failures сохраняются в полном comparison: разрешение подготовить storage artifact не является разрешением выпускать R1. Только после этих проверок job получает registry login, публикует проверенный image ID под уникальным commit/run/attempt tag, читает manifest и выполняет pull-by-digest/readback. Tokens не выводятся, PAT не нужен; login удаляется в always step.
+
+Отказы и действия:
+
+- `storage_publication_dispatch_invalid` / `storage_publication_dirty_source`: не запускать локально и не менять guard. Нужен ручной запуск из правильного `main` checkout.
+- `storage_publication_evidence_invalid`: сопоставить scopes, timestamps, source revision/fingerprint, identities, controls и severity. Не редактировать reports ради публикации; исправить причину и повторить затронутый pipeline.
+- Push denied: проверить связь package с этим repository, job permission `packages:write` и OCI source label. Не выдавать token полные account/admin scopes.
+- Manifest/config/readback mismatch или сетевой сбой после push: статус inconclusive; artifact может существовать. Не удалять его автоматически и не принимать tag как identity. Проверить конкретный manifest/config и ownership.
+- `public_access_verified=false` в успешной публикации ожидаем: authenticated readback не доказывает anonymous доступ. GHCR новый package по умолчанию private. Перед baseline adoption подтвердить public visibility и anonymous manifest/config readback; не добавлять PAT в bootstrap.
+
+Rollback до adoption: baseline не меняется, runtime rollback не требуется. Остановить дальнейшее принятие, сохранить отказ и digest для расследования. Старые рабочие states/volumes, private keys и единственная копия backup не удаляются. Package publication, anonymous access и новое baseline runtime acceptance отмечаются отдельно в STATUS; unit contracts не заменяют эти три native результата.
+
 ## CP2: новый Wolfi candidate не собрался или не прошёл audit
 
-Причина изменения: повторные High/Critical findings прежних Debian candidates, не отказ работающей БД. [Новые recipes и источники](../image-candidates.md#cp2-wolfi-candidates-2026-10-20) ещё требуют native compatibility/security проверки. Эта процедура не разрешает adoption.
+Причина изменения: повторные High/Critical findings прежних Debian candidates, не отказ работающей БД. [Новые recipes и источники](../image-candidates.md#cp2-wolfi-candidates-2026-10-20) требуют проверки для каждого нового image ID. Эта процедура не разрешает adoption.
 
 1. Read-only: зафиксировать commit, stage, candidate recipe digest, image ID и `scan_executed`. Проверить pinned base/пакеты в Dockerfile, актуальный APK index, build/worker/restore/audit reports. Отсутствующий report не считать pass.
 2. Ошибка package resolver: проверить доступность ровно заданных версий и signed repository metadata. Не заменять pin на `latest`, не использовать `--allow-untrusted`, не игнорировать ошибку загрузки. Изменение pin требует нового source review, build и qualification.

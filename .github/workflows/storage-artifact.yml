@@ -1,0 +1,64 @@
+name: Prepare qualified storage artifact
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: storage-artifact
+  cancel-in-progress: false
+jobs:
+  prepare-storage:
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_CONFIG: ${{ runner.temp }}/storage-publication-auth
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked contracts before publication credentials
+        run: |
+          uv sync --locked --python 3.12.15
+          uv run --locked ruff check scripts/storage_publication*.py
+          uv run --locked ruff format --check scripts/storage_publication*.py
+          uv run --locked coverage run --branch --source=scripts.storage_publication -m unittest scripts.storage_publication_qualification
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .coverage-publication.json
+          uv run --locked python -c "import json; totals=json.load(open('.coverage-publication.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
+          uv run --locked python -m scripts.image_suite_qualification
+          uv run --locked python -m scripts.storage_image_qualification
+          uv run --locked python -m scripts.storage_candidate_qualification
+      - name: Build baseline and isolated pinned candidates
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m scripts.image_candidates build
+      - name: Actual candidate worker compatibility
+        run: uv run --locked python -m scripts.image_candidates qualify-worker
+      - name: Signed restore and golden predictions in separate storage
+        run: uv run --locked python -m scripts.storage_candidate
+      - name: Fresh comparison and candidate artifact eligibility
+        run: uv run --locked python -m scripts.storage_publication prepare
+      - name: Login with repository scoped job token
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+      - name: Publish checked image and verify immutable registry readback
+        run: uv run --locked python -m scripts.storage_publication publish
+      - name: Remove temporary registry login
+        if: ${{ always() }}
+        run: docker logout ghcr.io
+      - name: Preserve full comparison including baseline failures
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --locked python -m scripts.image_audit_publication
+          echo 'Qualified storage artifact only, not runtime adoption or model release. Baseline comparison failures remain release blockers.' >> "$GITHUB_STEP_SUMMARY"
