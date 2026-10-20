@@ -29,7 +29,18 @@ Scope T01/T02. Candidates не заменяют `trusted-mlsecops:dev`, pinned w
 
 Из native `apk_packages` зафиксированы **все 34 worker и 56 storage APK name/version**, включая транзитивные и base packages, прямо в recipes. Exact pins вместе с build-time проверкой количества установленных packages запрещают незаметное расширение dependency set. Локальная сверка подтверждает равенство всего списка native inventory, а не только основных трёх библиотек. SHA256 canonical inventory: worker `2017ad3ee392a37229abd633fdd210971ba03077ca4ed30eb6181a6c4ae2e0aa`, storage `3b2fdfdb4f229231d900258a61a1949a47ec1d912e602fdea77de06fd50b18e0`.
 
-**До adoption:** повторный hosted build/compatibility/audit после полной фиксации closure и совпадение нового inventory с зафиксированным; scoped migration/rollback для принятия runtime; полный image scope, включая controllers. Package versions и base digest не доказывают bit-for-bit воспроизводимость OCI archive: registry retention, builder metadata, timestamps и scanner DB остаются отдельными inputs. При недоступном pin сборка должна отказать, а не выбирать новую версию.
+### Проверка полностью закреплённых recipes
+
+[Run 39475658299](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39475658299), job `118810824029`, attempt 1, commit `0de97b6731347e051be5ff11d1705a84bc88c18a`: clean hosted build с полными pins и package-count guards success. Новые `apk_packages` точно равны предыдущим спискам, включая каждую name/version; closure hashes выше сохранены. Все четыре scans выполнены, counts/status совпадают с таблицей; controls pass. DB SHA256 этого run `5bee2b8f39940a9eb07ae25eae384ae8b33fd334c9970f9f896f5941603ddbfc`, canonical audit-report SHA256 `ccca020b32ea56b797382c6fe01ee8bb6e75521d2e2081f3b42636209df79324`. Разные snapshots между runs допустимы; внутри каждого comparison используется одна проверенная DB.
+
+| Candidate | Exact image config ID | Recipe SHA256 |
+| --- | --- | --- |
+| Worker | `sha256:b46fee05289129d0e6d02dec11e1aa3aa2020219114604ceccc396e3eef04a61` | `f4db944536dbbe594adf5d650cd05aae042d4e9d1f269ca00e90a49e6174bec0` |
+| Storage | `sha256:6887337f0ca77ecdbbbcd8c53a430345ff58a868022eaa483815566e04f0bf3b` | `0a86de8979589cf4f4bd1d2042c34ffba27d06364fe3413286d0d5a0bbe8059f` |
+
+154 controlled audit, 40 storage-image, 14 orchestration contracts pass. Actual worker compatibility 74 cases pass, report digest `7684c7e4ca5f0fc1516f8254bb724ff8e2d42db4273934e7b7f17595b09cdeae`. Actual storage recovery 435 cases pass, report digest `3af7e4e508b76f885fbe0654ddec7c5ea952785a3873411f13e61c8255640f74`: 1 000 golden predictions/error 0.0, SQL restore 2.627095 s, restore-to-golden 4.079227 s. Resource ownership и cleanup проверены qualification. Эти времена не доказывают полный product RTO.
+
+**До adoption:** scoped migration/rollback для принятия runtime и полный image scope, включая controllers. Рабочие tags, SQL volumes и baseline здесь не меняются; image config ID не является registry manifest digest и не используется как выдуманный опубликованный OCI reference. Package versions и base digest не доказывают bit-for-bit воспроизводимость OCI archive: registry retention, builder metadata, timestamps и scanner DB остаются отдельными inputs. При недоступном pin сборка должна отказать, а не выбирать новую версию. Общий workflow failure по baseline остаётся действительным запретом выпуска.
 
 ## Предыдущий Debian-вариант, 2026-10-09
 
