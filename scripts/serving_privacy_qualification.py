@@ -17,7 +17,6 @@ from mlsecops.contracts import Rejected, canonical
 from mlsecops.datasets import FEATURES
 from scripts import serving_privacy_probe as probe
 from scripts.serving_native import site
-from scripts.serving_native_qualification import engine_fixture
 from scripts.serving_privacy_probe import Signals
 
 
@@ -207,6 +206,8 @@ class PrivacyProbeContracts(unittest.TestCase):
                 probe.exercise(request, body)
 
     def test_real_http_detector_rejects_active_bearer_in_headers_and_logs(self):
+        from scripts.serving_native_qualification import engine_fixture
+
         original = serving_http.create_app
         for channel in ("headers", "logs", "features"):
             with self.subTest(channel=channel):
@@ -494,6 +495,8 @@ class PrivacyProbeContracts(unittest.TestCase):
                 probe.scan_owned_audit(nested, (b"marker",))
 
     def test_real_http_privacy_matrix_checks_owned_audit_and_returns_only_summary(self):
+        from scripts.serving_native_qualification import engine_fixture
+
         engine = engine_fixture()
         generation = threading.Event()
         engine.response_budget.side_effect = lambda: serving.ResponseBudget(

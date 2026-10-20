@@ -68,6 +68,19 @@ def operation(observe):
 
 
 class OutputObservationContracts(unittest.TestCase):
+    def test_http_fixture_import_does_not_load_native_inference_runtime(self):
+        source = """
+import sys
+from scripts.serving_privacy_qualification import PrivacyProbeContracts
+assert 'onnxruntime' not in sys.modules, 'http_fixture_imported_inference_runtime'
+sys.stdout.buffer.write(b'{}\\n')
+"""
+        captured = worker_transport.capture(
+            [sys.executable, "-c", source], timeout=15, canonical_output=True
+        )
+        self.assertEqual(captured["output"], {})
+        self.assertEqual(captured["diagnostics"]["bytes"], 0)
+
     def test_sealed_capture_discards_late_content_and_emits_only_constant_failure(self):
         capture = probe.LifecycleCapture()
         self.assertEqual(capture.write("before"), 6)
