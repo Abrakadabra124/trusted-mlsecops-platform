@@ -17,6 +17,16 @@ Rollback: вернуть только candidate recipe/checker правку, н�
 
 ## Симптом и проверенная причина
 
+### CP2: bootstrap наследует non-root USER image
+
+[Run 39470747740](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39470747740), commit `e511f4f`: оба Wolfi images собраны, worker compatibility 74 cases pass; storage остановился с `storage_docker_failed:run`, audit не выполнялся. Исходный код не задавал пользователя для helper, подготавливающего новый volume. Wolfi recipe задаёт `USER 999:999`, а fresh volume требует root для подготовки ownership. Контракт воспроизвёл отсутствие explicit root; связь именно с native отказом требует нового integration run, поскольку старый report не сохранял этап.
+
+Исправление ограничено helper: `--user 0:0`, `--network none`, read-only rootfs, `--cap-drop ALL`, только `CHOWN`, `no-new-privileges`, существующие resource limits и `--rm`. `initdb` и сервер остаются `999:999` без добавленных capabilities. Helper работает только с новым scoped volume, не с рабочей БД. Ошибки теперь различают `storage_docker_failed:volume_prepare` и `storage_docker_failed:initdb`, без вывода аргументов, сертификатов, stdout/stderr.
+
+Read-only диагностика: проверить exact image ID, recipe USER, этап отказа и bootstrap command contracts. При `volume_prepare` проверить explicit UID и доступность shell/tar/chown; при `initdb` проверить user, client/server binaries и locale. Не лечить отказ `privileged`, снятием read-only или отключением TLS. До изменения причины не повторять тот же run. После исправления нужны полный signed restore/readback и ownership validation на disposable runner; controlled contracts не заменяют native recovery.
+
+Image audit теперь выполняется после успешной сборки candidates даже при отказе compatibility, чтобы получить независимое evidence о packages. В workflow нет `continue-on-error`: compatibility failure сохраняет общий failure, scan pass не разрешает adoption. При build failure scan не запускается. Откат этой правки меняет только bootstrap harness/CI; действующие images и volumes не переключаются.
+
 В run `38151770889`, job `114506519932`, обычный `gh run view --log` через GitHub CLI 2.98.0 не показал итоговые JSON-строки audit и publication. Прямой job-log API сохранил обе строки длиной 188 989 байт с timestamp; сам canonical report занимает 188 960 байт и содержит 1 119 finding records. Отсутствие результата в одном viewer не означает отсутствие audit или нулевые findings. Это сравнение двух способов чтения логов, не доказательство конкретного внутреннего дефекта GitHub CLI.
 
 Исправление: [publisher](../../scripts/image_audit_publication.py) выводит тот же JSON с переносами и отступами. Каждый символ данных сохраняется, JSON после parsing равен исходному; status, severity, findings и counts не переопределяются. Ограничения: 16 MiB canonical input и 16 KiB на строку, oversized/nonfinite input отклоняется целиком, не обрезается. Управляющие символы экранируются. Для сохранённого отчёта проверены 13 830 строк, максимум 110 байт/строка, все 1 119 findings сохранены.

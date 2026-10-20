@@ -52,7 +52,7 @@ LIMITS = [
 ]
 
 
-def docker(arguments, content=None, timeout=60, check=True):
+def docker(arguments, content=None, timeout=60, check=True, *, failure_stage=None):
     try:
         result = subprocess.run(
             ["docker", *arguments], input=content, capture_output=True, timeout=timeout, check=False
@@ -62,7 +62,7 @@ def docker(arguments, content=None, timeout=60, check=True):
     if len(result.stdout) > 2 * 1024 * 1024 or len(result.stderr) > 2 * 1024 * 1024:
         raise Rejected("storage_docker_output_limit")
     if check and result.returncode:
-        raise Rejected(f"storage_docker_failed:{arguments[0]}")
+        raise Rejected(f"storage_docker_failed:{failure_stage or arguments[0]}")
     return result
 
 
@@ -382,6 +382,8 @@ def bootstrap(state, port=15439, *, experimental_image_id=None):
                 "-i",
                 "--network",
                 "none",
+                "--user",
+                "0:0",
                 *LIMITS,
                 "--cap-add",
                 "CHOWN",
@@ -395,6 +397,7 @@ def bootstrap(state, port=15439, *, experimental_image_id=None):
                 f"umask 077; mkdir -p {MOUNT}/18; tar --no-same-owner -xf - -C {MOUNT}; chown -R 999:999 {MOUNT}",
             ],
             archive.getvalue(),
+            failure_stage="volume_prepare",
         )
         docker(
             [
@@ -419,6 +422,7 @@ def bootstrap(state, port=15439, *, experimental_image_id=None):
                 "--data-checksums",
             ],
             timeout=120,
+            failure_stage="initdb",
         )
         docker(
             [

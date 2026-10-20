@@ -42,6 +42,7 @@ jobs:
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
       - name: Build separate candidate images
+        id: candidate-build
         run: uv run --locked python -m scripts.image_candidates build
       - name: Qualify candidate training and prediction compatibility
         run: uv run --locked python -m scripts.image_candidates qualify-worker
@@ -52,6 +53,7 @@ jobs:
           uv run --locked coverage json -o .runtime/evidence/storage-candidate-coverage.json
           uv run --locked python -c "import json; totals=json.load(open('.runtime/evidence/storage-candidate-coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
       - name: Audit exact worker and PostgreSQL images
+        if: ${{ !cancelled() && steps.candidate-build.outcome == 'success' }}
         run: uv run --locked python -m scripts.image_audit --compare-candidates
       - name: Publish sanitized result even on failure
         if: ${{ !cancelled() }}

@@ -1,6 +1,8 @@
 import copy
+import subprocess
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops import storage_bootstrap, storage_restore
@@ -190,6 +192,82 @@ def qualify():
                     )
                     if docker.called:
                         raise Rejected("storage_foreign_image_created_resources")
+            for image_name, image_override in (("baseline", None), ("candidate", image_id)):
+                with (
+                    patch.object(storage_bootstrap.storage_pki, "initialize"),
+                    patch.object(storage_bootstrap, "specification", return_value=(candidate, {})),
+                    patch.object(
+                        storage_bootstrap,
+                        "inspect",
+                        side_effect=lambda kind, name, required=True: (
+                            {"Id": image_id, "Os": "linux", "Architecture": "amd64"}
+                            if kind == "image"
+                            else None
+                        ),
+                    ),
+                    patch.object(
+                        storage_bootstrap.shutil,
+                        "disk_usage",
+                        return_value=SimpleNamespace(free=16 * 1024**3),
+                    ),
+                    patch.object(storage_bootstrap.socket, "socket"),
+                    patch.object(storage_bootstrap, "docker") as docker,
+                ):
+
+                    def stop_before_container(arguments, *args, **kwargs):
+                        if arguments[0] == "create":
+                            raise Rejected("contract_stop_before_container")
+
+                    docker.side_effect = stop_before_container
+                    rejected(
+                        image_name + ":bootstrap-commands",
+                        lambda: storage_bootstrap.bootstrap(
+                            fresh, experimental_image_id=image_override
+                        ),
+                        "contract_stop_before_container",
+                    )
+                    runs = [
+                        call.args[0] for call in docker.call_args_list if call.args[0][0] == "run"
+                    ]
+                    stages = [
+                        call.kwargs.get("failure_stage")
+                        for call in docker.call_args_list
+                        if call.args[0][0] == "run"
+                    ]
+                    if stages != ["volume_prepare", "initdb"]:
+                        raise Rejected("storage_bootstrap_stage_diagnostics_missing")
+                    create = docker.call_args.args[0]
+                    helper, initdb = runs
+                    if "--user" not in helper or helper[helper.index("--user") + 1] != "0:0":
+                        raise Rejected("storage_volume_preparer_not_explicit_root")
+                    for arguments in (initdb, create):
+                        if arguments[arguments.index("--user") + 1] != "999:999":
+                            raise Rejected("storage_runtime_user_changed")
+                        if "--cap-add" in arguments:
+                            raise Rejected("storage_runtime_capabilities_added")
+                    if (
+                        helper[helper.index("--cap-add") + 1] != "CHOWN"
+                        or helper[helper.index("--network") + 1] != "none"
+                        or "--rm" not in helper
+                        or "--read-only" not in helper
+                        or helper[helper.index("--cap-drop") + 1] != "ALL"
+                        or "no-new-privileges" not in helper
+                    ):
+                        raise Rejected("storage_volume_preparer_unconfined")
+                    cases.append({"id": image_name + ":explicit-bootstrap-users", "status": "pass"})
+    for stage in (None, "volume_prepare", "initdb"):
+        with patch.object(
+            storage_bootstrap.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                ["docker"], 1, stdout=b"private-output", stderr=b"private-secret"
+            ),
+        ):
+            rejected(
+                f"sanitized-docker-failure:{stage}",
+                lambda: storage_bootstrap.docker(["run"], failure_stage=stage),
+                f"storage_docker_failed:{stage or 'run'}",
+            )
     return {
         "status": "pass",
         "scope": "storage-image-contracts-only",
