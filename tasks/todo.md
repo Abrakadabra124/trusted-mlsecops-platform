@@ -1,6 +1,6 @@
 # Backlog реализации
 
-T16 current: [ADR 0049 private primary audit evidence](../docs/decisions/0049-private-audit-evidence.md) implemented, native pending. [Evidence](../docs/evidence/audit-evidence-2026-10-20.md) сохраняет replay/ledger/fsync RED и review; [RB-68/PB-42](../docs/operations/audit-evidence-troubleshooting.md). Не закрывать task по этому компоненту: production lifecycle/429/503 privacy, service logs, subject composition и public gate projection ещё обязательны.
+T16 current: [ADR 0049 private primary audit evidence](../docs/decisions/0049-private-audit-evidence.md), **[native a7a09c8 verified](../docs/evidence/audit-evidence-a7a09c8-native.md)**: 85 cases, Linux 20 packet / 26 parent-output / 56 export-IO tests без skips, 10 terminal CI: 6 success / 4 failure. [Evidence](../docs/evidence/audit-evidence-2026-10-20.md) сохраняет replay/ledger/fsync RED и review; [RB-68/PB-42](../docs/operations/audit-evidence-troubleshooting.md). Не закрывать task по этому компоненту: production lifecycle/429/503 privacy, service logs, subject composition и public gate projection ещё обязательны.
 
 T16 approved metrics: **native 93de1b6 verified**, 35 metrics tests / 0 skips, collector/probe 100%, 78 actual-candidate cases и 69 approved samples. [Evidence](../docs/evidence/serving-metrics-2026-10-19.md): 10 terminal CI, 6 success / 4 failure; source-lock correction подтверждена, исторический fail сохранён. [RB-62/PB-36](../docs/operations/serving-metrics-troubleshooting.md). Остались controller/all-output/export/correlation, полный M13 и image/ML blockers.
 

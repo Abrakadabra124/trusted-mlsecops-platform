@@ -1,6 +1,6 @@
 # ADR 0049: private primary audit evidence
 
-Дата: 2026-10-20. Статус: implemented, native qualification pending.
+Дата: 2026-10-20. Статус: implemented, [native a7a09c8 verified](../evidence/audit-evidence-a7a09c8-native.md), полный M13 не принят.
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit».
 [M13](../acceptance.md#m13), [ADR 0048](0048-privacy-acceptance.md).
 

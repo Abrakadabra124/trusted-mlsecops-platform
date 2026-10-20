@@ -28,6 +28,6 @@ Windows, project `.venv`, без Docker/WSL/Kubernetes/SQL. Разрешённы
 - Native parent test использует реальные signatures и independently bound proposal/permit; storage IO заменён controlled fixture. Это не native SQL readback.
 - Broader regression: 155 methods / 7 Linux-only skips / 37.065 s, включая private packet, parent signatures, public export, FD observer, lifecycle, HTTP и transport ownership. Ruff: 254 files formatted, lint pass. Documentation check: 488 files / 203 Markdown / 1478 local links (до обновления индексов).
 - Final changed-suite verification: 20 methods / 0 skips / 0.873 s и 100% statement/branch coverage трёх новых модулей; отдельно 21 parent/output/IO methods / 5 Linux skips / 3.166 s. Documentation: 488 files / 203 Markdown / 1487 local links после обновления индексов.
-- Native CI записывается после завершения; до этого компонент не объявляется native verified.
+- **[Native a7a09c8 verified](audit-evidence-a7a09c8-native.md)**: 85 candidate cases, Linux packet 20 / parent-output 26 / export-IO 56 tests без skips. Exact retained packet проверен родителем после child/source cleanup. Все 10 CI terminal, attempt 1: 6 success / 4 failure. Подробные counts, source/image/packet digests, полный synthetic receipt и failed gates сохранены отдельно.
 
 Private `.runtime` хранит локальные RED/GREEN logs и coverage, но они не коммитятся. Public evidence не содержит packet, request/principal IDs, credentials, сырые журналы или private keys.

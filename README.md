@@ -2,7 +2,7 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
-Текущий increment T16: [private primary audit packet](docs/decisions/0049-private-audit-evidence.md), independent HTTP outcomes и parent verification после child exit. [Локальный статус и ограничения](docs/evidence/audit-evidence-2026-10-20.md), [RB-68/PB-42](docs/operations/audit-evidence-troubleshooting.md). Native qualification пока не завершена; полный M13 не принят.
+Текущий increment T16: **[native a7a09c8 verified](docs/evidence/audit-evidence-a7a09c8-native.md)**, 85 cases. [Private primary audit packet](docs/decisions/0049-private-audit-evidence.md), independent HTTP outcomes и parent verification после child exit: 107 responses, 336 audit events / 84 completed / 0 unresolved. Все 10 CI terminal: 6 success / 4 failure. [RED/review и ограничения](docs/evidence/audit-evidence-2026-10-20.md), [RB-68/PB-42](docs/operations/audit-evidence-troubleshooting.md). Полный M13 не принят, release blockers сохраняются.
 
 T16 checkpoint: [fresh private receipt, native b0df48e](docs/evidence/privacy-evidence-b0df48e-native.md) - 83 cases, independent signed proposal binding, 340 audit events / 85 completed requests; 10 terminal CI: 6 success / 4 failure. [RB-67/PB-41](docs/operations/privacy-evidence-troubleshooting.md). Это проверенный компонент, не полный M13 или разрешение release.
 

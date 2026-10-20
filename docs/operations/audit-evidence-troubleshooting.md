@@ -53,4 +53,4 @@ uv run --locked python scripts/check_docs.py
 
 ## Что проверено
 
-Процедура описывает controlled implementation failures, не production incident. Локальная проверенность и native статус перечислены в [evidence](../evidence/audit-evidence-2026-10-20.md). Реальное power-loss recovery, shared-host cleanup, production storage encryption/backup/retention и полный M13 этим increment не подтверждаются.
+Процедура описывает controlled implementation failures, не production incident. [Локальный evidence](../evidence/audit-evidence-2026-10-20.md) и **[native a7a09c8](../evidence/audit-evidence-a7a09c8-native.md)**: 85 cases; Linux 56 export/IO tests без skips, включая source cleanup и retained readback; 20 packet tests и 26 parent/output tests без skips. Все 10 CI terminal: 6 success / 4 failure, attempt 1. Реальное power-loss recovery, shared-host cleanup, production storage encryption/backup/retention и полный M13 этим increment не подтверждаются.
