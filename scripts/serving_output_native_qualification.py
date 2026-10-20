@@ -1,3 +1,5 @@
+import base64
+import copy
 import io
 import os
 import tempfile
@@ -7,18 +9,41 @@ from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops import (
+    contracts,
     inventory,
     process_privacy,
+    release_bundle,
     sandbox,
     storage_bootstrap,
     storage_pki,
     worker_transport,
 )
-from mlsecops.contracts import Rejected, decode, read_json, write_json
-from scripts import candidate_serving_native
+from mlsecops.contracts import Rejected, canonical, decode, digest, read_json, write_json
+from scripts import candidate_serving_native, release_bundle_qualification
 from scripts import serving_output_native as native
 from scripts import serving_output_probe as probe
-from scripts.serving_output_qualification import expected, operation, report
+from scripts.privacy_evidence_qualification import END, START, SUBJECT, fixture
+from scripts.serving_output_qualification import NEEDLES, expected, operation, report
+
+
+def evidence_child(value=None):
+    receipt = copy.deepcopy(value if value is not None else fixture())
+    receipt["cases"].remove("full-lifecycle-output-privacy")
+    del receipt["runtime"]["output_privacy"]
+
+    def exercise(observer):
+        observer(NEEDLES)
+        return receipt
+
+    return {
+        "schema_version": 1,
+        "output": probe.produce(exercise),
+        "diagnostics": {
+            "bytes": 0,
+            "gpu_discovery_warning": False,
+            "raw_output_retained": False,
+        },
+    }
 
 
 class OutputNativeContracts(unittest.TestCase):
@@ -134,15 +159,7 @@ class OutputNativeContracts(unittest.TestCase):
             self.assertFalse((state / "evidence/candidate-serving.json").exists())
 
     def test_run_uses_fixed_owned_child_and_rejects_changed_source_or_failed_transport(self):
-        child = {
-            "schema_version": 1,
-            "output": probe.produce(operation),
-            "diagnostics": {
-                "bytes": 0,
-                "gpu_discovery_warning": False,
-                "raw_output_retained": False,
-            },
-        }
+        child = evidence_child()
         for failure in (None, "changed", "timeout", "cleanup", "cancel"):
             error = {
                 "timeout": Rejected("worker_transport_deadline"),
@@ -150,6 +167,8 @@ class OutputNativeContracts(unittest.TestCase):
                 "cancel": KeyboardInterrupt(),
             }.get(failure)
             with (
+                patch.object(native, "verified_subject", return_value=SUBJECT),
+                patch.object(contracts, "now", side_effect=[START, END]),
                 patch.object(
                     native,
                     "source",
@@ -160,12 +179,10 @@ class OutputNativeContracts(unittest.TestCase):
                 ) as captured,
             ):
                 if failure is None:
-                    self.assertEqual(
-                        native.run(Path("root"), Path("state"), "image", 15446)["runtime"][
-                            "output_privacy"
-                        ]["status"],
-                        "pass",
-                    )
+                    result = native.run(Path("root"), Path("state"), "image", 15446)
+                    self.assertEqual(result["runtime"]["output_privacy"]["status"], "pass")
+                    self.assertIn("current-private-receipt-admitted", result["cases"])
+                    self.assertFalse(result["release_ready"])
                 else:
                     with self.assertRaises(KeyboardInterrupt if failure == "cancel" else Rejected):
                         native.run(Path("root"), Path("state"), "image", 15446)
@@ -174,6 +191,110 @@ class OutputNativeContracts(unittest.TestCase):
             self.assertIn("--child", arguments)
             self.assertEqual(captured.call_args.kwargs["timeout"], 570)
             self.assertIs(captured.call_args.kwargs["canonical_output"], True)
+
+    def test_unverified_primary_materials_cannot_start_the_child(self):
+        with (
+            patch.object(native, "source", return_value=expected()),
+            patch.object(native, "verified_subject", side_effect=Rejected("invalid-primary")),
+            patch.object(worker_transport, "capture") as captured,
+            self.assertRaises(Rejected),
+        ):
+            native.run(Path("root"), Path("state"), "image", 15446)
+        captured.assert_not_called()
+
+    def test_observed_child_must_match_independent_subject_freshness_and_accounting(self):
+        variants = [(name, "f" * 64) for name in SUBJECT] + [
+            ("started_at", "2026-10-20T11:59:59+00:00"),
+            ("finished_at", "2026-10-20T12:06:00+00:00"),
+            ("cases", list(fixture()["cases"])[1:]),
+            ("cases", [*fixture()["cases"], "current-private-receipt-admitted"]),
+        ]
+        for field, replacement in variants:
+            value = fixture()
+            value[field] = replacement
+            with (
+                self.subTest(field=field),
+                patch.object(native, "source", return_value=expected()),
+                patch.object(native, "verified_subject", return_value=SUBJECT),
+                patch.object(contracts, "now", side_effect=[START, END]),
+                patch.object(worker_transport, "capture", return_value=evidence_child(value)),
+                self.assertRaises(Rejected),
+            ):
+                native.run(Path("root"), Path("state"), "image", 15446)
+
+
+class OutputSubjectContracts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        release_bundle_qualification.ReleaseBundleContracts.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        release_bundle_qualification.ReleaseBundleContracts.tearDownClass()
+
+    def test_subject_is_derived_from_real_signed_materials_and_rejects_tampering(self):
+        bundle = release_bundle_qualification.ReleaseBundleContracts()
+        bundle.setUp()
+        self.addCleanup(bundle.doCleanups)
+        package = bundle.create()
+        verified = bundle.check(package)
+        context = bundle.materials.context
+        subject = {
+            "proposal_reference": digest(canonical(package["envelope"])),
+            "subject_sha256": verified["subject_sha256"],
+            "model_sha256": digest(verified["model"]),
+            "candidate_reference": context["candidate_reference"],
+            "evaluation_reference": context["evaluation_reference"],
+        }
+        receipt = {
+            "scope": "release-proposal-and-authorization-denial-not-full-M10",
+            "status": "pass",
+            "source_dirty": False,
+            "release_ready": False,
+            "source": context["expected"],
+            **subject,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state = root / "state"
+            write_json(root / "policies/local-cpu.json", context["policy"])
+            write_json(state / "storage-trust.json", context["trust"])
+            write_json(state / "trusted-keys.json", {"approver": bundle.materials.public})
+            for fault in (None, "source", "model", "expiry", "capsule", "document"):
+                primary, loaded = copy.deepcopy(receipt), copy.deepcopy(package)
+                if fault == "source":
+                    primary["source"] = {}
+                if fault == "model":
+                    primary["model_sha256"] = "0" * 64
+                if fault == "capsule":
+                    signature = loaded["capsule"]["envelope"]["signatures"][0]
+                    content = bytearray(base64.b64decode(signature["sig"], validate=True))
+                    content[0] ^= 1
+                    signature["sig"] = base64.b64encode(content).decode()
+                if fault == "document":
+                    loaded["documents"]["dependency-lock"] = b"tampered"
+                write_json(state / "evidence/release-native.json", primary)
+                with (
+                    self.subTest(fault=fault),
+                    patch.object(release_bundle, "load", return_value=loaded) as load,
+                    patch(
+                        "time.time", return_value=bundle.clock + (1801 if fault == "expiry" else 0)
+                    ),
+                ):
+                    if fault is None:
+                        self.assertEqual(
+                            native.verified_subject(root, state, context["expected"]), subject
+                        )
+                    else:
+                        with self.assertRaisesRegex(
+                            Rejected, "invalid_signature" if fault == "capsule" else ".+"
+                        ):
+                            native.verified_subject(root, state, context["expected"])
+                load.assert_called_once_with(
+                    (state / "storage-clients/serving").resolve(),
+                    subject["proposal_reference"],
+                    publisher_public=bundle.materials.public,
+                )
 
 
 if __name__ == "__main__":

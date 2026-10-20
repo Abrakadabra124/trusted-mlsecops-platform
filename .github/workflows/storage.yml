@@ -35,6 +35,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Fresh private privacy receipts and independent signed proposal bindings
+        run: |
+          uv run --locked coverage run --data-file=.coverage-privacy-evidence --source=mlsecops.privacy_evidence -m unittest scripts.privacy_evidence_qualification
+          uv run --locked coverage report --data-file=.coverage-privacy-evidence --fail-under=100
       - name: Full-lifecycle serving output observer and negative FD controls
         run: |
           uv run --locked coverage run --data-file=.coverage-serving-output --source=scripts.serving_output_probe,scripts.serving_output_native -m unittest scripts.serving_output_qualification scripts.serving_output_native_qualification

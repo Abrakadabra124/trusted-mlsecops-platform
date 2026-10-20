@@ -25,12 +25,50 @@ def qualified(root, state, image, port, observer):
     )
 
 
+def verified_subject(root, state, expected):
+    import math
+    import time
+
+    from mlsecops import release_bundle
+    from mlsecops.contracts import canonical, digest, read_json, safe_child
+    from scripts.candidate_serving_reader import bind_proposal
+
+    report, source_trust, public = (
+        read_json(safe_child(state, name))
+        for name in ("evidence/release-native.json", "storage-trust.json", "trusted-keys.json")
+    )
+    package = release_bundle.load(
+        safe_child(state, "storage-clients/serving"),
+        report["proposal_reference"],
+        publisher_public=public["approver"],
+    )
+    context, verified = bind_proposal(
+        report,
+        package,
+        policy=read_json(root / "policies/local-cpu.json"),
+        source_trust=source_trust,
+        publisher_public=public["approver"],
+        expected=expected,
+        clock=math.ceil(time.time()),
+    )
+    return {
+        "proposal_reference": digest(canonical(package["envelope"])),
+        "subject_sha256": verified["subject_sha256"],
+        "model_sha256": digest(verified["model"]),
+        "candidate_reference": context["candidate_reference"],
+        "evaluation_reference": context["evaluation_reference"],
+    }
+
+
 def run(root, state, image, port):
     from mlsecops import worker_transport
-    from mlsecops.contracts import Rejected
+    from mlsecops.contracts import Rejected, canonical, now
+    from mlsecops.privacy_evidence import checked_candidate
     from scripts.serving_output_probe import observe
 
     expected = source(root, image)
+    subject = verified_subject(root, state, expected)
+    started = now()
     envelope = worker_transport.capture(
         [
             sys.executable,
@@ -51,6 +89,16 @@ def run(root, state, image, port):
     result = observe(envelope, expected)
     if source(root, image) != expected:
         raise Rejected("serving_output_source_changed")
+    checked_candidate(
+        canonical(result),
+        expected_source=expected,
+        expected_subject=subject,
+        started_at=started,
+        observed_at=now(),
+    )
+    if "current-private-receipt-admitted" in result["cases"]:
+        raise Rejected("serving_output_parent_case_reserved")
+    result["cases"].append("current-private-receipt-admitted")
     return result
 
 

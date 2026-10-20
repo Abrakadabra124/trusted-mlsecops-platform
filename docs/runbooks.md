@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Fresh private receipt admission, RB-67/PB-41](operations/privacy-evidence-troubleshooting.md). Independent signed primary, timestamps/cases/accounting, reserved parent marker и fail-closed recovery; [evidence](evidence/privacy-evidence-2026-10-20.md). Это не полный M13 и не public-safe report.
+
 - [Full-lifecycle serving output observation, RB-66/PB-40](operations/serving-output-troubleshooting.md). Bounded child FDs, sealed captures, deferred publication, strict wire и forced-stop limits; [evidence](evidence/serving-output-2026-10-19.md), [карта M13 channels](privacy-output-map.md).
 
 - [Private source-to-request correlation, RB-65/PB-39](operations/audit-correlation-troubleshooting.md). Exact payload/envelope hashes, legacy/mismatch/unresolved windows, отдельные release/qualification authorities и безопасный rollback; [evidence](evidence/audit-correlation-2026-10-19.md).
