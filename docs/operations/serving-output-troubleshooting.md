@@ -47,6 +47,8 @@ uv run --locked python -m scripts.serving_output_native --state .runtime --confi
 
 ## Проверка и rollback
 
+PB-40 verified на [native 2a70ffc](../evidence/serving-output-2a70ffc-native.md): 82 cases, output observation pass после child exit, stderr=0, 6 canaries; Linux 19 output / 38 privacy methods без skips, probes 100%. Первый failed import run и оба RED privacy bypass сохранены в [истории](../evidence/serving-output-2026-10-19.md). Это не проверка forced-stop восстановления Docker resources и не полная M13-приёмка.
+
 Negative tests должны обнаруживать os.write, cached logger до redirect, handler внутри redirect с поздним atexit, inherited subprocess, незаметный JSON whitespace, overflow и отсутствие observer. Legacy capture mode остаётся совместимым; strict mode включён явно только у нового observer.
 
 Rollback означает отключить новый CI wrapper обычным reviewed изменением и вернуть прежний component command, явно сняв full-lifecycle observation claim. Не изменять сохранённые reports, не переименовывать inconclusive в pass. Старый report на диске после ошибки guard/ownership не относится к новому запуску и не должен быть переиспользован acceptance runner.

@@ -4,7 +4,7 @@
 
 ## Статус
 
-Реализовано локально; первый native CI нового increment остановился на тестовом import defect, исправленный CI ещё не подтверждён. Предыдущий [54cbe50](audit-correlation-54cbe50-native.md) доказывает correlation, но не новый full-lifecycle observer. Полные M13/T16/R1 открыты.
+**[Native 2a70ffc verified](serving-output-2a70ffc-native.md): 82 cases, zero native stderr, 6 canaries; все 10 CI terminal, 6 success / 4 failure.** Первый ff3f25f CI остановился на тестовом import defect и сохранён ниже. Исправленный commit проверен отдельной полной matrix. Полные M13/T16/R1, image/ML blockers и исторический M07 reliability debt остаются открытыми.
 
 ## Локальное evidence
 
@@ -20,7 +20,7 @@
 
 ## Что ещё требуется
 
-Native observer + actual candidate из clean checkout, complete CI matrix, canonical report digest, source binding, readonly publication verification. После этого - отдельная M13 acceptance aggregation, а не автоматическое закрытие gate по нескольким зелёным компонентам.
+Native observer + actual candidate из clean checkout, complete CI matrix и canonical report/source binding подтверждены в [полном evidence](serving-output-2a70ffc-native.md). Следующий этап - отдельная M13 acceptance aggregation, а не автоматическое закрытие gate по нескольким зелёным компонентам. Shared/local forced-stop recovery нового wrapper отдельно не квалифицирован.
 
 ## Первый Linux отказ и исправление
 

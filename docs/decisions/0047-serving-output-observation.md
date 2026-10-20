@@ -1,6 +1,6 @@
 # ADR 0047: full-lifecycle serving output observation
 
-Дата: 2026-10-19, обновлено 2026-10-20. Статус: implemented, native verification pending. Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [ADR 0046](0046-private-audit-correlation.md) проверил private chain, но не полноту всех output channels.
+Дата: 2026-10-19, обновлено 2026-10-20. Статус: implemented, [native 2a70ffc verified](../evidence/serving-output-2a70ffc-native.md). Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [ADR 0046](0046-private-audit-correlation.md) проверил private chain, но не полноту всех output channels. Этот increment тоже не закрывает полный M13.
 
 ## Пробел и требование
 

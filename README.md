@@ -2,7 +2,7 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
-T16: [наблюдение всего serving lifecycle](docs/decisions/0047-serving-output-observation.md) дополняет HTTP-проверку внешними stdout/stderr pipes и закрытием вложенных captures. [Локальное evidence и native status](docs/evidence/serving-output-2026-10-19.md), [карта каналов](docs/privacy-output-map.md), [RB-66/PB-40](docs/operations/serving-output-troubleshooting.md). Native proof нового increment пока не подтверждён; full M13/R1 остаётся открыт.
+T16: [наблюдение всего serving lifecycle](docs/decisions/0047-serving-output-observation.md) дополняет HTTP-проверку внешними stdout/stderr pipes, закрытием вложенных captures и публикацией только проверенного snapshot. **[Native 2a70ffc: 82 cases, zero stderr, 6 canaries](docs/evidence/serving-output-2a70ffc-native.md)**; Linux output/privacy probes 100%, CI 6 success / 4 failure. [История исправлений](docs/evidence/serving-output-2026-10-19.md), [карта каналов](docs/privacy-output-map.md), [RB-66/PB-40](docs/operations/serving-output-troubleshooting.md). Wrapper только disposable hosted CI; full M13/R1 и image/ML release blockers открыты.
 
 T16: [приватная source-to-request корреляция](docs/operations/audit-correlation-troubleshooting.md) связывает signed data lineage, training metadata, evaluation и отдельное release approval либо qualification permit с запросом. Public API/export не раскрывают эту цепочку. **[Native 54cbe50: 64 tests / 100%, 81 actual-candidate case](docs/evidence/audit-correlation-54cbe50-native.md)**; все 10 CI terminal, 6 success / 4 failure. Image/ML failures сохраняют запрет release, полный M13/R1 не принят.
 
