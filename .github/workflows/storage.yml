@@ -35,6 +35,11 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-evaluation --fail-under=95
           uv run --locked coverage run --data-file=.coverage-m07 --source=mlsecops.evaluation_gate -m unittest scripts.evaluation_gate_qualification
           uv run --locked coverage report --data-file=.coverage-m07 --fail-under=95
+      - name: Full-lifecycle serving output observer and negative FD controls
+        run: |
+          uv run --locked coverage run --data-file=.coverage-serving-output --source=scripts.serving_output_probe,scripts.serving_output_native -m unittest scripts.serving_output_qualification scripts.serving_output_native_qualification
+          uv run --locked coverage report --data-file=.coverage-serving-output --include='scripts/serving_output_probe.py' --fail-under=100
+          uv run --locked coverage report --data-file=.coverage-serving-output --include='scripts/serving_output_native.py' --fail-under=95
       - name: Private source-to-request correlation and independent primary materials
         run: |
           uv run --locked coverage run --data-file=.coverage-audit-correlation --source=mlsecops.audit_lineage,mlsecops.serving_context,mlsecops.audit_event,scripts.audit_correlation_probe -m unittest scripts.audit_correlation_qualification scripts.audit_correlation_probe_qualification scripts.serving_context_qualification scripts.audit_event_qualification scripts.release_reader_qualification scripts.candidate_serving_reader_qualification
@@ -58,7 +63,7 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-process-privacy --fail-under=100
       - name: Controller CLI privacy and owned transport lifecycle contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-controller-privacy --source=mlsecops.private_cli,mlsecops.serving_lifecycle,mlsecops.worker_transport -m unittest scripts.controller_privacy_qualification scripts.worker_transport_privacy_qualification scripts.serving_lifecycle_qualification scripts.transport_owner_qualification scripts.serving_http_qualification scripts.intake_denial_qualification
+          uv run --locked coverage run --data-file=.coverage-controller-privacy --source=mlsecops.private_cli,mlsecops.serving_lifecycle,mlsecops.worker_transport -m unittest scripts.controller_privacy_qualification scripts.worker_transport_privacy_qualification scripts.serving_lifecycle_qualification scripts.transport_owner_qualification scripts.serving_http_qualification scripts.intake_denial_qualification scripts.serving_output_qualification
           uv run --locked coverage report --data-file=.coverage-controller-privacy --include='mlsecops/private_cli.py,mlsecops/serving_lifecycle.py' --fail-under=100
           uv run --locked coverage report --data-file=.coverage-controller-privacy --include='mlsecops/worker_transport.py' --fail-under=95
       - name: Private audit and retained storage lifecycle contracts
@@ -159,7 +164,7 @@ jobs:
         run: uv run --locked python -m scripts.release_reader_native --state .runtime --confirm-disposable
       - name: Persistent serving, HTTP limits and cancellation contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-privacy --source=scripts.serving_privacy_probe -m unittest scripts.serving_privacy_qualification scripts.candidate_serving_native_qualification
+          uv run --locked coverage run --data-file=.coverage-privacy --source=scripts.serving_privacy_probe -m unittest scripts.serving_privacy_qualification scripts.candidate_serving_native_qualification scripts.serving_output_qualification
           uv run --locked coverage report --data-file=.coverage-privacy --fail-under=100
           uv run --locked coverage run --data-file=.coverage-http-audit --source=mlsecops.serving_http_audit -m unittest scripts.serving_http_qualification scripts.serving_http_audit_qualification
           uv run --locked coverage report --data-file=.coverage-http-audit --fail-under=100
@@ -181,4 +186,4 @@ jobs:
           uv run --locked coverage run --data-file=.coverage-paused-query --source=scripts.serving_pause_native -m unittest scripts.serving_pause_qualification
           uv run --locked coverage report --data-file=.coverage-paused-query --fail-under=90
       - name: Unchanged actual candidate in isolated HTTP qualification without release approval
-        run: uv run --locked python -m scripts.candidate_serving_native --state .runtime --confirm-disposable
+        run: uv run --locked python -m scripts.serving_output_native --state .runtime --confirm-disposable

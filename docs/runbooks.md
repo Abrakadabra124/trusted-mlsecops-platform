@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Full-lifecycle serving output observation, RB-66/PB-40](operations/serving-output-troubleshooting.md). Bounded child FDs, sealed captures, deferred publication, strict wire и forced-stop limits; [evidence](evidence/serving-output-2026-10-19.md), [карта M13 channels](privacy-output-map.md).
+
 - [Private source-to-request correlation, RB-65/PB-39](operations/audit-correlation-troubleshooting.md). Exact payload/envelope hashes, legacy/mismatch/unresolved windows, отдельные release/qualification authorities и безопасный rollback; [evidence](evidence/audit-correlation-2026-10-19.md).
 
 - [Public audit export, RB-64/PB-38](operations/audit-export-troubleshooting.md). Closed-spool ownership, bounded projection, incomplete windows и безопасный cleanup; [evidence](evidence/audit-export-2026-10-19.md). Не repair stale lease и не полный M13.

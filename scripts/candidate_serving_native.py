@@ -117,13 +117,15 @@ def context_matrix(engine, request, body, confirmed, context):
     }
 
 
-def privacy_matrix(request, body, confirmed):
+def privacy_matrix(request, body, confirmed, input_observer=None):
     metrics = {}
 
     def check_metrics(transport, needles):
         metrics.update(scan_metrics(transport, needles))
 
-    result = exercise_privacy(request, body, metrics_check=check_metrics)
+    result = exercise_privacy(
+        request, body, metrics_check=check_metrics, input_observer=input_observer
+    )
     confirmed("privacy-http-input-and-output-matrix", result["request_cases"] == 12)
     confirmed(
         "privacy-owned-audit-input-absent",
@@ -169,7 +171,7 @@ def http_matrix(engine, request, body, confirmed):
     confirmed("http-remains-ready-after-invalid-and-overload", request("/readyz")[0] == 200)
 
 
-def qualify(root, state, image, *, trust_port=15446):
+def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publish_report=True):
     state = Path(state).resolve()
     source = storage_bootstrap.validate(state)
     original_ledger = storage_restore.ledger(source["name"])
@@ -407,7 +409,7 @@ def qualify(root, state, image, *, trust_port=15446):
                     )
                 )
 
-                privacy.update(privacy_matrix(request, body, confirmed))
+                privacy.update(privacy_matrix(request, body, confirmed, privacy_observer))
 
             request, body, runtime = check_http(
                 services,
@@ -472,7 +474,8 @@ def qualify(root, state, image, *, trust_port=15446):
             "Production Reader acceptance, privacy/audit and load acceptance remain separate",
         ],
     }
-    write_json(safe_child(destination, "report.json"), result)
+    if publish_report:
+        write_json(safe_child(destination, "report.json"), result)
     return result
 
 

@@ -1,6 +1,7 @@
 import hashlib
 import io
 import logging
+import os
 import re
 import secrets
 import stat
@@ -38,6 +39,24 @@ class Capture(io.TextIOBase):
     def getvalue(self):
         with self.lock:
             return "".join(self.parts)
+
+
+class LifecycleCapture(Capture):
+    def __init__(self):
+        super().__init__()
+        self.phase_lock = threading.Lock()
+        self.sealed = False
+
+    def write(self, value):
+        with self.phase_lock:
+            if self.sealed and value:
+                os.write(2, b"serving_output_late_write\n")
+                return len(value)
+            return super().write(value)
+
+    def seal(self):
+        with self.phase_lock:
+            self.sealed = True
 
 
 class Signals:
@@ -189,7 +208,7 @@ def response_contract(value, path, status):
         raise Rejected("privacy_response_schema")
 
 
-def exercise(request, body, *, metrics_check=None):
+def exercise(request, body, *, metrics_check=None, input_observer=None):
     marker = secrets.token_hex(16)
     secret = secrets.token_hex(32)
     feature = 0.3183098861837907
@@ -203,6 +222,8 @@ def exercise(request, body, *, metrics_check=None):
     )
     response_needles = needles + (canonical(valid["instances"][0]),)
     private_needles = response_needles + (str(feature).encode(),)
+    if input_observer is not None:
+        input_observer(private_needles)
     cases = (
         ("/v1/predict", valid, {}, 200),
         (
@@ -240,7 +261,7 @@ def exercise(request, body, *, metrics_check=None):
         ("/readyz?email=" + marker, None, {}, 200),
     )
     before = drained(request)
-    captures = {name: Capture() for name in ("stdout", "stderr", "logs")}
+    captures = {name: LifecycleCapture() for name in ("stdout", "stderr", "logs")}
     signals = Signals()
     formatter = logging.Formatter("%(levelname)s:%(name)s:%(message)s")
 
@@ -248,6 +269,8 @@ def exercise(request, body, *, metrics_check=None):
         captures["logs"].write(formatter.format(record) + "\n")
 
     with ExitStack() as stack:
+        for capture in captures.values():
+            stack.callback(capture.seal)
         signals.install(stack)
         stack.enter_context(redirect_stdout(captures["stdout"]))
         stack.enter_context(redirect_stderr(captures["stderr"]))

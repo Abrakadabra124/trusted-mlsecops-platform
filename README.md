@@ -2,6 +2,8 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
+T16: [наблюдение всего serving lifecycle](docs/decisions/0047-serving-output-observation.md) дополняет HTTP-проверку внешними stdout/stderr pipes и закрытием вложенных captures. [Локальное evidence и native status](docs/evidence/serving-output-2026-10-19.md), [карта каналов](docs/privacy-output-map.md), [RB-66/PB-40](docs/operations/serving-output-troubleshooting.md). Native proof нового increment пока не подтверждён; full M13/R1 остаётся открыт.
+
 T16: [приватная source-to-request корреляция](docs/operations/audit-correlation-troubleshooting.md) связывает signed data lineage, training metadata, evaluation и отдельное release approval либо qualification permit с запросом. Public API/export не раскрывают эту цепочку. **[Native 54cbe50: 64 tests / 100%, 81 actual-candidate case](docs/evidence/audit-correlation-54cbe50-native.md)**; все 10 CI terminal, 6 success / 4 failure. Image/ML failures сохраняют запрет release, полный M13/R1 не принят.
 
 T16: [публичный экспорт закрытого audit journal](docs/operations/audit-export-troubleshooting.md) формирует только строгую сводку без request/principal IDs и private references. [Точный статус проверки](docs/evidence/audit-export-2026-10-19.md) отделяет Windows unit checks от Linux filesystem/CLI и actual-candidate evidence. Это не полная M13-приёмка и не release approval.

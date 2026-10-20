@@ -18,7 +18,9 @@ class CleanupIncomplete(Rejected):
         super().__init__("worker_cleanup_incomplete")
 
 
-def capture(arguments, timeout=570):
+def capture(arguments, timeout=570, *, canonical_output=False):
+    if type(canonical_output) is not bool:
+        raise Rejected("worker_capture_mode")
     captured = {}
     excessive = threading.Event()
     failed = threading.Event()
@@ -73,9 +75,12 @@ def capture(arguments, timeout=570):
         if process.returncode:
             raise Rejected("worker_process_failed")
         diagnostic = captured["diagnostic"]
+        output = decode(captured["output"], MAX_OUTPUT)
+        if canonical_output and captured["output"] != canonical(output) + b"\n":
+            raise Rejected("worker_output_noncanonical")
         return {
             "schema_version": 1,
-            "output": decode(captured["output"], MAX_OUTPUT),
+            "output": output,
             "diagnostics": {
                 "bytes": len(diagnostic),
                 "gpu_discovery_warning": b"GPU device discovery failed" in diagnostic,

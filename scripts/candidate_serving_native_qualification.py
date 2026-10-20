@@ -67,6 +67,7 @@ class CandidateServingHarnessContracts(unittest.TestCase):
             lineage=lineage(),
         )
         cases = []
+        inputs = []
 
         def confirmed(name, condition):
             self.assertTrue(condition, name)
@@ -84,10 +85,13 @@ class CandidateServingHarnessContracts(unittest.TestCase):
             self.assertEqual(audit["accepted_delta"], 8)
             self.assertEqual(audit["durable_delta"], 8)
             self.assertFalse(audit["release_ready"])
-            privacy = native.privacy_matrix(request, body, confirmed)
+            privacy = native.privacy_matrix(request, body, confirmed, inputs.append)
             self.assertEqual(privacy["request_cases"], 12)
             self.assertEqual(privacy["audit_events_confirmed"], 36)
             self.assertEqual(privacy["approved_metric_series"], 69)
+            self.assertEqual(len(inputs), 1)
+            self.assertEqual(len(inputs[0]), 6)
+            self.assertIn(request.privacy_credential.encode(), inputs[0])
         self.assertEqual(len(cases), 25)
         self.assertEqual(len(cases), len(set(cases)))
         self.assertIsNone(fixture.engine.worker)
