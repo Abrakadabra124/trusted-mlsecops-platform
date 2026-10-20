@@ -22,21 +22,21 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 | Требование | Основание | Граница |
 | --- | --- | --- |
-| M01, M04 | Native `61c6849`: 10 / 764 cases, [run и статус](../STATUS.md) | M05 fail; CP1 ещё не завершён |
+| M01, M04, M05 | Native `ab00a4e`: 10 / 764 / 58 cases, [run и статус](../STATUS.md); M20 725 / M21 122 также pass | Qualification synthetic lab, не release approval или общая M18 |
 | M02, M03, M06, M07, M20, M21 | Executable dispatch в [acceptance.py](../mlsecops/acceptance.py), профильные evidence в STATUS | Отдельные synthetic campaigns; ещё не общий candidate/M18 |
 | Последний интеграционный checkpoint a7a09c8 | [Полная CI-матрица](evidence/audit-evidence-a7a09c8-native.md): M03 431, M06 18, M07 97, M20 725, M21 122 cases pass | 6 success / 4 failure, release запрещён |
 | Actual candidate inference/privacy/audit | Там же: 85 cases, 107 HTTP responses, retained primary bytes и parent recheck | Qualification, не approved release и не полный M12/M13 |
 | Promotion/reader/revocation/backup/restore | Существующие native components и ранбуки из STATUS | Controlled approvals и component recovery не заменяют M10/M11/M16/M17 |
 
-Для остальных полных gates нет общей приёмки: M05, M08-M19, M22, M23. Наличие файлов или частичного зелёного теста не меняет этот статус.
+Для остальных полных gates нет общей приёмки: M08-M19, M22, M23. Наличие файлов или частичного зелёного теста не меняет этот статус.
 
 ## Обязательные блокеры R1
 
 | ID | Что осталось | Критерии / доказательство закрытия |
 | --- | --- | --- |
-| R1-B01 | M01 принят в native `61c6849` (10 cases); общий end-to-end entrypoint ещё не принят | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
+| R1-B01 | M01 принят в native `ab00a4e` (10 cases); общий end-to-end entrypoint ещё не принят и остаётся обязательным до CP5 | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
 | R1-B02 | Запрет выпуска по image severity; poisoning и evasion failures; paired candidate не исправил нарушения | M08/M09/M18/M22: remediation на validation без подбора final holdout, исходные frozen suites/thresholds и полный runtime/controller image scope; не scanner exceptions |
-| R1-B03 | M04 принят в native `61c6849` (764 cases); M05 proposal/report handoff исправлен локально, native проверка остаётся | M04/M05: реальные identity/network/storage и deadline/OOM probes, сохранение работоспособности serving; существующие M20 proofs переиспользовать |
+| R1-B03 | **Закрыт:** native `ab00a4e`, M04 764 / M05 58 cases pass; 13 concurrent Running observations и неизменный inference | M04/M05: реальные identity/network/storage и deadline/OOM probes, сохранение работоспособности serving; существующие M20 proofs переиспользованы |
 | R1-B04 | Approval -> production Reader -> inference -> revoke ещё не принят как единая цепочка; M13 не завершён | M10-M13/M19: actual subject binding, policy/rollback/replay, configured lifecycle, privacy 429/503, service-log coverage, public projection и inventory impact; не очередное усиление вне требований |
 | R1-B05 | Нет полной quality/security monitoring acceptance | M15/M23: два окна drift, delayed labels, clean controls, 7 event types, authentic delivery/dedup/gaps/outage; без auto-promotion |
 | R1-B06 | Не приняты load, staged rollout, compatible rollback и независимый restore | M14/M16/M17: исходные duration/count/latency/error/RTO/RPO, новый storage, golden readback и запрет revoked fallback |
@@ -45,17 +45,17 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 Исторический intermittent M07 connection rejection остаётся reliability debt в R1-B08: успешный retry не устанавливает причину. До финальной приёмки требуется диагностика либо явная согласованная политика надёжности, а не стирание первого отказа.
 
-CP1 implementation checkpoint: исправлен repeat-bootstrap, реализованы M01/M04/M05 dispatch и шаги существующего Kubernetes workflow. Foundation: 30 targeted methods и отдельная build-context regression, bootstrap/foundation/inventory 100% statements/branches; два настоящих subprocess отказа до создания state и CLI inconclusive/2 без lab prerequisites. Isolation: 18 targeted methods, новые modules 100%. Основной review и проверка трёх fixes завершены без замечаний. Native `61c6849` подтвердил M01/M04/M20, но выявил M05 proposal/report handoff defect; его RED/исправление и отдельный storage refusal сохранены в [STATUS](../STATUS.md). [Foundation runbook](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap), [M04/M05 runbook](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Native проверка исправленного M05 ещё требуется, R1-B01/R1-B03 остаются открытыми.
+CP1 gates приняты в native `ab00a4e`: M01/M04/M05/M20/M21 pass. Linux targeted tests: 31 foundation и 18 isolation, новые modules 100% statements/branches. Основной review и проверка конкретных fixes закончены. Первая матрица `61c6849`, M05 handoff defect/RED и отдельный storage refusal сохранены в [STATUS](../STATUS.md); targeted success не превращает её в полностью зелёную. [Foundation runbook](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap), [M04/M05 runbook](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). R1-B03 закрыт; R1-B01 остаётся открыт в части общего продукта, зависящей от следующих checkpoints.
 
 ## Конечная последовательность и checkpoints
 
-1. **CP1 - foundation и изоляция:** R1-B01 + R1-B03. Переиспользовать существующий bootstrap, inventory и native probes; подключить полные M01/M04/M05. Пользователь получает проверенный старт окружения и безопасный training path.
+1. **CP1 - foundation и изоляция:** M01-часть R1-B01 и весь R1-B03 приняты. Переиспользованы bootstrap, inventory и native probes, подключены полные M01/M04/M05. Пользователь получает проверенный старт окружения и изолированный training path. Общий entrypoint R1-B01 остаётся обязательным до CP5, не заменяется набором component tests.
 2. **CP2 - admissible candidate:** R1-B02 + R1-B07. Устранить image/model release blockers, выполнить M08/M09/M22 с существующими M02/M03/M06/M07/M20/M21. При fail сохранить refusal и работать над причиной, не выпускать fixture как candidate.
 3. **CP3 - выпуск и serving:** R1-B04. Закончить цепочку M10-M13/M19 целиком, включая отдельный production configuration path, audit и отзыв. Не создавать новый security slice, если он не нужен одному из этих критериев.
 4. **CP4 - эксплуатация:** R1-B05 + R1-B06. Подключить M14-M17/M23, alerts, rollback/restore и исполнимые эксплуатационные процедуры.
 5. **CP5 - заморозка и приёмка:** R1-B08. Один clean checkout, pinned candidate и все M01-M17/M19-M23; M18 последним. Опубликовать code/instructions/sanitized evidence и проверить удалённые артефакты.
 
-Это конечные интеграционные порции, не оценка календарных сроков. Ближайшая работа - CP1/R1-B01, начиная с M01; незаконченный M13 остаётся в CP3, дальнейшее необязательное усиление аудита не выполняется.
+Это конечные интеграционные порции, не оценка календарных сроков. Ближайшая работа - CP2/R1-B02/R1-B07; незаконченный M13 и отдельный storage privacy/output отказ остаются в CP3, дальнейшее необязательное усиление аудита не выполняется. Все исходные критерии действуют, незакрытый end-to-end entrypoint не исключён из R1.
 
 ## Правила расхода и изменений
 

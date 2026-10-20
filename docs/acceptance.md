@@ -1,10 +1,10 @@
 # Измеримая приёмка будущей платформы
 
-**M02, M03, M06, M07, M20 и M21 проверены executable runner в synthetic scope; результаты привязаны к отдельным commits, не к общей M18-приёмке.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
+**M01-M07, M20 и M21 проверены executable runner в synthetic scope; результаты привязаны к отдельным commits, не к общей M18-приёмке.** Числа ниже - пороги лабораторного профиля, не автоматически достигнутые результаты и не отраслевые нормативы. Policy зафиксирована до исходного эксперимента; нельзя ослаблять её после просмотра final holdout без нового review и новой оценки. R0.2 сохраняет номера старых gates, добавляет M19-M23 и расширяет итоговый M18. Фактическое evidence: [STATUS](../STATUS.md).
 
 ## Единый формат проверки
 
-CP1 2026-10-20: M01/M04/M05 dispatch реализован в рабочей копии; native acceptance ещё не подтверждена. [Foundation procedure](operations/artifact-intake-troubleshooting.md#продолжение-cp1-исполняемый-foundation-gate-m01), [isolation procedure](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Критерии и численные thresholds ниже не изменены.
+CP1 2026-10-20, native `ab00a4e`: M01/M04/M05 pass, соответственно 10/764/58 cases; [CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39464190902). [Foundation procedure](operations/artifact-intake-troubleshooting.md#продолжение-cp1-исполняемый-foundation-gate-m01), [isolation procedure](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). Критерии и численные thresholds ниже не изменены; общий candidate/M18 ещё не принят.
 
 CLI-контракт: `uv run --locked python -m mlsecops.acceptance --gate M01 --profile local-cpu --output .runtime/evidence/M01.json`. Runner создан в первом increment R1; пока полный gate не подключён, он сохраняет `inconclusive` и возвращает exit code 2. Это не ошибка, которую следует обходить, и не пройденная приёмка. [Документационный валидатор](../scripts/check_docs.py) остаётся отдельной проверкой.
 

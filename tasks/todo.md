@@ -1,6 +1,6 @@
 # Backlog реализации
 
-**Активная очередь:** [R1-B01-R1-B08 и CP1-CP5](../docs/r1-delivery.md), начиная с CP1/M01. Исторические Txx/gates ниже не удалены и не ослаблены. [FI backlog](../docs/future-improvements.md) не исполняется до R1 и явной команды владельца; новую работу привязывать к обязательному blocker/criterion.
+**Активная очередь:** [R1-B01-R1-B08 и CP1-CP5](../docs/r1-delivery.md), следующий checkpoint CP2 после принятых M01/M04/M05. Общий entrypoint R1-B01 остаётся обязательным до финальной приёмки. Исторические Txx/gates ниже не удалены и не ослаблены. [FI backlog](../docs/future-improvements.md) не исполняется до R1 и явной команды владельца; новую работу привязывать к обязательному blocker/criterion.
 
 T16 current: [ADR 0049 private primary audit evidence](../docs/decisions/0049-private-audit-evidence.md), **[native a7a09c8 verified](../docs/evidence/audit-evidence-a7a09c8-native.md)**: 85 cases, Linux 20 packet / 26 parent-output / 56 export-IO tests без skips, 10 terminal CI: 6 success / 4 failure. [Evidence](../docs/evidence/audit-evidence-2026-10-20.md) сохраняет replay/ledger/fsync RED и review; [RB-68/PB-42](../docs/operations/audit-evidence-troubleshooting.md). Не закрывать task по этому компоненту: production lifecycle/429/503 privacy, service logs, subject composition и public gate projection ещё обязательны.
 
@@ -10,10 +10,11 @@ T16 worker increment: безопасная диагностика CLI/import и 
 
 T16 update 2026-10-19: [existing output privacy](../docs/evidence/serving-privacy-2026-10-19.md) проверена на native 621d355: 17 privacy tests / 0 skips, 77 actual-candidate cases, 12 privacy requests / 36 durable events. Все 10 CI terminal: 6 success / 4 failure, M20 723/M21 122 pass; четыре image/ML failures сохраняются. T16 открыта: worker channels/metrics/cardinality/export/full correlation не закрыты; [RB-60/PB-34](../docs/operations/serving-privacy-troubleshooting.md).
 
-T03, T04 и T26 завершены для synthetic-only профиля; остальные **26 задач открыты**, реализация начата 2026-10-07. Результаты и границы каждой приёмки в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M02, M03, M06, M07, M20 и M21, а неподключённые полные проверки возвращают inconclusive. Эти gates не закрывают автоматически более широкий T07-T10/T27 lifecycle. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
+T01, T03-T06 и T26 завершены для synthetic-only профиля; остальные **23 задачи открыты**, реализация начата 2026-10-07. Результаты и границы каждой приёмки в [STATUS](../STATUS.md). Каждый раздел - результат одной или нескольких коротких итераций. Номера gates ссылаются на [полную приёмку](../docs/acceptance.md). Runner `mlsecops.acceptance` выполняет M01-M07, M20 и M21, а неподключённые полные проверки возвращают inconclusive. Эти gates не закрывают автоматически более широкий T02/T07-T10/T27 lifecycle. T25-T29 добавлены исследованием R0.2; ID сохраняют историю, порядок задают зависимости и [календарный план](plan.md). Ранняя проверка компонента не заменяет позднюю интеграционную приёмку.
 
 ## T01
-- [ ] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
+- [x] Scope, inventory и acceptance runner. Зависимости: нет. Gate: M01.
+- CP1 `ab00a4e`: M01 pass / 10 cases из clean hosted checkout; [доказательства](../STATUS.md). T02 image/P0 remediation и общий продуктовый walkthrough ещё не приняты.
 - Результат: требования к labels/данным, resources inventory, machine-readable report schema и CLI runner с явным fail для отсутствующих checks.
 - Проверка: недоступный tool/несовместимый foundation блокирует bootstrap; повторная инвентаризация не меняет текущий runtime.
 
@@ -46,8 +47,8 @@ T03, T04 и T26 завершены для synthetic-only профиля; ост�
 - Проверка: фактические разрешённые/запрещённые операции trainer/evaluator/serving, не только RBAC simulation.
 
 ## T06
-- [ ] Sandboxed training Jobs. Зависимость: T05. Gate: M05.
-- CP1: M05 подключает существующий actual-candidate HTTP/ONNX serving к CPU deadline/OOM probes; сравнивает predictions и container identity до/во время/после. Native `61c6849` fail на отсутствующем proposal report; исправление проверено targeted regression и требует нового native запуска. Не control HTTP fixture, не release approval.
+- [x] Sandboxed training Jobs. Зависимость: T05. Gate: M05.
+- CP1 `ab00a4e`: M05 pass / 58 cases, 13 overlapping Running observations при deadline/OOM и неизменный actual-candidate HTTP/ONNX inference до/во время/после. Native `61c6849` fail на отсутствующем proposal report сохранён; исправление принято новым native запуском. [Доказательства и границы](../STATUS.md). Не control HTTP fixture, не release approval и не M14 load acceptance.
 - Прогресс: настоящий Job backend, admission, deadline, PID/OOM/egress probes и cleanup проверены; влияние на будущий настоящий serving service ещё не измерено.
 - Результат: Job runner без host privileges, лимиты, deadlines, pinned image и cleanup.
 - Проверка: denied egress, timeout, memory exhaustion, отсутствие signing secrets и влияния на serving.

@@ -1,5 +1,25 @@
 # Статус и границы доказательств
 
+## CP1: проверенные foundation и isolation
+
+2026-10-20, `ab00a4ee672431f7267bf9082842267c76ade844`: [targeted Kubernetes integration](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39464190902) **success, attempt 1**, clean hosted checkout. После установленного и исправленного M05 handoff defect запускался только изменённый integration workflow, не вся неизменённая матрица.
+
+| Gate | Фактический результат |
+| --- | --- |
+| M01 | pass, 10 cases; fresh/repeat bootstrap, сохранность ключей/данных, tool/version refusals, pinned inventory |
+| M04 | pass, 764 cases; текущие API/SQL/TLS/network права и identities, не cached proof |
+| M05 | pass, 58 cases; actual-candidate inference при DeadlineExceeded/OOMKilled |
+| M20 | pass, 725 cases; fresh worker/controller qualification внутри M04 |
+| M21 | pass, 122 cases; scoped intake и независимый SQL readback после M05 |
+
+Linux targeted tests: foundation **31**, isolation **18**, без skips; новые foundation/isolation modules имеют 100% statement/branch coverage. Deadline fault завершился за **13.239815 s**, включая наблюдение terminal state, с **9** concurrent Running observations; OOM fault за **8.170219 s**, **4** observations. До, во время и после ошибок получены **16 одинаковых response digests**; все 13 concurrent samples подтвердили тот же Running Pod до/после HTTP, serving worker не перезапускался. Это проверка доступности/корректности, не M14 latency/load SLA. Candidate `e52030408eee1bee8d620fcf5d4e28a0896e8a9a7fc71fd1dee78e6ab15b2769`, model SHA-256 `b463c227c89352bd5ce8f7a43a00542b11d41dd348e16dfd9df52a30fdc9c634`; qualification не выдаёт release approval.
+
+Основные evidence SHA-256: foundation `fead41a1abbd1ee72e4d5ab089e73f9b3230e41d402c83bb8f87e2a6869cd491`, M04 qualification `d04d3b15cf24128d941f57db1f39cfd27e2a0885ba3870f380096df57571a341`, M05 qualification `6c010149ff1a0b81718c0d732e4bc4ae0dcbd436ccbc5fd97b983f7c07272cca`. Counts пересекаются по компонентам; их нельзя складывать в независимые статистические гарантии.
+
+**R1-B03 закрыт**, T01/T05/T06 приняты в synthetic lab scope. M01-часть R1-B01 подтверждена, но общий end-to-end entrypoint и окончательный clean-checkout walkthrough всего продукта ещё открыты. Следующий checkpoint CP2: image/model blockers R1-B02 и assurance R1-B07. Отдельный storage privacy/output refusal из первой матрицы остаётся R1-B04/R1-B08; успешный M05 его не исправляет и не закрывает M13. Нет общей зелёной матрицы на новом commit, M18/R1/release не приняты. FI backlog не расширялся и не исполнялся, локальная инфраструктура не запускалась.
+
+## История CP1 и сохранённые отказы
+
 CP1 native `61c6849`: [Kubernetes run](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378670) подтвердил **M01 pass / 10 cases, M04 pass / 764 cases, M20 pass / 725 cases**. M05 отказал с `artifact_unavailable`, M21 не запускался после отказа. Причина M05 воспроизведена локальным RED: coordinator вызывал `release_native.qualify`, но не сохранял его return report в `evidence/release-native.json`, который читает candidate serving. Исправление сохраняет свежий report и инвалидирует старый до вызова producer; producer failure не запускает serving. 18 targeted methods pass, coordinator 100% statements/branches. Повторная native проверка изменённого пути ещё требуется.
 
 Полная матрица `61c6849`: **4 success / 6 failure**, все attempt 1. Success: [docs](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378656), [developer](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378667), [intake](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378717), [tracking](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378724). Failure: Kubernetes выше, [storage](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378723), [images](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378737), [poisoning](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378677), [evasion](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378672), [paired training](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39461378714). Storage остановился на `serving_output_rejected` в actual-candidate privacy/output wrapper; причина этим закрытым diagnostic code не установлена, R1-B04/R1-B08 остаются открытыми. Это отдельный отказ, не исправленный публикацией M05 proposal и не основание для слепого retry. Для CP1 исправляется и повторяется только изменённый Kubernetes integration path; остальные workflows не перезапускаются ради зелёной матрицы.
