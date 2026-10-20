@@ -1,6 +1,6 @@
 import copy
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -15,6 +15,9 @@ def qualify():
     scenarios = {
         "comparison": "pass",
         "comparison-foreign": "inconclusive",
+        "comparison-no-wolfi-detection": "rejected",
+        "comparison-wolfi-database-changed": "rejected",
+        "comparison-wolfi-high": "fail",
         "clean": "pass",
         "high": "fail",
         "unknown": "inconclusive",
@@ -80,6 +83,22 @@ def qualify():
                             for package in ("scikit-learn", "onnxruntime", "cryptography")
                         ]
                     )
+                    if "-candidate-" in stage:
+                        document["distro"] = {"id": "wolfi", "versionID": "20230201"}
+                        for package in document["artifacts"]:
+                            if package["name"] == "libc6":
+                                package["name"] = "glibc-2.44"
+                            if package["type"] == "deb":
+                                package.update(type="apk", foundBy="apk-db-cataloger")
+                        document["artifacts"].append(
+                            {
+                                "id": "python-3.12",
+                                "name": "python-3.12",
+                                "version": "3.12.15-r4",
+                                "type": "apk",
+                                "foundBy": "apk-db-cataloger",
+                            }
+                        )
                     if name == "empty-sbom":
                         document["artifacts"] = []
                     if name == "syft-crash":
@@ -93,7 +112,29 @@ def qualify():
                     control_match["vulnerability"].update(id="GHSA-v845-jxx5-vc9f")
                     document["matches"] = [] if name == "no-detection" else [control_match]
                     returncode = 2
+                elif stage == "wolfi-detection-control":
+                    control_match = copy.deepcopy(match)
+                    control_match["artifact"].update(
+                        name="libxml2", version="2.11.5-r0", type="apk"
+                    )
+                    control_match["vulnerability"].update(id="CVE-2023-45322")
+                    document["distro"] = {"name": "wolfi", "version": "20230201"}
+                    document["matches"] = (
+                        [] if name == "comparison-no-wolfi-detection" else [control_match]
+                    )
+                    if name == "comparison-wolfi-database-changed":
+                        document["descriptor"]["db"]["status"]["built"] = (
+                            datetime.now(UTC) - timedelta(minutes=1)
+                        ).isoformat()
+                    returncode = 2
                 else:
+                    if "-candidate-" in stage:
+                        document["distro"] = {"name": "wolfi", "version": "20230201"}
+                        if name == "comparison-wolfi-high":
+                            finding = copy.deepcopy(match)
+                            finding["artifact"].update(name="glibc-2.44", type="apk")
+                            document["matches"] = [finding]
+                            returncode = 2
                     if name in {"high", "unknown"}:
                         finding = copy.deepcopy(match)
                         finding["vulnerability"]["severity"] = (

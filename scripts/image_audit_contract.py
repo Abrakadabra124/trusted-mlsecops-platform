@@ -7,6 +7,8 @@ from mlsecops.contracts import Rejected
 SYFT_VERSION = "1.54.1"
 GRYPE_VERSION = "0.120.1"
 SEVERITIES = ("Negligible", "Low", "Medium", "High", "Critical", "Unknown")
+DISTRO_VERSIONS = {"debian": {"12", "13"}, "wolfi": {"20230201"}}
+WOLFI_OS_PACKAGES = {"glibc-2.44", "python-3.12", "postgresql-18"}
 
 
 def database(report, timestamp):
@@ -45,7 +47,30 @@ def detection_control(report, returncode, timestamp=None):
         raise Rejected("image_audit_detection_control_failed") from error
 
 
-def inventory(sbom, image_id, required_packages):
+def wolfi_detection_control(report, returncode, timestamp=None):
+    database(report, timestamp or datetime.now(UTC))
+    try:
+        detected = any(
+            match["artifact"]["name"] == "libxml2"
+            and match["artifact"]["version"] == "2.11.5-r0"
+            and match["artifact"]["type"] == "apk"
+            and match["vulnerability"]["id"] in {"CVE-2023-45322", "CGA-2mq2-pxq9-3fqm"}
+            and match["vulnerability"]["severity"] in {"High", "Critical"}
+            for match in report["matches"]
+        )
+        if (
+            type(returncode) is not int
+            or returncode != 2
+            or report["distro"]["name"] != "wolfi"
+            or report["distro"]["version"] != "20230201"
+            or not detected
+        ):
+            raise Rejected("image_audit_wolfi_detection_control_failed")
+    except (KeyError, TypeError) as error:
+        raise Rejected("image_audit_wolfi_detection_control_failed") from error
+
+
+def inventory(sbom, image_id, required_packages, *, distro="debian"):
     try:
         if (
             not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id)
@@ -53,8 +78,10 @@ def inventory(sbom, image_id, required_packages):
             or sbom["descriptor"]["version"] != SYFT_VERSION
             or sbom["source"]["type"] != "image"
             or sbom["source"]["metadata"]["imageID"] != image_id
-            or sbom["distro"]["id"] != "debian"
-            or sbom["distro"]["versionID"].split(".")[0] not in {"12", "13"}
+            or distro not in DISTRO_VERSIONS
+            or sbom["distro"]["id"] != distro
+            or sbom["distro"]["versionID"].split(".")[0] not in DISTRO_VERSIONS[distro]
+            or (distro == "wolfi" and sbom["distro"]["versionID"] != "20230201")
             or not isinstance(sbom["artifacts"], list)
             or not sbom["artifacts"]
             or not required_packages
@@ -73,21 +100,29 @@ def inventory(sbom, image_id, required_packages):
             packages[package["id"]] = package
         if not required_packages <= {package["name"] for package in packages.values()}:
             raise Rejected("image_audit_required_packages_missing")
+        if distro == "wolfi" and any(
+            package["name"] in WOLFI_OS_PACKAGES
+            and (package["type"] != "apk" or package["foundBy"] != "apk-db-cataloger")
+            for package in packages.values()
+        ):
+            raise Rejected("image_audit_wolfi_package_coverage_invalid")
         return packages
     except (KeyError, TypeError, AttributeError) as error:
         raise Rejected("image_audit_inventory_invalid") from error
 
 
-def assess(sbom, report, image_id, required_packages, returncode, timestamp=None):
+def assess(
+    sbom, report, image_id, required_packages, returncode, timestamp=None, *, distro="debian"
+):
     status = database(report, timestamp or datetime.now(UTC))
-    packages = inventory(sbom, image_id, required_packages)
+    packages = inventory(sbom, image_id, required_packages, distro=distro)
     try:
         if (
             type(returncode) is not int
             or returncode not in (0, 2)
             or report["source"]["type"] != "image"
             or report["source"]["target"]["imageID"] != image_id
-            or report["distro"]["name"] != "debian"
+            or report["distro"]["name"] != distro
             or report["distro"]["version"]
             not in {sbom["distro"]["versionID"], sbom["distro"]["versionID"].split(".")[0]}
             or report.get("ignoredMatches")
@@ -127,8 +162,17 @@ def assess(sbom, report, image_id, required_packages, returncode, timestamp=None
         return {
             "status": "fail" if blocked else "inconclusive" if counts["Unknown"] else "pass",
             "image_id": image_id,
+            "distro": distro,
             "packages": len(packages),
             "package_types": dict(Counter(package["type"] for package in packages.values())),
+            "apk_packages": sorted(
+                [
+                    {"name": package["name"], "version": package["version"]}
+                    for package in packages.values()
+                    if package["type"] == "apk"
+                ],
+                key=lambda package: (package["name"], package["version"]),
+            ),
             "matches": len(findings),
             "unique_vulnerabilities": len({finding["id"] for finding in findings}),
             "severity_counts": dict(counts),

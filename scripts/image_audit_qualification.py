@@ -2,7 +2,7 @@ import copy
 from datetime import UTC, datetime, timedelta
 
 from mlsecops.contracts import Rejected, canonical
-from scripts.image_audit_contract import assess, detection_control
+from scripts.image_audit_contract import assess, detection_control, wolfi_detection_control
 
 
 def fixtures():
@@ -190,6 +190,106 @@ def qualify():
             confirmed(f"detection:{name}", True)
         else:
             confirmed(f"detection:{name}", False)
+    wolfi_sbom, wolfi_report, wolfi_match, image_id, timestamp = fixtures()
+    wolfi_sbom["distro"] = {"id": "wolfi", "versionID": "20230201"}
+    wolfi_report["distro"] = {"name": "wolfi", "version": "20230201"}
+    for package in wolfi_sbom["artifacts"]:
+        if package["name"] == "libc6":
+            package["name"] = "glibc-2.44"
+        package.update(type="apk", foundBy="apk-db-cataloger")
+    required = {"glibc-2.44", "postgresql-18"}
+    confirmed(
+        "wolfi-explicit-profile",
+        assess(wolfi_sbom, wolfi_report, image_id, required, 0, timestamp, distro="wolfi")["status"]
+        == "pass",
+    )
+    confirmed(
+        "wolfi-installed-package-versions-retained",
+        assess(wolfi_sbom, wolfi_report, image_id, required, 0, timestamp, distro="wolfi")[
+            "apk_packages"
+        ]
+        == [
+            {"name": "glibc-2.44", "version": "1"},
+            {"name": "postgresql-18", "version": "1"},
+        ],
+    )
+    try:
+        assess(wolfi_sbom, wolfi_report, image_id, required, 0, timestamp)
+    except Rejected:
+        confirmed("wolfi-is-not-default-debian", True)
+    else:
+        confirmed("wolfi-is-not-default-debian", False)
+    wolfi_match["artifact"] = {
+        key: wolfi_sbom["artifacts"][0][key] for key in ("id", "name", "version", "type")
+    }
+    for severity, expected, code in (("High", "fail", 2), ("Unknown", "inconclusive", 0)):
+        observed = copy.deepcopy(wolfi_report)
+        observed["matches"] = [copy.deepcopy(wolfi_match)]
+        observed["matches"][0]["vulnerability"]["severity"] = severity
+        confirmed(
+            f"wolfi-unmodified-policy:{severity}",
+            assess(wolfi_sbom, observed, image_id, required, code, timestamp, distro="wolfi")[
+                "status"
+            ]
+            == expected,
+        )
+    for name, mutate in (
+        ("sbom-distro", lambda sbom, report: sbom["distro"].update(id="alpine")),
+        ("sbom-version", lambda sbom, report: sbom["distro"].update(versionID="foreign")),
+        (
+            "sbom-version-suffix",
+            lambda sbom, report: sbom["distro"].update(versionID="20230201.99"),
+        ),
+        ("report-distro", lambda sbom, report: report["distro"].update(name="debian")),
+        ("report-version", lambda sbom, report: report["distro"].update(version="rolling")),
+        ("package-type", lambda sbom, report: sbom["artifacts"][0].update(type="python")),
+        (
+            "package-cataloger",
+            lambda sbom, report: sbom["artifacts"][0].update(foundBy="python-package-cataloger"),
+        ),
+        ("missing-libc", lambda sbom, report: sbom["artifacts"].pop(0)),
+        ("ignored-match", lambda sbom, report: report.update(ignoredMatches=[{}])),
+    ):
+        invalid_sbom, invalid_report = copy.deepcopy(wolfi_sbom), copy.deepcopy(wolfi_report)
+        mutate(invalid_sbom, invalid_report)
+        try:
+            assess(invalid_sbom, invalid_report, image_id, required, 0, timestamp, distro="wolfi")
+        except Rejected:
+            confirmed(f"wolfi-rejected:{name}", True)
+        else:
+            confirmed(f"wolfi-rejected:{name}", False)
+    wolfi_control = copy.deepcopy(wolfi_report)
+    wolfi_control["matches"] = [copy.deepcopy(wolfi_match)]
+    wolfi_control["matches"][0]["artifact"].update(name="libxml2", version="2.11.5-r0")
+    wolfi_control["matches"][0]["vulnerability"].update(id="CVE-2023-45322")
+    wolfi_detection_control(wolfi_control, 2, timestamp)
+    confirmed("wolfi-vulnerable-apk-detected", True)
+    for name, mutate in (
+        ("missing", lambda value: value.update(matches=[])),
+        ("malformed", lambda value: value.update(matches=[{}])),
+        ("distro", lambda value: value["distro"].update(name="alpine")),
+        ("version", lambda value: value["distro"].update(version="13")),
+        ("package", lambda value: value["matches"][0]["artifact"].update(name="other")),
+        ("installed", lambda value: value["matches"][0]["artifact"].update(version="2.11.5-r1")),
+        ("type", lambda value: value["matches"][0]["artifact"].update(type="python")),
+        ("id", lambda value: value["matches"][0]["vulnerability"].update(id="other")),
+        ("severity", lambda value: value["matches"][0]["vulnerability"].update(severity="Low")),
+    ):
+        invalid = copy.deepcopy(wolfi_control)
+        mutate(invalid)
+        try:
+            wolfi_detection_control(invalid, 2, timestamp)
+        except Rejected:
+            confirmed(f"wolfi-control-rejected:{name}", True)
+        else:
+            confirmed(f"wolfi-control-rejected:{name}", False)
+    for code in (0, True):
+        try:
+            wolfi_detection_control(wolfi_control, code, timestamp)
+        except Rejected:
+            confirmed(f"wolfi-control-exit:{code}", True)
+        else:
+            confirmed(f"wolfi-control-exit:{code}", False)
     return {
         "status": "pass",
         "scope": "image-audit-contracts-only",

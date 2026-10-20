@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+## CP2: устранение image blockers, в работе
+
+R1-B02, 2026-10-20: подготовлены отдельные [Wolfi candidates](docs/image-candidates.md#cp2-wolfi-candidates-2026-10-20) с прежними Python 3.12.15/PostgreSQL 18.6. Baseline Dockerfile, storage IMAGE, Python lock и действующие resources не изменены. Registry manifest/layer и доступные APK versions проверены read-only по HTTP. Audit получает явный Wolfi profile, APK coverage/binding checks и дополнительный known-vulnerable APK control на той же DB. Пороги High/Critical, Unknown и запрет exceptions не менялись. Native build/compatibility/scan ещё отсутствуют, полный APK closure ещё не frozen; adoption и закрытие R1-B02 не заявляются. [Ранбук обновлён](docs/operations/image-audit-troubleshooting.md#cp2-новый-wolfi-candidate-не-собрался-или-не-прошёл-audit). Следующая необходимая integration проверка только изменённого image workflow, полная матрица остаётся на CP2 checkpoint.
+
+Локально: 152 image contracts pass, 106/108 branches suite и 100% statements/branches audit contract. RED подтвердил отсутствующий Wolfi control и отдельную ошибку допуска суффикса версии `20230201.99`; после исправления точная Wolfi version обязательна. Ruff и docs check прошли. Fresh-context reviewer не завершился: backend 403, его результат не считается review pass. Выполнен собственный source/contract review с этой явной границей; независимость не заявляется и M22/T23 этим не закрываются.
+
 ## CP1: проверенные foundation и isolation
 
 2026-10-20, `ab00a4ee672431f7267bf9082842267c76ade844`: [targeted Kubernetes integration](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39464190902) **success, attempt 1**, clean hosted checkout. После установленного и исправленного M05 handoff defect запускался только изменённый integration workflow, не вся неизменённая матрица.

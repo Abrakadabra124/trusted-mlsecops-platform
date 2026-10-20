@@ -25,7 +25,13 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import image_candidates
 from scripts.image_archive import identity
-from scripts.image_audit_contract import assess, database, detection_control, inventory
+from scripts.image_audit_contract import (
+    assess,
+    database,
+    detection_control,
+    inventory,
+    wolfi_detection_control,
+)
 from scripts.image_audit_publication import render
 from scripts.image_comparison import compare
 
@@ -230,19 +236,31 @@ def audit(root, include_candidates=False):
             inspect_image(image)
     sboms = {}
     required = {
-        "worker": {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
-        "storage": {"libc6", "postgresql-18"},
+        ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
+        ("debian", "storage"): {"libc6", "postgresql-18"},
+        ("wolfi", "worker"): {
+            "glibc-2.44",
+            "python-3.12",
+            "scikit-learn",
+            "onnxruntime",
+            "cryptography",
+        },
+        ("wolfi", "storage"): {"glibc-2.44", "postgresql-18"},
     }
-    targets = [("worker", "worker", "trusted-mlsecops:dev"), ("storage", "storage", STORAGE_IMAGE)]
+    targets = [
+        ("worker", "worker", "trusted-mlsecops:dev", "debian"),
+        ("storage", "storage", STORAGE_IMAGE, "debian"),
+    ]
     if include_candidates:
         targets.extend(
-            (role + "-candidate", role, spec["reference"])
+            (role + "-candidate", role, spec["reference"], "wolfi")
             for role, spec in image_candidates.SPECS.items()
         )
-    for name, role, reference in targets:
+    for name, role, reference, distro in targets:
         component = {
             "name": name,
             "role": role,
+            "distro": distro,
             "status": "inconclusive",
             "scan_executed": False,
             "vulnerability_count": None,
@@ -279,7 +297,10 @@ def audit(root, include_candidates=False):
             if exit_code:
                 raise Rejected("image_audit_sbom_failed")
             packages = inventory(
-                decode(bounded_read(path, LIMIT), LIMIT), config_id, required[role]
+                decode(bounded_read(path, LIMIT), LIMIT),
+                config_id,
+                required[(distro, role)],
+                distro=distro,
             )
             component["catalogued_packages"] = len(packages)
             component["sbom_validated"] = True
@@ -327,6 +348,29 @@ def audit(root, include_candidates=False):
     report["detection_control"] = "pass"
     report["detection_control_digest"] = file_hash(control_path)
     control_database = database(control, datetime.now(UTC))
+    if include_candidates:
+        report["wolfi_detection_control"] = "inconclusive"
+        write_json(safe_child(root, REPORT), report)
+        exit_code, wolfi_path = scanner(
+            run,
+            "wolfi-detection-control",
+            GRYPE_IMAGE,
+            [
+                "pkg:apk/wolfi/libxml2@2.11.5-r0?arch=x86_64&distro=wolfi-20230201",
+                "--fail-on",
+                "high",
+                "-o",
+                "json",
+            ],
+            [(cache, "/cache", False)],
+        )
+        wolfi_control = decode(bounded_read(wolfi_path, LIMIT), LIMIT)
+        wolfi_detection_control(wolfi_control, exit_code)
+        if database(wolfi_control, datetime.now(UTC)) != control_database:
+            raise Rejected("image_audit_wolfi_database_changed")
+        report["wolfi_detection_control"] = "pass"
+        report["wolfi_detection_control_digest"] = file_hash(wolfi_path)
+        write_json(safe_child(root, REPORT), report)
     for component in report["components"]:
         name = component["name"]
         if name not in sboms:
@@ -344,8 +388,9 @@ def audit(root, include_candidates=False):
                 decode(bounded_read(path, LIMIT), LIMIT),
                 decode(bounded_read(scan_path, LIMIT), LIMIT),
                 component["image_config_id"],
-                required[component["role"]],
+                required[(component["distro"], component["role"])],
                 exit_code,
+                distro=component["distro"],
             )
             if (
                 result["database"] != control_database

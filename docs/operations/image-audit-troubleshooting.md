@@ -2,6 +2,19 @@
 
 Ответственные: platform operator и security reviewer. Процедура относится к scanner evidence лаборатории, не к production-инциденту. Рабочие SQL volumes, runtime tags и foundation не меняются.
 
+## CP2: новый Wolfi candidate не собрался или не прошёл audit
+
+Причина изменения: повторные High/Critical findings прежних Debian candidates, не отказ работающей БД. [Новые recipes и источники](../image-candidates.md#cp2-wolfi-candidates-2026-10-20) ещё требуют native compatibility/security проверки. Эта процедура не разрешает adoption.
+
+1. Read-only: зафиксировать commit, stage, candidate recipe digest, image ID и `scan_executed`. Проверить pinned base/пакеты в Dockerfile, актуальный APK index, build/worker/restore/audit reports. Отсутствующий report не считать pass.
+2. Ошибка package resolver: проверить доступность ровно заданных версий и signed repository metadata. Не заменять pin на `latest`, не использовать `--allow-untrusted`, не игнорировать ошибку загрузки. Изменение pin требует нового source review, build и qualification.
+3. `image_audit_binding_or_coverage_invalid` / `image_audit_wolfi_package_coverage_invalid`: сравнить Syft и Grype distro/version/image IDs, наличие APK catalogue и обязательных Python/OS packages. Не удалять package database и не подменять distro вручную. Новый дистрибутив допускается только явным проверенным profile, а не wildcard.
+4. `image_audit_wolfi_detection_control_failed` / `image_audit_wolfi_database_changed`: проверить свежесть и идентичность DB, exit code и detection известного уязвимого APK. До исправления причины candidate scan не считается надёжным, даже если список findings пуст. Не отключать control.
+5. Worker или restore failure: сохранить конкретный отказ, не переключать baseline. Проверить Python/ONNX versions, PostgreSQL 18.6, UID 999, client binaries, TLS, signed backup и golden readback. Формат или model thresholds не менять для обхода compatibility failure.
+6. После исправления проверить целиком changed image integration на disposable hosted CI: build -> actual training/inference -> signed restore в новый storage -> positive controls -> четыре scan на одной DB -> сохранение evidence. Общий audit может законно остаться fail из-за baseline; это не разрешение на adoption candidate.
+
+Rollback: вернуть только candidate recipe/checker правку, не трогая рабочие volumes и tags. До принятия runtime необходимо зафиксировать весь установленный APK dependency closure из `apk_packages`, повторить compatibility/security проверки и выполнить предусмотренную миграцию. Локальная инфраструктура запрещена; без установленной причины не запускать неизменённую CI-матрицу повторно.
+
 ## Симптом и проверенная причина
 
 В run `38151770889`, job `114506519932`, обычный `gh run view --log` через GitHub CLI 2.98.0 не показал итоговые JSON-строки audit и publication. Прямой job-log API сохранил обе строки длиной 188 989 байт с timestamp; сам canonical report занимает 188 960 байт и содержит 1 119 finding records. Отсутствие результата в одном viewer не означает отсутствие audit или нулевые findings. Это сравнение двух способов чтения логов, не доказательство конкретного внутреннего дефекта GitHub CLI.

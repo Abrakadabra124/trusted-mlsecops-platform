@@ -2,7 +2,21 @@
 
 Scope T01/T02. Candidates не заменяют `trusted-mlsecops:dev`, pinned working PostgreSQL, работающие containers или persisted volumes. Пороги security audit не ослабляются. Решение и альтернативы: [ADR 0015](decisions/0015-image-candidates.md).
 
-## Что изменено
+## CP2: Wolfi candidates, 2026-10-20
+
+Обязательный scope R1-B02, не дополнительное усиление после R1. Последний audit `61c6849` оставил worker candidate 0 Critical / 55 High и storage candidate 1 Critical / 85 High. Для найденных glibc defects Debian trixie пока не выпускает security update: [CVE-2026-5435](https://security-tracker.debian.org/tracker/CVE-2026-5435), [CVE-2026-19499](https://security-tracker.debian.org/tracker/CVE-2026-19499). Это не разрешение игнорировать matches или менять threshold.
+
+Новый isolated comparison сохраняет Python 3.12.15 и PostgreSQL 18.6, но использует публичный [Wolfi base](https://images.chainguard.dev/directory/image/wolfi-base/overview). OCI index SHA-256 `81211e15a86ea1d5357f284482af45730c51de45eaf10ad9ce205d6bfc2df323` и amd64 manifest `76811b6958657eb28da6f2ce79bbb97516e5818df442a086e94ab4c67303608b` проверены через registry HTTP; layer readback подтвердил `ID=wolfi`, `VERSION_ID=20230201`. Контейнеры локально не запускались.
+
+- Worker: Wolfi `python-3.12=3.12.15-r4`, `glibc-2.44=2.44-r8`, `libstdc++=16.2.0-r1`; uv используется только в build stage, interpreter указан явно, managed Python download запрещён. Locked Python dependencies остаются прежними.
+- Storage: `postgresql-18=18.6-r5`, client той же версии, glibc pin; имя postgres связано с UID/GID 999, server и client version проверяются при build. Default auto-init не добавлен, runtime запускает существующий initdb/postgres flow.
+- Версии сверены с [APK repository index](https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz), SHA-256 снимка `c5251e8283504eb1f5b25b120e7455fdbb77f4b5110f0b0869aa4b4d4e049c85`. Ответственность пакетов и пути binaries проверены по исходникам [Python](https://github.com/wolfi-dev/os/blob/main/python-3.12.yaml), [PostgreSQL](https://github.com/wolfi-dev/os/blob/main/postgresql-18.yaml), [glibc](https://github.com/wolfi-dev/os/blob/main/glibc-2.44.yaml). Наличие recipe и version pin не доказывает успешную установку или безопасность.
+- Audit разрешает Wolfi только для двух явно выбранных candidate targets. Он требует совпадение distro/version/image между Syft и Grype, APK catalogue для системных пакетов и исходные Python/OS package coverage checks. Package database не удаляется. High/Critical, Unknown, ignored matches и coverage alerts сохраняют прежние результаты.
+- Дополнительный positive control сканирует известный уязвимый Wolfi APK `libxml2@2.11.5-r0` на том же DB snapshot и должен обнаружить [CVE-2023-45322](https://github.com/wolfi-dev/advisories/blob/main/libxml2.advisories.yaml) с blocking severity. Поддержка [APK](https://oss.anchore.com/docs/capabilities/apk/) и [PURL distro hint](https://oss.anchore.com/docs/guides/vulnerability/scan-targets/) проверена по документации Anchore. Это проверка работы vulnerability feed, не новая exception.
+
+**До adoption:** native build, actual training/prediction, signed restore/golden checks и повторный scan ещё нужны. Все установленные APK name/version сохраняются в `apk_packages`, чтобы зафиксировать полный dependency closure до принятия runtime. Сейчас pinned base и direct packages не означают lock всех транзитивных OS packages или bit-for-bit reproducibility. Нельзя переносить эти candidates в baseline до закрытия этого условия и security/compatibility acceptance.
+
+## Предыдущий Debian-вариант, 2026-10-09
 
 Worker собирается в два этапа: pinned uv устанавливает locked Python dependencies, а отдельный pinned Python 3.12.15 runtime получает только venv и код. Исполняемые uv/uvx с Rust dependencies не попадают в final image. Debian libpcre2-8-0 установлен в точной исправленной версии `10.46-1~deb13u3` с проверкой APT signatures/hashes через HTTPS. Остальные пакеты не подвергаются плавающему dist-upgrade.
 
@@ -12,7 +26,7 @@ PostgreSQL candidate сохраняет версию 18.6 и используе�
 
 ## Воспроизведение
 
-Выполнять из корня checkout с Linux amd64 Docker Engine и locked Python environment:
+Для текущей работы выполнять только на разрешённом disposable hosted CI из clean checkout с Linux amd64 Docker Engine и locked Python environment. Локальные Docker/WSL/Kubernetes/SQL не запускать:
 
 ```bash
 uv sync --locked --python 3.12.15
