@@ -14,7 +14,22 @@ Scope T01/T02. Candidates не заменяют `trusted-mlsecops:dev`, pinned w
 - Audit разрешает Wolfi только для двух явно выбранных candidate targets. Он требует совпадение distro/version/image между Syft и Grype, APK catalogue для системных пакетов и исходные Python/OS package coverage checks. Package database не удаляется. High/Critical, Unknown, ignored matches и coverage alerts сохраняют прежние результаты.
 - Дополнительный positive control сканирует известный уязвимый Wolfi APK `openssl@3.0.7-r0` на том же DB snapshot и должен обнаружить `CVE-2023-0286` / `CGA-6vj8-747q-h83f` с High/Critical severity и exit 2. [Wolfi advisory](https://github.com/wolfi-dev/advisories/blob/main/openssl.advisories.yaml) задаёт fixed version `3.1.0-r0`; [GHSA](https://github.com/advisories/GHSA-x4qr-2fvf-3mr5) подтверждает High. Поддержка [APK](https://oss.anchore.com/docs/capabilities/apk/) и [PURL distro hint](https://oss.anchore.com/docs/guides/vulnerability/scan-targets/) проверена по документации Anchore. Это metadata-only контроль feed, уязвимый пакет не устанавливается в images. `--fail-on high`, image thresholds и запрет exceptions сохранены.
 
-**До adoption:** native build, actual training/prediction, signed restore/golden checks и повторный scan ещё нужны. Все установленные APK name/version сохраняются в `apk_packages`, чтобы зафиксировать полный dependency closure до принятия runtime. Сейчас pinned base и direct packages не означают lock всех транзитивных OS packages или bit-for-bit reproducibility. Нельзя переносить эти candidates в baseline до закрытия этого условия и security/compatibility acceptance.
+### Native comparison и фиксация APK closure
+
+[Run 39474325096](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39474325096), commit `61b8e6b`: оба positive controls pass, все четыре scans выполнены на одной DB SHA256 `8fe53df7787c1f89f11a03e33ee9bbe3d51037c55785fdfdabdfb0fa71a5a91f`. Worker compatibility 74 cases pass; storage recovery 435 cases pass, 1 000 golden rows/max error 0.0, SQL restore 3.617236 s, restore-to-golden 5.574964 s.
+
+| Image | Critical | High | Medium | Low | Negligible | Unknown | Package gate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Baseline worker | 0 | 56 | 59 | 11 | 47 | 0 | fail |
+| Baseline storage | 9 | 132 | 153 | 47 | 125 | 0 | fail |
+| Wolfi worker candidate | 0 | 0 | 6 | 0 | 1 | 0 | pass |
+| Wolfi storage candidate | 0 | 0 | 0 | 0 | 0 | 0 | pass |
+
+Это количества scanner matches, не доказанные exploitable paths. Worker не объявляется полностью свободным от уязвимостей. Общий workflow ожидаемо failure из-за baseline; ни один result не исключён из policy scope. Сравнение не означает adoption, complete M01/M17/M22 или R1.
+
+Из native `apk_packages` зафиксированы **все 34 worker и 56 storage APK name/version**, включая транзитивные и base packages, прямо в recipes. Exact pins вместе с build-time проверкой количества установленных packages запрещают незаметное расширение dependency set. Локальная сверка подтверждает равенство всего списка native inventory, а не только основных трёх библиотек. SHA256 canonical inventory: worker `2017ad3ee392a37229abd633fdd210971ba03077ca4ed30eb6181a6c4ae2e0aa`, storage `3b2fdfdb4f229231d900258a61a1949a47ec1d912e602fdea77de06fd50b18e0`.
+
+**До adoption:** повторный hosted build/compatibility/audit после полной фиксации closure и совпадение нового inventory с зафиксированным; scoped migration/rollback для принятия runtime; полный image scope, включая controllers. Package versions и base digest не доказывают bit-for-bit воспроизводимость OCI archive: registry retention, builder metadata, timestamps и scanner DB остаются отдельными inputs. При недоступном pin сборка должна отказать, а не выбирать новую версию.
 
 ## Предыдущий Debian-вариант, 2026-10-09
 
