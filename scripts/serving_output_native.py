@@ -1,5 +1,7 @@
 import os
+import re
 import sys
+import uuid
 from pathlib import Path
 
 
@@ -17,20 +19,27 @@ def source(root, image):
     }
 
 
-def qualified(root, state, image, port, observer):
+def qualified(root, state, image, port, observer, campaign=None):
     from scripts.candidate_serving_native import qualify
 
+    options = {} if campaign is None else {"campaign_id": campaign}
     return qualify(
-        root, state, image, trust_port=port, privacy_observer=observer, publish_report=False
+        root,
+        state,
+        image,
+        trust_port=port,
+        privacy_observer=observer,
+        publish_report=False,
+        **options,
     )
 
 
-def verified_subject(root, state, expected):
+def verified_materials(root, state, expected):
     import math
     import time
 
     from mlsecops import release_bundle
-    from mlsecops.contracts import canonical, digest, read_json, safe_child
+    from mlsecops.contracts import read_json, safe_child
     from scripts.candidate_serving_reader import bind_proposal
 
     report, source_trust, public = (
@@ -51,6 +60,13 @@ def verified_subject(root, state, expected):
         expected=expected,
         clock=math.ceil(time.time()),
     )
+    return context, verified, package, public["approver"]
+
+
+def verified_subject(root, state, expected):
+    from mlsecops.contracts import canonical, digest
+
+    context, verified, package, _ = verified_materials(root, state, expected)
     return {
         "proposal_reference": digest(canonical(package["envelope"])),
         "subject_sha256": verified["subject_sha256"],
@@ -58,6 +74,82 @@ def verified_subject(root, state, expected):
         "candidate_reference": context["candidate_reference"],
         "evaluation_reference": context["evaluation_reference"],
     }
+
+
+def verify_packet(root, state, expected, campaign, result):
+    import math
+    import time
+
+    from mlsecops import audit_evidence, audit_snapshot, release_policy, signing
+    from mlsecops.contracts import (
+        Rejected,
+        canonical,
+        digest,
+        read_json,
+        require_fields,
+        safe_child,
+    )
+    from scripts import audit_correlation_probe
+    from scripts.candidate_serving_reader import KIND
+
+    if (
+        type(campaign) is not str
+        or re.fullmatch("[a-f0-9]{32}", campaign) is None
+        or result["campaign_id"] != campaign
+    ):
+        raise Rejected("serving_output_campaign")
+    context, verified, package, publisher = verified_materials(root, state, expected)
+    destination = safe_child(state, f"serving-qualifications/{campaign}")
+    public = read_json(safe_child(destination, "public.json"))
+    require_fields(public, ("qualification",))
+    public = public["qualification"]
+    if signing.decode64(public) in {
+        signing.decode64(value)
+        for value in (publisher, context["trust"]["curator"], context["trust"]["evaluator"])
+    }:
+        raise Rejected("serving_output_qualification_key")
+    envelope = read_json(safe_child(destination, "permit.json"))
+    permit = release_policy.checked(envelope, KIND, public)
+    fixed = {
+        "schema_version": 1,
+        "purpose": KIND,
+        "campaign_id": campaign,
+        "environment": context["policy"]["environment"],
+        "proposal_sha256": digest(canonical(package["envelope"])),
+        "subject_sha256": verified["subject_sha256"],
+        "model_sha256": digest(verified["model"]),
+        **expected,
+    }
+    require_fields(permit, (*fixed, "issued_at", "expires_at"))
+    if (
+        canonical({key: permit[key] for key in fixed}) != canonical(fixed)
+        or digest(canonical(permit)) != result["qualification_permit_sha256"]
+        or result["proposal_reference"] != fixed["proposal_sha256"]
+        or result["subject_sha256"] != fixed["subject_sha256"]
+        or result["model_sha256"] != fixed["model_sha256"]
+        or any(
+            result[field] != context[field]
+            for field in ("candidate_reference", "evaluation_reference")
+        )
+    ):
+        raise Rejected("serving_output_permit_binding")
+    release_policy.window(permit, math.ceil(time.time()), maximum=600)
+    bound = audit_correlation_probe.candidate(package, context, envelope, public, publisher)
+    summary = audit_evidence.verify(
+        audit_snapshot.load_packet(safe_child(destination, "audit-evidence")),
+        binding={"campaign_id": campaign, "source": expected},
+        expected_context=bound,
+    )
+    if any(
+        canonical(result["runtime"][key]) != canonical(value)
+        for key, value in (
+            ("audit_evidence", summary),
+            ("http_correlation", summary["correlation"]),
+            ("public_audit_window", summary["public"]),
+        )
+    ):
+        raise Rejected("serving_output_packet_binding")
+    return summary
 
 
 def run(root, state, image, port):
@@ -68,6 +160,7 @@ def run(root, state, image, port):
 
     expected = source(root, image)
     subject = verified_subject(root, state, expected)
+    campaign = uuid.uuid4().hex
     started = now()
     envelope = worker_transport.capture(
         [
@@ -75,6 +168,8 @@ def run(root, state, image, port):
             "-m",
             "scripts.serving_output_native",
             "--child",
+            "--campaign",
+            campaign,
             "--state",
             str(state),
             "--image",
@@ -87,8 +182,8 @@ def run(root, state, image, port):
         canonical_output=True,
     )
     result = observe(envelope, expected)
-    if source(root, image) != expected:
-        raise Rejected("serving_output_source_changed")
+    if result["campaign_id"] != campaign:
+        raise Rejected("serving_output_campaign")
     checked_candidate(
         canonical(result),
         expected_source=expected,
@@ -96,9 +191,13 @@ def run(root, state, image, port):
         started_at=started,
         observed_at=now(),
     )
-    if "current-private-receipt-admitted" in result["cases"]:
+    owned_cases = ("current-private-receipt-admitted", "closed-audit-primary-packet-reverified")
+    if any(name in result["cases"] for name in owned_cases):
         raise Rejected("serving_output_parent_case_reserved")
-    result["cases"].append("current-private-receipt-admitted")
+    verify_packet(root, state, expected, campaign, result)
+    if source(root, image) != expected:
+        raise Rejected("serving_output_source_changed")
+    result["cases"].extend(owned_cases)
     return result
 
 
@@ -121,12 +220,20 @@ def main(arguments=None):
         parser.add_argument("--image", default="trusted-mlsecops:dev")
         parser.add_argument("--trust-port", type=int, default=15446)
         parser.add_argument("--child", action="store_true", help=SUPPRESS)
+        parser.add_argument("--campaign", help=SUPPRESS)
         options = parser.parse_args(arguments)
         if (
             os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
         ):
             raise Rejected("serving_output_disposable_hosted_runner_required")
+        if (
+            options.child
+            and (options.campaign is None or re.fullmatch("[a-f0-9]{32}", options.campaign) is None)
+            or not options.child
+            and options.campaign is not None
+        ):
+            raise Rejected("serving_output_campaign")
         storage_pki.workspace_id(options.state)
         output = None
         if not options.child:
@@ -146,7 +253,12 @@ def main(arguments=None):
 
             result = produce(
                 lambda observer: qualified(
-                    root, options.state, options.image, options.trust_port, observer
+                    root,
+                    options.state,
+                    options.image,
+                    options.trust_port,
+                    observer,
+                    options.campaign,
                 )
             )
         else:

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops import (
@@ -53,10 +54,15 @@ class OutputNativeContracts(unittest.TestCase):
         )
         environment.start()
         self.addCleanup(environment.stop)
+        campaign = patch("uuid.uuid4", return_value=SimpleNamespace(hex="d" * 32))
+        campaign.start()
+        self.addCleanup(campaign.stop)
 
     def test_guard_and_explicit_confirmation_precede_state_access(self):
         for arguments, error in (
             ([], None),
+            (["--state", "private", "--confirm-disposable", "--child"], None),
+            (["--state", "private", "--confirm-disposable", "--campaign", "invalid"], None),
             (["--state", "private", "--confirm-disposable"], Rejected("private-guard")),
         ):
             with (
@@ -106,6 +112,9 @@ class OutputNativeContracts(unittest.TestCase):
             privacy_observer=observer,
             publish_report=False,
         )
+        with patch.object(candidate_serving_native, "qualify", return_value=report()) as action:
+            native.qualified(Path("root"), Path("state"), "image", 15446, observer, "d" * 32)
+        self.assertEqual(action.call_args.kwargs["campaign_id"], "d" * 32)
 
     def test_parent_only_publishes_verified_result_and_constant_failure(self):
         for failure in (None, Rejected("private-canary"), KeyboardInterrupt()):
@@ -147,12 +156,24 @@ class OutputNativeContracts(unittest.TestCase):
                 patch.object(
                     native,
                     "qualified",
-                    side_effect=lambda root, location, image, port, observer: operation(observer),
+                    side_effect=lambda root, location, image, port, observer, campaign: operation(
+                        observer
+                    ),
                 ),
                 redirect_stdout(io.StringIO()) as output,
             ):
                 self.assertEqual(
-                    native.main(["--state", str(state), "--confirm-disposable", "--child"]), 0
+                    native.main(
+                        [
+                            "--state",
+                            str(state),
+                            "--confirm-disposable",
+                            "--child",
+                            "--campaign",
+                            "d" * 32,
+                        ]
+                    ),
+                    0,
                 )
             value = decode(output.getvalue())
             self.assertEqual(value["observation"]["status"], "inconclusive")
@@ -160,7 +181,7 @@ class OutputNativeContracts(unittest.TestCase):
 
     def test_run_uses_fixed_owned_child_and_rejects_changed_source_or_failed_transport(self):
         child = evidence_child()
-        for failure in (None, "changed", "timeout", "cleanup", "cancel"):
+        for failure in (None, "changed", "timeout", "cleanup", "cancel", "packet"):
             error = {
                 "timeout": Rejected("worker_transport_deadline"),
                 "cleanup": Rejected("worker_cleanup_incomplete"),
@@ -168,6 +189,11 @@ class OutputNativeContracts(unittest.TestCase):
             }.get(failure)
             with (
                 patch.object(native, "verified_subject", return_value=SUBJECT),
+                patch.object(
+                    native,
+                    "verify_packet",
+                    side_effect=Rejected("invalid-packet") if failure == "packet" else None,
+                ),
                 patch.object(contracts, "now", side_effect=[START, END]),
                 patch.object(
                     native,
@@ -182,6 +208,7 @@ class OutputNativeContracts(unittest.TestCase):
                     result = native.run(Path("root"), Path("state"), "image", 15446)
                     self.assertEqual(result["runtime"]["output_privacy"]["status"], "pass")
                     self.assertIn("current-private-receipt-admitted", result["cases"])
+                    self.assertIn("closed-audit-primary-packet-reverified", result["cases"])
                     self.assertFalse(result["release_ready"])
                 else:
                     with self.assertRaises(KeyboardInterrupt if failure == "cancel" else Rejected):
@@ -189,6 +216,7 @@ class OutputNativeContracts(unittest.TestCase):
             arguments = captured.call_args.args[0]
             self.assertEqual(arguments[1:3], ["-m", "scripts.serving_output_native"])
             self.assertIn("--child", arguments)
+            self.assertEqual(arguments[arguments.index("--campaign") + 1], "d" * 32)
             self.assertEqual(captured.call_args.kwargs["timeout"], 570)
             self.assertIs(captured.call_args.kwargs["canonical_output"], True)
 
@@ -201,6 +229,20 @@ class OutputNativeContracts(unittest.TestCase):
         ):
             native.run(Path("root"), Path("state"), "image", 15446)
         captured.assert_not_called()
+
+    def test_parent_rejects_replayed_campaign_despite_fresh_report_timestamps(self):
+        value = fixture()
+        value["campaign_id"] = "f" * 32
+        with (
+            patch.object(native, "source", return_value=expected()),
+            patch.object(native, "verified_subject", return_value=SUBJECT),
+            patch.object(native, "verify_packet", return_value={}),
+            patch("uuid.uuid4", return_value=SimpleNamespace(hex="d" * 32)),
+            patch.object(contracts, "now", side_effect=[START, END]),
+            patch.object(worker_transport, "capture", return_value=evidence_child(value)),
+            self.assertRaisesRegex(Rejected, "campaign"),
+        ):
+            native.run(Path("root"), Path("state"), "image", 15446)
 
     def test_observed_child_must_match_independent_subject_freshness_and_accounting(self):
         variants = [(name, "f" * 64) for name in SUBJECT] + [

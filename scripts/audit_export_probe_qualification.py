@@ -26,6 +26,27 @@ def public():
 
 
 class PublicProbeContracts(unittest.TestCase):
+    def test_observer_receives_exact_verified_snapshot_and_cli_stdout(self):
+        source = [encoded(records())]
+        payload = canonical(public()) + b"\n"
+        received = []
+        with (
+            patch.object(audit_export_probe.audit_snapshot, "read_closed", return_value=source),
+            patch.object(
+                audit_export_probe.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 0, payload, b""),
+            ),
+        ):
+            self.assertEqual(
+                audit_export_probe.exercise(
+                    Path("unused"),
+                    observer=lambda chunks, output: received.append((chunks, output)),
+                ),
+                public(),
+            )
+        self.assertEqual(received, [(tuple(source), payload)])
+
     def test_nested_private_lineage_values_are_positive_control_canaries(self):
         source = [encoded(records(bound=asdict(trace("candidate"))))]
         with (

@@ -41,9 +41,13 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-privacy-evidence --fail-under=100
       - name: Full-lifecycle serving output observer and negative FD controls
         run: |
-          uv run --locked coverage run --data-file=.coverage-serving-output --source=scripts.serving_output_probe,scripts.serving_output_native -m unittest scripts.serving_output_qualification scripts.serving_output_native_qualification
+          uv run --locked coverage run --data-file=.coverage-serving-output --source=scripts.serving_output_probe,scripts.serving_output_native -m unittest scripts.serving_output_qualification scripts.serving_output_native_qualification scripts.audit_evidence_parent_qualification
           uv run --locked coverage report --data-file=.coverage-serving-output --include='scripts/serving_output_probe.py' --fail-under=100
           uv run --locked coverage report --data-file=.coverage-serving-output --include='scripts/serving_output_native.py' --fail-under=95
+      - name: Private primary audit packet and independent HTTP outcome contracts
+        run: |
+          uv run --locked coverage run --data-file=.coverage-audit-evidence --source=mlsecops.audit_evidence,scripts.audit_http_observation,scripts.audit_evidence_probe -m unittest scripts.audit_evidence_qualification scripts.audit_http_observation_qualification scripts.audit_evidence_probe_qualification
+          uv run --locked coverage report --data-file=.coverage-audit-evidence --fail-under=100
       - name: Private source-to-request correlation and independent primary materials
         run: |
           uv run --locked coverage run --data-file=.coverage-audit-correlation --source=mlsecops.audit_lineage,mlsecops.serving_context,mlsecops.audit_event,scripts.audit_correlation_probe -m unittest scripts.audit_correlation_qualification scripts.audit_correlation_probe_qualification scripts.serving_context_qualification scripts.audit_event_qualification scripts.release_reader_qualification scripts.candidate_serving_reader_qualification
@@ -52,7 +56,7 @@ jobs:
       - name: Closed private audit public export and independent source verification
         run: |
           uv run --locked python -c "import sys; assert sys.platform == 'linux', 'audit snapshot native qualification requires Linux'"
-          uv run --locked coverage run --data-file=.coverage-audit-export --source=mlsecops.audit_export,mlsecops.audit_snapshot,scripts.audit_export_probe -m unittest scripts.audit_export_qualification scripts.audit_snapshot_qualification scripts.audit_export_probe_qualification scripts.audit_export_site_qualification
+          uv run --locked coverage run --data-file=.coverage-audit-export --source=mlsecops.audit_export,mlsecops.audit_snapshot,scripts.audit_export_probe -m unittest scripts.audit_export_qualification scripts.audit_snapshot_qualification scripts.audit_export_probe_qualification scripts.audit_export_site_qualification scripts.audit_packet_io_qualification
           uv run --locked coverage report --data-file=.coverage-audit-export --include='mlsecops/audit_export.py' --fail-under=95
           uv run --locked coverage report --data-file=.coverage-audit-export --include='mlsecops/audit_snapshot.py' --fail-under=95
           uv run --locked coverage report --data-file=.coverage-audit-export --include='scripts/audit_export_probe.py' --fail-under=100

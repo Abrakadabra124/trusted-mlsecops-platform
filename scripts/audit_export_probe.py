@@ -61,7 +61,7 @@ def scan(payload, *, private=()):
     return value
 
 
-def exercise(path):
+def exercise(path, *, observer=None):
     before = audit_snapshot.read_closed(path)
     events = [decode(line)["event"] for chunk in before for line in chunk.splitlines()]
     identities, contexts, needles = {}, {}, set()
@@ -105,4 +105,6 @@ def exercise(path):
         or before != audit_snapshot.read_closed(path)
     ):
         raise Rejected("audit_export_probe_source")
+    if observer is not None:
+        observer(tuple(before), result.stdout)
     return value

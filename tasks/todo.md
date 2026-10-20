@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T16 current: [ADR 0049 private primary audit evidence](../docs/decisions/0049-private-audit-evidence.md) implemented, native pending. [Evidence](../docs/evidence/audit-evidence-2026-10-20.md) сохраняет replay/ledger/fsync RED и review; [RB-68/PB-42](../docs/operations/audit-evidence-troubleshooting.md). Не закрывать task по этому компоненту: production lifecycle/429/503 privacy, service logs, subject composition и public gate projection ещё обязательны.
+
 T16 approved metrics: **native 93de1b6 verified**, 35 metrics tests / 0 skips, collector/probe 100%, 78 actual-candidate cases и 69 approved samples. [Evidence](../docs/evidence/serving-metrics-2026-10-19.md): 10 terminal CI, 6 success / 4 failure; source-lock correction подтверждена, исторический fail сохранён. [RB-62/PB-36](../docs/operations/serving-metrics-troubleshooting.md). Остались controller/all-output/export/correlation, полный M13 и image/ML blockers.
 
 T16 worker increment: безопасная диагностика CLI/import и Linux core/dumpability guard реализованы; [native d2c48bf](../docs/evidence/worker-privacy-2026-10-19.md): 13 tests / 0 skips, guard 100%, 77 candidate cases pass. Intake test regression исправлена и проверена Linux CI: 36 Developer tests, Intake 66/66, M21 122 pass. Все 10 CI terminal: 6 success / 4 failure; Windows symlink error и image/ML blockers сохранены. Не закрывает весь worker/controller output scope или M13. [RB-61/PB-35](../docs/operations/worker-privacy-troubleshooting.md).

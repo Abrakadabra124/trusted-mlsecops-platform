@@ -33,8 +33,8 @@ from mlsecops.contracts import (
 from mlsecops.datasets import FEATURES
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.prediction_protocol import PredictionBatch
-from scripts import audit_correlation_probe
-from scripts.audit_export_probe import exercise as export_audit
+from scripts import audit_correlation_probe, audit_evidence_probe
+from scripts.audit_http_observation import Ledger
 from scripts.candidate_serving_reader import KIND, CandidateReader, bind_proposal
 from scripts.release_reader_native import disposable
 from scripts.serving_metrics_probe import scan as scan_metrics
@@ -171,7 +171,19 @@ def http_matrix(engine, request, body, confirmed):
     confirmed("http-remains-ready-after-invalid-and-overload", request("/readyz")[0] == 200)
 
 
-def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publish_report=True):
+def qualify(
+    root,
+    state,
+    image,
+    *,
+    trust_port=15446,
+    privacy_observer=None,
+    publish_report=True,
+    campaign_id=None,
+):
+    campaign = uuid.uuid4().hex if campaign_id is None else campaign_id
+    if type(campaign) is not str or re.fullmatch("[a-f0-9]{32}", campaign) is None:
+        raise Rejected("candidate_serving_campaign")
     state = Path(state).resolve()
     source = storage_bootstrap.validate(state)
     original_ledger = storage_restore.ledger(source["name"])
@@ -210,7 +222,6 @@ def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publ
     production_policy = read_json(
         safe_child(state, f"release-proposals/{source_campaign}/policy-envelope.json")
     )
-    campaign = uuid.uuid4().hex
     destination = safe_child(state, f"serving-qualifications/{campaign}")
     if destination.exists():
         raise Rejected("candidate_serving_campaign_exists")
@@ -341,6 +352,8 @@ def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publ
             privacy = {}
             public_audit = {}
             correlation = {}
+            private_audit = {}
+            http_ledger = Ledger()
             expected_context = audit_correlation_probe.candidate(
                 package, context, envelope, qualification_public, public["approver"]
             )
@@ -351,7 +364,21 @@ def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publ
                     "closed-audit-private-primary-material-correlation",
                     correlation["status"] == "pass",
                 )
-                public_audit.update(export_audit(path))
+                private_audit.update(
+                    audit_evidence_probe.retain(
+                        path,
+                        safe_child(destination, "audit-evidence"),
+                        http_ledger,
+                        binding={"campaign_id": campaign, "source": expected},
+                        expected_context=expected_context,
+                    )
+                )
+                confirmed(
+                    "closed-audit-primary-packet-retained",
+                    private_audit["status"] == "pass"
+                    and private_audit["correlation"] == correlation,
+                )
+                public_audit.update(private_audit["public"])
                 confirmed(
                     "closed-audit-public-export-schema-counters-and-canaries",
                     public_audit["status"] == "pass",
@@ -419,6 +446,7 @@ def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publ
                 rejected,
                 exercise=exercise,
                 audit_export=closed_audit,
+                http_ledger=http_ledger,
             )
             runtime["http_trust_outage"] = outage
             runtime["http_paused_query"] = paused
@@ -427,6 +455,7 @@ def qualify(root, state, image, *, trust_port=15446, privacy_observer=None, publ
             runtime["http_privacy"] = privacy
             runtime["public_audit_window"] = public_audit
             runtime["http_correlation"] = correlation
+            runtime["audit_evidence"] = private_audit
             trust_authority.update(
                 authority, policy_hash, key, revoked_artifacts=[loaded.model_sha256]
             )

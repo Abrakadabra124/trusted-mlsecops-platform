@@ -80,13 +80,13 @@ def bind_real_runtime(fixture, image):
 
 
 @contextmanager
-def site(engine, *, clients=None, audit=None, audit_export=None):
+def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=None):
     from scripts.serving_privacy_probe import scan_owned_audit
 
     if audit is not None:
-        if audit_export is not None:
+        if audit_export is not None or http_ledger is not None:
             raise Rejected("serving_native_export_ownership")
-        with _site(engine, clients=clients, audit=audit) as request:
+        with _site(engine, clients=clients, audit=audit, http_ledger=http_ledger) as request:
             yield request
         return
     with tempfile.TemporaryDirectory() as temporary:
@@ -97,7 +97,7 @@ def site(engine, *, clients=None, audit=None, audit_export=None):
         )
         journal.start()
         try:
-            with _site(engine, clients=clients, audit=journal) as request:
+            with _site(engine, clients=clients, audit=journal, http_ledger=http_ledger) as request:
                 request.audit_scan = partial(scan_owned_audit, path)
                 yield request
         finally:
@@ -107,7 +107,11 @@ def site(engine, *, clients=None, audit=None, audit_export=None):
 
 
 @contextmanager
-def _site(engine, *, clients, audit):
+def _site(engine, *, clients, audit, http_ledger=None):
+    if http_ledger is not None:
+        from scripts.audit_http_observation import ObservedJournal
+
+        audit.emit = ObservedJournal(audit, http_ledger).emit
     if clients is None:
         token = secrets.token_hex(32)
         access = serving_access.Access.single(token)
@@ -166,9 +170,15 @@ def _site(engine, *, clients, audit):
                         raise Rejected("serving_native_response_overflow")
                     if response.length not in (None, 0):
                         raise Rejected("serving_native_response_incomplete")
+                    if http_ledger is not None:
+                        http_ledger.response(path, response.status, content)
                     if raw:
                         return response.status, response.getheaders(), content
                     return response.status, decode(content, 65536)
+                except BaseException:
+                    if http_ledger is not None:
+                        http_ledger.fail()
+                    raise
                 finally:
                     connection.close()
 
@@ -227,7 +237,17 @@ def check_clients(request, body, tokens, confirmed):
     }
 
 
-def check_http(services, reader, golden, confirmed, rejected, *, exercise=None, audit_export=None):
+def check_http(
+    services,
+    reader,
+    golden,
+    confirmed,
+    rejected,
+    *,
+    exercise=None,
+    audit_export=None,
+    http_ledger=None,
+):
     engine = serving.Engine(reader)
     clients = {
         "schema_version": 1,
@@ -242,7 +262,9 @@ def check_http(services, reader, golden, confirmed, rejected, *, exercise=None, 
             for rate, burst in ((1, 1), (1, 1), (20, 40))
         ],
     }
-    transport = services.enter_context(site(engine, clients=clients, audit_export=audit_export))
+    transport = services.enter_context(
+        site(engine, clients=clients, audit_export=audit_export, http_ledger=http_ledger)
+    )
     request = partial(transport, credential=clients["clients"][2]["token"])
     request.audit_status = transport.audit_status
     request.audit_scan = transport.audit_scan

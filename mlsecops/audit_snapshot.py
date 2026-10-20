@@ -8,6 +8,8 @@ from pathlib import Path
 from mlsecops import audit_retention
 from mlsecops.contracts import Rejected, canonical, decode, require_fields
 
+MAX_PACKET = 24 * 1024 * 1024
+
 
 def _private(metadata, *, directory=False):
     kind = stat.S_ISDIR if directory else stat.S_ISREG
@@ -163,7 +165,7 @@ def manifest(content):
     return saved
 
 
-def read_closed(path):
+def capture_closed(path):
     try:
         with _leased(Path(path)) as directory:
             source, identity = _read(directory, "manifest.json", audit_retention.MAX_MANIFEST)
@@ -192,6 +194,68 @@ def read_closed(path):
                 != (source, identity)
             ):
                 raise Rejected("audit_snapshot_changed")
-        return chunks
+        return source, tuple(chunks)
     except Exception:
         raise Rejected("audit_snapshot_unavailable") from None
+
+
+def read_closed(path):
+    return list(capture_closed(path)[1])
+
+
+def store_packet(path, content):
+    try:
+        if (
+            os.name != "posix"
+            or type(content) is not bytes
+            or not 1 <= len(content) <= MAX_PACKET
+            or not path.is_absolute()
+            or path.resolve() != path
+        ):
+            raise Rejected("audit_packet_arguments")
+        path.mkdir(mode=0o700)
+        with _leased(path) as directory:
+            descriptor = os.open(
+                "packet.json",
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+                dir_fd=directory,
+            )
+            try:
+                offset = 0
+                while offset < len(content):
+                    written = os.write(descriptor, memoryview(content)[offset : offset + 65536])
+                    if type(written) is not int or not 0 < written <= min(
+                        65536, len(content) - offset
+                    ):
+                        raise Rejected("audit_packet_write")
+                    offset += written
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            os.fsync(directory)
+            if (
+                _names(directory) != {".lease", "packet.json"}
+                or _read(directory, "packet.json", MAX_PACKET)[0] != content
+            ):
+                raise Rejected("audit_packet_readback")
+        parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+    except Exception:
+        raise Rejected("audit_packet_unavailable") from None
+
+
+def load_packet(path):
+    try:
+        with _leased(Path(path)) as directory:
+            if _names(directory) != {".lease", "packet.json"}:
+                raise Rejected("audit_packet_inventory")
+            content, _ = _read(directory, "packet.json", MAX_PACKET)
+            if not content or _names(directory) != {".lease", "packet.json"}:
+                raise Rejected("audit_packet_changed")
+        return content
+    except Exception:
+        raise Rejected("audit_packet_unavailable") from None
