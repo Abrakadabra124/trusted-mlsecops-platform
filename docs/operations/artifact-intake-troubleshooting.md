@@ -73,3 +73,22 @@ Rollback: не удалять evidence и не добавлять forged intake 
 **Критерий завершения:** новый clean-checkout developer CI проходит bootstrap, intake и последующую трёхкратную developer qualification; прежний отрицательный ownership case остаётся reject. Последний verified CI записывается в STATUS. При неясном ownership остановить изменяющие действия и эскалировать владельцу. Rollback CI change не должен сопровождаться удалением данных или ослаблением guard.
 
 **Проверка исправления:** [run 38431906395](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/38431906395) на `813783b` success. 21 contracts, 100% statement/branch coverage intake, 5 native cases и 74 developer checks/3 fresh runs после штатного bootstrap. Исходный failed run остаётся в истории. Это завершение конкретного CI recovery, не общая R1 acceptance.
+
+### R1-B01: неполная identity при повторном bootstrap
+
+**Controlled reproduction 2026-10-20, не production incident.** При удалённом private key повторный bootstrap создавал новый ключ до отказа сравнения с trust anchor; при удалённом `trusted-keys.json` создавал файл молча. Это небезопасное изменение существующего workspace, а не разрешённая ротация. Малформатный marker также не проверялся полностью.
+
+**Read-only диагностика:** остановить повторные bootstrap; проверить наличие `workspace.json`, `trusted-keys.json` и четырёх role keys, их происхождение и последнюю согласованную копию. Не выводить PEM, не создавать marker/anchor вручную и не удалять workspace. Отсутствие файла не даёт права восстановить доверие из оставшихся файлов.
+
+**Исправление CP1:** existing marker проходит strict schema/ID validation; существующие ключи только читаются, public keys сверяются с имеющимся anchor. Генерация разрешена лишь для нового пустого workspace. Неполный первый bootstrap тоже требует явного восстановления, а не скрытой генерации новой identity. Нет нового механизма migration/rotation.
+
+**Проверка в рабочей копии:**
+
+```bash
+uv run --locked coverage run --data-file=.coverage-bootstrap --source=mlsecops.bootstrap -m unittest scripts.bootstrap_qualification scripts.artifact_intake_qualification.ArtifactIntakeContracts.test_evidence_must_not_precede_workspace_ownership
+uv run --locked coverage report --data-file=.coverage-bootstrap --fail-under=95
+```
+
+9 methods прошли, statement/branch coverage bootstrap 100%; исходный RED дал 9 failures в 5 methods. Эти tests используют настоящие временные файлы и ключи, но controlled inventory без Docker. Это **локальное исправление CP1, ещё не опубликованное как проверенный runtime-код**; команды нового модуля доступны в рабочей копии. Полный M01/native checkpoint ещё не принят. После CP1 заменить эту отметку ссылкой на code/evidence.
+
+**Recovery / rollback:** при missing/mismatch identity не запускать serving/promotion. Владелец может восстановить согласованный backup в отдельном проверенном owned workspace и сверить trust pins по существующей процедуре recovery; здесь такая операция не выполнялась. Если подтверждённого backup нет, сохранить отказ и эскалировать owner/security reviewer, не «исправлять» trusted file. Не откатывать guard ради запуска; rollback приложения не разрешает смену ключей или удаление единственной копии.
