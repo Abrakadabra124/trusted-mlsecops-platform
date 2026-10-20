@@ -24,6 +24,20 @@ Adoption относится только к новым UUID states лабора�
 
 Rollback новых пустых lab states: вернуть предыдущий code/immutable reference и создать отдельный state; не монтировать использованный новым server volume в старый image. Возвращение к старому уязвимому baseline не разрешает выпуск. Частично опубликованный artifact при сетевом отказе не удалять автоматически: сохранить tag/digest и статус inconclusive, проверить его identity перед дальнейшими действиями.
 
+## Проверенная публикация
+
+Clean hosted commit `bbc20b4662d6dc59ae6a20ae143e2149d7381efb`, [run 39479186325](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39479186325), attempt 1, job `118822983866`, success. Actual worker **74**, storage **435** checks pass, 1 000 golden rows/max error **0.0**. SQL restore 3.441858 s, restore-to-golden 4.990953 s; это не полный M17 RTO. Оба positive controls pass. Candidate worker: 0 Critical/High/Unknown, 6 Medium/1 Negligible; candidate storage: все severity counts 0. Baseline worker 56 High, storage 9 Critical/132 High сохранены, полный comparison fail.
+
+- Immutable manifest: `ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres@sha256:dbd9ead6848515c5fcf7d709815853b510493f609f2715296c28d8d6d965f941`.
+- Проверенный config/image ID: `sha256:f407b8a36c6836f7b527fe0b2bed7787fd3063aba73ecdadff62490ed6957673`; storage recipe SHA-256 `21acc908a1590e2122918ade69b379a2a96dfa5e427b909e90322da9f7aea6f0`.
+- Source fingerprint: `0d11e3844edf96c2f8c660dfef496a3a58d4651ade4b503238163005a11dcc7d`.
+- Canonical evidence SHA-256: audit `ce3be3f962ab4f3b602a9ced41c4e6b30284c90fa6aef6a3ffde53ebaee02ce6`, worker `9c5fbddfb33d7616408571ae1846d6d14f308912c9e8800aa1e41fe95ef645f0`, storage `52be16863735bb136d6bbbb6a90c0c879e7db8b60061eb503822f0d0e14a482f`.
+- DB SHA-256: `5bee2b8f39940a9eb07ae25eae384ae8b33fd334c9970f9f896f5941603ddbfc`.
+
+Publisher выполнил authenticated pull/readback и сохранил `public_access_verified=false`: это корректная граница его доказательств. Отдельная проверка `2026-10-20T19:05:31Z`: [package page](https://github.com/Abrakadabra124/trusted-mlsecops-platform/pkgs/container/trusted-mlsecops-platform-postgres) уже отображала Public; настройки доступа в этой проверке не менялись. Без GitHub credentials получены anonymous registry token, manifest и config; hashes совпали с manifest reference и проверенным image ID. Config: Linux/amd64, USER `999:999`, правильный OCI source label, 12 layers. Это проверка metadata/anonymous доступа, не отдельный полный anonymous Docker pull; его проверит bootstrap свежего hosted job без registry login.
+
+Код adoption меняет root Dockerfile и общий storage reference, но не рабочие resources. Audit требует Wolfi inventory и known-vulnerable APK control также без `--compare-candidates`. Tracking отказывает startup state с прежним PostgreSQL pin, сохраняя read-only validation для безопасного stop. Native developer/storage/Kubernetes/tracking/image regression должна подтвердить эти изменения отдельно от публикации.
+
 ## Почему так
 
 Сборка PostgreSQL при каждом bootstrap вместо immutable registry reference добавила бы build toolchain и resolver в операционный путь. GHCR позволяет сохранить существующий pull-by-digest контракт. Worker уже собирается из source-bound кода; второй registry lifecycle для него сейчас не нужен.

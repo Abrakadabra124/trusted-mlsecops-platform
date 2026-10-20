@@ -4,6 +4,14 @@
 
 MLflow хранит историю экспериментов, параметры и метрики. PostgreSQL хранит metadata и права в отдельных базах; TLS проверяет сервер, а mTLS также удостоверяет клиента PostgreSQL. Tracking не является источником разрешения выпуска модели.
 
+## CP2: переход на non-root PostgreSQL image
+
+Scope: только новые R1 states по [ADR 0050](../decisions/0050-runtime-image-adoption.md). Общий PostgreSQL reference импортируется из storage policy, а не дублируется отдельным pin.
+
+Controlled RED воспроизвёл две ошибки: helper подготовки volume наследовал non-root USER образа, а существующий tracking state с прежним PostgreSQL reference принимался при неизменных application image/port. Это дефекты migration path, не подтверждённый production-инцидент. Исправление: explicit `--user 0:0` только для одноразового seed helper с network none, readonly rootfs, cap-drop ALL + CHOWN и no-new-privileges. Initdb/PostgreSQL остаются UID 999, MLflow UID 65532. Startup теперь требует совпадения PostgreSQL policy; old-state validation для read-only диагностики и owned stop остаётся доступной.
+
+Диагностика: проверить `configuration.json` и текущий `PG_IMAGE`, не выводя `credentials.json`/private keys. `tracking_service_change_requires_explicit_migration` запрещает `up`, не разрешает удаление state. При проблеме seed посмотреть USER/CHOWN только собственного helper, не выдавать privileged и не запускать весь сервер root. Конечная проверка - native tracking workflow: успешный bootstrap, TLS/roles/publication и фактические runtime UIDs; 16 controlled config checks этого не заменяют. Старую историю сохранить с прежним checkout/image, переводить только отдельным согласованным recovery планом.
+
 ## PB-01. Read-only диагностика
 
 Условия: запуск из корня репозитория, окружение `uv sync --locked --python 3.12.15`, доступ к локальному Docker Linux daemon. Секреты и receipts находятся в `.runtime/tracking-service`; не копировать их в issue или чат. Docker-доступ сам по себе привилегирован; плейбук не является sandbox для оператора.

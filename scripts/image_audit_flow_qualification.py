@@ -20,6 +20,8 @@ def qualify():
         "comparison-wolfi-database-changed": "rejected",
         "comparison-wolfi-high": "fail",
         "clean": "pass",
+        "no-wolfi-detection": "rejected",
+        "debian-baseline": "rejected",
         "high": "fail",
         "unknown": "inconclusive",
         "foreign-report": "inconclusive",
@@ -84,7 +86,7 @@ def qualify():
                             for package in ("scikit-learn", "onnxruntime", "cryptography")
                         ]
                     )
-                    if "-candidate-" in stage:
+                    if name != "debian-baseline":
                         document["distro"] = {"id": "wolfi", "versionID": "20230201"}
                         for package in document["artifacts"]:
                             if package["name"] == "libc6":
@@ -125,7 +127,9 @@ def qualify():
                     control_match["vulnerability"].update(id="CVE-2023-0286")
                     document["distro"] = {"name": "wolfi", "version": "20230201"}
                     document["matches"] = (
-                        [] if name == "comparison-no-wolfi-detection" else [control_match]
+                        []
+                        if name in {"comparison-no-wolfi-detection", "no-wolfi-detection"}
+                        else [control_match]
                     )
                     document["matches"].append(copy.deepcopy(match))
                     if name == "comparison-wolfi-database-changed":
@@ -137,15 +141,15 @@ def qualify():
                         control_match["vulnerability"]["severity"] = "Medium"
                         returncode = 0
                 else:
-                    if "-candidate-" in stage:
-                        document["distro"] = {"name": "wolfi", "version": "20230201"}
-                        if name == "comparison-wolfi-high":
-                            finding = copy.deepcopy(match)
-                            finding["artifact"].update(name="glibc-2.44", type="apk")
-                            document["matches"] = [finding]
-                            returncode = 2
+                    document["distro"] = {"name": "wolfi", "version": "20230201"}
+                    if "-candidate-" in stage and name == "comparison-wolfi-high":
+                        finding = copy.deepcopy(match)
+                        finding["artifact"].update(name="glibc-2.44", type="apk")
+                        document["matches"] = [finding]
+                        returncode = 2
                     if name in {"high", "unknown"}:
                         finding = copy.deepcopy(match)
+                        finding["artifact"].update(name="glibc-2.44", type="apk")
                         finding["vulnerability"]["severity"] = (
                             "High" if name == "high" else "Unknown"
                         )
@@ -198,13 +202,13 @@ def qualify():
                     outcome = "rejected"
             if outcome != expected or list(root.rglob("*.tar")):
                 raise Rejected(f"audit_flow_contract_failed:{name}:{outcome}")
-            if name.startswith("comparison"):
+            if name.startswith("comparison") or name in {"clean", "no-wolfi-detection"}:
                 saved = read_json(root / image_audit.REPORT)
                 observation = saved["wolfi_control_observation"]
                 severity = "Medium" if name == "comparison-wolfi-medium" else "High"
                 expected_matches = (
                     []
-                    if name == "comparison-no-wolfi-detection"
+                    if name in {"comparison-no-wolfi-detection", "no-wolfi-detection"}
                     else [{"id": "CVE-2023-0286", "severity": severity}]
                 )
                 if (

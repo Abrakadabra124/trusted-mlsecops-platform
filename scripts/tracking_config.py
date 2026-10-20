@@ -10,14 +10,12 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from mlsecops.contracts import Rejected, canonical, digest, read_json, safe_child, write_json
+from mlsecops.storage_bootstrap import IMAGE as PG_IMAGE
 from mlsecops.storage_pki import issue, write_pair
 
 ROLES = ("tracking_metadata", "tracking_auth")
 LABEL = "org.trusted-mlsecops.tracking-service"
 CONFIG_LABEL = "org.trusted-mlsecops.tracking-config"
-PG_IMAGE = (
-    "postgres:18.6-bookworm@sha256:9551dd5bf356409a21b31248f49b33bba9bb1877365f3a7e933aecd9af3cf52d"
-)
 
 
 def leaf(name, authority_key, authority):
@@ -61,7 +59,11 @@ def initialize(state, image, port):
     marker = state / "configuration.json"
     if marker.exists():
         current = read_json(marker)
-        if current["image"] != image or current["port"] != port:
+        if (
+            current["image"] != image
+            or current["port"] != port
+            or current["postgres_image"] != PG_IMAGE
+        ):
             raise Rejected("tracking_service_change_requires_explicit_migration")
         return validate(state, current)
     if state.exists() and any(state.iterdir()):

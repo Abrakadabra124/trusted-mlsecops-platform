@@ -26,6 +26,24 @@ Workflow повторяет actual compatibility/restore и fresh audit. Publica
 
 Rollback до adoption: baseline не меняется, runtime rollback не требуется. Остановить дальнейшее принятие, сохранить отказ и digest для расследования. Старые рабочие states/volumes, private keys и единственная копия backup не удаляются. Package publication, anonymous access и новое baseline runtime acceptance отмечаются отдельно в STATUS; unit contracts не заменяют эти три native результата.
 
+### Подключение опубликованного artifact
+
+Native publication `bbc20b4` и отдельный anonymous manifest/config readback подтверждены в [ADR 0050](../decisions/0050-runtime-image-adoption.md#проверенная-публикация). Новый root worker recipe совпадает с проверенным candidate, storage и tracking используют один registry manifest pin. Не путать manifest digest `dbd9ead...` с local config ID `f407b8a...`.
+
+Только disposable hosted CI, из clean `main`, после targeted contracts:
+
+```text
+gh workflow run runtime.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref main
+gh workflow run storage.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref main
+gh workflow run kubernetes.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref main
+gh workflow run tracking.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref main
+gh workflow run image-audit.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref main
+```
+
+Ожидается anonymous pull без login, native bootstrap/qualification, сохранение TLS/roles и idempotency, restore-to-new-target, оба audit controls и отсутствие Critical/High/Unknown. Отдельно проверить actual image/config IDs в конечных containers. Failure не исправлять повторным неизменённым запуском: сопоставить step/reason с [R1 blockers](../r1-delivery.md). Старый известный `serving_output_rejected` не является автоматически image regression; требует своего разбора R1-B04/B08. Частичный зелёный набор не закрывает CP2.
+
+Если старый state отвергнут после обновления pin, это ожидаемая защита. Сохранить checkout, marker, исходный volume и signed backups; не переписывать marker и не выполнять bootstrap поверх старой истории. Rollback/migration границы заданы ADR 0050. Для tracking helper USER и policy mismatch использовать [tracking runbook](tracking-troubleshooting.md#cp2-переход-на-non-root-postgresql-image).
+
 ## CP2: новый Wolfi candidate не собрался или не прошёл audit
 
 Причина изменения: повторные High/Critical findings прежних Debian candidates, не отказ работающей БД. [Новые recipes и источники](../image-candidates.md#cp2-wolfi-candidates-2026-10-20) требуют проверки для каждого нового image ID. Эта процедура не разрешает adoption.

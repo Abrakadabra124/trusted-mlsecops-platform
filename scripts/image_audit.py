@@ -248,8 +248,8 @@ def audit(root, include_candidates=False):
         ("wolfi", "storage"): {"glibc-2.44", "postgresql-18"},
     }
     targets = [
-        ("worker", "worker", "trusted-mlsecops:dev", "debian"),
-        ("storage", "storage", STORAGE_IMAGE, "debian"),
+        ("worker", "worker", "trusted-mlsecops:dev", "wolfi"),
+        ("storage", "storage", STORAGE_IMAGE, "wolfi"),
     ]
     if include_candidates:
         targets.extend(
@@ -348,7 +348,7 @@ def audit(root, include_candidates=False):
     report["detection_control"] = "pass"
     report["detection_control_digest"] = file_hash(control_path)
     control_database = database(control, datetime.now(UTC))
-    if include_candidates:
+    if any(distro == "wolfi" for unused, role, reference, distro in targets):
         report["wolfi_detection_control"] = "inconclusive"
         write_json(safe_child(root, REPORT), report)
         exit_code, wolfi_path = scanner(

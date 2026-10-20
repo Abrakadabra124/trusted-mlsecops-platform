@@ -25,7 +25,8 @@ from mlsecops.contracts import (
 from mlsecops.storage_schema import DATABASE, SCHEMA_VERSION, migration_sql, roles_sql
 
 IMAGE = (
-    "postgres:18.6-bookworm@sha256:9551dd5bf356409a21b31248f49b33bba9bb1877365f3a7e933aecd9af3cf52d"
+    "ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres"
+    "@sha256:dbd9ead6848515c5fcf7d709815853b510493f609f2715296c28d8d6d965f941"
 )
 WORKSPACE_LABEL = "org.trusted-mlsecops.workspace"
 CONFIG_LABEL = "org.trusted-mlsecops.storage-config"

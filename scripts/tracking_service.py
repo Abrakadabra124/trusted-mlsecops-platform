@@ -171,6 +171,8 @@ def seed_volume(spec, volume, files, uid, image):
             "run",
             "--rm",
             "-i",
+            "--user",
+            "0:0",
             "--network",
             "none",
             *limits(256 * 1024**2, 32, 0),
