@@ -22,6 +22,8 @@ Workflow повторяет actual compatibility/restore и fresh audit. Publica
 - Manifest/config/readback mismatch или сетевой сбой после push: статус inconclusive; artifact может существовать. Не удалять его автоматически и не принимать tag как identity. Проверить конкретный manifest/config и ownership.
 - `public_access_verified=false` в успешной публикации ожидаем: authenticated readback не доказывает anonymous доступ. GHCR новый package по умолчанию private. Перед baseline adoption подтвердить public visibility и anonymous manifest/config readback; не добавлять PAT в bootstrap.
 
+Встреченный preflight defect `6127048`: GitHub отклонил dispatch с HTTP 422 до создания run, потому что `runner.temp` недоступен в job-level `env`. Actionlint 1.7.12 воспроизвёл тот же expression error. Исправление: создать приватный registry-config directory внутри шага через `$RUNNER_TEMP` и передать путь последующим шагам через `$GITHUB_ENV`, после проверки candidates и до login. Ни runner job, ни push не произошли в неудачной попытке dispatch. Локальный actionlint проверяет Actions expressions/YAML; shellcheck/pyflakes в этой диагностике не выполняются, Python проверяется Ruff и unit suite.
+
 Rollback до adoption: baseline не меняется, runtime rollback не требуется. Остановить дальнейшее принятие, сохранить отказ и digest для расследования. Старые рабочие states/volumes, private keys и единственная копия backup не удаляются. Package publication, anonymous access и новое baseline runtime acceptance отмечаются отдельно в STATUS; unit contracts не заменяют эти три native результата.
 
 ## CP2: новый Wolfi candidate не собрался или не прошёл audit

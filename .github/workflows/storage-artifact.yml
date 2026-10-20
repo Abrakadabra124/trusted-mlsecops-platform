@@ -14,8 +14,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env:
-      DOCKER_CONFIG: ${{ runner.temp }}/storage-publication-auth
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -47,6 +45,11 @@ jobs:
         run: uv run --locked python -m scripts.storage_candidate
       - name: Fresh comparison and candidate artifact eligibility
         run: uv run --locked python -m scripts.storage_publication prepare
+      - name: Prepare isolated registry configuration
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/storage-publication-auth"
+          printf 'DOCKER_CONFIG=%s/storage-publication-auth\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Login with repository scoped job token
         env:
           GHCR_USER: ${{ github.actor }}
