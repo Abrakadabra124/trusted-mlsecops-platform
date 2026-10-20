@@ -260,8 +260,8 @@ def qualify():
             confirmed(f"wolfi-rejected:{name}", False)
     wolfi_control = copy.deepcopy(wolfi_report)
     wolfi_control["matches"] = [copy.deepcopy(wolfi_match)]
-    wolfi_control["matches"][0]["artifact"].update(name="libxml2", version="2.11.5-r0")
-    wolfi_control["matches"][0]["vulnerability"].update(id="CVE-2023-45322")
+    wolfi_control["matches"][0]["artifact"].update(name="openssl", version="3.0.7-r0")
+    wolfi_control["matches"][0]["vulnerability"].update(id="CVE-2023-0286")
     wolfi_detection_control(wolfi_control, 2, timestamp)
     confirmed("wolfi-vulnerable-apk-detected", True)
     for name, mutate in (
@@ -270,10 +270,11 @@ def qualify():
         ("distro", lambda value: value["distro"].update(name="alpine")),
         ("version", lambda value: value["distro"].update(version="13")),
         ("package", lambda value: value["matches"][0]["artifact"].update(name="other")),
-        ("installed", lambda value: value["matches"][0]["artifact"].update(version="2.11.5-r1")),
+        ("installed", lambda value: value["matches"][0]["artifact"].update(version="3.1.0-r0")),
         ("type", lambda value: value["matches"][0]["artifact"].update(type="python")),
         ("id", lambda value: value["matches"][0]["vulnerability"].update(id="other")),
         ("severity", lambda value: value["matches"][0]["vulnerability"].update(severity="Low")),
+        ("medium", lambda value: value["matches"][0]["vulnerability"].update(severity="Medium")),
     ):
         invalid = copy.deepcopy(wolfi_control)
         mutate(invalid)

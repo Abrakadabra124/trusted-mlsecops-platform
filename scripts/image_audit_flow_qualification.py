@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlsecops.contracts import Rejected, canonical, write_json
+from mlsecops.contracts import Rejected, canonical, read_json, write_json
 from scripts import image_audit, image_candidates
 from scripts.image_audit_qualification import fixtures
 
@@ -16,6 +16,7 @@ def qualify():
         "comparison": "pass",
         "comparison-foreign": "inconclusive",
         "comparison-no-wolfi-detection": "rejected",
+        "comparison-wolfi-medium": "rejected",
         "comparison-wolfi-database-changed": "rejected",
         "comparison-wolfi-high": "fail",
         "clean": "pass",
@@ -113,20 +114,28 @@ def qualify():
                     document["matches"] = [] if name == "no-detection" else [control_match]
                     returncode = 2
                 elif stage == "wolfi-detection-control":
+                    if arguments[:3] != [
+                        "pkg:apk/wolfi/openssl@3.0.7-r0?arch=x86_64&distro=wolfi-20230201",
+                        "--fail-on",
+                        "high",
+                    ]:
+                        raise AssertionError("Wolfi control input or severity changed")
                     control_match = copy.deepcopy(match)
-                    control_match["artifact"].update(
-                        name="libxml2", version="2.11.5-r0", type="apk"
-                    )
-                    control_match["vulnerability"].update(id="CVE-2023-45322")
+                    control_match["artifact"].update(name="openssl", version="3.0.7-r0", type="apk")
+                    control_match["vulnerability"].update(id="CVE-2023-0286")
                     document["distro"] = {"name": "wolfi", "version": "20230201"}
                     document["matches"] = (
                         [] if name == "comparison-no-wolfi-detection" else [control_match]
                     )
+                    document["matches"].append(copy.deepcopy(match))
                     if name == "comparison-wolfi-database-changed":
                         document["descriptor"]["db"]["status"]["built"] = (
                             datetime.now(UTC) - timedelta(minutes=1)
                         ).isoformat()
                     returncode = 2
+                    if name == "comparison-wolfi-medium":
+                        control_match["vulnerability"]["severity"] = "Medium"
+                        returncode = 0
                 else:
                     if "-candidate-" in stage:
                         document["distro"] = {"name": "wolfi", "version": "20230201"}
@@ -189,6 +198,22 @@ def qualify():
                     outcome = "rejected"
             if outcome != expected or list(root.rglob("*.tar")):
                 raise Rejected(f"audit_flow_contract_failed:{name}:{outcome}")
+            if name.startswith("comparison"):
+                saved = read_json(root / image_audit.REPORT)
+                observation = saved["wolfi_control_observation"]
+                severity = "Medium" if name == "comparison-wolfi-medium" else "High"
+                expected_matches = (
+                    []
+                    if name == "comparison-no-wolfi-detection"
+                    else [{"id": "CVE-2023-0286", "severity": severity}]
+                )
+                if (
+                    observation["exit_code"] != (0 if severity == "Medium" else 2)
+                    or observation["distro"] != {"name": "wolfi", "version": "20230201"}
+                    or observation["expected_matches"] != expected_matches
+                    or len(saved["wolfi_detection_control_digest"]) != 64
+                ):
+                    raise Rejected("wolfi_control_diagnostics_not_preserved")
             cases.append({"id": name, "status": "pass", "actual": outcome, "expected": expected})
     return {
         "status": "pass",

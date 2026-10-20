@@ -356,7 +356,7 @@ def audit(root, include_candidates=False):
             "wolfi-detection-control",
             GRYPE_IMAGE,
             [
-                "pkg:apk/wolfi/libxml2@2.11.5-r0?arch=x86_64&distro=wolfi-20230201",
+                "pkg:apk/wolfi/openssl@3.0.7-r0?arch=x86_64&distro=wolfi-20230201",
                 "--fail-on",
                 "high",
                 "-o",
@@ -365,11 +365,24 @@ def audit(root, include_candidates=False):
             [(cache, "/cache", False)],
         )
         wolfi_control = decode(bounded_read(wolfi_path, LIMIT), LIMIT)
+        report["wolfi_control_observation"] = {
+            "exit_code": exit_code,
+            "distro": {
+                key: wolfi_control.get("distro", {}).get(key) for key in ("name", "version")
+            },
+            "expected_matches": [
+                {key: match["vulnerability"].get(key) for key in ("id", "severity")}
+                for match in wolfi_control.get("matches", [])
+                if match.get("vulnerability", {}).get("id")
+                in {"CVE-2023-0286", "CGA-6vj8-747q-h83f"}
+            ],
+        }
+        report["wolfi_detection_control_digest"] = file_hash(wolfi_path)
+        write_json(safe_child(root, REPORT), report)
         wolfi_detection_control(wolfi_control, exit_code)
         if database(wolfi_control, datetime.now(UTC)) != control_database:
             raise Rejected("image_audit_wolfi_database_changed")
         report["wolfi_detection_control"] = "pass"
-        report["wolfi_detection_control_digest"] = file_hash(wolfi_path)
         write_json(safe_child(root, REPORT), report)
     for component in report["components"]:
         name = component["name"]

@@ -51,10 +51,10 @@ def wolfi_detection_control(report, returncode, timestamp=None):
     database(report, timestamp or datetime.now(UTC))
     try:
         detected = any(
-            match["artifact"]["name"] == "libxml2"
-            and match["artifact"]["version"] == "2.11.5-r0"
+            match["artifact"]["name"] == "openssl"
+            and match["artifact"]["version"] == "3.0.7-r0"
             and match["artifact"]["type"] == "apk"
-            and match["vulnerability"]["id"] in {"CVE-2023-45322", "CGA-2mq2-pxq9-3fqm"}
+            and match["vulnerability"]["id"] in {"CVE-2023-0286", "CGA-6vj8-747q-h83f"}
             and match["vulnerability"]["severity"] in {"High", "Critical"}
             for match in report["matches"]
         )
