@@ -26,6 +26,8 @@ Observer закрывает пробел между Python redirects и actual s
 
 ## PB-40: последовательность
 
+Диагностический [run 40009532353](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40009532353), `e040f03`, снова отказал. Outage/paused/expiry traces отсутствовали, поэтому гипотеза об их timing failure **не подтверждена**. Для локализации более раннего сбоя добавлено сохранение только allowlisted module names и номеров строк текущего child traceback: максимум 16 позиций, без exception messages, locals, абсолютных путей и содержимого captures. Parent повторно фильтрует поля перед публикацией. Это координаты публичного кода, а не raw traceback и не acceptance proof. Ошибка записи диагностики оставляет прежний constant rejection. Не включать произвольные новые модули или вывод private state для удобства расследования.
+
 1. Локально выполнить только pure contracts:
 
 ```bash

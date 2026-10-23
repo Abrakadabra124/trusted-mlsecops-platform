@@ -4,6 +4,41 @@ import sys
 import uuid
 from pathlib import Path
 
+DIAGNOSTIC_MODULES = (
+    "scripts.serving_output_native",
+    "scripts.serving_output_probe",
+    "scripts.candidate_serving_native",
+    "scripts.serving_native",
+    "scripts.serving_pause_native",
+    "scripts.serving_outage_native",
+    "scripts.serving_privacy_probe",
+    "scripts.audit_correlation_probe",
+    "scripts.audit_evidence_probe",
+    "scripts.candidate_serving_reader",
+    "mlsecops.storage_bootstrap",
+    "mlsecops.storage",
+    "mlsecops.serving",
+    "mlsecops.serving_worker",
+    "mlsecops.serving_runtime",
+    "mlsecops.trust",
+    "mlsecops.release_bundle",
+    "mlsecops.release_policy",
+    "mlsecops.contracts",
+)
+
+
+def failure_locations(error):
+    root = Path(__file__).resolve().parents[1]
+    allowed = {root / (module.replace(".", "/") + ".py"): module for module in DIAGNOSTIC_MODULES}
+    locations = []
+    trace = error.__traceback__
+    while trace is not None:
+        module = allowed.get(Path(trace.tb_frame.f_code.co_filename).resolve())
+        if module is not None:
+            locations.append({"module": module, "line": trace.tb_lineno})
+        trace = trace.tb_next
+    return locations[-16:]
+
 
 def source(root, image):
     from mlsecops.contracts import Rejected
@@ -161,7 +196,25 @@ def failure_diagnostic(state, campaign):
         "scope": "serving-failure-diagnostic-not-acceptance",
         "status": "fail",
         "release_ready": False,
+        "locations": [],
     }
+    try:
+        if re.fullmatch("[a-f0-9]{32}", campaign) is None:
+            raise Rejected("diagnostic_campaign")
+        path = safe_child(state, f"serving-qualifications/{campaign}/failure-location.json")
+        locations = decode(bounded_read(path, 16384))
+        if type(locations) is list and len(locations) <= 16:
+            for location in locations:
+                if (
+                    type(location) is dict
+                    and set(location) == {"module", "line"}
+                    and location["module"] in DIAGNOSTIC_MODULES
+                    and type(location["line"]) is int
+                    and 1 <= location["line"] <= 100000
+                ):
+                    result["locations"].append(location)
+    except (Rejected, OSError, ValueError, TypeError):
+        pass
     reasons = {
         "trust_refreshed_or_lease_changed_during_outage",
         "http_response_invalid",
@@ -270,6 +323,7 @@ def run(root, state, image, port):
 
 
 def main(arguments=None):
+    failure_path = None
     try:
         from mlsecops.process_privacy import enforce
 
@@ -319,6 +373,9 @@ def main(arguments=None):
         if options.child:
             from scripts.serving_output_probe import produce
 
+            failure_path = safe_child(
+                options.state, f"serving-qualifications/{options.campaign}/failure-location.json"
+            )
             result = produce(
                 lambda observer: qualified(
                     root,
@@ -338,7 +395,12 @@ def main(arguments=None):
     except KeyboardInterrupt:
         print("serving_output_cancelled", file=sys.stderr)
         return 130
-    except Exception:
+    except Exception as error:
+        if failure_path is not None:
+            try:
+                write_json(failure_path, failure_locations(error))
+            except (OSError, ValueError, TypeError, Rejected):
+                pass
         print("serving_output_rejected", file=sys.stderr)
         return 1
 

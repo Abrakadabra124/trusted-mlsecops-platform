@@ -149,6 +149,88 @@ class OutputNativeContracts(unittest.TestCase):
                 )
             )
 
+    def test_child_failure_records_only_allowlisted_code_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            with (
+                patch.object(process_privacy, "enforce"),
+                patch.object(storage_pki, "workspace_id"),
+                patch.object(storage_bootstrap, "validate"),
+                patch.object(native, "qualified", side_effect=Rejected("credential-canary")),
+                redirect_stdout(io.StringIO()) as output,
+                redirect_stderr(io.StringIO()) as diagnostic,
+            ):
+                self.assertEqual(
+                    native.main(
+                        [
+                            "--state",
+                            str(state),
+                            "--confirm-disposable",
+                            "--child",
+                            "--campaign",
+                            "d" * 32,
+                        ]
+                    ),
+                    1,
+                )
+            self.assertEqual(output.getvalue(), "")
+            self.assertEqual(diagnostic.getvalue(), "serving_output_rejected\n")
+            report = native.failure_diagnostic(state, "d" * 32)
+            self.assertTrue(report["locations"])
+            self.assertEqual(report["locations"][0]["module"], "scripts.serving_output_native")
+            self.assertNotIn("credential-canary", canonical(report).decode())
+            self.assertNotIn(str(state), canonical(report).decode())
+
+    def test_failure_location_projection_rejects_private_or_unbounded_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            path = state / "serving-qualifications" / ("d" * 32) / "failure-location.json"
+            valid = {"module": "scripts.serving_output_native", "line": 10}
+            for value in (
+                {"private": "credential-canary"},
+                [valid] * 17,
+                [
+                    None,
+                    {"module": "credential-canary", "line": 1},
+                    {**valid, "line": -1},
+                    {**valid, "line": True},
+                    {**valid, "line": 100001},
+                    {**valid, "private": "credential-canary"},
+                ],
+            ):
+                write_json(path, value)
+                report = native.failure_diagnostic(state, "d" * 32)
+                self.assertEqual(report["locations"], [])
+                self.assertNotIn("credential-canary", canonical(report).decode())
+            self.assertEqual(native.failure_locations(Rejected("credential-canary")), [])
+
+    def test_failure_location_write_failure_does_not_expose_the_exception(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch.object(process_privacy, "enforce"),
+                patch.object(storage_pki, "workspace_id"),
+                patch.object(storage_bootstrap, "validate"),
+                patch.object(native, "qualified", side_effect=Rejected("credential-canary")),
+                patch.object(contracts, "write_json", side_effect=OSError("private-path")),
+                redirect_stdout(io.StringIO()) as output,
+                redirect_stderr(io.StringIO()) as diagnostic,
+            ):
+                self.assertEqual(
+                    native.main(
+                        [
+                            "--state",
+                            directory,
+                            "--confirm-disposable",
+                            "--child",
+                            "--campaign",
+                            "d" * 32,
+                        ]
+                    ),
+                    1,
+                )
+            self.assertEqual(output.getvalue(), "")
+            self.assertEqual(diagnostic.getvalue(), "serving_output_rejected\n")
+
     def test_non_hosted_environment_is_rejected_before_private_access(self):
         with (
             patch.dict(os.environ, {"RUNNER_ENVIRONMENT": "self-hosted"}),
