@@ -12,6 +12,24 @@ Controlled RED воспроизвёл две ошибки: helper подгото
 
 Диагностика: проверить `configuration.json` и текущий `PG_IMAGE`, не выводя `credentials.json`/private keys. `tracking_service_change_requires_explicit_migration` запрещает `up`, не разрешает удаление state. При проблеме seed посмотреть USER/CHOWN только собственного helper, не выдавать privileged и не запускать весь сервер root. Конечная проверка - native tracking workflow: успешный bootstrap, TLS/roles/publication и фактические runtime UIDs; 16 controlled config checks этого не заменяют. Старую историю сохранить с прежним checkout/image, переводить только отдельным согласованным recovery планом.
 
+## CP2: dependency audit остановил сборку
+
+На `883c262` Storage [40002307097](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40002307097) остановился до PostgreSQL из-за `certifi 2026.7.22`; Tracking [40002311281](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40002311281) остановился до сборки образа: 37 advisory matches в трёх пакетах. Это новые результаты dependency feed, не доказательство регрессии PostgreSQL или эксплуатации уязвимости.
+
+Причины и scoped исправления:
+
+- `certifi` предоставляет доверенные корневые сертификаты для Python TLS clients. [PYSEC-2026-4320](https://raw.githubusercontent.com/pypa/advisory-database/main/vulns/certifi/PYSEC-2026-4320.yaml) требует удалить скомпрометированную цепочку emSign: версия `2026.10.19` в обоих locks, hashes сверены с [PyPI](https://pypi.org/project/certifi/2026.10.19/).
+- `GitPython` даёт MLflow доступ к Git metadata. [Исправление 3.2.1](https://gitpython.readthedocs.io/en/latest/changes.html) закрывает `CVE-2026-114145`, запись в `.git` через submodule path. Версия `3.2.1` вместо `3.2.0` только в tracking lock.
+- `Pillow` входит в зависимости MLflow для изображений. 35 scanner matches в `12.3.0` требуют `13.0.0`; [release notes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html) описывают security fixes и несовместимые API. Наш профиль Python 3.12 сохраняется; этот bump требует нового tracking build и настоящих MLflow/TLS/publication checks, не только resolver success. Возможность обработки произвольных изображений не заявляется.
+
+Плейбук для platform operator:
+
+1. Сохранить run/commit и JSON `pip-audit` приватно; в публичный отчёт включить package/version/advisory/count, не огромные raw descriptions. Различать audit failure и недоступность feed. Не использовать `ignore-vuln`, TLS bypass или downgrade scanner.
+2. Подтвердить fixed versions у издателей. Resolver `uv 0.12.23` генерирует кандидат locks отдельно от рабочих services: `uv lock --upgrade-package certifi==2026.10.19`; tracking использует прежние Python/platform/no-build/generate-hashes параметры из header с точечными `--upgrade-package certifi==2026.10.19 --upgrade-package gitpython==3.2.1 --upgrade-package pillow==13.0.0`. Проверить diff: другие package versions/graphs не меняются. Main lock revision 3 -> 5 является форматом pinned uv, не изменением Python.
+3. Проверить `uv lock --check`, затем `uv sync --locked --python 3.12.15` в отдельном окружении. Выполнить `uv run --locked pip-audit --strict --progress-spinner off` и `uv run --locked pip-audit -r images/tracking/requirements.lock --disable-pip --require-hashes --strict --progress-spinner off`. Исправленные locks дали 0 findings для 63 installed / 91 tracking packages локально. Это package audit, не полный controller image scan.
+4. Выполнить targeted developer/storage/tracking CI на новом commit. Конечное состояние: сборка нового tracking image, offline authorization, persistent SQL/TLS/publication, M06 и storage gates проходят. Source/materials digests меняются; старые evidence не перепривязывать к новому commit.
+5. Не переключать существующую tracking БД автоматически и не переписывать `configuration.json`. При несовместимости сохранить отказ, старые volumes и logs; восстановление только по согласованному migration path. Возврат к уязвимому lock не разрешает выпуск. Если fixed version недоступна или новый audit fail, эскалировать как R1-B02, а не исключать finding.
+
 ## PB-01. Read-only диагностика
 
 Условия: запуск из корня репозитория, окружение `uv sync --locked --python 3.12.15`, доступ к локальному Docker Linux daemon. Секреты и receipts находятся в `.runtime/tracking-service`; не копировать их в issue или чат. Docker-доступ сам по себе привилегирован; плейбук не является sandbox для оператора.
