@@ -2,7 +2,7 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
-**Сквозной запуск проверен:** [одна команда, refusal path и восстановление той же модели](docs/operations/r1-walkthrough.md), [clean-checkout CI 40006116831](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40006116831), `af472f3`. Пять стадий pass, 85 serving checks, 1 000 golden predictions после независимого restore без расхождений. Diagnostic inference не является approved release: выпуск корректно запрещён, **R1/M01-M23 не завершены**. Запуск только в disposable GitHub-hosted CI, не на рабочем Docker/WSL/SQL.
+**Сквозной путь реализован, стабильность не подтверждена:** [одна команда, refusal path и восстановление той же модели](docs/operations/r1-walkthrough.md). [Первый clean-checkout CI 40006116831](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40006116831) прошёл пять стадий, 85 serving checks и 1 000 golden predictions после restore без расхождений; [повтор 40007993642](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40007993642) отказал на inference-observation. Причина диагностируется, успешный проход не отменяет отказ. Выпуск запрещён, **R1/M01-M23 не завершены**. Запуск только в disposable GitHub-hosted CI, не на рабочем Docker/WSL/SQL.
 
 **Поставка R1:** [замороженные границы, обязательные блокеры и 5 checkpoints](docs/r1-delivery.md). [Будущие улучшения FI-001-FI-008](docs/future-improvements.md) выполняются только после R1 и отдельной команды владельца. Дальнейший порядок определяется delivery-планом, а не количеством завершённых компонентов.
 

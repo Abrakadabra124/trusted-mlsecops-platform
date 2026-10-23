@@ -76,6 +76,79 @@ class OutputNativeContracts(unittest.TestCase):
             self.assertEqual(output.getvalue(), "")
             self.assertEqual(diagnostic.getvalue(), "serving_output_rejected\n")
 
+    def test_failed_child_diagnostics_project_only_fixed_operational_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            campaign = "d" * 32
+            destination = state / "serving-qualifications" / campaign
+            secret = "private-input-and-credential-canary"
+            write_json(
+                destination / "http-outage.json",
+                {
+                    "status": "fail",
+                    "identity": secret,
+                    "assessment": {
+                        "first_503_seconds": 60.02,
+                        "failures": ["first_http_503_exceeds_60_seconds", secret],
+                    },
+                },
+            )
+            write_json(
+                destination / "http-paused-query.json",
+                {
+                    "status": "inconclusive",
+                    "private": secret,
+                    "denial": {
+                        "http_status": 503,
+                        "libpq_query_active_at_denial": True,
+                        "read_finished_at_denial": False,
+                        "response_valid": True,
+                        "generation_fenced": True,
+                    },
+                },
+            )
+            report = native.failure_diagnostic(state, campaign)
+            self.assertEqual(report["status"], "fail")
+            self.assertFalse(report["release_ready"])
+            self.assertNotIn(secret, canonical(report).decode())
+            self.assertEqual(report["outage"]["first_503_seconds"], 60.02)
+            self.assertEqual(report["outage"]["failures"], ["first_http_503_exceeds_60_seconds"])
+            self.assertEqual(report["paused"]["http_status"], 503)
+            self.assertEqual(report["expiry"]["status"], "unavailable")
+
+    def test_failed_child_diagnostics_handle_missing_malformed_and_oversized_traces(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            campaign = "d" * 32
+            destination = state / "serving-qualifications" / campaign
+            for value in (
+                {"status": "secret", "assessment": []},
+                [],
+                {
+                    "status": "pass",
+                    "assessment": {"first_503_seconds": "secret", "failures": "secret"},
+                },
+                {"status": "pass", "denial": []},
+            ):
+                for filename in (
+                    "http-outage.json",
+                    "http-paused-query.json",
+                    "http-expiring-query.json",
+                ):
+                    write_json(destination / filename, value)
+                report = native.failure_diagnostic(state, campaign)
+                self.assertNotIn("secret", canonical(report).decode())
+            (destination / "http-outage.json").write_bytes(b"x" * 262145)
+            report = native.failure_diagnostic(state, campaign)
+            self.assertEqual(report["outage"]["status"], "unavailable")
+            report = native.failure_diagnostic(state, "../private")
+            self.assertTrue(
+                all(
+                    report[name]["status"] == "unavailable"
+                    for name in ("outage", "paused", "expiry")
+                )
+            )
+
     def test_non_hosted_environment_is_rejected_before_private_access(self):
         with (
             patch.dict(os.environ, {"RUNNER_ENVIRONMENT": "self-hosted"}),

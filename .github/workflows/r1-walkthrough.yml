@@ -23,13 +23,13 @@ jobs:
         run: |
           uv sync --locked --no-build --python 3.12.15
           uv run --locked pip-audit --strict --progress-spinner off
-          uv run --locked ruff check scripts/r1_walkthrough.py scripts/r1_walkthrough_qualification.py
-          uv run --locked ruff format --check scripts/r1_walkthrough.py scripts/r1_walkthrough_qualification.py
+          uv run --locked ruff check scripts/r1_walkthrough.py scripts/r1_walkthrough_qualification.py scripts/serving_output_native.py scripts/serving_output_native_qualification.py
+          uv run --locked ruff format --check scripts/r1_walkthrough.py scripts/r1_walkthrough_qualification.py scripts/serving_output_native.py scripts/serving_output_native_qualification.py
           uv run --locked python scripts/check_docs.py
-          uv run --locked coverage run --source=scripts.r1_walkthrough -m unittest scripts.r1_walkthrough_qualification
+          uv run --locked coverage run --source=scripts.r1_walkthrough,scripts.serving_output_native -m unittest scripts.r1_walkthrough_qualification scripts.serving_output_qualification scripts.serving_output_native_qualification scripts.audit_evidence_parent_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage-r1-walkthrough.json
-          uv run --locked python -c "import json; totals=json.load(open('.coverage-r1-walkthrough.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
+          uv run --locked python -c "import json; files=json.load(open('.coverage-r1-walkthrough.json'))['files']; raise SystemExit(0 if all(item['summary']['num_branches'] and item['summary']['covered_branches']/item['summary']['num_branches'] >= 0.95 for item in files.values()) else 1)"
           uv run --locked python -c "from pathlib import Path; from mlsecops.data_source import validate_lock; validate_lock(Path.cwd())"
       - name: Same candidate, real refusal, HTTP observation and independent SQL recovery
         run: uv run --locked python -m scripts.r1_walkthrough --confirm-disposable

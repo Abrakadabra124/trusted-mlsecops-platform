@@ -214,14 +214,14 @@ def run(root, state):
         image = prepared["image_id"]
         demo = stage("data-training-evaluation", lambda: storage_pipeline.demo(root, source, image))
         proposal = stage("release-decision", lambda: release_native.qualify(root, source, image))
+        report.update(release_decision="refused", refusal_reason="release_assurance_required")
+        write_json(state / "report.json", report)
         write_json(source / "evidence/release-native.json", proposal)
         inference = stage(
             "inference-observation", lambda: serving_output_native.run(root, source, image, 15446)
         )
         verify_subject(demo, proposal, inference)
         report.update(
-            release_decision="refused",
-            refusal_reason="release_assurance_required",
             candidate_reference=demo["candidate"]["candidate_reference"],
             evaluation_reference=demo["evaluation_reference"],
             model_sha256=proposal["model_sha256"],

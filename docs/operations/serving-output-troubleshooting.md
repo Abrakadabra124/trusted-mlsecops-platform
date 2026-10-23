@@ -10,6 +10,8 @@ Observer закрывает пробел между Python redirects и actual s
 
 ## RB-66: диагностика
 
+2026-10-23: Storage `fa053bc` ([40004068900](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40004068900)) и новый end-to-end `72071df` ([40007993642](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40007993642)) отказали в child observer; отдельный `af472f3` прошёл. Это воспроизведённая нестабильность, но не установленная причина. Повторять неизменённый код ради green запрещено. Для следующего изменённого прогона parent при `Rejected` читает bounded fault traces своей текущей campaign и выводит `scope=serving-failure-diagnostic-not-acceptance`: только enum статусы, известные outage причины, ограниченное время первого 503, HTTP 200/503 и фиксированные boolean признаки paused query. Missing/malformed/oversized trace даёт unavailable; raw exception, stdout/stderr, features, URLs, campaign/model hashes и credentials не выводятся. Диагностический итог всегда fail; исходное исключение повторно поднимается, approval не создаётся. Эти поля локализуют проблему, но не служат подписанным acceptance evidence и не подтверждают cleanup после forced stop.
+
 | Симптом | Причина/граница | Действие |
 | --- | --- | --- |
 | serving_output_rejected, child nonzero | Guard, ownership, source, capture, native operation или schema отказ | Сверить commit/job/step и постоянный код; не печатать raw captured stderr/exception или private state. |

@@ -245,6 +245,13 @@ class WalkthroughContracts(unittest.TestCase):
             with self.subTest(failure=failure):
                 self.assertEqual(self.exercise_run(failure)["status"], "fail")
 
+    def test_inference_failure_preserves_the_completed_release_refusal(self):
+        report = self.exercise_run("run")
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["release_decision"], "refused")
+        self.assertEqual(report["refusal_reason"], "release_assurance_required")
+        self.assertNotIn("recovery", report)
+
     def test_cli_returns_nonzero_for_preflight_or_incomplete_execution(self):
         for result, expected in (({"status": "pass"}, 0), ({"status": "fail"}, 1)):
             with patch.object(r1_walkthrough, "run", return_value=result):

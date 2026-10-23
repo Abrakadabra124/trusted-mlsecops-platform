@@ -36,6 +36,8 @@ uv run --locked python -m scripts.r1_walkthrough --confirm-disposable
 
 ## Подтверждённое исполнение
 
+**Ограничение воспроизведения:** следующий [run 40007993642](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40007993642), commit `72071df3f0311fd65941df9edd823a23a29f8782`, attempt 1, завершился **failure**. Preflight/12 contracts и первые три stages прошли; inference-observation отказал, recovery не запускался, исходная БД остановлена. Причина пока не установлена. Этот отказ нельзя вычеркнуть первым pass или исправлением hosted guard. Новая диагностика читает только существующие private fault traces и печатает фиксированные поля без payload/identifiers; она не ослабляет privacy observer и не разрешает выпуск.
+
 [Run 40006116831](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40006116831), attempt 1, job `120594341314`, commit `af472f3781cfb4dbd5dfa8cb74cb8f2583d4deea`: **success**. Цепочка выполнялась 2026-10-23 18:47:16-18:49:36 UTC. Отчёт подтвердил пять stages pass, 85 actual-candidate serving checks и отказ `release_assurance_required`.
 
 - Candidate: `72654d118d73609c3c7ed60d8c742f9aac2e5e75a53ada4049375da89354bb53`.
@@ -48,6 +50,8 @@ uv run --locked python -m scripts.r1_walkthrough --confirm-disposable
 Первый [run 40006074198](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40006074198) на `6f4ea3a` остановился до infrastructure stage из-за Ruff format. Исправление только форматировало contract test; этот failure не скрыт повторным attempt.
 
 После native проверки найден mismatch prerequisites: произвольный Linux проходил начало, но child observer позднее отклонял не-hosted среду. Guard перенесён в ранний preflight; RED подтвердил поздний отказ, затем 12 focused methods pass, 137/138 statements и 29/30 branches (96.67% branches). Проверка этого уточнения на hosted runner относится к финальному воспроизведению, не приписана предыдущему commit.
+
+Во втором failure summary ошибочно оставалось `release_decision=not-evaluated`, хотя stage уже прошёл. RED воспроизвёл это и код теперь сохраняет `refused` сразу после настоящего admission. Эта поправка делает отчёт точным, но сама по себе не исправляет inference. `release_ready` и `r1_status` не меняются при ошибках.
 
 ## Как читать результат
 

@@ -152,6 +152,70 @@ def verify_packet(root, state, expected, campaign, result):
     return summary
 
 
+def failure_diagnostic(state, campaign):
+    import math
+
+    from mlsecops.contracts import Rejected, bounded_read, decode, safe_child
+
+    result = {
+        "scope": "serving-failure-diagnostic-not-acceptance",
+        "status": "fail",
+        "release_ready": False,
+    }
+    reasons = {
+        "trust_refreshed_or_lease_changed_during_outage",
+        "http_response_invalid",
+        "ml_response_after_deadline_or_denial",
+        "unexpected_http_status",
+        "missing_outage_phase",
+        "first_http_503_exceeds_60_seconds",
+    }
+    for name, filename in (
+        ("outage", "http-outage.json"),
+        ("paused", "http-paused-query.json"),
+        ("expiry", "http-expiring-query.json"),
+    ):
+        try:
+            if re.fullmatch("[a-f0-9]{32}", campaign) is None:
+                raise Rejected("diagnostic_campaign")
+            path = safe_child(state, f"serving-qualifications/{campaign}/{filename}")
+            trace = decode(bounded_read(path, 262144))
+            if not isinstance(trace, dict):
+                raise Rejected("diagnostic_schema")
+        except (Rejected, OSError, ValueError, TypeError):
+            trace = {}
+        status = trace.get("status")
+        result[name] = {
+            "status": status if status in ("pass", "fail", "inconclusive") else "unavailable"
+        }
+        assessment = trace.get("assessment", {})
+        if isinstance(assessment, dict):
+            failures = assessment.get("failures", [])
+            result[name]["failures"] = sorted(
+                reason for reason in reasons if isinstance(failures, list) and reason in failures
+            )
+            delay = assessment.get("first_503_seconds")
+            result[name]["first_503_seconds"] = (
+                delay
+                if type(delay) in (int, float) and math.isfinite(delay) and 0 <= delay <= 600
+                else None
+            )
+        denial = trace.get("denial", {})
+        if isinstance(denial, dict):
+            code = denial.get("http_status")
+            result[name]["http_status"] = code if type(code) is int and code in (200, 503) else None
+            for field in (
+                "connected_read_entered",
+                "libpq_query_active_at_denial",
+                "read_finished_at_denial",
+                "response_valid",
+                "generation_fenced",
+            ):
+                value = denial.get(field)
+                result[name][field] = value if type(value) is bool else None
+    return result
+
+
 def run(root, state, image, port):
     from mlsecops import worker_transport
     from mlsecops.contracts import Rejected, canonical, now
@@ -162,25 +226,29 @@ def run(root, state, image, port):
     subject = verified_subject(root, state, expected)
     campaign = uuid.uuid4().hex
     started = now()
-    envelope = worker_transport.capture(
-        [
-            sys.executable,
-            "-m",
-            "scripts.serving_output_native",
-            "--child",
-            "--campaign",
-            campaign,
-            "--state",
-            str(state),
-            "--image",
-            expected["image_id"],
-            "--trust-port",
-            str(port),
-            "--confirm-disposable",
-        ],
-        timeout=570,
-        canonical_output=True,
-    )
+    try:
+        envelope = worker_transport.capture(
+            [
+                sys.executable,
+                "-m",
+                "scripts.serving_output_native",
+                "--child",
+                "--campaign",
+                campaign,
+                "--state",
+                str(state),
+                "--image",
+                expected["image_id"],
+                "--trust-port",
+                str(port),
+                "--confirm-disposable",
+            ],
+            timeout=570,
+            canonical_output=True,
+        )
+    except Rejected:
+        print(canonical(failure_diagnostic(state, campaign)).decode(), flush=True)
+        raise
     result = observe(envelope, expected)
     if result["campaign_id"] != campaign:
         raise Rejected("serving_output_campaign")
