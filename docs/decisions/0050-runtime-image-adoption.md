@@ -1,6 +1,6 @@
 # ADR 0050: scoped принятие исправленных runtime images
 
-Статус: реализация, native adoption ещё не проверен. Scope: CP2/R1-B02, продолжение ADR 0015/0016, не изменение критериев R1.
+Статус: native adoption частично проверен; новый storage pin ожидает consumer regression. Scope: CP2/R1-B02, продолжение ADR 0015/0016, не изменение критериев R1.
 
 ## Основание
 
@@ -39,6 +39,18 @@ Publisher выполнил authenticated pull/readback и сохранил `publ
 Код adoption меняет root Dockerfile и общий storage reference, но не рабочие resources. Audit требует Wolfi inventory и known-vulnerable APK control также без `--compare-candidates`. Tracking отказывает startup state с прежним PostgreSQL pin, сохраняя read-only validation для безопасного stop. Native developer/storage/Kubernetes/tracking/image regression должна подтвердить эти изменения отдельно от публикации.
 
 ## Почему так
+
+### Artifact с явными зависимостями egress probe
+
+`8e50f58e396d60ff121d821dafc9d962fdc23290`, [run 40000844038](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40000844038), attempt 1, job `120576193609`: success. Build проверил 60 APK и настоящий GNU timeout/deadline exit 124. Actual worker 74 / storage 435 checks, signed restore 1 000 rows/error 0.0; SQL 3.312396 s, restore-to-golden 4.875550 s, не полный M17 RTO. Все четыре scans pass, 0 Critical/High/Unknown; worker 6 Medium/1 Negligible, оба storage без findings. Оба controls pass, severity policy не менялась.
+
+- Новый manifest: `ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres@sha256:9172aa68aa0790240cd4597707d8d8fda875dcd944e0155277e2347142585b7b`.
+- Config/image ID: `sha256:87758f47c070ff81b0acd3d55f2c85056a0e7425250e93c65438e32535fc053e`; recipe SHA-256 `d2bfade99aa7fedca18b9512ecca33fdf5119e9bb2128af8402762eed7af636c`.
+- Source fingerprint: `0c926c0fd304953e7bc81d0b9079a3c6e3629236eaee326c6af7d5656c8943ba`.
+- Canonical evidence SHA-256: audit `95109f3afeba3beef29ea5c16f0279a62836bc42f01366cebce885a9bf7378d3`, worker `2ec1e88440b5e2bb7fbf4f8f58f76124d19a2d1260607b14a0a74fe10a5a5208`, storage `f26d5e17e00173ec4a082458d57852f9c7b912d6c550b3c6bbeff32dd8640d9e`.
+- DB SHA-256: `ebeb1361ad5ecec6cfee77b8c6b3287046a984dee448e91435c2b0ea04ca6d33`.
+
+Anonymous readback `2026-10-23T18:14:40Z` отдельно подтвердил hashes manifest/config, Linux/amd64, USER 999:999 и OCI source label без GitHub credentials. Новый digest подключён к shared storage policy; рабочие volumes не изменены. Повторяется Kubernetes regression и затронутые storage/tracking пути, поскольку GNU coreutils меняет также используемые bootstrap utilities. Не запускается полная дорогая матрица. Publication, package audit и unit checks не заменяют результат этих native consumers.
 
 Уточнение 2026-10-23 по native `91aa1b7`/`f9054fc`: четыре adoption workflows проходят, Kubernetes выявил неявные зависимости существующего PostgreSQL egress probe на Bash/GNU timeout. Новый candidate явно фиксирует эти два инструмента и их две дополнительные библиотеки, 60 APK вместо исторических 56. Non-root UID/capabilities/NetworkPolicy не меняются; положительный и отрицательный TCP controls выполняются внутри настоящего PostgreSQL container. Увеличение package surface допустимо только после нового полного audit и публикации; это исправление обязательного executable gate, не универсальный debug image. [Диагностика и порядок принятия](../operations/image-audit-troubleshooting.md#отсутствующая-зависимость-egress-probe).
 
