@@ -1,0 +1,40 @@
+name: R1 end-to-end refusal walkthrough
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: r1-walkthrough-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  walkthrough:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked dependencies, source and focused contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked pip-audit --strict --progress-spinner off
+          uv run --locked ruff check scripts/r1_walkthrough.py scripts/r1_walkthrough_qualification.py
+          uv run --locked ruff format --check scripts/r1_walkthrough.py scripts/r1_walkthrough_qualification.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --source=scripts.r1_walkthrough -m unittest scripts.r1_walkthrough_qualification
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .coverage-r1-walkthrough.json
+          uv run --locked python -c "import json; totals=json.load(open('.coverage-r1-walkthrough.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
+          uv run --locked python -c "from pathlib import Path; from mlsecops.data_source import validate_lock; validate_lock(Path.cwd())"
+      - name: Same candidate, real refusal, HTTP observation and independent SQL recovery
+        run: uv run --locked python -m scripts.r1_walkthrough --confirm-disposable
+      - name: Sanitized summary, never private state or keys
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; report=Path('.runtime/r1-walkthrough/report.json'); print(canonical(read_json(report)).decode() if report.is_file() else 'No completed walkthrough report')"
+          echo 'Qualification inference after an actual release refusal. This is not approved production serving or full M01-M23 acceptance.' >> "$GITHUB_STEP_SUMMARY"

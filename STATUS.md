@@ -1,5 +1,9 @@
 # Статус и границы доказательств
 
+## Сквозной запуск к 2026-10-23 23:34 МСК
+
+По решению владельца работа переключена на R1-B01: [единую команду и runbook](docs/operations/r1-walkthrough.md) поверх существующих training/evaluation, release admission, candidate HTTP/metrics/audit и signed SQL restore. Реализуется именно actual-candidate refusal path с явным `release_ready=false`; отдельные controlled approvals не используются как разрешение этой модели. Native проверка ещё выполняется. Последние 30 минут зарезервированы для clean checkout, документации и публикации; все M01-M23 остаются обязательными, полный R1 не завершён.
+
 ## CP2: устранение image blockers, в работе
 
 **Source-lock correction:** `5c97642` прошёл dependency audits и image builds, но developer/storage/tracking failed на старой привязке `data.lock` к `uv.lock`. Повторная генерация подтвердила прежние **20 000 rows / 1 915 576 bytes / SHA-256 `1a96301c...`**; остальные generator inputs совпадают. Обновлена только environment provenance, не данные, split или thresholds. [Точные hashes, три failed runs и обязательная preflight-проверка](docs/operations/tracking-troubleshooting.md#cp2-dependency-audit-остановил-сборку). Native regression этого исправления ещё требуется.

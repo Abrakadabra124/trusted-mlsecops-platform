@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Сквозной refusal walkthrough](operations/r1-walkthrough.md). Чистый checkout -> данные/training/evaluation -> реальный отказ promotion -> qualification HTTP/metrics/audit -> восстановление той же модели при остановленной source БД. Не full R1 acceptance; только disposable Linux/hosted CI.
+
 - [Private primary audit packet, RB-68/PB-42](operations/audit-evidence-troubleshooting.md). Parent nonce, signed permit, exact retained bytes, independent HTTP admission/outcomes и terminal observation failures; [evidence](evidence/audit-evidence-2026-10-20.md). Полный M13 не принят.
 
 - [Fresh private receipt admission, RB-67/PB-41](operations/privacy-evidence-troubleshooting.md). Independent signed primary, timestamps/cases/accounting, reserved parent marker и fail-closed recovery; [evidence](evidence/privacy-evidence-2026-10-20.md). Это не полный M13 и не public-safe report.

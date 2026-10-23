@@ -2,6 +2,8 @@
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
+**Сквозной запуск:** [одна команда, refusal path и восстановление той же модели](docs/operations/r1-walkthrough.md). Реализована интеграция существующих компонентов, native проверка ещё выполняется. Diagnostic inference не является approved release, M01-M23 не объявляются завершёнными.
+
 **Поставка R1:** [замороженные границы, обязательные блокеры и 5 checkpoints](docs/r1-delivery.md). [Будущие улучшения FI-001-FI-008](docs/future-improvements.md) выполняются только после R1 и отдельной команды владельца. Дальнейший порядок определяется delivery-планом, а не количеством завершённых компонентов.
 
 **CP1 gates приняты; следующий checkpoint CP2.** Native `ab00a4e`: M01 pass / 10 cases, M04 pass / 764, M05 pass / 58, M20 pass / 725, M21 pass / 122. При deadline/OOM training faults настоящий inference сохранил ответы и serving worker. [Успешный targeted CI](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/39464190902), [порядок приёмки](docs/r1-delivery.md), [ранбук](docs/kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference), [статус и сохранённые отказы полной матрицы](STATUS.md). Image/model blockers, отдельный privacy/output отказ и end-to-end R1 acceptance остаются открыты; выпуск запрещён.

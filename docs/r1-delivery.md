@@ -49,6 +49,8 @@ CP1 gates приняты в native `ab00a4e`: M01/M04/M05/M20/M21 pass. Linux ta
 
 ## Конечная последовательность и checkpoints
 
+Уточнение владельца 2026-10-23: до **23:04 МСК** приоритет у [сквозного запуска существующих компонентов](operations/r1-walkthrough.md), **23:04-23:34 МСК** только чистое воспроизведение, инструкции и публикация. Это перестановка работ R1-B01, не снятие CP2-CP5 или M01-M23. Непройденный release остаётся отказом; qualification inference не заменяет production serving. Конкретные блокеры сообщаются до дедлайна.
+
 1. **CP1 - foundation и изоляция:** M01-часть R1-B01 и весь R1-B03 приняты. Переиспользованы bootstrap, inventory и native probes, подключены полные M01/M04/M05. Пользователь получает проверенный старт окружения и изолированный training path. Общий entrypoint R1-B01 остаётся обязательным до CP5, не заменяется набором component tests.
 2. **CP2 - admissible candidate:** R1-B02 + R1-B07. Устранить image/model release blockers, выполнить M08/M09/M22 с существующими M02/M03/M06/M07/M20/M21. При fail сохранить refusal и работать над причиной, не выпускать fixture как candidate.
 3. **CP3 - выпуск и serving:** R1-B04. Закончить цепочку M10-M13/M19 целиком, включая отдельный production configuration path, audit и отзыв. Не создавать новый security slice, если он не нужен одному из этих критериев.
