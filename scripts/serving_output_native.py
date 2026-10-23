@@ -24,6 +24,9 @@ DIAGNOSTIC_MODULES = (
     "mlsecops.release_bundle",
     "mlsecops.release_policy",
     "mlsecops.contracts",
+    "mlsecops.privacy_evidence",
+    "mlsecops.audit_evidence",
+    "mlsecops.audit_snapshot",
 )
 
 
@@ -302,24 +305,30 @@ def run(root, state, image, port):
     except Rejected:
         print(canonical(failure_diagnostic(state, campaign)).decode(), flush=True)
         raise
-    result = observe(envelope, expected)
-    if result["campaign_id"] != campaign:
-        raise Rejected("serving_output_campaign")
-    checked_candidate(
-        canonical(result),
-        expected_source=expected,
-        expected_subject=subject,
-        started_at=started,
-        observed_at=now(),
-    )
-    owned_cases = ("current-private-receipt-admitted", "closed-audit-primary-packet-reverified")
-    if any(name in result["cases"] for name in owned_cases):
-        raise Rejected("serving_output_parent_case_reserved")
-    verify_packet(root, state, expected, campaign, result)
-    if source(root, image) != expected:
-        raise Rejected("serving_output_source_changed")
-    result["cases"].extend(owned_cases)
-    return result
+    try:
+        result = observe(envelope, expected)
+        if result["campaign_id"] != campaign:
+            raise Rejected("serving_output_campaign")
+        checked_candidate(
+            canonical(result),
+            expected_source=expected,
+            expected_subject=subject,
+            started_at=started,
+            observed_at=now(),
+        )
+        owned_cases = ("current-private-receipt-admitted", "closed-audit-primary-packet-reverified")
+        if any(name in result["cases"] for name in owned_cases):
+            raise Rejected("serving_output_parent_case_reserved")
+        verify_packet(root, state, expected, campaign, result)
+        if source(root, image) != expected:
+            raise Rejected("serving_output_source_changed")
+        result["cases"].extend(owned_cases)
+        return result
+    except (Rejected, OSError, ValueError, KeyError, TypeError) as error:
+        diagnostic = failure_diagnostic(state, campaign)
+        diagnostic["locations"] = failure_locations(error)
+        print(canonical(diagnostic).decode(), flush=True)
+        raise
 
 
 def main(arguments=None):

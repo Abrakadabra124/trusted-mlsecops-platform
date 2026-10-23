@@ -231,6 +231,22 @@ class OutputNativeContracts(unittest.TestCase):
             self.assertEqual(output.getvalue(), "")
             self.assertEqual(diagnostic.getvalue(), "serving_output_rejected\n")
 
+    def test_parent_verification_failure_exposes_only_code_locations(self):
+        with (
+            patch.object(native, "source", return_value=expected()),
+            patch.object(native, "verified_subject", return_value=SUBJECT),
+            patch.object(worker_transport, "capture", return_value=evidence_child()),
+            patch.object(probe, "observe", side_effect=Rejected("credential-canary")),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            with self.assertRaises(Rejected):
+                native.run(Path("root"), Path("state"), "image", 15446)
+        self.assertTrue(output.getvalue())
+        report = decode(output.getvalue())
+        self.assertTrue(report["locations"])
+        self.assertNotIn("credential-canary", output.getvalue())
+        self.assertEqual(report["status"], "fail")
+
     def test_non_hosted_environment_is_rejected_before_private_access(self):
         with (
             patch.dict(os.environ, {"RUNNER_ENVIRONMENT": "self-hosted"}),
