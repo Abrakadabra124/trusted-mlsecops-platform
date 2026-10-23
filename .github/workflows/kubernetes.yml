@@ -28,7 +28,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -m unittest scripts.cluster_command_qualification
+          uv run --locked python -m unittest scripts.cluster_command_qualification scripts.storage_egress_qualification
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python scripts/install_ci_tools.py
           echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"

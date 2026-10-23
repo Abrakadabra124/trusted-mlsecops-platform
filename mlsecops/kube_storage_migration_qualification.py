@@ -304,6 +304,7 @@ def qualify(root, state, image):
         "schema_version": 1,
         "status": "pass",
         "scope": "signed-cluster-migration-not-full-M04-M17-M20",
+        "postgres_egress": acl["postgres_egress"],
         "observed_at": now(),
         "source_fingerprint": source_fingerprint(root),
         "release_ready": False,

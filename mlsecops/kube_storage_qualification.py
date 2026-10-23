@@ -4,6 +4,7 @@ import ipaddress
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -16,6 +17,51 @@ from mlsecops.kube_worker import job_document, load_image, pod_spec, verify_runn
 from mlsecops.sandbox import resolve_image
 from mlsecops.storage_bootstrap import IMAGE, export_clients
 from mlsecops.storage_snapshot import ledger_sql, validate_ledger
+
+
+def postgres_egress_denied(state, address):
+    try:
+        target = ipaddress.IPv4Address(address)
+    except (TypeError, ValueError) as error:
+        raise Rejected("storage_dns_probe_target_invalid") from error
+    if target not in ipaddress.ip_network("10.79.0.0/16"):
+        raise Rejected("storage_dns_probe_target_invalid")
+
+    def connect(host, port):
+        return kubectl(
+            state,
+            [
+                "exec",
+                "postgres-0",
+                "-n",
+                NAMESPACE,
+                "-c",
+                "postgres",
+                "--",
+                "bash",
+                "-c",
+                'timeout 3 bash -c \'exec 3<>/dev/tcp/"$1"/"$2"\' probe "$1" "$2"; printf "%s" "$?"',
+                "probe",
+                host,
+                str(port),
+            ],
+            timeout=12,
+        ).stdout
+
+    if connect("127.0.0.1", 5432) != b"0":
+        raise Rejected("storage_egress_probe_positive_control_failed")
+    started = time.monotonic()
+    result = connect(str(target), 53)
+    elapsed = time.monotonic() - started
+    if result != b"124" or elapsed < 3:
+        raise Rejected("storage_egress_probe_timeout_not_proven")
+    return {
+        "positive_control": "connected",
+        "negative_control": "timeout",
+        "timeout_seconds": 3,
+        "elapsed_seconds": round(elapsed, 6),
+        "method": "same-postgres-container-bash-tcp-gnu-timeout",
+    }
 
 
 def probe(state, image, image_id, namespace, identity, action, address=None, port=5432):
@@ -272,24 +318,8 @@ def qualify(root, state, image):
         port=53,
     )
     confirmed("dns-tcp-positive-control", result == {"result": "connected"})
-    result = kubectl(
-        state,
-        [
-            "exec",
-            "postgres-0",
-            "-n",
-            NAMESPACE,
-            "-c",
-            "postgres",
-            "--",
-            "bash",
-            "-c",
-            'timeout 3 bash -c \'exec 3<>/dev/tcp/"$1"/53\' probe "$1"; printf "%s" "$?"',
-            "probe",
-            dns_address,
-        ],
-    )
-    confirmed("postgres-egress-dns-denied", result.stdout == b"124")
+    egress = postgres_egress_denied(state, dns_address)
+    confirmed("postgres-egress-dns-denied", True)
     payload = canonical({"kind": "kubernetes-persistence-probe", "nonce": uuid.uuid4().hex})
     identifier = digest(payload)
     kube_storage.admin(
@@ -341,6 +371,7 @@ def qualify(root, state, image):
         "observed_at": now(),
         "status": "pass",
         "scope": "private-cluster-storage-component-not-M04-or-M20",
+        "postgres_egress": egress,
         "release_ready": False,
         "source_fingerprint": source_fingerprint(root),
         "worker_image": image_id,

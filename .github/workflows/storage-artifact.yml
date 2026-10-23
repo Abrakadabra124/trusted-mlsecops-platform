@@ -35,6 +35,7 @@ jobs:
           uv run --locked python -m scripts.image_suite_qualification
           uv run --locked python -m scripts.storage_image_qualification
           uv run --locked python -m scripts.storage_candidate_qualification
+          uv run --locked python -m unittest scripts.storage_egress_qualification
       - name: Build baseline and isolated pinned candidates
         run: |
           uv run --locked python -m mlsecops build

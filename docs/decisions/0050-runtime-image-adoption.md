@@ -40,6 +40,8 @@ Publisher выполнил authenticated pull/readback и сохранил `publ
 
 ## Почему так
 
+Уточнение 2026-10-23 по native `91aa1b7`/`f9054fc`: четыре adoption workflows проходят, Kubernetes выявил неявные зависимости существующего PostgreSQL egress probe на Bash/GNU timeout. Новый candidate явно фиксирует эти два инструмента и их две дополнительные библиотеки, 60 APK вместо исторических 56. Non-root UID/capabilities/NetworkPolicy не меняются; положительный и отрицательный TCP controls выполняются внутри настоящего PostgreSQL container. Увеличение package surface допустимо только после нового полного audit и публикации; это исправление обязательного executable gate, не универсальный debug image. [Диагностика и порядок принятия](../operations/image-audit-troubleshooting.md#отсутствующая-зависимость-egress-probe).
+
 Сборка PostgreSQL при каждом bootstrap вместо immutable registry reference добавила бы build toolchain и resolver в операционный путь. GHCR позволяет сохранить существующий pull-by-digest контракт. Worker уже собирается из source-bound кода; второй registry lifecycle для него сейчас не нужен.
 
 Публикация не доказывает издателя, подпись модели, независимый review или отсутствие всех CVEs. GitHub runner/admin и pinned Actions остаются доверенными. Не добавляются scanner exceptions, paid services или автоматический promotion.

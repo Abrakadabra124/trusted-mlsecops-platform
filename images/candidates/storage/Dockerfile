@@ -2,8 +2,10 @@ FROM cgr.dev/chainguard/wolfi-base@sha256:81211e15a86ea1d5357f284482af45730c51de
 LABEL org.opencontainers.image.source="https://github.com/Abrakadabra124/trusted-mlsecops-platform"
 RUN apk add --no-cache \
         'apk-tools=2.14.10-r17' \
+        'bash=5.3-r14' \
         'busybox=1.38.0-r3' \
         'ca-certificates-bundle=20260909-r3' \
+        'coreutils=9.12-r4' \
         'cyrus-sasl-heimdal-libs=2.1.28-r58' \
         'ecpg-18=18.6-r5' \
         'gdbm=1.26-r7' \
@@ -15,6 +17,8 @@ RUN apk add --no-cache \
         'krb5-conf=1.0-r10' \
         'krb5-libs=1.22.2-r5' \
         'ld-linux-2.44=2.44-r8' \
+        'libacl1=2.4.0-r4' \
+        'libattr1=2.6.0-r4' \
         'libLLVM=19.1.7-r8' \
         'libbrotlicommon1=1.2.0-r6' \
         'libbrotlidec1=1.2.0-r6' \
@@ -57,7 +61,10 @@ RUN apk add --no-cache \
         'wolfi-keys=1-r13' \
         'xz=5.8.4-r0' \
         'zlib=1.3.2.1_rc20260921-r0' \
-    && test "$(apk info | wc -l)" -eq 56 \
+    && test "$(apk info | wc -l)" -eq 60 \
+    && command -v bash >/dev/null \
+    && test "$(timeout --version | head -n 1)" = 'timeout (GNU coreutils) 9.12' \
+    && (timeout 1 bash -c 'sleep 5'; test "$?" -eq 124) \
     && addgroup -g 999 postgres \
     && adduser -D -H -u 999 -G postgres postgres \
     && test "$(postgres --version)" = 'postgres (PostgreSQL) 18.6' \
