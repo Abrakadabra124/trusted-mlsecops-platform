@@ -1,6 +1,6 @@
 # Сквозной запуск: настоящий candidate и отказ выпуска
 
-Scope: R1-B01, интеграция существующих компонентов. Это воспроизводимый **refusal path**, не завершение R1 и не замена M01-M23. Первый clean-checkout native запуск подтверждён ниже. Разрешённый production release остаётся заблокированным до полной assurance/approval; нельзя подменить её controlled fixtures.
+Scope: R1-B01, интеграция существующих компонентов. Это сквозной **refusal path** с подтверждёнными native проходами и сохранённой историей failures, не завершение R1 и не замена M01-M23. Разрешённый production release остаётся заблокированным до полной assurance/approval; нельзя подменить её controlled fixtures.
 
 ## Что выполняет одна команда
 
@@ -23,7 +23,7 @@ gh run list --repo Abrakadabra124/trusted-mlsecops-platform --workflow r1-walkth
 gh run view <run-id> --repo Abrakadabra124/trusted-mlsecops-platform --json headSha,status,conclusion,url
 ```
 
-Выбрать ID именно своего dispatch и проверить `headSha`, а не считать любой последний зелёный run своим. Успех требует `status=completed`, `conclusion=success`, совпадения `headSha` с `source_revision` итогового отчёта и всех пяти stages pass. Первый подтверждённый commit: `af472f3781cfb4dbd5dfa8cb74cb8f2583d4deea`; текущий `main` не объявляется проверенным автоматически.
+Выбрать ID именно своего dispatch и проверить `headSha`, а не считать любой последний зелёный run своим. Успех требует `status=completed`, `conclusion=success`, совпадения `headSha` с `source_revision` итогового отчёта и всех пяти stages pass. Проверенный runtime commit после accounting fix: `51d0a77fd450aac9879e36a4b4a5d133d50920e2`; текущий `main` не объявляется проверенным автоматически. Reports из unit-test step не являются native evidence: брать итог из шага `Same candidate, real refusal, HTTP observation and independent SQL recovery`.
 
 Сам workflow выполняет одну интеграционную команду после locked install и focused tests:
 
@@ -35,6 +35,10 @@ uv run --locked python -m scripts.r1_walkthrough --confirm-disposable
 Не копировать эту команду на рабочую машину и не выставлять вручную `GITHUB_ACTIONS`/`RUNNER_ENVIRONMENT`, чтобы обойти guard. Environment marker предотвращает ошибочный запуск, но сам по себе не является криптографическим доказательством доверия к runner. Повторный запуск использует новый hosted checkout; при диагностике внутри согласованного runner допустим новый ещё не существующий `--state .runtime/r1-next`. Старое состояние не удалять ради preflight.
 
 ## Подтверждённое исполнение
+
+**После исправления учёта защитных отказов:** [40013427595](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40013427595), commit `51d0a77fd450aac9879e36a4b4a5d133d50920e2`, attempt 1, job `120619317667`, **success**. Native chain: 19:42:16-19:44:32 UTC 2026-10-23, пять stages и 85 serving checks pass. 73 focused tests без skips; privacy checker 34/34 branches, walkthrough 29/30, output observer 51/52. До него diagnostic-only `bad408c` [40011629168](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40011629168) тоже прошёл, поэтому один новый success не используется как доказательство причины каждого прежнего сбоя.
+
+Candidate `691cd0227aef71338b89d99c2d22059aa89fbe28411d0afad85d423510b4f736`, evaluation `15d31cdad54b5b9d7358bf11c00d405b61a8ab295d79783eebce4b9751b808b4`, model SHA-256 `09c48030c2a98d78d74d0a31d4fe18b081e4906abadf5be8a246ec4faa416b8f`. Recovery: source offline, отдельные storage/keys, 1 000 golden rows/error 0.0, restore-to-readback 4.461576 s, идемпотентный повтор и stopped readback обеих БД. Полный M17 RPO/RTO не заявляется. Заключительное воспроизведение замороженного кода ещё требуется.
 
 **Ограничение воспроизведения:** следующий [run 40007993642](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40007993642), commit `72071df3f0311fd65941df9edd823a23a29f8782`, attempt 1, завершился **failure**. Preflight/12 contracts и первые три stages прошли; inference-observation отказал, recovery не запускался, исходная БД остановлена. Причина пока не установлена. Этот отказ нельзя вычеркнуть первым pass или исправлением hosted guard. Новая диагностика читает только существующие private fault traces и печатает фиксированные поля без payload/identifiers; она не ослабляет privacy observer и не разрешает выпуск.
 
@@ -49,7 +53,7 @@ uv run --locked python -m scripts.r1_walkthrough --confirm-disposable
 
 Первый [run 40006074198](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40006074198) на `6f4ea3a` остановился до infrastructure stage из-за Ruff format. Исправление только форматировало contract test; этот failure не скрыт повторным attempt.
 
-После native проверки найден mismatch prerequisites: произвольный Linux проходил начало, но child observer позднее отклонял не-hosted среду. Guard перенесён в ранний preflight; RED подтвердил поздний отказ, затем 12 focused methods pass, 137/138 statements и 29/30 branches (96.67% branches). Проверка этого уточнения на hosted runner относится к финальному воспроизведению, не приписана предыдущему commit.
+После первого native прохода найден mismatch prerequisites: произвольный Linux проходил начало, но child observer позднее отклонял не-hosted среду. Guard перенесён в ранний preflight; RED подтвердил поздний отказ, затем 12 focused methods pass, 137/138 statements и 29/30 branches (96.67% branches). Hosted preflight подтвердили последующие jobs; их inference failures сохраняются отдельно. Это не изменение разрешённых сред и не перенос лаборатории на рабочий компьютер.
 
 Во втором failure summary ошибочно оставалось `release_decision=not-evaluated`, хотя stage уже прошёл. RED воспроизвёл это и код теперь сохраняет `refused` сразу после настоящего admission. Эта поправка делает отчёт точным, но сама по себе не исправляет inference. `release_ready` и `r1_status` не меняются при ошибках.
 
