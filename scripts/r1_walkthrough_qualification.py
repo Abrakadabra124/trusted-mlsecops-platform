@@ -1,4 +1,5 @@
 import copy
+import os
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -120,6 +121,10 @@ class WalkthroughContracts(unittest.TestCase):
             for system, dirty in (("Windows", ""), ("Linux", " M tracked.py")):
                 with (
                     self.subTest(system=system),
+                    patch.dict(
+                        os.environ,
+                        {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted"},
+                    ),
                     patch.object(r1_walkthrough.platform, "system", return_value=system),
                     patch.object(r1_walkthrough.inventory, "command", return_value=dirty),
                     patch.object(r1_walkthrough.bootstrap, "initialize") as initialize,
@@ -128,8 +133,36 @@ class WalkthroughContracts(unittest.TestCase):
                         r1_walkthrough.run(root, root / ".runtime" / "fresh")
                     initialize.assert_not_called()
 
+    def test_non_hosted_runner_stops_before_infrastructure(self):
+        for environment in (
+            {},
+            {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "self-hosted"},
+            {"GITHUB_ACTIONS": "false", "RUNNER_ENVIRONMENT": "github-hosted"},
+        ):
+            with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+                root = Path(directory)
+                stack.enter_context(patch.dict(os.environ, environment, clear=True))
+                stack.enter_context(
+                    patch.object(r1_walkthrough.platform, "system", return_value="Linux")
+                )
+                stack.enter_context(
+                    patch.object(r1_walkthrough.inventory, "command", return_value="")
+                )
+                lock = stack.enter_context(
+                    patch.object(r1_walkthrough.data_source, "validate_lock")
+                )
+                with self.assertRaisesRegex(Rejected, "walkthrough_requires_hosted_runner"):
+                    r1_walkthrough.run(root, root / ".runtime" / "fresh")
+                lock.assert_not_called()
+                self.assertFalse((root / ".runtime").exists())
+
     def exercise_run(self, failure=None):
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            stack.enter_context(
+                patch.dict(
+                    os.environ, {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted"}
+                )
+            )
             root = Path(directory)
             state = root / ".runtime" / "fresh"
 

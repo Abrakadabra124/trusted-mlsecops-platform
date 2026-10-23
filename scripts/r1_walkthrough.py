@@ -1,4 +1,5 @@
 import argparse
+import os
 import platform
 import time
 from pathlib import Path
@@ -160,6 +161,11 @@ def run(root, state):
     state = destination(root, state)
     if platform.system() != "Linux":
         raise Rejected("walkthrough_requires_disposable_linux")
+    if (
+        os.environ.get("GITHUB_ACTIONS") != "true"
+        or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
+    ):
+        raise Rejected("walkthrough_requires_hosted_runner")
     if inventory.command(["git", "-C", str(root), "status", "--porcelain"]):
         raise Rejected("walkthrough_requires_clean_checkout")
     data_source.validate_lock(root)
