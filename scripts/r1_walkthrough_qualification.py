@@ -311,7 +311,9 @@ class WalkthroughContracts(unittest.TestCase):
             patch.object(
                 r1_walkthrough.storage_bootstrap, "validate", side_effect=[source_marker, marker]
             ),
-            patch.object(r1_walkthrough, "stop_owned", side_effect=lambda owned: order.append("stop")),
+            patch.object(
+                r1_walkthrough, "stop_owned", side_effect=lambda owned: order.append("stop")
+            ),
             patch.object(r1_walkthrough.storage_restore, "restore", side_effect=restore),
             patch.object(
                 r1_walkthrough.storage_bootstrap,
