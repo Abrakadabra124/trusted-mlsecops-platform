@@ -149,6 +149,16 @@ class ParentPacketContracts(unittest.TestCase):
             with self.subTest(fault=fault), self.assertRaises(Rejected):
                 self.run_check(report=report, envelope=envelope, public=public)
 
+    def test_agreeing_denial_counts_cannot_replace_the_primary_http_outcome(self):
+        report = copy.deepcopy(self.report)
+        for correlation in (
+            report["runtime"]["http_correlation"],
+            report["runtime"]["audit_evidence"]["correlation"],
+        ):
+            correlation.update(completed_200=0, failed_after_intent=1)
+        with self.assertRaisesRegex(Rejected, "serving_output_packet_binding"):
+            self.run_check(report=report)
+
     def test_mismatched_receipt_and_tampered_retained_bytes_reject(self):
         for field in (*self.subject, "qualification_permit_sha256"):
             report = {**self.report, field: "f" * 64}

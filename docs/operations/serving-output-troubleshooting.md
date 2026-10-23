@@ -51,6 +51,14 @@ uv run --locked python -m scripts.serving_output_native --state .runtime --confi
 
 ## Проверка и rollback
 
+### Сквозной отказ после успешного intent
+
+При разборе повторов найден самостоятельный воспроизводимый integration defect: существующий HTTP/audit контракт разрешает переход `[None, 200, 503, 503]`, если trust/generation изменились после durable success intent, но до отправки ответа. Predictions не выдаются, completed response является 503, private intent остаётся в журнале. `audit_export` и первичный `audit_evidence.verify` корректно принимают такой закрытый журнал; `privacy_evidence` ошибочно требовал `failed_after_intent=0` и равенство числа связанных запросов числу HTTP 200. Поэтому законный защитный отказ мог отклонить всю qualification.
+
+RED создаёт такой первичный packet, проверяет его обычным verifier, затем воспроизводит `privacy_evidence_component` в агрегаторе. Исправление требует точное равенство `completed_200 + failed_after_intent = correlated_requests`, сохраняя минимум **7 успешных** запросов, раздельные without-context totals, четыре события на completed request, zero unresolved/aborted, privacy controls и все source/subject bindings. Denial не считается успешным inference. Parent по-прежнему перечитывает primary packet; даже согласованная подделка обоих summaries отклоняется по реальному HTTP outcome. Это исправление математического контракта, не ослабление M08/M09/M11 или approval policy.
+
+Локально: 72 targeted methods, checker 91/91 statements и 34/34 branches; дополнительный negative parent test и существующий ASGI test проверяют forged counts и настоящий переход intent -> 503 в controlled HTTP harness. Это доказывает дефект и его исправление в контролируемом воспроизведении. Исторические native failures нельзя автоматически приписать ему без их primary traces; новый native checkpoint ещё требуется. M13/R1 и общая reliability acceptance не закрыты.
+
 PB-40 verified на [native 2a70ffc](../evidence/serving-output-2a70ffc-native.md): 82 cases, output observation pass после child exit, stderr=0, 6 canaries; Linux 19 output / 38 privacy methods без skips, probes 100%. Первый failed import run и оба RED privacy bypass сохранены в [истории](../evidence/serving-output-2026-10-19.md). Это не проверка forced-stop восстановления Docker resources и не полная M13-приёмка.
 
 Negative tests должны обнаруживать os.write, cached logger до redirect, handler внутри redirect с поздним atexit, inherited subprocess, незаметный JSON whitespace, overflow и отсутствие observer. Legacy capture mode остаётся совместимым; strict mode включён явно только у нового observer.

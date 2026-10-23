@@ -67,6 +67,8 @@ Unit tests не создают local infra. Linux native проверка дол
 
 ## Разбор review и незакрытые обязательства
 
+Уточнение 2026-10-23: legal HTTP transition `200 intent -> 503 completed` при потере допуска уже поддерживается HTTP layer, audit event schema и primary verifier. Агрегатор исправлен: `completed_200 + failed_after_intent = correlated_requests`, а не прежнее ошибочное `failed_after_intent=0`. Минимум **7 successful HTTP 200** из непересекающихся фаз сохраняется; aborted/unresolved остаются запрещены. Связанный отказ учитывается отдельно, не превращается в успешное предсказание. Exact primary packet/HTTP outcome recheck остаётся обязательным. [RED, negative controls и ограничения](../operations/serving-output-troubleshooting.md#сквозной-отказ-после-успешного-intent). Это не принятие полного M13.
+
 Design review выявил пять actionable пробелов полного gate. Они **не исправлены одним checker**:
 
 - Actual candidate и controlled production-release fixture имеют разные subjects. Нужен явный compositional acceptance contract, либо M13 остаётся inconclusive; нельзя подделывать actual approval при failed ML/image gates.

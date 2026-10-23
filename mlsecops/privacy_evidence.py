@@ -206,8 +206,14 @@ def checked_candidate(content, *, expected_source, expected_subject, started_at,
     _component(
         correlation,
         "candidate-qualification-private-correlation-not-full-M13",
-        {"failed_after_intent": 0},
-        ("events", "correlated_requests", "completed_200", "without_context"),
+        {},
+        (
+            "events",
+            "correlated_requests",
+            "completed_200",
+            "failed_after_intent",
+            "without_context",
+        ),
         schema=True,
     )
     _component(
@@ -226,12 +232,14 @@ def checked_candidate(content, *, expected_source, expected_subject, started_at,
     require_fields(public["routes"], ("predict", "ready"))
     events = _count(correlation["events"], minimum=1)
     correlated = _count(correlation["correlated_requests"], 16384, 7)
+    successful = _count(correlation["completed_200"], 16384, 7)
+    failed = _count(correlation["failed_after_intent"], 16384)
     completed = _count(public["requests"]["completed"], 16384, 15)
     predicted = _count(public["routes"]["predict"], 16384, 13)
     ready = _count(public["routes"]["ready"], 16384, 2)
     if (
         _count(public["events"], minimum=1) != events
-        or _count(correlation["completed_200"], 16384, 1) != correlated
+        or successful + failed != correlated
         or _count(correlation["without_context"], 16384, 8) + correlated != completed
         or _count(public["context_kinds"]["candidate-qualification"], 16384) != correlated
         or _count(public["context_kinds"]["none"], 16384) != completed - correlated

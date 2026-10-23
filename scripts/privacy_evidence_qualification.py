@@ -130,6 +130,64 @@ def check(value, **changes):
 
 
 class PrivacyEvidenceContracts(unittest.TestCase):
+    def test_verified_503_after_success_intent_is_counted_as_failure_not_inference(self):
+        from mlsecops import audit_evidence, audit_export
+        from mlsecops.contracts import decode
+        from scripts import audit_evidence_qualification as primary
+        from scripts.audit_export_qualification import encoded
+
+        manifest, chunks, outcomes, _ = primary.fixture()
+        entries = [decode(line) for line in chunks[0].splitlines()]
+        for entry in entries[2:]:
+            entry["event"].update(status=503, context=None)
+        altered = encoded(entries)
+        saved = decode(manifest)
+        saved["segments"][0].update(size=len(altered), sha256=digest(altered))
+        outcomes[0]["status"] = 503
+        packet = audit_evidence.create(
+            canonical(saved),
+            [altered],
+            outcomes,
+            canonical(audit_export.project([altered])) + b"\n",
+            binding=primary.binding(),
+        )
+        verified = primary.check(packet)
+        self.assertEqual(verified["status"], "pass")
+        self.assertEqual(verified["correlation"]["failed_after_intent"], 1)
+        self.assertEqual(verified["correlation"]["completed_200"], 0)
+        value = fixture()
+        value["runtime"]["http_correlation"].update(
+            correlated_requests=59, completed_200=58, failed_after_intent=1, without_context=25
+        )
+        value["runtime"]["public_audit_window"]["context_kinds"].update(
+            {"candidate-qualification": 59, "none": 25}
+        )
+        result = check(value)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["correlated_requests"], 59)
+        self.assertFalse(result["release_ready"])
+
+    def test_correlated_denials_cannot_hide_missing_successes_or_forge_counts(self):
+        for successful, failed, correlated in (
+            (6, 53, 59),
+            (0, 59, 59),
+            (58, -1, 59),
+            (58, True, 59),
+            (58, 2, 59),
+        ):
+            value = fixture()
+            value["runtime"]["http_correlation"].update(
+                completed_200=successful,
+                failed_after_intent=failed,
+                correlated_requests=correlated,
+                without_context=84 - correlated,
+            )
+            value["runtime"]["public_audit_window"]["context_kinds"].update(
+                {"candidate-qualification": correlated, "none": 84 - correlated}
+            )
+            with self.subTest(successful=successful, failed=failed), self.assertRaises(Rejected):
+                check(value)
+
     def test_private_verifier_summary_does_not_return_report_or_claim_full_M13(self):
         value = fixture()
         result = check(value)
