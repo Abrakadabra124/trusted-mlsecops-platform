@@ -24,7 +24,15 @@ def definition():
     }
 
 
-def design(features, labels, scaler):
+def design(features, labels, scaler, *, linf_budget=None):
+    if linf_budget is None:
+        linf_budget = definition()["linf_budget"]
+    if (
+        type(linf_budget) not in (int, float)
+        or not np.isfinite(linf_budget)
+        or not 0 <= linf_budget <= 1
+    ):
+        raise Rejected("robust_training_budget")
     features, labels = np.asarray(features), np.asarray(labels)
     if (
         features.ndim != 2
@@ -52,9 +60,7 @@ def design(features, labels, scaler):
     standardized = (features - means) / scales
     signed = 2 * labels.astype(np.float64) - 1
     budget = np.zeros(len(FEATURES))
-    budget[[FEATURES.index(name) for name in definition()["mutable_features"]]] = definition()[
-        "linf_budget"
-    ]
+    budget[[FEATURES.index(name) for name in definition()["mutable_features"]]] = linf_budget
     lower, upper = np.minimum(budget, features) / scales, np.minimum(budget, 1 - features) / scales
     positive_cost = np.where(signed[:, None] == 1, lower, upper)
     negative_cost = np.where(signed[:, None] == 1, upper, lower)

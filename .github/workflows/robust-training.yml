@@ -28,7 +28,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked coverage run --data-file=.coverage-robust-training --source=mlsecops.robust_training -m unittest scripts.robust_training_qualification scripts.robust_training_native_qualification
+          uv run --locked coverage run --data-file=.coverage-robust-training --source=mlsecops.robust_training -m unittest scripts.robust_training_qualification scripts.robust_training_native_qualification scripts.noise_training_qualification
           uv run --locked coverage report --data-file=.coverage-robust-training --fail-under=100
       - name: Build source-bound image and owned workspace
         run: |
