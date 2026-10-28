@@ -33,6 +33,10 @@ def qualify():
         "runtime-changed": "rejected",
         "runtime-unsupported-distro": "inconclusive",
         "runtime-high": "fail",
+        "runtime-no-go-module": "rejected",
+        "runtime-no-go-stdlib": "rejected",
+        "runtime-go-database-changed": "rejected",
+        "runtime-go-database-file-changed": "rejected",
         "missing-tracking-image": "inconclusive",
         "bad-tracking-materials": "inconclusive",
         "root-tracking-image": "inconclusive",
@@ -245,6 +249,36 @@ def qualify():
                     if name == "comparison-wolfi-medium":
                         control_match["vulnerability"]["severity"] = "Medium"
                         returncode = 0
+                elif stage in {"go-module-detection-control", "go-stdlib-detection-control"}:
+                    kind = "module" if stage == "go-module-detection-control" else "stdlib"
+                    package, version = (
+                        ("golang.org/x/net", "v0.16.0")
+                        if kind == "module"
+                        else ("stdlib", "go1.20.9")
+                    )
+                    if (
+                        arguments
+                        != [f"pkg:golang/{package}@{version}", "--fail-on", "high", "-o", "json"]
+                        or network
+                        or mounts != [(run / "cache", "/cache", False)]
+                        or image != image_audit.GRYPE_IMAGE
+                    ):
+                        raise AssertionError(
+                            "Go controls require pinned offline scanner and database"
+                        )
+                    control_match = copy.deepcopy(match)
+                    control_match["artifact"].update(
+                        name=package, version=version, type="go-module"
+                    )
+                    control_match["vulnerability"].update(id="GO-2023-2102")
+                    document["matches"] = [] if name == f"runtime-no-go-{kind}" else [control_match]
+                    returncode = 2
+                    if name == "runtime-go-database-changed":
+                        document["descriptor"]["db"]["status"]["built"] = (
+                            datetime.now(UTC) - timedelta(minutes=1)
+                        ).isoformat()
+                    if name == "runtime-go-database-file-changed":
+                        (run / "cache/vulnerability.db").write_bytes(b"changed")
                 else:
                     document["distro"] = (
                         {"name": "debian", "version": "12"}
@@ -356,6 +390,15 @@ def qualify():
                         **({"runtime_state": root} if name.startswith("runtime-") else {}),
                     )
                     outcome = result["status"]
+                    if name.startswith("runtime-"):
+                        controls = result["go_detection_controls"]
+                        if set(controls) != {"module", "stdlib"} or any(
+                            item["status"] != "pass" or item["exit_code"] != 2
+                            for item in controls.values()
+                        ):
+                            raise AssertionError(
+                                "runtime audit requires both independent Go controls"
+                            )
                     if name == "runtime-local-export" and exported.call_count != 1:
                         raise AssertionError("local-only runtime target was not exported")
                     if name == "runtime-known-worker":

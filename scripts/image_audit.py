@@ -27,9 +27,12 @@ from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import image_candidates, image_scope, tracking_spike
 from scripts.image_archive import identity
 from scripts.image_audit_contract import (
+    GO_CONTROL_ADVISORIES,
+    GO_CONTROLS,
     assess,
     database,
     detection_control,
+    go_detection_control,
     inventory,
     observe_packages,
     wolfi_detection_control,
@@ -552,6 +555,35 @@ def audit(root, include_candidates=False, runtime_state=None):
             raise Rejected("image_audit_wolfi_database_changed")
         report["wolfi_detection_control"] = "pass"
         write_json(safe_child(root, REPORT), report)
+    if observed is not None:
+        report["go_detection_controls"] = {}
+        for kind, (package, version) in GO_CONTROLS.items():
+            observation = {"status": "inconclusive", "package": package, "version": version}
+            report["go_detection_controls"][kind] = observation
+            write_json(safe_child(root, REPORT), report)
+            exit_code, control_path = scanner(
+                run,
+                f"go-{kind}-detection-control",
+                GRYPE_IMAGE,
+                [f"pkg:golang/{package}@{version}", "--fail-on", "high", "-o", "json"],
+                [(cache, "/cache", False)],
+            )
+            control = decode(bounded_read(control_path, LIMIT), LIMIT)
+            observation.update(
+                exit_code=exit_code,
+                report_digest=file_hash(control_path),
+                expected_matches=[
+                    {key: match["vulnerability"].get(key) for key in ("id", "severity")}
+                    for match in control.get("matches", [])
+                    if match.get("vulnerability", {}).get("id") in GO_CONTROL_ADVISORIES
+                ],
+            )
+            write_json(safe_child(root, REPORT), report)
+            go_detection_control(control, exit_code, kind)
+            if database(control, datetime.now(UTC)) != control_database:
+                raise Rejected("image_audit_go_database_changed")
+            observation["status"] = "pass"
+            write_json(safe_child(root, REPORT), report)
     for component in report["components"]:
         name = component["name"]
         if name not in sboms:

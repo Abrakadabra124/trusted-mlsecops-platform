@@ -9,6 +9,11 @@ GRYPE_VERSION = "0.120.1"
 SEVERITIES = ("Negligible", "Low", "Medium", "High", "Critical", "Unknown")
 DISTRO_VERSIONS = {"debian": {"12", "13"}, "wolfi": {"20230201"}}
 WOLFI_OS_PACKAGES = {"glibc-2.44", "python-3.12", "postgresql-18"}
+GO_CONTROLS = {
+    "module": ("golang.org/x/net", "v0.16.0"),
+    "stdlib": ("stdlib", "go1.20.9"),
+}
+GO_CONTROL_ADVISORIES = {"GO-2023-2102", "CVE-2023-39325", "GHSA-4374-p667-p6c8"}
 
 
 def observe_packages(sbom, image_id):
@@ -151,6 +156,30 @@ def wolfi_detection_control(report, returncode, timestamp=None):
             raise Rejected("image_audit_wolfi_detection_control_failed")
     except (KeyError, TypeError) as error:
         raise Rejected("image_audit_wolfi_detection_control_failed") from error
+
+
+def go_detection_control(report, returncode, kind, timestamp=None):
+    database(report, timestamp or datetime.now(UTC))
+    try:
+        name, version = GO_CONTROLS[kind]
+        detected = any(
+            match["artifact"]["name"] == name
+            and match["artifact"]["version"] == version
+            and match["artifact"]["type"] == "go-module"
+            and match["vulnerability"]["id"] in GO_CONTROL_ADVISORIES
+            and match["vulnerability"]["severity"] in {"High", "Critical"}
+            for match in report["matches"]
+        )
+        if (
+            type(returncode) is not int
+            or returncode != 2
+            or not detected
+            or report.get("ignoredMatches")
+            or report.get("alertsByPackage")
+        ):
+            raise Rejected("image_audit_go_detection_control_failed")
+    except (KeyError, TypeError) as error:
+        raise Rejected("image_audit_go_detection_control_failed") from error
 
 
 def inventory(sbom, image_id, required_packages, *, distro="debian"):
