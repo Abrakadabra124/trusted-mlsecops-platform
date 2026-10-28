@@ -32,6 +32,8 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 ### Финальная проверка исполнимости приёмки 2026-10-23
 
+Обновление 2026-10-28: M08 получил исполняемый путь на существующем evaluated candidate. [Native run 40747492224](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40747492224) подтвердил 68 checks, 35 scenarios и readback/replay; результат fail из-за 10 robustness violations. Теперь реализован dispatch **10 gates**, placeholder остаётся у **13 gates: M09-M19, M22, M23**. Полной приёмки одного candidate по-прежнему нет; следующие строки сохраняют историческую проверку `21ae473`.
+
 На опубликованном `21ae473` проверены ветки `report()` в [acceptance.py](../mlsecops/acceptance.py) и фактические ответы неподключённых gates. Это проверка готовности runner, не новый native campaign; локальные infrastructure services не запускались.
 
 - Полный dispatch существует для **9 gates: M01-M07, M20, M21**. Это наличие исполняемого пути, не утверждение, что эти gates приняты на текущем общем candidate.

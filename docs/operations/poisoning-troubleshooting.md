@@ -18,6 +18,8 @@ Prerequisites: current source-bound worker, owned workspace/storage, existing `s
 
 ## RB-15: benchmark завершается fail при исправной инфраструктуре
 
+Подтверждённый пример новой интеграции: [40747492224](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40747492224), `518ada6`, 2026-10-28. Подготовка candidate, 35 trainings, 35 predictions, 251-file reconciliation, actual model replay (error 0.0) и повторное SQL чтение выполнены; 10 scenarios нарушили targeted-ASR limit при 5% poisoning. Итог M08 fail / 68 checks корректен, инфраструктурного исключения нет. Остановка owned SQL подтверждена cleanup. Повтор без изменения причины не является remediation; сохранить отказ, обосновать изменение модели/обучения на validation, затем повторить замороженный protocol и независимую assurance. Результат нельзя исправлять правкой JSON либо ослаблением порога.
+
 **Симптом:** все 35 runs выполнены, `execution_status=complete`, но `status=fail` и CLI exit 1. Это может быть правильным отказом security quality policy, а не багом CI.
 
 1. Сначала read-only прочитать summary, исходный protocol digest, source/image и причины scenario decisions. Не переписывать report и не удалять неудачные cases.
