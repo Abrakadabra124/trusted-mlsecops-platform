@@ -2,7 +2,7 @@
 
 ## CP2: интеграция M09 2026-10-29
 
-[Actual-candidate M09](docs/evidence/m09-candidate-2026-10-29.md) реализован и проверен controlled tests: 20 gate/M08 regression methods + 35 format/evasion methods, 146/146 statements и 34/34 branches. Native ещё требуется. Gate использует существующий evaluated SQL candidate, его реальные predictions и повторный readback; standalone baseline не подменяет предмет проверки. Исходный evasion threshold 0.05 сохранён. Dispatch 11 gates реализован, это не 11 passing gates и не M18/R1. T02 image findings, M08/M09 statistical blockers, M22 и CP3-CP5 остаются открытыми.
+[Actual-candidate M09](docs/evidence/m09-candidate-2026-10-29.md) проверен native на `0150f62`, [40780340787](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40780340787): **fail**, 42 cases (41 pass / 1 evasion fail), 18 001 actual predictions, 28 primary files, 3 000 golden rows / max error 2.086162567138672e-07 / 0 label mismatches, replay error 0.0 и 12 abstentions. Recall drop 0.07183673469387755 >0.05; owned SQL cleanup success. До CI прошли 20 gate/M08 regression + 35 format/evasion methods, 146/146 statements и 34/34 branches. Dispatch 11 gates реализован, это не 11 passing gates и не M18/R1. T02 image findings, M08/M09 statistical blockers, M22 и CP3-CP5 остаются открытыми.
 
 ## CP2: наблюдаемые системные пакеты 2026-10-28
 

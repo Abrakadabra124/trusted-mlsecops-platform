@@ -1,6 +1,6 @@
 # R1: границы и конечный маршрут поставки
 
-Обновление 2026-10-29: [M09 actual-candidate integration](evidence/m09-candidate-2026-10-29.md) реализована и проходит controlled tests, native ещё требуется. Dispatch содержит 11 gates M01-M09/M20/M21; остаются 12 M10-M19/M22/M23. Это счётчик реализованных путей, не принятых критериев: system-image и model failures сохраняются, M18 на одном candidate не выполнен. [Node patch experiment](operations/node-candidate.md#native-результат-2026-10-29-мск) уменьшил findings, но candidate не принят.
+Обновление 2026-10-29: [M09 actual-candidate integration](evidence/m09-candidate-2026-10-29.md) проверена native на `0150f62`: 42 cases, 18 001 actual predictions, parity pass, evasion fail 0.07183673469387755 >0.05. Dispatch содержит 11 gates M01-M09/M20/M21; остаются 12 M10-M19/M22/M23. Это счётчик реализованных путей, не принятых критериев: system-image и model failures сохраняются, M18 на одном candidate не выполнен. [Node patch experiment](operations/node-candidate.md#native-результат-2026-10-29-мск) уменьшил findings, но candidate не принят.
 
 Зафиксировано 2026-10-20 по решению владельца. Это порядок завершения существующей цели, не новая цель и не изменение критериев. Источники: [GOAL](../GOAL.md), [STATUS](../STATUS.md), [план](../tasks/plan.md), [задачи](../tasks/todo.md), [M01-M23](acceptance.md), [policy](../policies/local-cpu.json).
 
