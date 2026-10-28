@@ -4,6 +4,18 @@
 
 ## CP2: отсутствующий образ tracking
 
+## CP2: Brotli в закреплённых Wolfi images
+
+2026-10-28, native `22371d8`, [40750705961](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40750705961): worker и storage получили по 3 Critical matches CVE-2026-111497 для `libbrotlicommon1`, `libbrotlidec1`, `libbrotlienc1` версии `1.2.0-r6`; GHSA alias дал ещё 3 Unknown matches. Это находки установленного пакета, не проверка достижимости уязвимого кода и не шесть независимых CVEs. Политика сохраняет refusal.
+
+Источники проверены 2026-10-28: [Wolfi recipe](https://github.com/wolfi-dev/os/blob/main/brotli.yaml) содержит upstream `1.2.1`, epoch `2`; [advisory](https://github.com/advisories/GHSA-9v8h-qqgm-4m35) описывает Brotli decoder issue. Публичный [APK index x86_64](https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz) содержит все три `1.2.1-r2`; SHA-256 полученного архива `56c90c1fd9740197d6c47e035361ed60073e5907133b62713e219897b4dba64f`. Чтение index не заменяет проверку подписи APK при native build и повторный scanner result.
+
+Исправление ограничено девятью pins: основной worker и отдельные worker/storage candidate recipes переходят на `1.2.1-r2`. Остальные packages, base digests, Python lock, модель и thresholds сохраняются. Опубликованный storage digest и действующие volumes пока не меняются: новый storage image сначала должен пройти signed restore, 1 000 golden predictions, package audit и отдельную публикацию с immutable readback.
+
+Плейбук: запустить существующий `image-audit.yml` на точном feature ref в disposable hosted CI; проверить builds, worker compatibility, signed storage restore, все пять components и severity counts. Успех только трёх исправленных images не закрывает baseline storage, tracking и runtime system coverage. Не добавлять scanner ignores. При неуспехе сборки сохранить старый pin как исторический artifact без разрешения release; установить package/ABI/source причину и повторить новый run. Rollback working database не нужен, поскольку rehearsal использует отдельный target. Native результат нового pin фиксируется в STATUS; до него исправление не считается подтверждённым.
+
+## Обязательный tracking image
+
 **Симптом:** прежний успешный worker/storage audit не содержит MLflow, хотя tracking service использует отдельный образ. Причина установлена по списку targets: в нём было только два runtime components. Это пробел покрытия CP2/R1-B02, а не подтверждённая эксплуатация уязвимости.
 
 **Исправление:** policy v2 требует tracking в обычном audit и при candidate comparison. Before-scan identity проверяет recipe digest и non-root USER; после scan проверяются неизменность materials, package coverage и тот же DB snapshot. Оба workflow, вызывающие audit, предварительно строят tracking image. Storage publication verifier принимает только новый полный scope; старый четырёхкомпонентный report не подходит.

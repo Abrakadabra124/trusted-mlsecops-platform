@@ -20,9 +20,9 @@ RUN apk add --no-cache \
         'libacl1=2.4.0-r4' \
         'libattr1=2.6.0-r4' \
         'libLLVM=19.1.7-r8' \
-        'libbrotlicommon1=1.2.0-r6' \
-        'libbrotlidec1=1.2.0-r6' \
-        'libbrotlienc1=1.2.0-r6' \
+        'libbrotlicommon1=1.2.1-r2' \
+        'libbrotlidec1=1.2.1-r2' \
+        'libbrotlienc1=1.2.1-r2' \
         'libcom_err=1.47.4-r3' \
         'libcrypt1-2.44=2.44-r8' \
         'libcrypto3=3.6.5-r5' \

@@ -8,9 +8,9 @@ RUN apk add --no-cache \
         'glibc-2.44=2.44-r8' \
         'glibc-2.44-locale-posix=2.44-r8' \
         'ld-linux-2.44=2.44-r8' \
-        'libbrotlicommon1=1.2.0-r6' \
-        'libbrotlidec1=1.2.0-r6' \
-        'libbrotlienc1=1.2.0-r6' \
+        'libbrotlicommon1=1.2.1-r2' \
+        'libbrotlidec1=1.2.1-r2' \
+        'libbrotlienc1=1.2.1-r2' \
         'libbz2-1=1.0.8-r25' \
         'libcrypt1-2.44=2.44-r8' \
         'libexpat1=2.9.0-r0' \
