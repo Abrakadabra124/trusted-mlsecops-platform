@@ -1,6 +1,6 @@
 # Backlog реализации
 
-T12/CP2 2026-10-29: [balanced training trial](../docs/noise-training-validation.md) выбран по train/validation после отказа v1. Development v2: AP 0.911632, evasion 0.043584, четыре poisoning upper ASR 0.016913; FPR/Brier ухудшились и опубликованы. Подключён настоящий worker и recipe, native M08/M09 на одном candidate ещё требуется. T11/T12/M22, T02 system findings и CP3-CP5 остаются открытыми; validation не закрывает gates.
+T11/T12/CP2 2026-10-29: [native balanced candidate](../docs/noise-training-validation.md#подтверждённый-native-результат-2026-10-29-мск) прошёл **M08/M09 на одном candidate**, `e7d166e`: 35 poisoning scenarios / 0 violations, evasion drop 0.0318367, ONNX parity 2.5172e-07. Paired `2d3e43e` pass на всех трёх fixed probes. Это закрывает прежние measured M08/M09 failures для этого source/candidate, не весь CP2. FPR/Brier regression опубликованы. Далее full main regression, M22, T02 system findings и CP3-CP5; 12 dispatch placeholders сохраняются.
 
 T02 node candidate 2026-10-29: [native build/audit f8a15c4](../docs/operations/node-candidate.md#native-результат-2026-10-29-мск), builder success, audit fail; Critical/High 67/394 -> 61/349. Обновление только Kubernetes недостаточно, candidate не принят. Полный T02 остаётся открытым. Следующая обязательная работа CP2 - T12/M09 actual-candidate binding, формат, parity и frozen evasion без ослабления исходных критериев.
 

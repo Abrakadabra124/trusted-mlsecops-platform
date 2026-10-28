@@ -34,6 +34,43 @@
 
 [Отдельный hosted workflow](../.github/workflows/model-candidate.yml) повторяет validation, создаёт одно evaluated SQL candidate и выполняет полные M08/M09 на его bytes. Проверяются actual ONNX parity, frozen probes, poisoned trainings, primary readback и cleanup. До terminal результатов это **не native pass** и не принятие CP2. M07 полная приёмка, M06, image audit, M22 и CP3-CP5 также остаются обязательными.
 
+### Подтверждённый native результат 2026-10-29 МСК
+
+Исправленный [run 40784079343](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40784079343), job `123152789443`, commit `e7d166e98b28b2a9e2264c079f6efeb0940c1660`, завершился **success**, source_dirty=false. M08 выполнялся 02:00:43-02:05:37 МСК, M09 02:05:37-02:05:57 МСК. Owned SQL остановлен с проверкой `State.Running=false`.
+
+| Проверка | Фактический результат |
+| --- | --- |
+| M08 | **pass**, 68 checks, 35 trainings / 35 predictions, 30 poisoned + 5 controls, 35 nonviolating / 0 violating / 0 inconclusive |
+| M08 primary | 251 files reconciled, actual-candidate replay error 0.0 |
+| M08 thresholds | max upper ASR **0.01535139014528554** <=0.10, max AP drop **0.004749635293563759** <=0.03, min eligible **1 109** >=500 |
+| M09 | **pass**, 42 checks, 18 001 actual-candidate predictions, 28 primary files, 12 outside-support abstentions |
+| M09 parity | 3 000 golden rows, max absolute error **2.5171979389781995e-07** <=1e-5, 0 label mismatches, reference replay 0.0 |
+| M09 evasion | 1 225 positives, clean TP 1 056 -> attacked TP 1 017, recall drop **0.03183673469387755** <=0.05 |
+| Signed evaluation component | Holdout AP **0.9132159424391436**, gain **0.5058826091058103**; 1 000 valid diagnostic bootstrap resamples. Это component evaluation, не вся M07 negative suite |
+
+Общие привязки **обоих gates**:
+
+- Candidate: `9e2a2271b2fe4ad3852c8c1031a3bcbe54a463b3833ea6a4d5c012e52afcb4f4`.
+- Evaluation: `d0f3ffa864eec6a11c26058ff30db47b6e191728e1e7d52c45b7439f26195fa6`.
+- Model: `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`.
+- Image config: `sha256:b5b667b93d15717564a60060199d94a5c51a8c57289e6d95296d84fa02df24e6`.
+- Source fingerprint: `197f845e8fb67b0a92273beb4bad99d70c571c5a13b987bddc4b95ba2c5f9849`.
+- Training input: `09732aa22f7b0a672c790ef63bb25494d7496ca858e70d591e5a1fdbbef8495d`.
+
+Protocol и host_scripts hashes M08/M09 ожидаемо различаются: это разные проверки, а не разные models. Оба report сохраняют release_ready=false. Общая M18 не выполнена, независимые M22 challenges и system-image blockers не сняты.
+
+[Paired v2 run 40784734008](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40784734008), job `123154973738`, commit `2d3e43ed383255dc8212b7823b4fabc3a96dd808`: **success**, 14 actual worker executions, primary reconciliation pass, source_dirty=false. На каждом из трёх прежних наборов кандидат прошёл quality, evasion и AP-loss guard:
+
+| Probe | Candidate AP | AP loss к fresh original | Recall drop |
+| --- | --- | --- | --- |
+| 73041 | 0.9150660733 | 0.0207132911 | 0.0318367347 |
+| 73043 | 0.9159978144 | 0.0192364949 | 0.0232365145 |
+| 73047 | 0.9135283297 | 0.0173413778 | 0.0435153584 |
+
+Три прежних baseline drops 0.07184/0.07386/0.07594 остаются fail. У нового варианта FPR 0.14989-0.16732 против baseline 0.09248-0.10310. Это известные regression probes, несмотря на исторические ключи `new-73043/new-73047`; они не независимые reviewer challenges. Candidate model bytes совпали с M08/M09, но image config другого build `sha256:13dbd148d8216b1f35c7e861fb8d6c40f4f0e0fd522176c2f62d32d9062edc53` и revision отличаются. Эти campaigns нельзя склеить в одну M18-приёмку.
+
+До native прошли 47 numerical/model methods; coverage `noise_training`+`robust_training`: 123/123 statements, 28/28 branches. Gate contracts M08/M09 отдельно: 20 methods pass. Совместный запуск gate tests после format/release tests в одном Python process закономерно получил controller-parser rejection из-за ранее импортированного ONNX; отдельный process, как в CI, прошёл. Проверка boundary не отключалась. Release/evaluation/intake regression methods также прошли, кроме указанного нарушения порядка test isolation; это не покрытие всего проекта.
+
 Ответственный: разработчик модели. Prerequisites: locked Python environment, разрешённая synthetic-only CPU development, сохранённые data.lock и protocol. Команда:
 
 ```text

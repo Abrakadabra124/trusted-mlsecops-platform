@@ -4,7 +4,7 @@
 
 ## Реализация
 
-CP2 candidate trial 2026-10-29: StandardScaler обучается только на train, обычная Logistic Regression (lbfgs/seed 17/max_iter 300) инициализирует bounded-loss refit. [Протокол и validation](noise-training-validation.md): generalized cross entropy q=0.7, balanced weights из train, clipped training box radius 0.10, L-BFGS-B и проверка stationarity. Все шесть входов и threshold 0.5 сохраняются. Native приёмка нового варианта ещё требуется; приведённые ниже исторические числа относятся к прежнему обычному logistic training.
+CP2 candidate 2026-10-29: StandardScaler обучается только на train, обычная Logistic Regression (lbfgs/seed 17/max_iter 300) инициализирует bounded-loss refit. [Протокол, validation и native evidence](noise-training-validation.md): generalized cross entropy q=0.7, balanced weights из train, clipped training box radius 0.10, L-BFGS-B и проверка stationarity. Все шесть входов и threshold 0.5 сохраняются. M08/M09 pass на одном candidate, paired utility/robustness pass на трёх прежних probes; общая M18 не выполнена. Holdout AP нового candidate 0.9132159424/gain 0.5058826091. Числа в историческом разделе ниже относятся к прежнему обычному logistic training.
 
 Экспорт skl2onnx с opset 18, zipmap выключен; ONNX остаётся StandardScaler -> LinearClassifier. Runtime использует ONNX Runtime CPUExecutionProvider и один вычислительный поток. Sigmoid score после balanced bounded-loss fit **не является откалиброванной вероятностью инцидента**. На development validation вырос FPR 0.0977 ->0.1635 и ухудшился Brier 0.0901 ->0.1130; повышение recall не скрывает этот компромисс.
 

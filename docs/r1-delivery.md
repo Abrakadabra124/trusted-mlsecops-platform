@@ -1,5 +1,7 @@
 # R1: границы и конечный маршрут поставки
 
+CP2 update 2026-10-29: [balanced candidate прошёл native M08/M09 на одном subject](noise-training-validation.md#подтверждённый-native-результат-2026-10-29-мск), `e7d166e`: 35 poisoning cases/0 violations и evasion drop 0.0318367. Paired v2 на трёх fixed probes также pass (`2d3e43e`). Прежние statistical blockers устранены для проверенного source/candidate без изменения thresholds. R1-B02 всё ещё открыт из-за system-image findings/coverage и необходимой общей regression; R1-B07/M22 и CP3-CP5 также сохраняются. Это не full R1 и не production promotion. Издержки FPR/Brier и historical failures опубликованы.
+
 Обновление 2026-10-29: [M09 actual-candidate integration](evidence/m09-candidate-2026-10-29.md) проверена native на `0150f62`: 42 cases, 18 001 actual predictions, parity pass, evasion fail 0.07183673469387755 >0.05. Dispatch содержит 11 gates M01-M09/M20/M21; остаются 12 M10-M19/M22/M23. Это счётчик реализованных путей, не принятых критериев: system-image и model failures сохраняются, M18 на одном candidate не выполнен. [Node patch experiment](operations/node-candidate.md#native-результат-2026-10-29-мск) уменьшил findings, но candidate не принят.
 
 Зафиксировано 2026-10-20 по решению владельца. Это порядок завершения существующей цели, не новая цель и не изменение критериев. Источники: [GOAL](../GOAL.md), [STATUS](../STATUS.md), [план](../tasks/plan.md), [задачи](../tasks/todo.md), [M01-M23](acceptance.md), [policy](../policies/local-cpu.json).
