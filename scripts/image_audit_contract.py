@@ -224,19 +224,48 @@ def inventory(sbom, image_id, required_packages, *, distro="debian"):
 
 
 def assess(
-    sbom, report, image_id, required_packages, returncode, timestamp=None, *, distro="debian"
+    sbom,
+    report,
+    image_id,
+    required_packages,
+    returncode,
+    timestamp=None,
+    *,
+    distro="debian",
+    diagnostic_only=False,
 ):
     status = database(report, timestamp or datetime.now(UTC))
-    packages = inventory(sbom, image_id, required_packages, distro=distro)
+    if diagnostic_only:
+        observation = observe_packages(sbom, image_id)
+        if not observation["package_count"]:
+            raise Rejected("image_audit_empty_observation")
+        packages = {package["id"]: package for package in sbom["artifacts"]}
+        declared = observation["distro"] or {}
+        distro = declared.get("id") or None
+        version = declared.get("versionID") or None
+        versions = {version}
+        if distro == "debian" and version:
+            versions.add(version.split(".")[0])
+    else:
+        packages = inventory(sbom, image_id, required_packages, distro=distro)
+        versions = {sbom["distro"]["versionID"], sbom["distro"]["versionID"].split(".")[0]}
     try:
+        observed_distro = report.get("distro")
+        if observed_distro is None and diagnostic_only:
+            observed_distro = {}
+        if not isinstance(observed_distro, dict):
+            raise Rejected("image_audit_binding_or_coverage_invalid")
+        name, version = observed_distro.get("name"), observed_distro.get("version")
+        if diagnostic_only:
+            name = None if name == "" else name
+            version = None if version == "" else version
         if (
             type(returncode) is not int
             or returncode not in (0, 2)
             or report["source"]["type"] != "image"
             or report["source"]["target"]["imageID"] != image_id
-            or report["distro"]["name"] != distro
-            or report["distro"]["version"]
-            not in {sbom["distro"]["versionID"], sbom["distro"]["versionID"].split(".")[0]}
+            or name != distro
+            or version not in versions
             or report.get("ignoredMatches")
             or report.get("alertsByPackage")
             or not isinstance(report["matches"], list)
@@ -272,7 +301,12 @@ def assess(
         if returncode != (2 if blocked else 0):
             raise Rejected("image_audit_exit_report_disagreement")
         return {
-            "status": "fail" if blocked else "inconclusive" if counts["Unknown"] else "pass",
+            "status": "fail"
+            if blocked
+            else "inconclusive"
+            if counts["Unknown"] or diagnostic_only
+            else "pass",
+            "diagnostic_only": diagnostic_only,
             "image_id": image_id,
             "distro": distro,
             "packages": len(packages),

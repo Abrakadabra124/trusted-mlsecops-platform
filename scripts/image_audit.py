@@ -325,8 +325,6 @@ def audit(root, include_candidates=False, runtime_state=None):
         ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
         ("debian", "storage"): {"libc6", "postgresql-18"},
         ("debian", "tracking"): {"libc6", "mlflow", "mlflow-skinny", "psycopg", "uvicorn"},
-        ("debian", "system"): {"libc6"},
-        ("wolfi", "system"): {"glibc-2.44"},
         ("wolfi", "worker"): {
             "glibc-2.44",
             "python-3.12",
@@ -461,20 +459,23 @@ def audit(root, include_candidates=False, runtime_state=None):
                 declared = sbom.get("distro")
                 distro = declared.get("id") if isinstance(declared, dict) else None
                 component["distro"] = distro
-                if (distro, role) not in required:
-                    raise Rejected("image_audit_runtime_distro_unsupported")
                 if expected_distro is not None and distro != expected_distro:
                     raise Rejected("image_audit_runtime_distro_mismatch")
-            packages = inventory(
-                sbom,
-                config_id,
-                required[(distro, component["coverage_profile"])]
-                if component["coverage_profile"] != "unapproved-system"
-                else required[(distro, role)],
-                distro=distro,
-            )
+            diagnostic = component["coverage_profile"] == "unapproved-system"
+            if diagnostic:
+                packages = sbom["artifacts"]
+                if not packages:
+                    raise Rejected("image_audit_empty_observation")
+            else:
+                packages = inventory(
+                    sbom,
+                    config_id,
+                    required[(distro, component["coverage_profile"])],
+                    distro=distro,
+                )
             component["catalogued_packages"] = len(packages)
-            component["sbom_validated"] = True
+            component["package_binding_validated"] = True
+            component["sbom_validated"] = not diagnostic
             sboms[name] = path
             component["sbom_digest"] = file_hash(path)
         except Rejected as error:
@@ -603,9 +604,10 @@ def audit(root, include_candidates=False, runtime_state=None):
                 component["image_config_id"],
                 required[(component["distro"], component["coverage_profile"])]
                 if component["coverage_profile"] != "unapproved-system"
-                else required[(component["distro"], component["role"])],
+                else set(),
                 exit_code,
                 distro=component["distro"],
+                diagnostic_only=component["coverage_profile"] == "unapproved-system",
             )
             if (
                 result["database"] != control_database

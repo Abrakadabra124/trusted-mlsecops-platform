@@ -37,6 +37,11 @@ def qualify():
         "runtime-no-go-stdlib": "rejected",
         "runtime-go-database-changed": "rejected",
         "runtime-go-database-file-changed": "rejected",
+        "runtime-minimal-debian": "inconclusive",
+        "runtime-minimal-high": "fail",
+        "runtime-ubuntu": "inconclusive",
+        "runtime-go-only": "inconclusive",
+        "runtime-empty-observation": "inconclusive",
         "missing-tracking-image": "inconclusive",
         "bad-tracking-materials": "inconclusive",
         "root-tracking-image": "inconclusive",
@@ -213,6 +218,31 @@ def qualify():
                         document["distro"] = {"id": "debian", "versionID": "13"}
                     if name == "empty-sbom":
                         document["artifacts"] = []
+                    if stage == "runtime-000-sbom" and name == "runtime-empty-observation":
+                        document["artifacts"] = []
+                    if stage == "runtime-000-sbom" and name in {
+                        "runtime-minimal-debian",
+                        "runtime-minimal-high",
+                        "runtime-ubuntu",
+                        "runtime-go-only",
+                    }:
+                        document["distro"] = (
+                            {}
+                            if name == "runtime-go-only"
+                            else {"id": "ubuntu", "versionID": "26.04"}
+                            if name == "runtime-ubuntu"
+                            else {"id": "debian", "versionID": "12.14"}
+                        )
+                        document["artifacts"] = [
+                            {
+                                "id": "app",
+                                "name": "example.org/app",
+                                "version": "v1.0.0",
+                                "type": "go-module",
+                                "foundBy": "go-module-binary-cataloger",
+                                "locations": [{"path": "/app"}],
+                            }
+                        ]
                     if name == "syft-crash":
                         returncode = 1
                 elif stage == "db-update":
@@ -324,6 +354,28 @@ def qualify():
                     if stage == "runtime-000-scan" and name == "runtime-high":
                         document["matches"] = [copy.deepcopy(match)]
                         returncode = 2
+                    if stage == "runtime-000-scan" and name in {
+                        "runtime-minimal-debian",
+                        "runtime-minimal-high",
+                        "runtime-ubuntu",
+                        "runtime-go-only",
+                    }:
+                        document["distro"] = (
+                            None
+                            if name == "runtime-go-only"
+                            else {"name": "ubuntu", "version": "26.04"}
+                            if name == "runtime-ubuntu"
+                            else {"name": "debian", "version": "12"}
+                        )
+                        if name == "runtime-minimal-high":
+                            finding = copy.deepcopy(match)
+                            finding["artifact"] = {
+                                "id": "app",
+                                "name": "example.org/app",
+                                "version": "v1.0.0",
+                                "type": "go-module",
+                            }
+                            document["matches"], returncode = [finding], 2
                 write_json(path, document)
                 return returncode, path
 
@@ -401,6 +453,36 @@ def qualify():
                             )
                     if name == "runtime-local-export" and exported.call_count != 1:
                         raise AssertionError("local-only runtime target was not exported")
+                    if name == "runtime-empty-observation":
+                        component = next(
+                            c for c in result["components"] if c["name"] == "runtime-000"
+                        )
+                        if (
+                            component["scan_executed"]
+                            or component["reason"] != "image_audit_empty_observation"
+                        ):
+                            raise AssertionError(
+                                "empty inventory must not become a diagnostic scan"
+                            )
+                    if name in {
+                        "runtime-minimal-debian",
+                        "runtime-minimal-high",
+                        "runtime-ubuntu",
+                        "runtime-go-only",
+                    }:
+                        component = next(
+                            c for c in result["components"] if c["name"] == "runtime-000"
+                        )
+                        if (
+                            component.get("scan_executed") is not True
+                            or component.get("diagnostic_only") is not True
+                            or component["sbom_validated"] is not False
+                            or component["package_binding_validated"] is not True
+                            or result["runtime_scope"]["covered_images"] != 0
+                        ):
+                            raise AssertionError(
+                                "diagnostic scan must retain findings without approving coverage"
+                            )
                     if name == "runtime-known-worker":
                         if (
                             result["runtime_scope"]["status"] != "pass"

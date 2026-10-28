@@ -2,7 +2,7 @@
 
 ## CP2: наблюдаемые системные пакеты 2026-10-28
 
-Обновление: [Cilium regression ced7ea0 и parser d3c54a2](docs/evidence/cp2-system-images-2026-10-28.md) проверены native. M01/M04/M05/M21 pass; observation теперь **14/14**, но approved application coverage по-прежнему **4/14**, audit fail. Добавлены отдельные Go module/stdlib detection controls: 192 audit cases + 8 unittest methods pass локально; native проверка controls ещё требуется. Полный CP2/R1 не принят.
+Обновление: [Cilium regression ced7ea0, parser d3c54a2 и Go controls f12476c](docs/evidence/cp2-system-images-2026-10-28.md) проверены native. M01/M04/M05/M21 pass; observations **14/14**, approved application coverage **4/14**, audit fail. Оба Go controls реально обнаружили ожидаемый High advisory и вернули exit 2. Подключён диагностический scan неподтверждённых system inventories без права pass: **197 audit cases + 12 unittest methods pass**, contract **130/130 statements, 50/50 branches**. Native проверка diagnostic path ещё требуется. Полный CP2/R1 не принят.
 
 [Native 3393480 и полная main-матрица aaae245](docs/evidence/cp2-system-images-2026-10-28.md): main **7 success / 3 failure**, M08 и обе robustness campaigns сохраняют отказ. Observed audit **4/14 coverage**, состав доступен для 13 targets; обнаружены конкретные kube-proxy/kind findings, минимальные Go images и unresolved module versions. Optional-distro parser исправлен с RED/GREEN, 188 audit cases и 6 observation tests pass, contract 98/98 statements и 36/36 branches. Cilium security patch 1.20.4 закреплён на `ced7ea0`; native regression ещё ожидается. Это продвижение обязательного R1-B02, не закрытие T02/CP2/R1.
 
