@@ -41,7 +41,11 @@
 
 Commit `ced7ea067487f21523adac72c632e04a5fbdba37` закрепляет **1.20.4**, сохраняя сетевую политику и resource limits. Chart hash проверен против upstream index, image digests против release notes. [Причина и точные pins](../operations/image-audit-troubleshooting.md#cp2-security-patch-cilium-1204). Локально 33 проверки cluster command, storage egress, foundation и observation прошли.
 
-Native regression запущена отдельно: [Kubernetes 40762255437](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40762255437) и [observed audit 40762260195](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40762260195). Оба результата пока ожидаются; run 3393480 выше относится к прежней Cilium 1.20.2 и не доказывает качество нового pin.
+[Observed audit 40762260195](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40762260195) на `ced7ea0` завершён: **fail**, coverage **4/14**. Фактический agent reference совпал с новым pin `quay.io/cilium/cilium@sha256:20fe92e4c86641233a450098c158d2d29085f3419931ab6bf681d2485dedf16e`, config `sha256:1320017dd0b611d024c18a7e2f59a0378221a9bb840b16f35f159ecbb03d5c8a`. SBOM наблюдает `github.com/cilium/cilium v1.20.4` в `/usr/bin/cilium-agent` и Go `1.26.10`. Это доказывает фактическую смену bytes/runtime, но Ubuntu application coverage ещё не принят. Worker/storage/tracking сохраняют 0 Critical/High/Unknown. Новый config `1fb303f6...` также не прошёл прежний optional-distro parser.
+
+Полная [Kubernetes regression 40762255437](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40762255437) ещё выполняется. Исправление parser `d3c54a2` отдельно проверяется в [40763471155](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40763471155); native результат пока ожидается. Run 3393480 выше относится к прежней Cilium 1.20.2.
+
+У kube-proxy/kind основной вклад в High/Critical дают Go stdlib/modules и OS packages. [Kubernetes 1.36.6](https://github.com/kubernetes/kubernetes/releases/tag/v1.36.6) существует, но запрос anonymous Docker Registry `kindest/node:v1.36.6` на 2026-10-28 вернул HTTP 404. [kind 0.33.0](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0) публикует предсобранный 1.36.4. Поэтому простая смена строки version не является готовым исправлением: требуется проверенная сборка node/base либо новый официальный artifact с функциональной regression и полным audit. Текущий node pin не менялся.
 
 ## Main checkpoint aaae245
 
