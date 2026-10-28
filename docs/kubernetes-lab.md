@@ -8,6 +8,8 @@ Kubernetes управляет Jobs и их завершением, ServiceAccoun
 
 ## Запуск
 
+Текущий chart pin: Cilium **1.20.4**, SHA-256 `505abff8385811df1a949776fc42e9f10697989a332acc86d6e8933efcb855ed`. Это security patch внутри прежней minor-ветки; [причина, проверка и восстановление](operations/image-audit-troubleshooting.md#cp2-security-patch-cilium-1204). Исторические проверки 1.20.2 ниже не являются проверкой нового image. Native regression нового pin ещё ожидается.
+
 Нужны kind 0.33.0, Helm 4.2.4, kubectl 1.36.x, Linux x86_64 Docker Engine, Git и uv. Docker capacity: >=4 CPU/15 GiB RAM, свободный диск >=12 GiB. Проверяйте доступную RAM с учётом других контейнеров, а не только total. CIDR 10.78.0.0/16 и 10.79.0.0/16 должны быть свободны. Собственный node ограничен 12 GiB/4 CPU; namespace memory quotas суммарно 6.5 GiB, остальное оставлено системным компонентам. Kind может показывать kubelet память всей VM, поэтому одного node cgroup недостаточно.
 
 ```bash

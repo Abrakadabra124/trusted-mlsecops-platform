@@ -170,6 +170,23 @@ gh api repos/Abrakadabra124/trusted-mlsecops-platform/actions/jobs/114506519932/
 
 Команда проверена с gh 2.98.0. Флаг разрешает сохранение содержащих управляющие символы bytes в файл, а не отключает TLS/auth. Raw log не добавлять в Git. Для нового run сначала получить его job ID, не переносить исторические counts на текущий image.
 
+## CP2: security patch Cilium 1.20.4
+
+Основание: [официальный выпуск 1.20.4 от 2026-10-23](https://github.com/cilium/cilium/releases/tag/v1.20.4) устраняет CVE-2026-111943 обновлением Go до 1.26.10 и обновляет зависимости. Прежний pin 1.20.2 не включает этот security patch. Это устранение установленной зависимости, не утверждение, что все scanner findings или CP2 закрыты.
+
+Оператор CP2 проверил SHA-256 скачанного chart против [официального Helm index](https://helm.cilium.io/index.yaml): `505abff8385811df1a949776fc42e9f10697989a332acc86d6e8933efcb855ed`; Chart.yaml version/appVersion равны 1.20.4. Содержимое архива проверялось без извлечения и исполнения. В values.yaml включён `useDigest`: agent `sha256:20fe92e4c86641233a450098c158d2d29085f3419931ab6bf681d2485dedf16e`, operator-generic `sha256:7a7a3489dc66ad67e420d285c8a8d2e169b0957ad15e120f593d27081bf38d82`. Оба digest совпадают с release notes. HTTPS и сверка hash подтверждают совпадение источников; независимая проверка подписи chart не заявляется.
+
+Изменение затрагивает только version/hash в [bootstrap](../../mlsecops/cluster.py). NetworkPolicy, resource limits, namespace identities и остальные версии сохраняются. Рабочий Windows runtime не обновлять. Проверка разрешена только в новом disposable hosted checkout:
+
+```text
+gh workflow run kubernetes.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp2-system-inventory
+gh workflow run runtime-image-audit.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp2-system-inventory
+```
+
+Перед запуском убедиться, что remote SHA соответствует проверяемому commit; сохранить оба run ID. Первый workflow должен подтвердить два bootstrap, Jobs, SQL/TLS и isolation denials с positive controls. Второй должен наблюдать фактические agent/operator digest, проверить неизменность inventory и просканировать те же bytes. Не выдавать успешную установку chart за устранение всех CVE. Сейчас native regression этого pin ещё ожидается.
+
+При несовпадении chart hash ожидается отказ bootstrap. Не заменять digest на значение из неожиданного ответа и не отключать TLS. При regression сохранить очищенную причину и остановить adoption. Для воспроизведения прежнего поведения использовать отдельный checkout предыдущего commit и новый disposable runner; не делать автоматический downgrade живого кластера. Удалять только созданный и проверенный owned cluster через cleanup workflow. Возврат к старой версии сохраняет её security blocker и запрещает утверждать готовность release.
+
 ## CP2: сверка фактических образов
 
 Симптом при расширении scope: прежние три scans ничего не доказывали о реально загруженных system/controller images. Исправление: read-only inventory, manifest/config reconciliation, дополнительное сканирование и повторный inventory после него. Controlled проверки воспроизводят ошибочные ownership, config/distro/source bindings, смену состава, отсутствующий image и неоднозначный digest. Реальный production-инцидент этим не заявляется.
