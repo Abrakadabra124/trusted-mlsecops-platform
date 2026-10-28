@@ -205,6 +205,18 @@ class RuntimeImageScopeContracts(unittest.TestCase):
             with self.assertRaises(Rejected):
                 self.collect()
 
+    def test_cri_failure_distinguishes_missing_references_from_identity_mismatch(self):
+        for status, reason in (
+            ({"id": sha("9"), "repoDigests": []}, "config_mismatch"),
+            ({"id": sha("5"), "repoDigests": None}, "references_invalid"),
+            ({"id": sha("5"), "repoDigests": ["x"] * 17}, "references_invalid"),
+            ({"id": sha("5"), "repoDigests": []}, "references_missing"),
+        ):
+            with self.subTest(reason=reason):
+                self.cri = {"status": status}
+                with self.assertRaisesRegex(Rejected, "image_scope_cri_" + reason + "$"):
+                    self.collect()
+
     def test_refuses_duplicate_or_unbounded_container_inventory(self):
         for value in (
             self.listed + "\n" + self.listed,

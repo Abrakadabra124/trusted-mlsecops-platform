@@ -177,12 +177,12 @@ def _collect(root, state):
             ).encode()
         )["status"]
         references = status["repoDigests"]
-        if (
-            status["id"] != config
-            or not isinstance(references, list)
-            or not 1 <= len(references) <= 16
-        ):
-            raise Rejected("image_scope_cri_identity_invalid")
+        if status["id"] != config:
+            raise Rejected("image_scope_cri_config_mismatch")
+        if not isinstance(references, list) or len(references) > 16:
+            raise Rejected("image_scope_cri_references_invalid")
+        if not references:
+            raise Rejected("image_scope_cri_references_missing")
         reference = min(registry_reference(value) for value in references)
         if observe("pod-manifest-config", image_config, reference.split("@", 1)[1]) != config:
             raise Rejected("image_scope_cri_manifest_mismatch")
