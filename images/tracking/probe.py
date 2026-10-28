@@ -36,7 +36,7 @@ def stop(process):
 
 
 def qualify(records):
-    if mlflow.__version__ != "3.17.0" or not isinstance(records, list) or len(records) != 3:
+    if mlflow.__version__ != "3.17.2" or not isinstance(records, list) or len(records) != 3:
         raise ProbeFailure("tracking_probe_input_or_version_invalid")
     passwords = {
         name: secrets.token_urlsafe(32) for name in ("admin", "publisher", "reader", "foreign")

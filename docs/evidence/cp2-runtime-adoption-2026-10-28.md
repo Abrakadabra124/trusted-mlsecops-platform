@@ -37,3 +37,7 @@ Primary sources: [filelock 4.2.1](https://github.com/tox-dev/filelock/releases/t
 Audit ожидает Wolfi и проверяет наличие glibc, Python, mlflow, mlflow-skinny, mlflow-tracing, psycopg и uvicorn. OS-only inventory, отсутствие tracing и чужой distro не засчитываются. Existing High/Unknown, scanner crash, wrong image/materials и detection-control negative cases сохранены. Controlled RED подтвердил, что старый Debian profile не принимает новый tracking recipe; native build, auth/TLS/publication и full image scan ещё требуют завершённого hosted запуска.
 
 M08 уже имеет фактический отказ на candidate, полный runtime inventory всё ещё непокрыт, M09/M22 и CP3-CP5 не приняты. Ни один результат этой страницы не закрывает эти blockers.
+
+## Первый adoption checkpoint
+
+Commit `1dc1f055d25b7b8a6c98882d0761f86d638b54de`: controlled audit 188 cases pass, 451/458 statements и 153/156 branches; source/docs/format checks pass. [Developer 40757080941](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757080941) success. [Tracking 40757092245](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757092245) failure после успешной сборки: probe и host readback сохранили прежний exact-version 3.17.0. Они исправлены на 3.17.2 без ослабления проверки; [диагностика и предотвращение повторения](../operations/tracking-troubleshooting.md#cp2-dependency-audit-остановил-сборку). Остальные native outcomes записываются после завершения, не выводятся из resolver/build success.

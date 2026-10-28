@@ -150,7 +150,7 @@ def qualify(root, worker_image):
         if (
             report.get("release_ready") is not False
             or report.get("scope") != "mlflow-offline-auth-sqlite-spike-not-T08-M06"
-            or report.get("version") != "3.17.0"
+            or report.get("version") != "3.17.2"
             or report.get("record_digests") != [digest(canonical(record)) for record in records]
             or len(set(report["tracking_run_ids"])) != 3
             or report["checks"] < 53
