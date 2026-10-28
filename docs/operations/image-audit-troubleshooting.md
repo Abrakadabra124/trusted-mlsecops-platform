@@ -165,6 +165,8 @@ gh run list --repo Abrakadabra124/trusted-mlsecops-platform --workflow runtime-i
 
 Команды требуют действующей CLI-авторизации; наличие подключения GitHub в Codex её не заменяет. Зафиксировать конкретный run ID/head SHA и наблюдать тот же run, не повторять запуск из-за timeout интерфейса. Не открывать PR только ради запуска: он запустит общую regression matrix.
 
+Проверенный отказ публикации после переноса Windows: `create_tree` через connector дал 403 `Resource not accessible by integration`, хотя repository metadata показывала account push/admin permissions. Это разные полномочия: права пользователя не доказывают права конкретной интеграции. `gh auth status` также подтвердил отсутствие CLI-входа, браузер показал Sign in. Владелец восстанавливает обычный вход `gh auth login --hostname github.com --git-protocol https --web` либо разрешения подключения для этого репозитория. Не извлекать старые tokens из Windows credential store и не включать их в команды, Git или логи. После входа проверить account identity, затем обычный non-force push в выделенную ветку, remote head и конкретный workflow run. Пока write-операция не прошла, успешное чтение профиля не считать восстановленной публикацией.
+
 Workflow выполняет bootstrap, build worker/tracking, cluster, private storage, scoped controllers, tracking service, затем `python -m scripts.image_audit --runtime-state .runtime`. Это интеграция существующих компонентов без migration рабочего volume. Expected summary: scope `observed-runtime-image-audit-only`, source revision текущего checkout, runtime_scope с expected/covered counts. `release_ready` всегда false.
 
 Ветви диагностики:
