@@ -32,7 +32,7 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-poisoning --fail-under=95
           uv run --locked coverage run --data-file=.coverage-poisoning-evidence --source=scripts.poisoning_evidence -m unittest scripts.poisoning_evidence_qualification
           uv run --locked coverage report --data-file=.coverage-poisoning-evidence --fail-under=95
-          uv run --locked coverage run --branch --data-file=.coverage-poisoning-gate --source=mlsecops.poisoning_gate,scripts.poisoning_contracts -m unittest scripts.poisoning_gate_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-poisoning-gate --source=mlsecops.poisoning_gate,mlsecops.candidate_subject,scripts.poisoning_contracts -m unittest scripts.poisoning_gate_qualification
           uv run --locked coverage report --data-file=.coverage-poisoning-gate --fail-under=95
           uv run --locked coverage json --data-file=.coverage-poisoning-gate -o .coverage-poisoning-gate.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-poisoning-gate.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"

@@ -52,6 +52,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 ## M09
 **Безопасный формат, parity, ограниченная устойчивость.** Python/ONNX probability max absolute error <= `1e-5` на >= 1 000 golden cases, совпадение label для случаев вне epsilon-зоны decision threshold. Forbidden pickle/custom operator/external path/oversized graph fixtures отвергаются до load. Evasion suite: только разрешённые признаки и заданный бюджет; падение recall <= 0.05 на заранее утверждённых probes, OOD fixtures приводят к abstain. Отчёт перечисляет непокрытые атаки. T12.
 
+Исполняемая интеграция: [actual-candidate M09](robustness-protocol.md#исполняемый-m09-для-существующего-кандидата), [evidence](evidence/m09-candidate-2026-10-29.md). Controlled tests не заменяют native приёмку и не снимают threshold failure.
+
 ## M10
 **Комплект и promotion policy.** Все обязательные digests связаны, signature/identity/issuer policy проверяются до promotion; approval связан с environment и policy. Negative: чужой signer, отсутствующий report, mismatched subject, alias swap, self-approval trainer, неизвестная schema и повтор в другом environment отклоняются. Повтор разрешённого promotion идемпотентен. Evidence: positive/negative matrix и state transitions. T13.
 

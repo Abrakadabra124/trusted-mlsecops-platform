@@ -288,7 +288,7 @@ def report(gate, profile, root, state=None):
             if isinstance(error, ClaimFailure):
                 result["diagnostics"] = {"holdout_concurrency": error.diagnostics}
         result["finished_at"] = now()
-    elif gate == "M08":
+    elif gate in {"M08", "M09"}:
         if not all(
             (state / name).is_file()
             for name in (
@@ -300,10 +300,17 @@ def report(gate, profile, root, state=None):
             )
         ):
             result["residual_risks"] = [
-                "M08 requires an existing evaluated candidate in owned storage"
+                f"{gate} requires an existing evaluated candidate in owned storage"
             ]
             return result
-        from mlsecops.poisoning_gate import qualify
+        if gate == "M08":
+            from mlsecops.poisoning_gate import qualify
+
+            name = "poisoning"
+        else:
+            from mlsecops.robustness_gate import qualify
+
+            name = "robustness"
 
         try:
             evidence = qualify(root, state)
@@ -316,7 +323,7 @@ def report(gate, profile, root, state=None):
                 residual_risks=evidence["limitations"],
                 artifact_hashes={
                     **evidence["artifact_hashes"],
-                    "poisoning_gate": digest(bounded_read(state / "evidence/poisoning-gate.json")),
+                    f"{name}_gate": digest(bounded_read(state / f"evidence/{name}-gate.json")),
                 },
             )
             result["input_digests"].update(evidence["input_digests"])
@@ -337,7 +344,7 @@ def report(gate, profile, root, state=None):
                 status="inconclusive" if unavailable else "fail",
                 exit_code=2 if unavailable else 1,
                 residual_risks=[
-                    str(error) if isinstance(error, Rejected) else "M08 runtime unavailable"
+                    str(error) if isinstance(error, Rejected) else f"{gate} runtime unavailable"
                 ],
             )
         result["finished_at"] = now()

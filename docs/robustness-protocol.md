@@ -13,6 +13,16 @@
 - Clean/attacked recall на одном полном наборе positives, threshold=0.5; допустимое падение <=0.05 по M09. Минимум 200 positives и ровно 3 000 probes. Ни abstain, ни потерянные ответы не исключают строки из знаменателя ради pass. Неверный protocol - reject, недостаточная выборка - inconclusive, нарушение порога - fail.
 - Четыре corners покрывают экстремумы выбранных двух координат для текущей монотонной линейной модели. Это не общая стратегия для нелинейных моделей, categorical features или другого attacker budget.
 
+## Исполняемый M09 для существующего кандидата
+
+С 2026-10-29 [gate](../mlsecops/robustness_gate.py) подключён к `mlsecops.acceptance --gate M09`. Он требует уже evaluated candidate в owned storage и текущий source-bound image. Общий [candidate reader](../mlsecops/candidate_subject.py), используемый также M08, проверяет подписанную lineage, policy, identities, source/image, dataset/run/model digests и повторное SQL чтение.
+
+Контрактные fixtures безопасного формата выполняются отдельным Python subprocess: реальные ONNX bytes, forbidden pickle, custom domain/operator, external tensor path, oversized/extra graph и guard до вызова runtime constructor. Проверяются точные 35 case IDs и отсутствие skips; controller получает только итог, без импорта ONNX parser. Это controlled проверка настоящего parser, не доказательство невозможности любых parser exploits.
+
+Далее fresh reference campaign повторяет исходный training request на закреплённых train/validation и frozen probes. M09 перечитывает 28 primary files, проверяет train/validation/probes и exact training request против текущих материалов. Отдельный prediction worker получает **bytes существующего candidate**: 3 000 golden cases + 3 000 clean probes + 4 x 3 000 corners. В отчёт входят actual-candidate Python/ONNX parity, label equality вне epsilon-зоны, replay против reference, заново выбранные adversarial scores и recall drop. Model digest reference явно отделён от model_digest кандидата.
+
+12 outside-support fixtures должны abstain без вызова predictor; mixed batch проверяет позиции и одно фактическое предсказание. Повторный subject/source/material readback завершает проверку. Proof request/response остаётся в `.runtime`; публично выводятся aggregates, case outcomes и digests. **Native проверка нового gate ещё требуется**; реализация dispatch не означает passing M09. Порог recall drop <=0.05, frozen probes и остальные M01-M23 не изменены. [Evidence](evidence/m09-candidate-2026-10-29.md), [ранбук](operations/robustness-troubleshooting.md#исполняемый-m09-на-текущем-candidate).
+
 ## Контракт abstain для будущего serving
 
 Не более 100 строк по шесть конечных чисел. Ошибка shape/type, bool, NaN/Inf или переполнение - reject до исполнения. Конечная строка вне известного synthetic support [0,1]^6 получает `abstain`, `score=null`, `reason=outside-support`, без передачи в predictor. Поддерживаемые строки смешанного batch сохраняют порядок. Ошибка predictor не маскируется abstain.

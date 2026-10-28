@@ -1,5 +1,9 @@
 # Статус и границы доказательств
 
+## CP2: интеграция M09 2026-10-29
+
+[Actual-candidate M09](docs/evidence/m09-candidate-2026-10-29.md) реализован и проверен controlled tests: 20 gate/M08 regression methods + 35 format/evasion methods, 146/146 statements и 34/34 branches. Native ещё требуется. Gate использует существующий evaluated SQL candidate, его реальные predictions и повторный readback; standalone baseline не подменяет предмет проверки. Исходный evasion threshold 0.05 сохранён. Dispatch 11 gates реализован, это не 11 passing gates и не M18/R1. T02 image findings, M08/M09 statistical blockers, M22 и CP3-CP5 остаются открытыми.
+
 ## CP2: наблюдаемые системные пакеты 2026-10-28
 
 Node candidate [40777426055](docs/operations/node-candidate.md#native-результат-2026-10-29-мск), `f8a15c4`: builder success, audit **fail**. На одной DB node 1.36.4 -> 1.36.6: Critical 67 -> 61, High 394 -> 349, Unknown 70 -> 67; обе версии содержат 878 packages. Фактические kubeadm/kubectl/kubelet подтверждены как 1.36.6. Candidate не принят, node/base pins runtime сохранены. Scope builder проверен; foundation security blocker остаётся. Следующая реализация CP2 - binding полного M09 к существующему evaluated candidate, без ослабления evasion threshold.

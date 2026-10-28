@@ -35,6 +35,8 @@ $report | Select-Object status,execution_status,campaign_id,metrics,parity,outsi
 
 ## PB-18: воспроизведение
 
+На текущей Windows локальные Docker/WSL/Kubernetes/SQL запрещены владельцем. Приведённая ниже прежняя локальная процедура описывает исторический lab; сейчас infrastructure reproduction выполняется только в disposable hosted workflow. Для нового M09 использовать отдельную последовательность далее.
+
 Prerequisites: pinned uv/Python, Docker Linux amd64, достаточный ресурсный headroom. Source image и host scripts должны оставаться неизменными до завершения. В рамках теста ничего не устанавливается в training containers.
 
 ```powershell
@@ -52,3 +54,17 @@ uv run --locked python -m scripts.robustness_native --state .runtime/robustness-
 Сначала сохранить fail evidence. Для functional regression откатить код к reviewed compatible version и повторить на новом source-bound image, не подменяя прошлые artifacts. Для измеренной уязвимости модели нужен новый заранее описанный mitigation experiment: feature provenance, обоснованная adversarial training/decision policy и проверка utility/false positives на новых независимых probes. Нельзя выбирать параметры по опубликованным probes и затем называть их untouched holdout. До подтверждения mitigations выпуск блокируется, безопасный operational fallback - manual review без ML.
 
 Escalate model reviewer при превышении recall drop, неизвестной возможности управлять признаками или необходимости менять policy. Escalate platform operator при mismatch source/image/ownership или утрате evidence. Это инструкция дальнейших действий, не заявление, что mitigations или production recovery уже выполнены.
+
+## Исполняемый M09 на текущем candidate
+
+Симптом прежнего состояния: `acceptance --gate M09` оставался placeholder, а standalone campaign переобучала baseline без связи с evaluated SQL candidate. Это пробел интеграции, не production-инцидент. Исправление связывает формат, parity, замороженные probes и actual bytes через [gate](../../mlsecops/robustness_gate.py).
+
+1. Read-only: проверить head и существующие runs через `gh run list --workflow robustness.yml`; не перезапускать живой job. Прочитать последнюю aggregate evidence, отличая component `robustness.json` от acceptance `M09.json`.
+2. На disposable hosted runner [workflow](../../.github/workflows/robustness.yml) выполняет lock/contracts, собирает exact-source worker, bootstrap owned workspace/storage и `mlsecops.storage_pipeline`. Подготовка создаёт настоящий evaluated candidate; сброс чужого ledger или выбор другого candidate не допускается.
+3. Выполнить `uv run --locked python -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json`. Gate не выдаёт approval, не выпускает модель и не меняет runtime alias.
+4. Проверить source revision, candidate/evaluation/model digests, 28 primary files, фактическую parity на 3 000 golden rows, recall drop и 12 abstentions. Expected native outcomes ещё не подтверждены; точные числа берутся из завершённого run, не из этого плейбука.
+5. При `M09_candidate_training_or_golden_mismatch` сверить input digest и data lock, не подменять readback новым удобным training. При parity/replay mismatch проверить frozen matrices и обе модели. При stale/changed/foreign evidence сохранить refusal и исследовать конкретное несовпадение; partial execution не дополнять вручную статусом pass.
+6. При фактическом evasion fail продолжить заранее обоснованную mitigation на validation; опубликованные probes не становятся untouched holdout. Не изменять пороги, допустимые признаки, знаменатели или seeds ради pass.
+7. Cleanup workflow останавливает только контейнер из подтверждённого owned storage marker и перечитывает `State.Running=false`. При неизвестном результате остановки не заявлять cleanup success. Hosted VM остаётся временной; внешнего durable backup этот gate не создаёт.
+
+Исходные candidate/model и trust roots не изменяются gate, поэтому rollback модели не требуется. Для исправления runtime-кода использовать новую проверенную версию и fresh evidence, сохранив прежний отказ. Raw model/request/response/scores и keys остаются в `.runtime`; публиковать только итоговые aggregates/digests. [Controlled/native status](../evidence/m09-candidate-2026-10-29.md) отделяет доказанное от ожидаемого.

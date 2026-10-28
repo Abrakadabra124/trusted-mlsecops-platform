@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlsecops import acceptance, poisoning_gate
+from mlsecops import acceptance, candidate_subject, poisoning_gate
 from mlsecops.contracts import Rejected, canonical, digest, now, read_json, write_json
 from mlsecops.prediction_protocol import response
 from scripts import poisoning, poisoning_contracts, poisoning_native
@@ -162,16 +162,20 @@ class SubjectContracts(unittest.TestCase):
                 "bindings": {"dataset_reference": record["dataset_reference"]},
             }
             with (
-                patch.object(poisoning_gate, "validate", return_value={}),
-                patch.object(poisoning_gate, "command", return_value=expected["source_revision"]),
+                patch.object(candidate_subject, "validate", return_value={}),
                 patch.object(
-                    poisoning_gate,
+                    candidate_subject, "command", return_value=expected["source_revision"]
+                ),
+                patch.object(
+                    candidate_subject,
                     "source_fingerprint",
                     return_value=expected["source_fingerprint"],
                 ),
-                patch.object(poisoning_gate.candidate_lineage, "collect", return_value=projection),
                 patch.object(
-                    poisoning_gate.storage_pipeline,
+                    candidate_subject.candidate_lineage, "collect", return_value=projection
+                ),
+                patch.object(
+                    candidate_subject.storage_pipeline,
                     "load_candidate",
                     return_value=(record, expected, model),
                 ),
