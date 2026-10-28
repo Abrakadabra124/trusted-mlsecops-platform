@@ -35,6 +35,8 @@ class ExperimentContracts(unittest.TestCase):
 
     def test_training_and_intake_readback_rejects_semantic_swaps(self):
         request, response, profile = self.response()
+        request["action"] = native.ARMS["baseline"]
+        response.update(action=request["action"], input_digest=digest(canonical(request)))
         profile["training_seed"] = 17
         image = "sha256:" + "1" * 64
         recorded = {}

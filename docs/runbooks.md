@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [CP2 training validation и candidate trial](noise-training-validation.md#диагностика-и-воспроизведение). Train-only параметры, раздельные v1/v2 outcomes, source lock/solver failures, actual-candidate M08/M09 и owned cleanup. Validation pass не разрешает release.
+
 - [Изолированный Kubernetes node candidate](operations/node-candidate.md). Verified server archive, закреплённый base, same-DB comparison, запрет локального запуска и отдельные условия adoption. Build success не закрывает image coverage или R1.
 
 - [Сквозной refusal walkthrough](operations/r1-walkthrough.md). Чистый checkout -> данные/training/evaluation -> реальный отказ promotion -> qualification HTTP/metrics/audit -> восстановление той же модели при остановленной source БД. Не full R1 acceptance; только disposable Linux/hosted CI.

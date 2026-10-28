@@ -21,7 +21,7 @@ def train(request):
     from mlsecops.signing import encode64
 
     require_fields(request, ("action", "train", "seed", "features"))
-    if request["action"] not in ("train", "research-robust-train"):
+    if request["action"] not in ("train", "research-robust-train", "reference-logistic-train"):
         raise Rejected("invalid_training_action")
     if type(request["seed"]) is not int or not 0 <= request["seed"] <= 2**32 - 1:
         raise Rejected("invalid_training_seed")
@@ -35,6 +35,10 @@ def train(request):
     )
     classifier.fit(train_features, train_labels)
     optimization = None
+    if request["action"] == "train":
+        from mlsecops.noise_training import refit
+
+        refit(classifier, train_features, train_labels, balanced=True)
     if request["action"] == "research-robust-train":
         from mlsecops.robust_training import refit
 
@@ -80,7 +84,7 @@ def predict_request(request):
 def execute(request):
     if not isinstance(request, dict):
         raise Rejected("invalid_worker_request")
-    if request.get("action") in ("train", "research-robust-train"):
+    if request.get("action") in ("train", "research-robust-train", "reference-logistic-train"):
         return train(request)
     if request.get("action") == "predict":
         return predict_request(request)

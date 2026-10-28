@@ -1,0 +1,76 @@
+name: CP2 balanced candidate M08 and M09
+on:
+  push:
+    branches: [codex/cp2-validation-remediation]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: model-candidate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked numerical contracts and parity
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file=.coverage-noise --source=mlsecops.noise_training,mlsecops.robust_training -m unittest scripts.noise_training_qualification scripts.robust_training_qualification scripts.robust_training_native_qualification scripts.model_contract_qualification
+          uv run --locked coverage report --data-file=.coverage-noise --fail-under=100
+      - name: Reproduce validation selection without frozen probes
+        run: uv run --locked python -m scripts.noise_training_validation --balanced
+      - name: Build and evaluate one actual candidate
+        id: candidate
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Frozen M08 full poisoning campaign
+        if: steps.candidate.outcome == 'success'
+        run: uv run --locked python -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
+      - name: Frozen M09 on the same evaluated candidate
+        if: always() && steps.candidate.outcome == 'success'
+        run: uv run --locked python -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
+      - name: Sanitized reports including refusals
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          for name in ('noise-validation-balanced.json', 'M08.json', 'poisoning-gate.json', 'poisoning.json', 'M09.json', 'robustness-gate.json'):
+              path = Path('.runtime/evidence') / name
+              if path.is_file():
+                  print(canonical(read_json(path)).decode())
+              else:
+                  print(name + ': no completed report')
+          PY
+          echo 'Candidate trial only. All M01-M23, image blockers and independent M22 challenges remain required.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop only verified owned disposable storage
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('model_candidate_storage_stop_incomplete')
+          PY
+          fi

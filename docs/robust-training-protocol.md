@@ -1,5 +1,7 @@
 # Эксперимент robust logistic training
 
+С 2026-10-29 historical paired baseline запрашивается явно как `reference-logistic-train`. Это сохраняет прежнее ordinary logistic обучение после появления отдельного [balanced candidate trial](noise-training-validation.md); research-robust-train и его исходные thresholds остаются прежними. Scoped production controllers не разрешают reference/research actions.
+
 Зафиксировано 2026-10-13 до обучения нового варианта и просмотра новых probe outcomes. Область: T12, synthetic CPU research; baseline не меняется автоматически. Прежний [evasion failure](evidence/robustness-2026-10-13.md) остаётся историческим результатом.
 
 ## Обоснование и альтернативы

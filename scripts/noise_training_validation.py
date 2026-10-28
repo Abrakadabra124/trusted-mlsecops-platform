@@ -1,5 +1,6 @@
 """Fixed train/validation experiment. No frozen probes, model loading or services."""
 
+import argparse
 import copy
 import importlib.metadata
 import json
@@ -14,14 +15,15 @@ from sklearn.metrics import average_precision_score
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from mlsecops import noise_training
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, now, write_json
 from mlsecops.data_source import generated, validate_lock
 from mlsecops.datasets import arrays
-from scripts import noise_training, poisoning, robustness
+from scripts import poisoning, robustness
 
 SEEDS = (619, 631)
 MATERIALS = (
-    "scripts/noise_training.py",
+    "mlsecops/noise_training.py",
     "scripts/noise_training_validation.py",
     "scripts/poisoning.py",
     "scripts/robustness.py",
@@ -64,8 +66,9 @@ def quality(labels, scores):
     }
 
 
-def run(root):
+def run(root, *, balanced=False):
     root = Path(root).resolve()
+    training = noise_training.definition(balanced)
     lock = validate_lock(root)
     content = generated(root)
     if {"sha256": digest(content), "bytes": len(content)} != lock["output"]:
@@ -83,7 +86,7 @@ def run(root):
         "started_at": now(),
         "status": "inconclusive",
         "release_ready": False,
-        "training": noise_training.definition(),
+        "training": training,
         "development_seeds": list(SEEDS),
         "inputs": {
             "source": source,
@@ -120,7 +123,9 @@ def run(root):
                 StandardScaler(), LogisticRegression(random_state=17, max_iter=300)
             )
             model.fit(x, y)
-            optimization = noise_training.refit(model, x, y) if arm == "candidate" else None
+            optimization = (
+                noise_training.refit(model, x, y, balanced=balanced) if arm == "candidate" else None
+            )
             scores = model.predict_proba(validation_features)[:, 1]
             trigger_scores = model.predict_proba(np.asarray(triggers, dtype=np.float32))[:, 1]
             result = {"quality": quality(labels, scores), "optimization": optimization}
@@ -157,7 +162,9 @@ def run(root):
             result["primary_digest"] = digest(bounded_read(campaign / f"{arm}-{name}.json"))
             results[name] = result
         report["arms"][arm] = results
-    if source != {name: digest(bounded_read(root / name)) for name in MATERIALS}:
+    if source != {name: digest(bounded_read(root / name)) for name in MATERIALS} or canonical(
+        validate_lock(root)
+    ) != canonical(lock):
         raise Rejected("noise_validation_materials_changed")
     baseline, candidate = report["arms"]["baseline"], report["arms"]["candidate"]
     report.update(
@@ -172,11 +179,14 @@ def run(root):
         adoption="not-adopted",
     )
     write_json(campaign / "report.json", report)
-    write_json(root / ".runtime/evidence/noise-validation.json", report)
+    name = "noise-validation-balanced.json" if balanced else "noise-validation.json"
+    write_json(root / ".runtime/evidence" / name, report)
     return copy.deepcopy(report)
 
 
 if __name__ == "__main__":
-    result = run(Path(__file__).resolve().parents[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--balanced", action="store_true")
+    result = run(Path(__file__).resolve().parents[1], balanced=parser.parse_args().balanced)
     print(json.dumps(result, sort_keys=True))
     raise SystemExit({"pass": 0, "fail": 1, "inconclusive": 2}[result["status"]])

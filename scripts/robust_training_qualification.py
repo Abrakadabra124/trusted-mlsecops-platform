@@ -111,9 +111,9 @@ class RobustTrainingTests(unittest.TestCase):
         with self.assertRaises(Rejected):
             worker.execute({**request, "budget": 0.01})
 
-    def test_existing_training_does_not_silently_use_new_algorithm(self):
+    def test_historical_reference_does_not_use_adversarial_research_algorithm(self):
         request = {
-            "action": "train",
+            "action": "reference-logistic-train",
             "train": generate(rows=100),
             "seed": 17,
             "features": [[0.5] * 6],
@@ -121,7 +121,7 @@ class RobustTrainingTests(unittest.TestCase):
         with patch.object(robust_training, "refit", side_effect=AssertionError("unexpected")):
             output = worker.execute(request)
         self.assertNotIn("optimization", output)
-        self.assertEqual(output["action"], "train")
+        self.assertEqual(output["action"], "reference-logistic-train")
 
     def test_research_action_has_no_scoped_controller_authority(self):
         profile = {
@@ -133,8 +133,9 @@ class RobustTrainingTests(unittest.TestCase):
             "source_revision": "4" * 40,
         }
         for role in ("publisher", "scorer"):
-            with self.assertRaisesRegex(Rejected, "controller_worker_action_mismatch"):
-                controller_worker.documents(profile, role, {"action": "research-robust-train"})
+            for action in ("research-robust-train", "reference-logistic-train"):
+                with self.assertRaisesRegex(Rejected, "controller_worker_action_mismatch"):
+                    controller_worker.documents(profile, role, {"action": action})
         for action in ([], {}, None, "unknown"):
             with self.assertRaises(Rejected):
                 worker.execute({"action": action})

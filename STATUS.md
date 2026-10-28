@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+## CP2: balanced candidate trial 2026-10-29
+
+[Validation remediation](docs/noise-training-validation.md): v1 отвергнут по poisoning; v2 прошёл 10 development fits, AP 0.911632, evasion drop 0.043584, четыре poisoning upper ASR 0.016913. FPR вырос 0.097672 ->0.163543, Brier ухудшился; это не calibrated incident probability. V2 подключён к trial worker, новый recipe отражён в release descriptor, reference action отделена от scoped training. [Hosted M08/M09 workflow](.github/workflows/model-candidate.yml) должен проверить один actual candidate. Native результат ещё не подтверждён, полный R1/CP2 не принят.
+
+Предыдущий main `28bbd27`: все 10 workflows завершены, **7 success / 3 failure**. [Kubernetes 40781089346](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40781089346) success; [M08 40781089432](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40781089432), [M09 40781089374](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40781089374), [paired research 40781089299](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40781089299) failure. Это состояние прежнего алгоритма, не доказательство новой модели.
+
 ## CP2: интеграция M09 2026-10-29
 
 [Actual-candidate M09](docs/evidence/m09-candidate-2026-10-29.md) проверен native на `0150f62`, [40780340787](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40780340787): **fail**, 42 cases (41 pass / 1 evasion fail), 18 001 actual predictions, 28 primary files, 3 000 golden rows / max error 2.086162567138672e-07 / 0 label mismatches, replay error 0.0 и 12 abstentions. Recall drop 0.07183673469387755 >0.05; owned SQL cleanup success. До CI прошли 20 gate/M08 regression + 35 format/evasion methods, 146/146 statements и 34/34 branches. Dispatch 11 gates реализован, это не 11 passing gates и не M18/R1. T02 image findings, M08/M09 statistical blockers, M22 и CP3-CP5 остаются открытыми.

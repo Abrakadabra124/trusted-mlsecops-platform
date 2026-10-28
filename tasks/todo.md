@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T12/CP2 2026-10-29: [balanced training trial](../docs/noise-training-validation.md) выбран по train/validation после отказа v1. Development v2: AP 0.911632, evasion 0.043584, четыре poisoning upper ASR 0.016913; FPR/Brier ухудшились и опубликованы. Подключён настоящий worker и recipe, native M08/M09 на одном candidate ещё требуется. T11/T12/M22, T02 system findings и CP3-CP5 остаются открытыми; validation не закрывает gates.
+
 T02 node candidate 2026-10-29: [native build/audit f8a15c4](../docs/operations/node-candidate.md#native-результат-2026-10-29-мск), builder success, audit fail; Critical/High 67/394 -> 61/349. Обновление только Kubernetes недостаточно, candidate не принят. Полный T02 остаётся открытым. Следующая обязательная работа CP2 - T12/M09 actual-candidate binding, формат, parity и frozen evasion без ослабления исходных критериев.
 
 T02 2026-10-29 МСК: [native diagnostic scan](../docs/evidence/cp2-system-images-2026-10-28.md#native-diagnostic-scan-завершён-2026-10-29-мск) завершён: 14/14 scanned, 4/14 application coverage, fail; Go controls и cleanup pass. [Node patch candidate 1.36.6](../docs/operations/node-candidate.md) реализован для отдельного hosted build/audit, без adoption, native ещё требуется. Остальные R1 blockers сохраняются. Предыдущие записи ниже являются историей этапа.

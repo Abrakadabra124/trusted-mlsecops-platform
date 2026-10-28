@@ -9,10 +9,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from mlsecops import robust_training
+from mlsecops import noise_training, robust_training
 from mlsecops.contracts import Rejected
 from mlsecops.datasets import arrays, generate
-from scripts import noise_training
 
 
 class NoiseTrainingTests(unittest.TestCase):
@@ -43,6 +42,31 @@ class NoiseTrainingTests(unittest.TestCase):
             self.assertTrue(np.isfinite(gradient).all())
             self.assertGreaterEqual(loss, 0)
             self.assertLessEqual(loss, 1 / 0.7)
+
+    def test_balanced_gradient_and_weights_use_only_observed_train_labels(self):
+        model, features, labels = self.fixture()
+        matrix = robust_training.design(features, labels, model.steps[0][1], linf_budget=0.10)
+        weights = noise_training.weights(labels, balanced=True)
+        self.assertAlmostEqual(float(weights[labels == 0].sum()), len(labels) / 2)
+        self.assertAlmostEqual(float(weights[labels == 1].sum()), len(labels) / 2)
+        parameters = np.linspace(0.1, 0.7, 13)
+        self.assertLess(
+            check_grad(
+                lambda p: noise_training.objective(p, matrix, weights)[0],
+                lambda p: noise_training.objective(p, matrix, weights)[1],
+                parameters,
+            ),
+            1e-6,
+        )
+        receipt = noise_training.refit(model, features, labels, balanced=True)
+        self.assertLessEqual(receipt["projected_gradient_inf"], 1e-5)
+        self.assertNotEqual(noise_training.definition(True), noise_training.definition(False))
+        for invalid in (1, None, "balanced"):
+            with self.assertRaises(Rejected):
+                noise_training.definition(invalid)
+        for labels in (np.ones(3, dtype=int), np.array([[0, 1]]), np.array([0.0, 1.0])):
+            with self.assertRaises(Rejected):
+                noise_training.weights(labels, True)
 
     def test_refit_is_deterministic_train_only_and_preserves_scaler(self):
         model, features, labels = self.fixture()
@@ -117,6 +141,40 @@ class NoiseTrainingTests(unittest.TestCase):
         for invalid in ([], [{"status": "unknown"}] * 4):
             with self.assertRaises(Rejected):
                 decide(baseline, clean, evasion, invalid)
+
+    def test_default_worker_uses_balanced_fit_and_reference_stays_distinct(self):
+        from mlsecops import worker
+
+        rows = generate(rows=1000)
+        x, y = arrays(rows)
+        expected = make_pipeline(
+            StandardScaler(), LogisticRegression(random_state=17, max_iter=300)
+        )
+        expected.fit(x, y)
+        reference = expected.predict_proba(x)[:, 1]
+        noise_training.refit(expected, x, y, balanced=True)
+        request = {
+            "action": "train",
+            "train": rows,
+            "seed": 17,
+            "features": [r["features"] for r in rows],
+        }
+        output = worker.execute(request)
+        np.testing.assert_allclose(
+            output["python_scores"], expected.predict_proba(x)[:, 1], atol=1e-12
+        )
+        np.testing.assert_allclose(
+            output["onnx_scores"], output["python_scores"], atol=1e-5, rtol=0
+        )
+        self.assertNotIn("optimization", output)
+        previous = worker.execute({**request, "action": "reference-logistic-train"})
+        np.testing.assert_allclose(previous["python_scores"], reference, atol=1e-12)
+        self.assertGreater(float(np.max(np.abs(reference - output["python_scores"]))), 0.01)
+        with patch.object(
+            noise_training, "refit", side_effect=Rejected("test-convergence-failure")
+        ):
+            with self.assertRaisesRegex(Rejected, "convergence"):
+                worker.execute(request)
 
 
 if __name__ == "__main__":

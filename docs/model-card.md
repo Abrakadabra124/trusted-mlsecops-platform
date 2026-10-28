@@ -4,7 +4,9 @@
 
 ## Реализация
 
-scikit-learn StandardScaler обучается только на train, затем Logistic Regression с solver lbfgs, seed 17 и максимумом 300 итераций. Экспорт skl2onnx с opset 18, zipmap выключен. Runtime использует ONNX Runtime CPUExecutionProvider и один вычислительный поток.
+CP2 candidate trial 2026-10-29: StandardScaler обучается только на train, обычная Logistic Regression (lbfgs/seed 17/max_iter 300) инициализирует bounded-loss refit. [Протокол и validation](noise-training-validation.md): generalized cross entropy q=0.7, balanced weights из train, clipped training box radius 0.10, L-BFGS-B и проверка stationarity. Все шесть входов и threshold 0.5 сохраняются. Native приёмка нового варианта ещё требуется; приведённые ниже исторические числа относятся к прежнему обычному logistic training.
+
+Экспорт skl2onnx с opset 18, zipmap выключен; ONNX остаётся StandardScaler -> LinearClassifier. Runtime использует ONNX Runtime CPUExecutionProvider и один вычислительный поток. Sigmoid score после balanced bounded-loss fit **не является откалиброванной вероятностью инцидента**. На development validation вырос FPR 0.0977 ->0.1635 и ухудшился Brier 0.0901 ->0.1130; повышение recall не скрывает этот компромисс.
 
 Training/prediction идут в отдельных короткоживущих Linux containers. У workers нет сети, host mounts, service-account token или signing keys. JSON protocol ограничивает размеры; scorer хранит labels отдельно и проверяет shape/range/finite probabilities перед вычислением метрик.
 

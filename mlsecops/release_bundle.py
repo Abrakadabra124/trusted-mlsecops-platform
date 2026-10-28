@@ -52,6 +52,8 @@ def index(envelope, publisher_public):
 
 
 def documents(capsule, lock, *, context, publisher_public, serving_image):
+    from mlsecops.noise_training import definition as training_definition
+
     verified = material_bundle.verify_bundle(
         capsule, context=context, signer_public=publisher_public
     )
@@ -106,6 +108,7 @@ def documents(capsule, lock, *, context, publisher_public, serving_image):
             for field in ("quality_component", "auprc", "auprc_gain", "rows", "positives")
         },
         "limitations": [
+            "Balanced bounded-loss sigmoid score is not a calibrated incident probability",
             "Not production approval or business utility validation",
             "No universal poisoning, evasion or privacy guarantee",
             "Separate release assurance and explicit approval required",
@@ -125,9 +128,9 @@ def documents(capsule, lock, *, context, publisher_public, serving_image):
     }
     parameters = {
         "schema_version": 1,
-        "recipe": "standardscaler-logistic-lbfgs-v1",
-        "C": 1.0,
-        "max_iter": 300,
+        "recipe": training_definition(True)["algorithm"],
+        "training": training_definition(True),
+        "initialization": {"recipe": "standardscaler-logistic-lbfgs-v1", "C": 1.0, "max_iter": 300},
         "seed": context["policy"]["training_seed"],
         "training_request_digest": metadata["input_digest"],
         "compute_profile": "linux-amd64-cpu-float32",

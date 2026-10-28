@@ -20,13 +20,28 @@
 
 ## Диагностика и воспроизведение
 
+### Вариант v2, до первого результата
+
+Следующая гипотеза фиксируется отдельно после отказа v1: при том же `q=0.7`, training radius 0.10 и неизменных validation/attack thresholds применить balanced weights `N/(2*n_class)` к bounded loss. Вес определяется только наблюдаемыми train labels, без clean-reference labels, validation fitting, знания poisoned indices или final holdout. Формула соответствует [scikit-learn compute_sample_weight](https://scikit-learn.org/stable/modules/generated/sklearn.utils.class_weight.compute_sample_weight.html). Проверяются те же два development seeds; это повторная разработка на известной validation, не независимый challenge.
+
+Веса меняют обучаемую функцию риска и границу решения, поэтому вероятность от sigmoid нельзя объявлять откалиброванной вероятностью инцидента. Threshold остаётся 0.5; recall/FPR/Brier и AP loss сообщаются вместе с результатом, все прежние условия допуска сохраняются. Это гипотеза о компенсации class imbalance, не доказанная коррекция class-conditional poisoning. V1 доступен без флага, v2 запускается явным `--balanced`; результаты хранятся раздельно.
+
+### V2: validation pass и следующая native проверка
+
+Второй результат, 2026-10-29: 10 fits, validation **pass**. AP 0.9116318703419971 (baseline 0.9319120498018768, loss 0.0202801794598797), evasion drop 0.043583535108958835, 1 239 positives. Все четыре poisoning cases: upper ASR 0.016913306348599885, eligible 1 083, max AP loss 0.0054459769173361705. Чистый recall 0.87409200968523, FPR **0.1635434412265758** против baseline 0.097671777399205, Brier **0.11304204755637928** против 0.09007855163491003. Эти издержки не скрываются. Данные/thresholds не менялись, final holdout и frozen probes не оценивались этим script.
+
+После validation variant вынесен в [noise_training](../mlsecops/noise_training.py) и подключён как versioned `train` на ветке candidate trial. Прежнее обычное обучение доступно только как `reference-logistic-train` для исторического paired experiment; scoped controllers запрещают эту action. Worker протокол сохранён, recipe/source/image связаны существующим provenance; параметры release descriptor теперь явно называют новый алгоритм. Recipe не является approval. Автоматического переноса старого pass на новый source нет.
+
+[Отдельный hosted workflow](../.github/workflows/model-candidate.yml) повторяет validation, создаёт одно evaluated SQL candidate и выполняет полные M08/M09 на его bytes. Проверяются actual ONNX parity, frozen probes, poisoned trainings, primary readback и cleanup. До terminal результатов это **не native pass** и не принятие CP2. M07 полная приёмка, M06, image audit, M22 и CP3-CP5 также остаются обязательными.
+
 Ответственный: разработчик модели. Prerequisites: locked Python environment, разрешённая synthetic-only CPU development, сохранённые data.lock и protocol. Команда:
 
 ```text
 uv run --locked python -m unittest scripts.noise_training_qualification scripts.robust_training_qualification
 uv run --locked python -m scripts.noise_training_validation
+uv run --locked python -m scripts.noise_training_validation --balanced
 ```
 
-Вторая команда сохраняет private primary scores/coefficients и report в новом `.runtime/noise-validation/<uuid>/`; последнее завершённое evidence находится в `.runtime/evidence/noise-validation.json`. Exit 1 при плохих метриках ожидаем и не означает сбой runtime. Ошибка до завершения оставляет campaign inconclusive; нельзя брать старый summary за новый результат. Сверить время/source digests и все десять cases.
+Каждый validation запуск сохраняет private primary scores/coefficients и report в новом `.runtime/noise-validation/<uuid>/`; последнее завершённое evidence находится в `.runtime/evidence/noise-validation.json` или `noise-validation-balanced.json`. Exit 1 при плохих метриках ожидаем и не означает сбой runtime. Ошибка до завершения оставляет campaign inconclusive; нельзя брать старый summary за новый результат. Сверить время/source digests и все десять cases.
 
-При source lock mismatch остановиться и проверить изменённые inputs; не переписывать lock ради зелёного запуска. При solver failure не подставлять baseline. При statistical fail сохранить все результаты, зафиксировать новую гипотезу до нового fit и не запускать frozen acceptance до готовности. Rollback рабочего candidate не требуется: этот script его не меняет. Следующее изменение алгоритма требует отдельного versioned протокола и полной приёмки.
+При source lock mismatch остановиться и проверить изменённые inputs; не переписывать lock ради зелёного запуска. При solver failure не подставлять baseline. При statistical fail сохранить все результаты, зафиксировать новую гипотезу до нового fit и не запускать frozen acceptance до готовности. Validation script не меняет SQL candidate. Native workflow создаёт только disposable owned storage и в конце проверяет State.Running=false; production promotion отсутствует. При native failure сохранять отказ и не переносить trial в main как принятый candidate. Следующее изменение алгоритма требует отдельного versioned протокола и полной приёмки.
