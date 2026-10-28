@@ -1,8 +1,18 @@
-# Аудит worker и PostgreSQL images
+# Аудит worker, PostgreSQL и MLflow images
 
 Срез T01/T02, не полный M01. Порог политики: найденные High/Critical дают `fail`; недоступность DB, неизвестная severity, неполное покрытие или ошибка дают `inconclusive`. Оба исхода возвращают ненулевой exit code и не разрешают выпуск. Даже `pass` этого компонента не означает `release_ready`: полный R1 требует остальных gates.
 
-Текущий переход: [ADR 0050](decisions/0050-runtime-image-adoption.md) и [STATUS](../STATUS.md). Wolfi candidates прошли compatibility/security и PostgreSQL опубликован по проверенному manifest digest; default worker/storage adoption проходит отдельную native regression. Исторический **fail** на `d4b5514` и прежние Debian findings остаются в [comparison evidence](evidence/image-candidates-2026-10-09.md) и [baseline audit](evidence/container-audit-2026-10-08.md). Ни publication, ни смена Dockerfile не доказывают безопасный release.
+Текущий переход: [ADR 0050](decisions/0050-runtime-image-adoption.md) и [STATUS](../STATUS.md). Wolfi candidates прошли compatibility/security и PostgreSQL опубликован по проверенному manifest digest. Исторический **fail** на `d4b5514` и прежние Debian findings остаются в [comparison evidence](evidence/image-candidates-2026-10-09.md) и [baseline audit](evidence/container-audit-2026-10-08.md). Ни publication, ни смена Dockerfile не доказывают безопасный release.
+
+## Расширение CP2 на tracking
+
+2026-10-28: policy `worker-storage-tracking-v2` включает отдельный образ MLflow, который раньше отсутствовал в package audit. Проверяются его Linux/amd64 identity, USER `65532:65532`, digest шести материалов `images/tracking/`, непустой Debian SBOM и обязательные `libc6`, `mlflow`, `mlflow-skinny`, `psycopg`, `uvicorn`. Материалы повторно сверяются перед итогом. Исходник helper `tracking_spike.py` включён в runner materials. Missing/stale image, missing package, crash и Unknown дают inconclusive; High/Critical дают fail. Прежние severity thresholds и controls не изменены.
+
+Обычный audit теперь требует три компонента; `--compare-candidates` требует пять. Сравнение remediation worker/storage остаётся отдельным четырёхкомпонентным расчётом, но общий итог учитывает MLflow. Успешное сравнение не скрывает failed/incomplete tracking. Scoped publication PostgreSQL также требует завершённого tracking scan; её прежний контракт позволяет публиковать исправленный storage artifact при failed baseline, сохраняя `release_ready=false`. Это не разрешение выпуска модели или adoption.
+
+Локальные controlled проверки: **166 cases**, 378/383 statements, 109/112 branches (97.32% branches) пяти audit/candidate modules; отдельно **9 storage publication methods**, 97/98 statements и 27/28 branches. RED до исправления подтвердил отсутствие MLflow в успешном результате и несовместимость нового scope с прежним publication verifier. Это проверки логики, не реальный Syft/Grype scan MLflow. Native audit нового scope ещё не выполнен.
+
+Publisher/scorer controllers используют образ worker по [controller bootstrap](../mlsecops/controller_bootstrap.py), однако этот audit не сверяет фактически работающие workloads. Полный deployed controller/system inventory, его соответствие image reports и остальные M18 criteria остаются обязательными. [Диагностика и плейбук](operations/image-audit-troubleshooting.md#cp2-отсутствующий-образ-tracking).
 
 ## Что делают технологии
 
@@ -23,6 +33,7 @@ uv run --locked python -m scripts.image_archive_qualification
 uv run --locked python -m scripts.image_audit_runner_qualification
 uv run --locked python -m scripts.image_audit_flow_qualification
 uv run --locked python -m mlsecops build
+uv run --locked python -m scripts.tracking_spike build
 uv run --locked python -m scripts.image_audit
 ```
 
@@ -32,13 +43,13 @@ uv run --locked python -m scripts.image_audit
 
 ## Как работает проверка
 
-1. Фиксируются source revision/fingerprint, digest policy и audit scripts. Worker label должен совпасть с текущим fingerprint. PostgreSQL и scanner images указаны с immutable digests; ни один непроверенный latest tag не выбирается автоматически.
+1. Фиксируются source revision/fingerprint, digest policy и audit scripts. Worker label должен совпасть с текущим fingerprint; tracking label - с digest текущего recipe, lock и server/probe sources. PostgreSQL и scanner images указаны с immutable digests; ни один непроверенный latest tag не выбирается автоматически.
 2. Каждый target экспортируется через `docker image save <resolved ID>` в новый owned run. Из tar без распаковки в host filesystem читаются bounded regular manifest/config entries. Несколько images, duplicate members, symlink metadata, traversal и несоответствие platform/layers/labels отклоняются.
 3. В Docker Engine с containerd runtime `.Id` может быть manifest ID, а `source.metadata.imageID` Syft - hash image config. Поэтому сохраняются оба: `runtime_image_id` и `image_config_id`. SHA-256 вычисляется над конфигурацией из свежего экспорта, а не над произвольным старым SBOM.
-4. Syft 1.54.1 без сети каталогизирует squashed filesystem. Проверяются version/source/image/distro, непустой уникальный inventory, обязательные packages и `foundBy`. Текущие targets требуют Wolfi `20230201` и APK cataloguer; Debian contract сохранён для исторических отчётов, но Debian SBOM не допускается вместо нового runtime. Наличие SBOM не означает завершённый vulnerability audit.
+4. Syft 1.54.1 без сети каталогизирует squashed filesystem. Проверяются version/source/image/distro, непустой уникальный inventory, обязательные packages и `foundBy`. Worker/storage требуют Wolfi `20230201` и APK cataloguer; отдельный tracking target требует Debian. Debian SBOM не допускается вместо Wolfi worker/storage. Наличие SBOM не означает завершённый vulnerability audit.
 5. Grype 0.120.1 отдельным контейнером обновляет официальную DB. Сохраняются TLS, hash validation и максимальный возраст 120 часов. После обновления cache монтируется read-only, сеть scanner выключена, auto-update выключен только для использования того же snapshot. Файлы DB хешируются до и после проверок.
 6. Положительный контроль сопоставляет PURL `pkg:pypi/urllib3@1.26.7` с DB. Этот package не устанавливается и не исполняется. Ожидаются High/Critical `GHSA-v845-jxx5-vc9f` и native threshold exit 2. Для Wolfi также обязателен APK control `openssl@3.0.7-r0`, `CVE-2023-0286`, тот же snapshot и High/Critical/exit 2, в том числе без candidate comparison. Пустая или неправильная выдача любого обязательного control запрещает pass.
-7. Проверяются Grype reports обоих images: version, valid свежая DB, тот же DB snapshot, config ID, distro, связь каждого finding с SBOM package. Непустые ignored matches и coverage alerts не скрываются. High/Critical блокируют независимо от доступности fix; Unknown не становится Low.
+7. Проверяются Grype reports всех обязательных images: version, valid свежая DB, тот же DB snapshot, config ID, distro, связь каждого finding с SBOM package. Непустые ignored matches и coverage alerts не скрываются. High/Critical блокируют независимо от доступности fix; Unknown не становится Low.
 8. Публикуются только выбранные поля findings, counts, hashes, версии и ограничения. Timeout/overflow останавливает CLI и удаляет только scanner по его собственному CID. Временные image archives удаляются после каталогизации; raw reports и DB остаются локально для разбора. Глобальные Docker prune и удаление чужих volumes не используются.
 
 Контейнеры scanner работают non-root, с read-only rootfs, без capabilities, с no-new-privileges, 2 CPU/2 GiB RAM, 256 PIDs и tmpfs 1 GiB. Wrapper проверяет stdout 64 MiB/stderr 2 MiB каждые 100 ms, поэтому возможен небольшой overshoot между проверками; это не filesystem quota. Offline операция ограничена 300 секундами, DB update - 600. Последний лимит увеличен после реального 300-second timeout при распаковке DB размером более 3 GiB на Windows bind mount; freshness/TLS/hash validation не изменены. В host administrator trust boundary входит целостность локального Docker daemon и файлов run.

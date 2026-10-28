@@ -2,6 +2,36 @@
 
 Ответственные: platform operator и security reviewer. Процедура относится к scanner evidence лаборатории, не к production-инциденту. Рабочие SQL volumes, runtime tags и foundation не меняются.
 
+## CP2: отсутствующий образ tracking
+
+**Симптом:** прежний успешный worker/storage audit не содержит MLflow, хотя tracking service использует отдельный образ. Причина установлена по списку targets: в нём было только два runtime components. Это пробел покрытия CP2/R1-B02, а не подтверждённая эксплуатация уязвимости.
+
+**Исправление:** policy v2 требует tracking в обычном audit и при candidate comparison. Before-scan identity проверяет recipe digest и non-root USER; после scan проверяются неизменность materials, package coverage и тот же DB snapshot. Оба workflow, вызывающие audit, предварительно строят tracking image. Storage publication verifier принимает только новый полный scope; старый четырёхкомпонентный report не подходит.
+
+**Диагностика без запуска services:** открыть sanitized summary `.runtime/evidence/image-audit.json`, сверить policy ID, наличие `tracking`, `recipe_digest`, `scan_executed`, `status` и `reason`. Сопоставить recipe с `images/tracking/Dockerfile`, lock и server/probe sources. Не публиковать raw Docker inspect: он может содержать environment. Пользоваться выбранными полями summary.
+
+**Плейбук на разрешённом disposable runner:**
+
+```text
+uv sync --locked --python 3.12.15
+uv run --locked python -m scripts.image_suite_qualification
+uv run --locked python -m unittest scripts.storage_publication_qualification
+uv run --locked python -m mlsecops build
+uv run --locked python -m scripts.tracking_spike build
+uv run --locked python -m scripts.image_audit
+uv run --locked python -m scripts.image_audit_publication
+```
+
+Команды build/scan изменяют cache/images и создают evidence, но не запускают приложение MLflow и не переключают рабочие БД. Ожидаемый корректный результат включает три runtime components. Код 1 означает findings, 2 означает неполную проверку; оба запрещают трактовать общий audit как pass. Publisher выводит данные, а не переопределяет результат предыдущей команды. Для `--compare-candidates` сначала нужны отдельные candidate builds и compatibility checks из существующего image-audit workflow.
+
+- `image_audit_tracking_materials_mismatch`: сохранить отчёт, сверить checkout и recipe, пересобрать tracking из тех же locked материалов. Не переписывать Docker labels вручную.
+- Missing image: выполнить предусмотренную сборку, не заменять локальный tag случайным образом из registry.
+- Missing package, crash, Unknown или stale DB: устранить причину неполного покрытия; пустой findings не является доказательством безопасности.
+- High/Critical в tracking: сохранить advisory/package/version, исправить соответствующий dependency/base image и проверить затронутый service. Успешное сравнение worker/storage не снимает этот отказ.
+- Sources изменились во время scan: текущий результат inconclusive, нужен один новый scan после фиксации материалов. Не смешивать SBOM предыдущего build с новым image.
+
+**Проверка исправления:** 166 controlled audit cases и 9 publication methods прошли локально; в том числе tracking failure/missing image при успешном comparison. Реальный новый hosted scan ещё требуется. Full controller/system inventory и R1 не приняты. При отказе не менять рабочие volumes или уничтожать source artifacts; сохранить исходный checkout/report, исправить причину и повторить на чистом runner. Возврат к v1 не является допустимым способом получить новый pass.
+
 ## CP2: подготовка storage artifact к scoped adoption
 
 [ADR 0050](../decisions/0050-runtime-image-adoption.md) ограничивает изменение новыми R1 states, без переключения рабочих SQL volumes. Это следующий обязательный шаг R1-B02, не новый необязательный scope.

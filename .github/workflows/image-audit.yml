@@ -1,4 +1,4 @@
-name: Worker and storage image audit
+name: Worker, storage and tracking image audit
 on:
   push:
     branches: [main]
@@ -41,6 +41,8 @@ jobs:
           uv run --locked coverage run --source=scripts.storage_candidate -m scripts.storage_candidate_qualification
       - name: Build pinned Linux worker
         run: uv run --locked python -m mlsecops build
+      - name: Build locked tracking image for mandatory audit
+        run: uv run --locked python -m scripts.tracking_spike build
       - name: Build separate candidate images
         id: candidate-build
         run: uv run --locked python -m scripts.image_candidates build
@@ -52,11 +54,11 @@ jobs:
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .runtime/evidence/storage-candidate-coverage.json
           uv run --locked python -c "import json; totals=json.load(open('.runtime/evidence/storage-candidate-coverage.json'))['totals']; raise SystemExit(0 if totals['num_branches'] and totals['covered_branches']/totals['num_branches'] >= 0.95 else 1)"
-      - name: Audit exact worker and PostgreSQL images
+      - name: Audit exact worker, PostgreSQL and MLflow images
         if: ${{ !cancelled() && steps.candidate-build.outcome == 'success' }}
         run: uv run --locked python -m scripts.image_audit --compare-candidates
       - name: Publish sanitized result even on failure
         if: ${{ !cancelled() }}
         run: |
           uv run --locked python -m scripts.image_audit_publication
-          echo 'Worker/storage package audit only. This is not full M01 or R1 acceptance.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Worker/storage/tracking package audit. Deployed controller/system inventory reconciliation and full R1 acceptance remain required.' >> "$GITHUB_STEP_SUMMARY"

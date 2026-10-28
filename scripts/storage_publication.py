@@ -25,7 +25,7 @@ def permit(audit, worker, storage, identities, revision, fingerprint, timestamp,
             ):
                 raise Rejected("storage_publication_evidence_invalid")
         if (
-            audit["scope"] != "worker-storage-image-audit-only"
+            audit["scope"] != "worker-storage-tracking-image-audit-only"
             or audit["status"] not in {"pass", "fail"}
             or audit["source_dirty"] is not False
             or audit["source_revision"] != revision
@@ -51,9 +51,9 @@ def permit(audit, worker, storage, identities, revision, fingerprint, timestamp,
             raise Rejected("storage_publication_evidence_invalid")
         components = audit["components"]
         if (
-            len(components) != 4
+            len(components) != 5
             or {component["name"] for component in components}
-            != {"worker", "storage", "worker-candidate", "storage-candidate"}
+            != {"worker", "storage", "tracking", "worker-candidate", "storage-candidate"}
             or any(
                 component["scan_executed"] is not True
                 or component["sbom_validated"] is not True

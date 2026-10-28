@@ -23,7 +23,7 @@ from mlsecops.contracts import (
 )
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
-from scripts import image_candidates
+from scripts import image_candidates, tracking_spike
 from scripts.image_archive import identity
 from scripts.image_audit_contract import (
     assess,
@@ -44,14 +44,14 @@ GRYPE_IMAGE = (
 REPORT = ".runtime/evidence/image-audit.json"
 LIMIT = 64 * 1024 * 1024
 POLICY = {
-    "id": "worker-storage-v1",
+    "id": "worker-storage-tracking-v2",
     "threshold": "High",
     "db_max_age_hours": 120,
     "unknown_severity": "inconclusive",
     "ignored_matches": "inconclusive",
     "coverage_alerts": "inconclusive",
     "allow_exceptions": False,
-    "scope": ["worker", "storage"],
+    "scope": ["worker", "storage", "tracking"],
     "catalogue_scope": "squashed",
 }
 
@@ -203,7 +203,7 @@ def audit(root, include_candidates=False):
         "schema_version": 1,
         "status": "inconclusive",
         "release_ready": False,
-        "scope": "worker-storage-image-audit-only",
+        "scope": "worker-storage-tracking-image-audit-only",
         "run_id": run_id,
         "started_at": now(),
         "source_revision": command(["git", "-C", str(root), "rev-parse", "HEAD"]),
@@ -213,14 +213,18 @@ def audit(root, include_candidates=False):
         "policy_digest": digest(canonical(POLICY)),
         "scanner_images": {"syft": SYFT_IMAGE, "grype": GRYPE_IMAGE},
         "runner_materials": {
-            path.name: file_hash(path) for path in sorted((root / "scripts").glob("image_*.py"))
+            path.name: file_hash(path)
+            for path in [
+                *sorted((root / "scripts").glob("image_*.py")),
+                root / "scripts/tracking_spike.py",
+            ]
         },
         "components": [],
         "includes_candidates": include_candidates,
         "detection_control": "inconclusive",
         "vulnerability_count": None,
         "limitations": [
-            "Not full M01, M21 or R1 acceptance; control-plane images are outside this slice",
+            "Not full M01, M21 or R1 acceptance; deployed controller/system inventory reconciliation is still required",
             "Scanner signatures not independently verified; digest pinning is not publisher identity",
             "Package matching is not exploitability analysis or complete vulnerability coverage",
             "Host administrator is trusted; reports are not a signed trusted audit sink",
@@ -228,6 +232,7 @@ def audit(root, include_candidates=False):
         ],
     }
     write_json(safe_child(root, REPORT), report)
+    tracking_materials = tracking_spike.materials(root)
     for image in (SYFT_IMAGE, GRYPE_IMAGE, STORAGE_IMAGE):
         try:
             inspect_image(image)
@@ -238,6 +243,7 @@ def audit(root, include_candidates=False):
     required = {
         ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
         ("debian", "storage"): {"libc6", "postgresql-18"},
+        ("debian", "tracking"): {"libc6", "mlflow", "mlflow-skinny", "psycopg", "uvicorn"},
         ("wolfi", "worker"): {
             "glibc-2.44",
             "python-3.12",
@@ -250,6 +256,7 @@ def audit(root, include_candidates=False):
     targets = [
         ("worker", "worker", "trusted-mlsecops:dev", "wolfi"),
         ("storage", "storage", STORAGE_IMAGE, "wolfi"),
+        ("tracking", "tracking", tracking_spike.TAG, "debian"),
     ]
     if include_candidates:
         targets.extend(
@@ -281,6 +288,14 @@ def audit(root, include_candidates=False):
                 component["recipe_digest"] = image_candidates.validate(root, role, details)[
                     "recipe_digest"
                 ]
+            if role == "tracking":
+                if (
+                    details["Config"].get("User") != "65532:65532"
+                    or details["Config"].get("Labels", {}).get(tracking_spike.LABEL)
+                    != tracking_materials
+                ):
+                    raise Rejected("image_audit_tracking_materials_mismatch")
+                component["recipe_digest"] = tracking_materials
             component["runtime_image_id"] = details["Id"]
             command(
                 ["docker", "image", "save", "--output", str(archive), details["Id"]], timeout=300
@@ -420,7 +435,11 @@ def audit(root, include_candidates=False):
         except Rejected as error:
             component["reason"] = str(error)
         write_json(safe_child(root, REPORT), report)
-    if snapshot(cache) != db_files or source_fingerprint(root) != fingerprint:
+    if (
+        snapshot(cache) != db_files
+        or source_fingerprint(root) != fingerprint
+        or tracking_spike.materials(root) != tracking_materials
+    ):
         raise Rejected("image_audit_materials_changed")
     statuses = {component["status"] for component in report["components"]}
     report["status"] = (
@@ -436,7 +455,9 @@ def audit(root, include_candidates=False):
         )
     report["completed_at"] = now()
     if include_candidates:
-        report["comparison"] = compare(report["components"])
+        report["comparison"] = compare(
+            [component for component in report["components"] if component["name"] != "tracking"]
+        )
     return report
 
 

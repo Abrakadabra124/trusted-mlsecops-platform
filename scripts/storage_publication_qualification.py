@@ -44,7 +44,7 @@ def fixtures():
         "golden_max_error": 0.0,
     }
     audit = {
-        "scope": "worker-storage-image-audit-only",
+        "scope": "worker-storage-tracking-image-audit-only",
         "status": "fail",
         "release_ready": False,
         "completed_at": moment.isoformat(),
@@ -57,6 +57,14 @@ def fixtures():
         "policy": copy.deepcopy(image_audit.POLICY),
         "policy_digest": digest(canonical(image_audit.POLICY)),
         "components": [
+            {
+                "name": "tracking",
+                "status": "fail",
+                "scan_executed": True,
+                "sbom_validated": True,
+            }
+        ]
+        + [
             {
                 "name": role + suffix,
                 "status": "pass" if suffix else "fail",
@@ -75,6 +83,19 @@ def fixtures():
 
 
 class PublicationContracts(unittest.TestCase):
+    def test_tracking_cannot_be_omitted_or_left_unchecked(self):
+        for mutation in (
+            lambda audit: audit["components"].pop(0),
+            lambda audit: audit["components"][0].update(scan_executed=False),
+            lambda audit: audit["components"][0].update(sbom_validated=False),
+            lambda audit: audit["components"][0].update(status="inconclusive"),
+            lambda audit: audit.update(scope="worker-storage-image-audit-only"),
+        ):
+            arguments = fixtures()
+            mutation(arguments[0])
+            with self.assertRaises(Rejected):
+                storage_publication.permit(*arguments)
+
     def test_qualified_artifact_does_not_override_baseline_failure(self):
         arguments = fixtures()
         result = storage_publication.permit(*arguments)

@@ -39,6 +39,7 @@ jobs:
       - name: Build baseline and isolated pinned candidates
         run: |
           uv run --locked python -m mlsecops build
+          uv run --locked python -m scripts.tracking_spike build
           uv run --locked python -m scripts.image_candidates build
       - name: Actual candidate worker compatibility
         run: uv run --locked python -m scripts.image_candidates qualify-worker

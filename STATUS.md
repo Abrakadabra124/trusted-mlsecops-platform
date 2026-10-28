@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+## Продолжение CP2 после переноса среды 2026-10-28
+
+Локально реализовано обязательное включение отдельного MLflow image в [package audit](docs/container-audit.md#расширение-cp2-на-tracking). Новый scope требует три runtime components и пять при candidate comparison, проверяет tracking recipe/USER/packages, сохраняет refusal при missing/stale/crashed/failed tracking. Два workflow и scoped storage publication verifier согласованы с новым scope. **166 controlled audit cases и 9 publication methods pass**, audit branch coverage 109/112, publication 27/28; RED и границы проверки записаны в [ранбуке](docs/operations/image-audit-troubleshooting.md#cp2-отсутствующий-образ-tracking).
+
+Это изменение ещё не проверено native Syft/Grype run и не опубликовано как принятый CP2. Полный фактический controller/system inventory, M08/M09/M22 и следующие CP3-CP5 остаются открыты. Успех локальных проверок не меняет исторические failures ниже и не завершает R1. Python environment новой Windows восстановлен; инфраструктурная проверка нового кода остаётся для разрешённого disposable hosted CI.
+
 ## Сквозной запуск к 2026-10-23 23:34 МСК
 
 ### Итог до дедлайна

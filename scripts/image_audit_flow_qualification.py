@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, read_json, write_json
-from scripts import image_audit, image_candidates
+from scripts import image_audit, image_candidates, tracking_spike
 from scripts.image_audit_qualification import fixtures
 
 
@@ -19,9 +19,19 @@ def qualify():
         "comparison-wolfi-medium": "rejected",
         "comparison-wolfi-database-changed": "rejected",
         "comparison-wolfi-high": "fail",
+        "comparison-tracking-high": "fail",
+        "comparison-missing-tracking": "inconclusive",
         "clean": "pass",
+        "missing-tracking-image": "inconclusive",
+        "bad-tracking-materials": "inconclusive",
+        "root-tracking-image": "inconclusive",
+        "missing-tracking-package": "inconclusive",
+        "tracking-high": "fail",
+        "tracking-unknown": "inconclusive",
+        "tracking-scanner-crash": "inconclusive",
+        "changed-tracking-materials": "rejected",
         "no-wolfi-detection": "rejected",
-        "debian-baseline": "rejected",
+        "debian-baseline": "inconclusive",
         "high": "fail",
         "unknown": "inconclusive",
         "foreign-report": "inconclusive",
@@ -42,10 +52,12 @@ def qualify():
         with tempfile.TemporaryDirectory(prefix="audit-flow-contract-") as temporary:
             root = Path(temporary)
             (root / "scripts").mkdir()
+            (root / "scripts/tracking_spike.py").write_bytes(b"# controlled helper material\n")
             calls = []
             sbom, report, match, image_id, unused = fixtures()
             report["descriptor"]["db"]["status"]["built"] = datetime.now(UTC).isoformat()
             fingerprint = "f" * 64
+            tracking_materials = "e" * 64
             inspected = {
                 "Id": image_id,
                 "Config": {"Labels": {"org.trusted-mlsecops.source-fingerprint": fingerprint}},
@@ -58,6 +70,17 @@ def qualify():
                 details = copy.deepcopy(inspected)
                 if name == "bad-worker-source" and reference == "trusted-mlsecops:dev":
                     details["Config"]["Labels"] = {}
+                if reference == tracking_spike.TAG:
+                    if name in {"missing-tracking-image", "comparison-missing-tracking"}:
+                        raise Rejected("missing")
+                    details["Config"].update(
+                        User="0:0" if name == "root-tracking-image" else "65532:65532",
+                        Labels={
+                            tracking_spike.LABEL: "old"
+                            if name == "bad-tracking-materials"
+                            else tracking_materials
+                        },
+                    )
                 return details
 
             def command(arguments, **kwargs):
@@ -86,7 +109,19 @@ def qualify():
                             for package in ("scikit-learn", "onnxruntime", "cryptography")
                         ]
                     )
-                    if name != "debian-baseline":
+                    if stage == "tracking-sbom":
+                        document["artifacts"].extend(
+                            {
+                                "id": package,
+                                "name": package,
+                                "version": "1",
+                                "type": "python",
+                                "foundBy": "python-package-cataloger",
+                            }
+                            for package in ("mlflow", "mlflow-skinny", "psycopg", "uvicorn")
+                            if name != "missing-tracking-package" or package != "mlflow"
+                        )
+                    elif name != "debian-baseline":
                         document["distro"] = {"id": "wolfi", "versionID": "20230201"}
                         for package in document["artifacts"]:
                             if package["name"] == "libc6":
@@ -141,7 +176,11 @@ def qualify():
                         control_match["vulnerability"]["severity"] = "Medium"
                         returncode = 0
                 else:
-                    document["distro"] = {"name": "wolfi", "version": "20230201"}
+                    document["distro"] = (
+                        {"name": "debian", "version": "12"}
+                        if stage == "tracking-scan"
+                        else {"name": "wolfi", "version": "20230201"}
+                    )
                     if "-candidate-" in stage and name == "comparison-wolfi-high":
                         finding = copy.deepcopy(match)
                         finding["artifact"].update(name="glibc-2.44", type="apk")
@@ -149,7 +188,8 @@ def qualify():
                         returncode = 2
                     if name in {"high", "unknown"}:
                         finding = copy.deepcopy(match)
-                        finding["artifact"].update(name="glibc-2.44", type="apk")
+                        if stage != "tracking-scan":
+                            finding["artifact"].update(name="glibc-2.44", type="apk")
                         finding["vulnerability"]["severity"] = (
                             "High" if name == "high" else "Unknown"
                         )
@@ -164,10 +204,31 @@ def qualify():
                     elif name == "changed-sbom":
                         with (run / f"{stage.split('-')[0]}-sbom.json").open("ab") as output:
                             output.write(b" ")
+                    if stage == "tracking-scan" and name in {
+                        "tracking-high",
+                        "tracking-unknown",
+                        "comparison-tracking-high",
+                    }:
+                        finding = copy.deepcopy(match)
+                        finding["vulnerability"]["severity"] = (
+                            "Unknown" if name == "tracking-unknown" else "High"
+                        )
+                        document["matches"] = [finding]
+                        returncode = 0 if name == "tracking-unknown" else 2
+                    if stage == "tracking-scan" and name == "tracking-scanner-crash":
+                        returncode = 1
                 write_json(path, document)
                 return returncode, path
 
             with (
+                patch.object(
+                    tracking_spike,
+                    "materials",
+                    side_effect=[
+                        tracking_materials,
+                        "changed" if name == "changed-tracking-materials" else tracking_materials,
+                    ],
+                ),
                 patch.object(
                     image_candidates,
                     "validate",
@@ -195,9 +256,37 @@ def qualify():
                 ),
             ):
                 try:
-                    outcome = image_audit.audit(
+                    result = image_audit.audit(
                         root, include_candidates=name.startswith("comparison")
-                    )["status"]
+                    )
+                    outcome = result["status"]
+                    if name in {"comparison-tracking-high", "comparison-missing-tracking"}:
+                        if result["comparison"]["status"] != "pass" or outcome == "pass":
+                            raise AssertionError(
+                                "comparison cannot override incomplete or failed tracking"
+                            )
+                    if name in {"comparison", "clean"}:
+                        indexed = {
+                            component["name"]: component for component in result["components"]
+                        }
+                        if (
+                            set(indexed)
+                            != {"worker", "storage", "tracking"}
+                            | (
+                                {"worker-candidate", "storage-candidate"}
+                                if name == "comparison"
+                                else set()
+                            )
+                            or not indexed["tracking"]["scan_executed"]
+                            or indexed["tracking"].get("recipe_digest") != tracking_materials
+                            or result["policy"]["scope"] != ["worker", "storage", "tracking"]
+                            or result["release_ready"] is not False
+                        ):
+                            raise AssertionError(
+                                "tracking must be audited with exact recipe binding"
+                            )
+                        if name == "comparison" and result["comparison"]["status"] != "pass":
+                            raise AssertionError("candidate comparison must remain complete")
                 except Rejected:
                     outcome = "rejected"
             if outcome != expected or list(root.rglob("*.tar")):

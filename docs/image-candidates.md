@@ -58,15 +58,16 @@ PostgreSQL candidate сохраняет версию 18.6 и используе�
 uv sync --locked --python 3.12.15
 uv run --locked python -m scripts.image_suite_qualification
 uv run --locked python -m mlsecops build
+uv run --locked python -m scripts.tracking_spike build
 uv run --locked python -m scripts.image_candidates build
 uv run --locked python -m scripts.image_candidates qualify-worker
 uv run --locked python -m scripts.storage_candidate
 uv run --locked python -m scripts.image_audit --compare-candidates
 ```
 
-Build создаёт только `trusted-mlsecops:worker-candidate` и `trusted-mlsecops:storage-candidate`. Worker qualification использует новый UUID state в `.runtime/image-candidates`, immutable image ID и existing developer suite, не рабочие signing keys или SQL. Отсутствие image и сбой нового запуска инвалидируют старый qualification pass.
+Команда `image_candidates build` создаёт только `trusted-mlsecops:worker-candidate` и `trusted-mlsecops:storage-candidate`; отдельная команда `tracking_spike build` подготавливает обязательный MLflow target. Worker qualification использует новый UUID state в `.runtime/image-candidates`, immutable image ID и existing developer suite, не рабочие signing keys или SQL. Отсутствие image и сбой нового запуска инвалидируют старый qualification pass.
 
-Последняя команда повторно сканирует четыре images на одном read-only DB snapshot. Baseline findings сохраняются, даже если candidate лучше. Общий audit остаётся fail, пока любой image в scope содержит блокирующие findings. `comparison.status=pass` означает только полноту сопоставления, не прохождение security policy; `release_ready` всегда false. Пары сравниваются по advisory ID и package name, а не installed version: обновление версии при сохранении того же advisory не выдаётся за исправление.
+С policy v2 от 2026-10-28 последняя команда сканирует пять images на одном read-only DB snapshot: worker, storage, tracking и два remediation candidates. Baseline findings сохраняются, даже если candidate лучше. Общий audit остаётся fail, пока любой image в scope содержит блокирующие findings; incomplete tracking запрещает общий pass. `comparison.status=pass` означает только полноту четырёхкомпонентного сопоставления worker/storage, не прохождение общей security policy; `release_ready` всегда false. Пары сравниваются по advisory ID и package name, а не installed version: обновление версии при сохранении того же advisory не выдаётся за исправление.
 
 Результаты, ignored: `.runtime/evidence/image-candidate-build.json`, `.runtime/evidence/image-candidate-worker.json`, `.runtime/evidence/image-audit.json`. Raw SBOM/config и keys не публиковать. `--compare-candidates` не делает restore и не переключает deployment.
 
