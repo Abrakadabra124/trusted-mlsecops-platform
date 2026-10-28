@@ -1,5 +1,9 @@
 # Статус и границы доказательств
 
+## CP2: подключение M08 2026-10-28
+
+Реализован [fresh candidate-bound M08](docs/poisoning-benchmark.md#исполняемый-m08-для-существующего-кандидата): существующий evaluated candidate читается через проверку подписанной lineage, выполняются новые 30+5 runs, 251 primary files сверяются, точные bytes кандидата проходят отдельный prediction replay. Training input, source, actual predictions и повторное SQL чтение связывают результат с кандидатом. Пороги и модель не изменены; known failures сохраняют fail. 29 прежних controlled contracts pass; 11 новых gate/dispatch tests pass, 126/126 statements и 30/30 branches gate/contract wrapper. Это controlled evidence, не native M08 acceptance. Workflow подготовлен для отдельной ветки; T11/M08, M22 и полный R1 остаются открыты.
+
 ## Продолжение CP2 после переноса среды 2026-10-28
 
 Локально реализовано обязательное включение отдельного MLflow image в [package audit](docs/container-audit.md#расширение-cp2-на-tracking). Новый scope требует три runtime components и пять при candidate comparison, проверяет tracking recipe/USER/packages, сохраняет refusal при missing/stale/crashed/failed tracking. Два workflow и scoped storage publication verifier согласованы с новым scope. **166 controlled audit cases и 9 publication methods pass**, audit branch coverage 109/112, publication 27/28; RED и границы проверки записаны в [ранбуке](docs/operations/image-audit-troubleshooting.md#cp2-отсутствующий-образ-tracking).
@@ -8,7 +12,9 @@
 
 Эти изменения ещё не приняты как CP2. Native image coverage, M08/M09/M22 и следующие CP3-CP5 остаются открыты. Успех локальных проверок не меняет исторические failures ниже и не завершает R1. Python environment новой Windows восстановлен; инфраструктурная проверка нового кода выполняется только в разрешённом disposable hosted CI.
 
-Публикация 2026-10-28 не состоялась: GitHub connector читает профиль/repository metadata, но `create_tree` вернул HTTP 403 `Resource not accessible by integration`. В новой Windows `gh auth status` сообщает отсутствие входа; браузер также показывает Sign in. Локальные commits `26781eb` и `37446c3` сохранены, удалённый main проверен на `91fd69d`. Ветка `codex/cp2-runtime-image-audit` не создана, native workflow не запущен. Требуется восстановить штатную write-авторизацию, затем публиковать проверенный commit в выделенную ветку и наблюдать конкретный run. Это блокер публикации/CI, не разрешение запуска инфраструктуры локально.
+Первая попытка публикации 2026-10-28 не состоялась: GitHub connector читал профиль/repository metadata, но `create_tree` вернул HTTP 403 `Resource not accessible by integration`. Затем владелец завершил device authorization: `gh` подтвердил `Abrakadabra124`, credential хранится в keyring. Обычный non-force push опубликовал код в ветку `codex/cp2-runtime-image-audit`; remote main остаётся `91fd69d`.
+
+Первый native [run 40745787034](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40745787034), head `1a9a26d`, завершился failure: setup, оба build, cluster, storage/controllers и tracking pass; сбор inventory вернул `required_tool_failed` до сканирования (`expected_images=null`, `covered_images=0`). Summary и все cleanup steps success. Это не CVE/coverage result. Добавлена диагностика фиксированного этапа без raw command output, 12 collector tests pass; [run 40746943667](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40746943667) на `eacf4f9` запущен для установления причины. Native image scope пока не принят.
 
 ## Сквозной запуск к 2026-10-23 23:34 МСК
 

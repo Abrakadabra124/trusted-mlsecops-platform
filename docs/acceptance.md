@@ -47,6 +47,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 ## M08
 **Poisoning benchmark и честные пределы защиты.** Выполнены 30 poisoned runs + 5 clean controls по [протоколу](threat-model.md). Для release candidate относительно matched clean control: падение clean AUPRC <= 0.03; верхняя граница 95% CI прироста targeted ASR <= 0.10 на заранее выбранных probes, denominator >= 500. Эти пределы только для оговорённых атак. Known-violation fixtures с нарушением порога блокируются все; challenge bypass и false positives публикуются независимо от результата. Нельзя требовать «любая атака должна обнаруживаться» и подбирать fixtures под желаемый ответ. T11.
 
+Исполняемый [M08](poisoning-benchmark.md#исполняемый-m08-для-существующего-кандидата) требует evaluated candidate, заново выполняет frozen matrix и сверяет primary materials, source и actual model predictions. Наличие реализации не означает прохождения порогов: native outcome и исторические violations читаются в STATUS. M22 проверяется отдельно.
+
 ## M09
 **Безопасный формат, parity, ограниченная устойчивость.** Python/ONNX probability max absolute error <= `1e-5` на >= 1 000 golden cases, совпадение label для случаев вне epsilon-зоны decision threshold. Forbidden pickle/custom operator/external path/oversized graph fixtures отвергаются до load. Evasion suite: только разрешённые признаки и заданный бюджет; падение recall <= 0.05 на заранее утверждённых probes, OOD fixtures приводят к abstain. Отчёт перечисляет непокрытые атаки. T12.
 

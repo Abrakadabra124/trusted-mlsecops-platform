@@ -87,6 +87,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T11
 - [ ] Poisoning benchmark. Зависимость: T10. Gate: M08.
+- CP2 2026-10-28: [fresh candidate-bound M08](../docs/poisoning-benchmark.md#исполняемый-m08-для-существующего-кандидата) подключает 29 controlled contracts, native 30+5, primary readback и actual model replay. Native outcome нового gate ещё не подтверждён; исторические 10 violations и независимые M22 challenges остаются открыты.
 - Сверка evidence 2026-10-11: [primary-material verifier](../docs/poisoning-benchmark.md) заново вычисляет все метрики и связывает 35 cases с 251 сохранённым файлом. Локально integrity pass при неизменном robustness fail; 17 verifier tests. Это компонент, не полный M08 и не устранение 10 measured violations.
 - Increment 2026-10-11: [native 30+5 matrix](../docs/poisoning-benchmark.md), protocol frozen до запуска. Локально 35 trainings/35 predictions; 10 targeted-ASR violations при 5% poisoning. M08/T11 не закрыты: failure не waived, нужна общая gate/material integration и последующее обоснованное устранение риска. Independent M22 challenges не выполнены.
 - Результат: clean controls + label-flip/backdoor matrix, ASR/CIs/utility deltas и полный отчёт failures/bypasses.

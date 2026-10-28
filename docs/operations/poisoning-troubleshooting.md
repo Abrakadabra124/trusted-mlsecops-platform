@@ -2,6 +2,20 @@
 
 Ответственные: ML owner и security reviewer, для runtime failure также platform operator. Это лабораторное исследование, не production incident и не атака сторонних сервисов.
 
+## Исполняемый M08 и привязка кандидата
+
+Ответственный - оператор CP2 вместе с ML/security reviewer. Симптом интеграционного разрыва: component campaign существовала, но `acceptance --gate M08` возвращал placeholder без выполнения. Добавлены fresh dispatch, проверка actual candidate и повторное чтение evidence. Это исправление отсутствующей связи, а не устранение исторических poisoning violations.
+
+Prerequisites: current source-bound worker, owned workspace/storage, existing `storage-demo.json`, `storage-trust.json`, `trusted-keys.json`, publisher/promoter clients. Gate не создаёт и не меняет working candidate. Native запуск выполнять через `Candidate-bound M08 poisoning acceptance` в disposable hosted CI; локальные Docker/SQL не запускать. Зафиксировать run ID/head SHA, вызвать [команду M08](../poisoning-benchmark.md#исполняемый-m08-для-существующего-кандидата) и читать `M08.json` вместе с campaign/reconciliation, а не только exit code последнего шага печати.
+
+- `M08_candidate_training_mismatch`, `M08_candidate_seed_unsupported`: pipeline/seed/materials не соответствуют frozen protocol. Проверить source, training input, profile и data lock. Не менять metadata JSON ради совпадения и не подбирать seed по желаемому результату.
+- `M08_candidate_prediction_mismatch`: фактическая модель не воспроизвела fresh control в установленном допуске или изменились labels. Сохранить candidate и private proof, сравнить worker/lock/source. Не заменять candidate на control без нового полноценного train/evaluate цикла.
+- `M08_candidate_scores_changed`, `M08_materials_changed`, `M08_candidate_readback_changed`: bytes или привязки изменились. Gate запрещает pass; остановить изменение среды, установить причину и создать новую campaign в чистом стенде. Старые результаты не переписывать.
+- `M08_controlled_contracts_*`, `M08_primary_reconciliation_incomplete`, `M08_campaign_not_fresh`: проверки пропущены, неполны либо не относятся к текущему запуску. Не применять resume из готовых моделей; после исправления выполнить весь protocol заново.
+- `status=fail` при complete 35 cases и успешной reconciliation: смотреть effective candidate-bound matrix. AP/targeted ASR violation остаётся релизным блокером. Исходные thresholds, denominator и confidence method не ослаблять. Недоступность tool/storage даёт inconclusive, а не доказательство устойчивости.
+
+Финальное состояние: report связан с candidate reference/model digest, fresh campaign, runtime и source; SQL candidate повторно прочитан, direct prediction receipt сохранён, все 35 cases присутствуют. Контроли могут быть зелёными одновременно с failed robustness. Rollback модели не требуется: gate не выполняет promotion. CI cleanup проверяет ownership, останавливает свою БД и сохраняет volumes до уничтожения временной VM; ни backup действующей платформы, ни production release этим не создаются. Raw requests/responses и credentials не загружать в публичные artifacts. Независимые M22 challenges остаются обязательными.
+
 ## RB-15: benchmark завершается fail при исправной инфраструктуре
 
 **Симптом:** все 35 runs выполнены, `execution_status=complete`, но `status=fail` и CLI exit 1. Это может быть правильным отказом security quality policy, а не багом CI.

@@ -27,6 +27,22 @@ Final holdout M07 не используется для этих 35 оценок.
 
 ## Воспроизведение
 
+### Исполняемый M08 для существующего кандидата
+
+2026-10-28 добавлен [gate](../mlsecops/poisoning_gate.py), который связывает research matrix с конкретным evaluated candidate из owned storage. Он читает `storage-demo.json` как указатель, проверяет подписанную lineage/evaluation через publisher/promoter readers и сверяет повторное чтение model/metadata. Указатель или старый JSON с pass сами по себе не являются доказательством.
+
+Порядок: 29 existing controlled contracts без skips -> свежие 30 poisoned trainings и 5 controls -> пересчёт 35 cases / 251 primary files -> отдельный offline replay точных bytes кандидата на clean/trigger probes -> повторное чтение candidate, source и primary hashes. Training input кандидата должен совпасть с clean control его seed, probability error не превышать существующий `repeat_tolerance=1e-6`, labels не должны измениться. Сравнения для этого seed пересчитываются по actual candidate predictions; другие seeds остаются проверкой той же процедуры обучения. Равенство model digest двух обучений не подменяет replay: ONNX exports могут иметь разные служебные graph names.
+
+```text
+uv run --locked python -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
+```
+
+Нужны явно подготовленная owned workspace/storage, существующий evaluated candidate и текущий worker image. В текущем режиме инфраструктурный запуск разрешён только в disposable hosted CI. [Workflow](../.github/workflows/poisoning.yml) создаёт candidate из clean checkout, выполняет gate и останавливает только проверенную БД. Для отдельного прогона предусмотрена ветка `codex/cp2-poisoning-gate`, также остаётся ручной запуск.
+
+Выходы: `evidence/M08.json`, `evidence/poisoning-gate.json`, `evidence/poisoning.json`, `evidence/poisoning-reconciliation.json`. Private `poisoning/<id>/candidate-binding.json` содержит запрос/ответ actual model и effective matrix; он и keys не публикуются. Публичный gate содержит hashes, статусы и счётчики. Нарушенный порог сохраняет fail/exit 1, неполное выполнение - inconclusive/exit 2; `release_ready=false` сохраняется и при pass. M22 challenges и общая same-candidate M18 остаются отдельными обязательствами.
+
+Реализация проверяется controlled tests; native outcome фиксируется отдельно в STATUS. Исторические 10 measured violations не устранены добавлением gate, параметры модели и thresholds не изменены. [Диагностика](operations/poisoning-troubleshooting.md#исполняемый-m08-и-привязка-кандидата).
+
 Prerequisites: locked Python/uv environment, Linux/amd64 Docker и current source-bound worker image. Платное облако/GPU не нужны. Этот command не read-only: выполняет 35 trainings и 35 predictions в disposable offline контейнерах, сохраняет экспериментальные артефакты локально.
 
 ```text
