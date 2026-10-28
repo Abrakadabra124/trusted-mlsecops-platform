@@ -210,6 +210,11 @@ def _collect(root, state):
         if observe("pod-manifest-config", image_config, reference.split("@", 1)[1]) != config:
             raise Rejected("image_scope_cri_manifest_mismatch")
         target(reference, config)
+        tags = status.get("repoTags")
+        if tags:
+            if not isinstance(tags, list) or len(tags) > 16:
+                raise Rejected("image_scope_cri_references_invalid")
+            local_references[reference] = min(local_reference(value) for value in tags)
     return {
         "schema_version": 1,
         "workspace_id": owner,

@@ -224,6 +224,16 @@ class RuntimeImageScopeContracts(unittest.TestCase):
         self.assertEqual(target["containerd_reference"], "registry.example/system:v1")
         self.assertFalse(any("pull" in cmd or "export" in cmd for cmd in self.commands))
 
+    def test_repo_digest_does_not_force_registry_download_of_a_preloaded_image(self):
+        self.cri["status"]["repoTags"] = ["registry.example/system:v1"]
+        target = next(row for row in self.collect()["targets"] if row["config_id"] == sha("5"))
+        self.assertEqual(target["reference"], "registry.example/system@" + sha("6"))
+        self.assertEqual(target["containerd_reference"], "registry.example/system:v1")
+        for tags in ("not-a-list", ["x"] * 17):
+            self.cri["status"]["repoTags"] = tags
+            with self.assertRaisesRegex(Rejected, "cri_references_invalid"):
+                self.collect()
+
     def test_local_export_aliases_are_bounded_and_never_accept_credentials_or_options(self):
         for tags in (
             None,

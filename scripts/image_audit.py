@@ -107,7 +107,13 @@ def execute(arguments, output, timeout, cidfile=None, *, output_limit=None):
 
 def export_local_image(target, archive):
     config_id = image_scope.image_digest(target["config_id"])
-    if target["reference"] != config_id:
+    reference = target["reference"]
+    if "@" in reference:
+        image_scope.registry_reference(reference)
+        observed_config = image_scope.image_config(reference.split("@", 1)[1])
+    else:
+        observed_config = reference
+    if observed_config != config_id:
         raise Rejected("image_audit_local_target_invalid")
     alias = image_scope.local_reference(target["containerd_reference"])
     config = image_document(config_id)
@@ -430,11 +436,11 @@ def audit(root, include_candidates=False, runtime_state=None):
             if role == "system":
                 declared = sbom.get("distro")
                 distro = declared.get("id") if isinstance(declared, dict) else None
+                component["distro"] = distro
                 if (distro, role) not in required:
                     raise Rejected("image_audit_runtime_distro_unsupported")
                 if expected_distro is not None and distro != expected_distro:
                     raise Rejected("image_audit_runtime_distro_mismatch")
-                component["distro"] = distro
             packages = inventory(
                 sbom,
                 config_id,

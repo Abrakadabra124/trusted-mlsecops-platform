@@ -52,6 +52,8 @@ def qualify():
         config_id = "sha256:" + digest(canonical(configuration))
         for scenario, expected in (
             ("exact", None),
+            ("registry-exact", None),
+            ("registry-mismatch", "image_audit_local_target_invalid"),
             ("retagged", "image_audit_runtime_config_mismatch"),
             ("failed-export", "image_audit_local_export_failed"),
             ("foreign-reference", "image_audit_local_target_invalid"),
@@ -64,6 +66,8 @@ def qualify():
             }
             if scenario == "foreign-reference":
                 target["reference"] = "sha256:" + "c" * 64
+            if scenario.startswith("registry-"):
+                target["reference"] = "registry.example/preloaded@sha256:" + "d" * 64
             if scenario == "unsafe-alias":
                 target["containerd_reference"] = "--all"
 
@@ -102,6 +106,13 @@ def qualify():
 
             with (
                 patch.object(image_audit, "image_document", return_value=configuration),
+                patch.object(
+                    image_audit.image_scope,
+                    "image_config",
+                    return_value=(
+                        "sha256:" + "e" * 64 if scenario == "registry-mismatch" else config_id
+                    ),
+                ),
                 patch.object(image_audit, "execute", side_effect=export),
             ):
                 try:
