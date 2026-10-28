@@ -4,6 +4,8 @@
 
 ## CP2: Brotli в закреплённых Wolfi images
 
+Продолжение после описанного ниже первоначального исправления: [publication/adoption 2026-10-28](../evidence/cp2-runtime-adoption-2026-10-28.md). PostgreSQL опубликован workflow `40755338187`, manifest/config прочитаны анонимно, shared pin обновлён для fresh states. Tracking также переведён на Wolfi/MLflow 3.17.2. Component audit `40758097499` success: 0 Critical/High/Unknown во всех пяти images; worker/tracking сохраняют 6 Medium/1 Negligible. Отдельные ограничения runtime/system coverage и модели остаются. Старые failures ниже сохраняют историю, а не описывают новый image как всё ещё непубликованный.
+
 2026-10-28, native `22371d8`, [40750705961](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40750705961): worker и storage получили по 3 Critical matches CVE-2026-111497 для `libbrotlicommon1`, `libbrotlidec1`, `libbrotlienc1` версии `1.2.0-r6`; GHSA alias дал ещё 3 Unknown matches. Это находки установленного пакета, не проверка достижимости уязвимого кода и не шесть независимых CVEs. Политика сохраняет refusal.
 
 Источники проверены 2026-10-28: [Wolfi recipe](https://github.com/wolfi-dev/os/blob/main/brotli.yaml) содержит upstream `1.2.1`, epoch `2`; [advisory](https://github.com/advisories/GHSA-9v8h-qqgm-4m35) описывает Brotli decoder issue. Публичный [APK index x86_64](https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz) содержит все три `1.2.1-r2`; SHA-256 полученного архива `56c90c1fd9740197d6c47e035361ed60073e5907133b62713e219897b4dba64f`. Чтение index не заменяет проверку подписи APK при native build и повторный scanner result.

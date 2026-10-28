@@ -41,3 +41,21 @@ M08 уже имеет фактический отказ на candidate, полн
 ## Первый adoption checkpoint
 
 Commit `1dc1f055d25b7b8a6c98882d0761f86d638b54de`: controlled audit 188 cases pass, 451/458 statements и 153/156 branches; source/docs/format checks pass. [Developer 40757080941](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757080941) success. [Tracking 40757092245](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757092245) failure после успешной сборки: probe и host readback сохранили прежний exact-version 3.17.0. Они исправлены на 3.17.2 без ослабления проверки; [диагностика и предотвращение повторения](../operations/tracking-troubleshooting.md#cp2-dependency-audit-остановил-сборку). Остальные native outcomes записываются после завершения, не выводятся из resolver/build success.
+
+## Native результаты исправления
+
+| Проверка | Commit / run | Фактический результат |
+|---|---|---|
+| Developer | `1dc1f05` / [40757080941](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757080941) | success; три fresh trainings, одинаковые вероятности, max ONNX parity error `2.086162567138672e-07` |
+| Storage | `1dc1f05` / [40757086625](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757086625) | success; M03 431 checks, M07 97 checks; recovery 433 checks / 1 000 golden rows / max error 0.0; actual candidate HTTP qualification pass, без release approval |
+| Kubernetes | `1dc1f05` / [40757097871](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757097871) | success; повторный bootstrap, train/evaluate Jobs, private SQL, signed migration 497 checks, M01 10 checks, M04/M05 isolation и M21 intake/readback; owned cluster cleanup pass |
+| Tracking после version correction | `37fe32bcb2121d9747d65368d19a14f68e6dd71a` / [40757788675](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40757788675) | success; MLflow 3.17.2, 53 offline auth / 70 persistent PostgreSQL-TLS checks; M06 18 checks, 6 trainings / 6 predictions / 6 tracking runs, 3 000 golden rows, max probability difference и AUPRC difference 0.0; owned cleanup pass |
+| Полный component image audit | `37fe32b` / [40758097499](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40758097499) | success; пять images, все required inventories проверены, оба vulnerable-package detection controls pass; 74 worker / 435 storage compatibility checks |
+
+У всех пяти images **0 Critical / 0 High / 0 Unknown**. Worker и tracking: по 6 Medium / 1 Negligible; оба storage images: findings отсутствуют. Tracking содержит 125 catalogued packages, worker 68, storage 60. Exceptions, feed downgrade и ослабление severity policy не применялись. Предыдущий tracking образ имел 56 High matches; результаты разных scan databases не выдаются за одно same-DB comparison.
+
+Tracking в функциональном job имел config ID `7e1921f9bb0640bcad2b3b7dfe6556221d404f2113d3af01a48889eab5bf4edf`, в audit job `d7bab0d79b313ec23a266fa917637be2b97431b119194bff12d2d1423349af21` (SHA-256). Это отдельные сборки одинакового source recipe, не bit-for-bit identical image и не один release candidate. Immutable PostgreSQL в обоих путях имеет config `ef426cb1343f72de96bcc72aade0ee57f552b806cdd7e93f80b98d41117fe059`. Полная приёмка всё ещё требует observed inventory фактически развёрнутых образов и одного bound ML candidate.
+
+Исторический отказ tracking на `1dc1f05` сохранён. Native проверки worker/storage/Kubernetes относятся к adoption commit; последующий `37fe32b` меняет только два tracking version guards и документы, поэтому повторены tracking и image audit. Полная CI-матрица ради этого небольшого исправления не запускалась.
+
+Все пять затронутых workflows имеют terminal success для проверенных revisions. Это завершённая компонентная regression этого исправления. Результаты относятся к свежим disposable hosted Linux checkouts; локальная Windows-инфраструктура не изменена. Новая integrated проверка `main` и полный CP2/R1 оцениваются отдельно.

@@ -1,6 +1,6 @@
 # MLflow: проверка совместимости и доступа до deployment
 
-Scope T07/T08, [ADR 0017](decisions/0017-experiment-tracking.md). Это настоящий MLflow 3.17.0 с HTTP requests и тремя реальными обучениями, но пока **одноразовый offline SQLite spike**, не целевой PostgreSQL/TLS service и не выполненный M06. Production/release readiness остаётся false.
+Scope T07/T08, [ADR 0017](decisions/0017-experiment-tracking.md). Текущий probe использует настоящий MLflow 3.17.2 с HTTP requests и тремя реальными обучениями. Это **одноразовый offline SQLite spike**; сам probe не заменяет PostgreSQL/TLS service или M06. [Native обновление 2026-10-28](evidence/cp2-runtime-adoption-2026-10-28.md) отдельно подтвердило 53 probe checks, 70 persistent checks и M06. Production/release readiness остаётся false.
 
 Следующий increment вынесен отдельно: [постоянный local PostgreSQL/TLS service](tracking-service.md). Это не меняет исторический scope и counts данного SQLite probe.
 
@@ -14,7 +14,7 @@ Docker запускает probe и tracking server внутри одного и�
 
 ## Как работает
 
-1. Отдельный hashed lock фиксирует **91 пакет**, включая `mlflow[auth]==3.17.0` и `psycopg[binary]==3.3.6`. Существующие `pyproject.toml`, `uv.lock` и worker image dependencies не изменяются. Native wheel install выполняется с `--require-hashes --only-binary :all:`; uv не копируется в final image.
+1. Отдельный hashed lock фиксирует **91 пакет**, включая `mlflow[auth]==3.17.2` и `psycopg[binary]==3.3.6`. Tracking requirements отделены от worker dependencies. Native wheel install выполняется с `--require-hashes --only-binary :all:`; uv не копируется в final image. Builder и runtime используют одну закреплённую Wolfi Python closure из 34 APK.
 2. Build label связывает Dockerfile, Docker-specific ignore, requirements input/lock и probe. Перед запуском проверяются digest label, immutable image ID, Linux amd64 и UID 65532. В контекст сборки не попадает `.runtime` или весь checkout.
 3. Host runner создаёт новый UUID state и выполняет existing developer qualification: **74 проверки**, включая три fresh-process обучения и независимые оценки. Worker остаётся offline, не получает MLflow SDK, пароль или API.
 4. Host projection выбирает только allowlisted IDs/digests, seeds и метрики. Проверяет разные run IDs, одинаковые input/image/materials/version/policy/source bindings, probability tolerance <=1e-6 и AUPRC difference <=1e-4. Модели, строки dataset, ключи и произвольные поля metadata в MLflow не экспортируются.

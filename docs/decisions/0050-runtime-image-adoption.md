@@ -1,10 +1,10 @@
 # ADR 0050: scoped принятие исправленных runtime images
 
-Статус: native adoption частично проверен; новый storage pin ожидает consumer regression. Scope: CP2/R1-B02, продолжение ADR 0015/0016, не изменение критериев R1.
+Статус: component adoption и пять затронутых workflows проверены; полный observed runtime scope остаётся открытым. Scope: CP2/R1-B02, продолжение ADR 0015/0016, не изменение критериев R1.
 
 ## Основание
 
-Продолжение 2026-10-28: [новый Brotli-patched PostgreSQL опубликован и прочитан анонимно](../evidence/cp2-runtime-adoption-2026-10-28.md); shared pin переключён на manifest `bd279118884568f35de40901ee9438f17af7c2e75a0623be89b36bbd69b68fe5`. Guarded workflow `40755338187` success, 74 worker / 435 storage checks, 1 000 golden rows/error 0.0. Consumer regression нового pin ещё не завершена. Tracking recipe также переводится на уже квалифицированную Wolfi Python closure с MLflow 3.17.2; каждый consumer и полный image audit должны подтвердить это изменение. Исторические результаты ниже не являются evidence нового tracking runtime.
+Продолжение 2026-10-28: [новый Brotli-patched PostgreSQL опубликован, прочитан анонимно и проверен consumers](../evidence/cp2-runtime-adoption-2026-10-28.md); shared pin переключён на manifest `bd279118884568f35de40901ee9438f17af7c2e75a0623be89b36bbd69b68fe5`. Guarded workflow `40755338187` success, 74 worker / 435 storage checks, 1 000 golden rows/error 0.0. Developer/Storage/Kubernetes regression нового pin success на `1dc1f05`. Tracking на Wolfi Python closure с MLflow 3.17.2 прошёл native service/M06 и полный component image audit на `37fe32b` после correction version guards. Это отдельные builds/source-bound результаты, не единый принятый R1 candidate. Исторические результаты ниже не являются evidence нового tracking runtime.
 
 В `0de97b6` Wolfi candidates прошли actual worker/storage qualification, package audit и повторную сборку с точным APK closure. Baseline по-прежнему содержит High/Critical. [Evidence и digests](../image-candidates.md#проверка-полностью-закреплённых-recipes). Один успешный эксперимент не меняет default runtime.
 

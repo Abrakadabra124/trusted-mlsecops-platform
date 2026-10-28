@@ -2,6 +2,8 @@
 
 T07/T08 component, 2026-10-11. После [offline spike](tracking-spike.md) появился **реальный постоянный tracking service**. Он хранит три настоящих обучения, metadata и auth в PostgreSQL, artifacts в отдельном volume. Это ещё не полный M06, trusted release или production deployment.
 
+Актуальное продолжение 2026-10-28: [MLflow 3.17.2 на Wolfi и новый pinned PostgreSQL](evidence/cp2-runtime-adoption-2026-10-28.md) прошли 70 native service checks; отдельный M06 прошёл 18 checks с шестью trainings/predictions/tracking runs и нулевой разницей вероятностей. Исторический component scope ниже не подменяет эту отдельную проверку. Recovery, observed system image scope и полный R1 по-прежнему требуют своей приёмки.
+
 ## Что работает
 
 ```text
@@ -9,7 +11,7 @@ offline training workers -> проверенная projection -> host publisher
                                                     |
                                       HTTPS + scoped Basic auth
                                                     |
-                                       MLflow 3.17.0 / Uvicorn
+                                       MLflow 3.17.2 / Uvicorn
                                          |                |
                               mTLS, verify-full       artifact volume
                                          |
