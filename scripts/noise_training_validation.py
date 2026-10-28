@@ -79,7 +79,7 @@ def run(root, *, balanced=False):
     if len(train) != 14000 or len(validation) != 3000:
         raise Rejected("noise_validation_split")
     source = {name: digest(bounded_read(root / name)) for name in MATERIALS}
-    campaign = root / ".runtime/noise-validation" / uuid.uuid4().hex
+    campaign = root / "tmp/noise-validation" / uuid.uuid4().hex
     campaign.mkdir(parents=True, exist_ok=False)
     report = {
         "scope": "train-validation-development-not-acceptance",
@@ -180,7 +180,7 @@ def run(root, *, balanced=False):
     )
     write_json(campaign / "report.json", report)
     name = "noise-validation-balanced.json" if balanced else "noise-validation.json"
-    write_json(root / ".runtime/evidence" / name, report)
+    write_json(root / "tmp/evidence" / name, report)
     return copy.deepcopy(report)
 
 

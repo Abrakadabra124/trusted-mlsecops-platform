@@ -51,7 +51,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import canonical, read_json
           for name in ('noise-validation-balanced.json', 'M08.json', 'poisoning-gate.json', 'poisoning.json', 'M09.json', 'robustness-gate.json'):
-              path = Path('.runtime/evidence') / name
+              path = Path('tmp/evidence' if name.startswith('noise-') else '.runtime/evidence') / name
               if path.is_file():
                   print(canonical(read_json(path)).decode())
               else:
