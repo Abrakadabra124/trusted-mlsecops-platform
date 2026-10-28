@@ -152,6 +152,30 @@ gh api repos/Abrakadabra124/trusted-mlsecops-platform/actions/jobs/114506519932/
 
 Команда проверена с gh 2.98.0. Флаг разрешает сохранение содержащих управляющие символы bytes в файл, а не отключает TLS/auth. Raw log не добавлять в Git. Для нового run сначала получить его job ID, не переносить исторические counts на текущий image.
 
+## CP2: сверка фактических образов
+
+Симптом при расширении scope: прежние три scans ничего не доказывали о реально загруженных system/controller images. Исправление: read-only inventory, manifest/config reconciliation, дополнительное сканирование и повторный inventory после него. Controlled проверки воспроизводят ошибочные ownership, config/distro/source bindings, смену состава, отсутствующий image и неоднозначный digest. Реальный production-инцидент этим не заявляется.
+
+Ответственный - оператор CP2. Prerequisites: чистая ветка с текущим кодом, доступ GitHub Actions и disposable hosted runner; запускать Docker/cluster этой процедурой на рабочей Windows запрещено. Для одного native прогона использовать workflow `Observed runtime image audit` на выбранном commit. Push в ветку `codex/cp2-runtime-image-audit` также запускает только этот workflow. Для ручного запуска после регистрации workflow в default branch:
+
+```text
+gh workflow run runtime-image-audit.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp2-runtime-image-audit
+gh run list --repo Abrakadabra124/trusted-mlsecops-platform --workflow runtime-image-audit.yml --branch codex/cp2-runtime-image-audit --limit 5
+```
+
+Команды требуют действующей CLI-авторизации; наличие подключения GitHub в Codex её не заменяет. Зафиксировать конкретный run ID/head SHA и наблюдать тот же run, не повторять запуск из-за timeout интерфейса. Не открывать PR только ради запуска: он запустит общую regression matrix.
+
+Workflow выполняет bootstrap, build worker/tracking, cluster, private storage, scoped controllers, tracking service, затем `python -m scripts.image_audit --runtime-state .runtime`. Это интеграция существующих компонентов без migration рабочего volume. Expected summary: scope `observed-runtime-image-audit-only`, source revision текущего checkout, runtime_scope с expected/covered counts. `release_ready` всегда false.
+
+Ветви диагностики:
+
+- `image_scope_*` / `image_audit_runtime_*`: сверить ownership, controller profile, image IDs и stage failure. Registry manifest обязан указывать на наблюдённый config. Не заменять reference на `latest` и не исключать проблемный Pod из inventory.
+- `image_audit_runtime_changed`: сохранить refusal; выяснить, менялся ли lab во время scan. После исправления причины допустим новый отдельный run. Старый snapshot не переписывать.
+- `image_audit_runtime_application_coverage_unapproved` или `image_audit_runtime_distro_unsupported`: OS/package coverage недостаточно. По фактическому SBOM определить состав application binaries, поддерживаемые catalogers и обязательные packages; оформить профиль с отрицательными тестами. Не разрешать pass по одному наличию libc.
+- High/Critical сохраняют fail даже при неполном application coverage. Unknown, scanner crash и недоступность digest сохраняют inconclusive. Успешная печать summary не означает успешный scan.
+
+Recovery/rollback: job останавливает только проверенные tracking/host-storage containers и удаляет только кластер с подтверждённым ownership. Если bootstrap не успел сохранить marker, cleanup не угадывает владельца; остатки исчезнут с disposable VM. При несовпадении ownership оператор прекращает ручные удаления и фиксирует блокер. Вне этой VM нет deployment, следовательно rollback действующей платформы не нужен. Raw runtime snapshots, keys, Docker inspect и SQL credentials не загружать в публичные artifacts. Завершение CP2 требует native evidence и устранения coverage/findings blockers; текущие controlled tests это не заменяют.
+
 ## Решение по результату
 
 1. `scan_executed=false`, invalid/stale DB, timeout или missing coverage: evidence неполно. Проверить доступность registry/DB, ownership процесса и его текущий handle. Не запускать новый audit только из-за timeout наблюдения и не менять severity threshold.

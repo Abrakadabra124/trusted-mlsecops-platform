@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, read_json, write_json
-from scripts import image_audit, image_candidates, tracking_spike
+from scripts import image_audit, image_candidates, image_scope, tracking_spike
 from scripts.image_audit_qualification import fixtures
 
 
@@ -22,6 +22,16 @@ def qualify():
         "comparison-tracking-high": "fail",
         "comparison-missing-tracking": "inconclusive",
         "clean": "pass",
+        "runtime-clean": "inconclusive",
+        "runtime-known-worker": "pass",
+        "runtime-distro-changed": "inconclusive",
+        "runtime-source-mismatch": "rejected",
+        "runtime-local-image-changed": "inconclusive",
+        "runtime-missing-image": "inconclusive",
+        "runtime-foreign-config": "inconclusive",
+        "runtime-changed": "rejected",
+        "runtime-unsupported-distro": "inconclusive",
+        "runtime-high": "fail",
         "missing-tracking-image": "inconclusive",
         "bad-tracking-materials": "inconclusive",
         "root-tracking-image": "inconclusive",
@@ -58,6 +68,22 @@ def qualify():
             report["descriptor"]["db"]["status"]["built"] = datetime.now(UTC).isoformat()
             fingerprint = "f" * 64
             tracking_materials = "e" * 64
+            runtime_reference = "registry.example/system@" + image_id
+            runtime_snapshot = {
+                "targets": [
+                    {"name": "runtime-000", "reference": runtime_reference, "config_id": image_id}
+                ],
+                "source_revision": "revision",
+                "source_fingerprint": fingerprint,
+                "containers": [],
+                "pods": [],
+            }
+            if name == "runtime-source-mismatch":
+                runtime_snapshot["source_revision"] = "different-revision"
+            if name == "runtime-local-image-changed":
+                runtime_snapshot["targets"][0].update(
+                    reference="sha256:" + "9" * 64, config_id=None
+                )
             inspected = {
                 "Id": image_id,
                 "Config": {"Labels": {"org.trusted-mlsecops.source-fingerprint": fingerprint}},
@@ -65,9 +91,16 @@ def qualify():
 
             def inspect(reference):
                 calls.append(("inspect", reference))
+                if name == "runtime-missing-image" and reference == runtime_reference:
+                    raise Rejected("missing")
                 if name == "missing-image-pull" and len(calls) == 1:
                     raise Rejected("missing")
                 details = copy.deepcopy(inspected)
+                if name in {"runtime-known-worker", "runtime-distro-changed"}:
+                    if reference == image_audit.STORAGE_IMAGE:
+                        details["Id"] = "sha256:" + "8" * 64
+                    elif reference == tracking_spike.TAG:
+                        details["Id"] = "sha256:" + "7" * 64
                 if name == "bad-worker-source" and reference == "trusted-mlsecops:dev":
                     details["Config"]["Labels"] = {}
                 if reference == tracking_spike.TAG:
@@ -94,9 +127,17 @@ def qualify():
             def scanner(run, stage, image, arguments, mounts=(), network=False):
                 path = run / f"{stage}.json"
                 document = copy.deepcopy(report)
+                observed_id = image_id
+                if name in {"runtime-known-worker", "runtime-distro-changed"}:
+                    if stage.startswith("storage-"):
+                        observed_id = "sha256:" + "8" * 64
+                    elif stage.startswith("tracking-"):
+                        observed_id = "sha256:" + "7" * 64
+                document["source"]["target"]["imageID"] = observed_id
                 returncode = 0
                 if stage.endswith("-sbom"):
                     document = copy.deepcopy(sbom)
+                    document["source"]["metadata"]["imageID"] = observed_id
                     document["artifacts"].extend(
                         [
                             {
@@ -121,6 +162,9 @@ def qualify():
                             for package in ("mlflow", "mlflow-skinny", "psycopg", "uvicorn")
                             if name != "missing-tracking-package" or package != "mlflow"
                         )
+                    elif stage == "runtime-000-sbom" and name != "runtime-known-worker":
+                        if name == "runtime-unsupported-distro":
+                            document["distro"] = {"id": "unsupported", "versionID": "1"}
                     elif name != "debian-baseline":
                         document["distro"] = {"id": "wolfi", "versionID": "20230201"}
                         for package in document["artifacts"]:
@@ -179,6 +223,7 @@ def qualify():
                     document["distro"] = (
                         {"name": "debian", "version": "12"}
                         if stage == "tracking-scan"
+                        or (stage == "runtime-000-scan" and name != "runtime-known-worker")
                         else {"name": "wolfi", "version": "20230201"}
                     )
                     if "-candidate-" in stage and name == "comparison-wolfi-high":
@@ -217,10 +262,23 @@ def qualify():
                         returncode = 0 if name == "tracking-unknown" else 2
                     if stage == "tracking-scan" and name == "tracking-scanner-crash":
                         returncode = 1
+                    if stage == "runtime-000-scan" and name == "runtime-high":
+                        document["matches"] = [copy.deepcopy(match)]
+                        returncode = 2
                 write_json(path, document)
                 return returncode, path
 
             with (
+                patch.object(
+                    image_scope,
+                    "collect",
+                    side_effect=[
+                        runtime_snapshot,
+                        {**runtime_snapshot, "pods": ["changed"]}
+                        if name == "runtime-changed"
+                        else runtime_snapshot,
+                    ],
+                ),
                 patch.object(
                     tracking_spike,
                     "materials",
@@ -239,7 +297,15 @@ def qualify():
                 ),
                 patch.object(image_audit, "inspect_image", side_effect=inspect),
                 patch.object(image_audit, "command", side_effect=command),
-                patch.object(image_audit, "identity", return_value=image_id),
+                patch.object(
+                    image_audit,
+                    "identity",
+                    side_effect=lambda archive, details: (
+                        "sha256:" + "9" * 64
+                        if name == "runtime-foreign-config" and archive.stem == "runtime-000"
+                        else details["Id"]
+                    ),
+                ),
                 patch.object(image_audit, "scanner", side_effect=scanner),
                 patch.object(
                     image_audit.shutil,
@@ -257,9 +323,20 @@ def qualify():
             ):
                 try:
                     result = image_audit.audit(
-                        root, include_candidates=name.startswith("comparison")
+                        root,
+                        include_candidates=name.startswith("comparison"),
+                        **({"runtime_state": root} if name.startswith("runtime-") else {}),
                     )
                     outcome = result["status"]
+                    if name == "runtime-known-worker":
+                        if (
+                            result["runtime_scope"]["status"] != "pass"
+                            or result["runtime_scope"]["covered_images"] != 1
+                        ):
+                            raise AssertionError("every observed image must be scanned")
+                    if name in {"runtime-clean", "runtime-high"}:
+                        if result["runtime_scope"]["status"] != "inconclusive":
+                            raise AssertionError("OS-only scan cannot prove application coverage")
                     if name in {"comparison-tracking-high", "comparison-missing-tracking"}:
                         if result["comparison"]["status"] != "pass" or outcome == "pass":
                             raise AssertionError(

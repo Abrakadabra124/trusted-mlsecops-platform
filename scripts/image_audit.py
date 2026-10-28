@@ -23,7 +23,7 @@ from mlsecops.contracts import (
 )
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
-from scripts import image_candidates, tracking_spike
+from scripts import image_candidates, image_scope, tracking_spike
 from scripts.image_archive import identity
 from scripts.image_audit_contract import (
     assess,
@@ -192,25 +192,36 @@ def snapshot(cache):
     return {path.relative_to(cache).as_posix(): file_hash(path) for path in paths}
 
 
-def audit(root, include_candidates=False):
+def audit(root, include_candidates=False, runtime_state=None):
     if shutil.disk_usage(root).free < 8 * 1024**3:
         raise Rejected("image_audit_disk_headroom_required")
     run_id = uuid.uuid4().hex
     run = safe_child(root, f".runtime/image-audit/{run_id}")
     run.mkdir(parents=True, mode=0o700)
     fingerprint = source_fingerprint(root)
+    policy = (
+        POLICY
+        if runtime_state is None
+        else {
+            **POLICY,
+            "id": "observed-runtime-images-v1",
+            "scope": [*POLICY["scope"], "owned-runtime"],
+        }
+    )
     report = {
         "schema_version": 1,
         "status": "inconclusive",
         "release_ready": False,
-        "scope": "worker-storage-tracking-image-audit-only",
+        "scope": "worker-storage-tracking-image-audit-only"
+        if runtime_state is None
+        else "observed-runtime-image-audit-only",
         "run_id": run_id,
         "started_at": now(),
         "source_revision": command(["git", "-C", str(root), "rev-parse", "HEAD"]),
         "source_dirty": bool(command(["git", "-C", str(root), "status", "--porcelain"])),
         "source_fingerprint": fingerprint,
-        "policy": POLICY,
-        "policy_digest": digest(canonical(POLICY)),
+        "policy": policy,
+        "policy_digest": digest(canonical(policy)),
         "scanner_images": {"syft": SYFT_IMAGE, "grype": GRYPE_IMAGE},
         "runner_materials": {
             path.name: file_hash(path)
@@ -224,14 +235,30 @@ def audit(root, include_candidates=False):
         "detection_control": "inconclusive",
         "vulnerability_count": None,
         "limitations": [
-            "Not full M01, M21 or R1 acceptance; deployed controller/system inventory reconciliation is still required",
+            "Not full M01, M21 or R1 acceptance; unapproved system application coverage remains inconclusive"
+            if runtime_state is not None
+            else "Not full M01, M21 or R1 acceptance; deployed controller/system inventory reconciliation is still required",
             "Scanner signatures not independently verified; digest pinning is not publisher identity",
             "Package matching is not exploitability analysis or complete vulnerability coverage",
             "Host administrator is trusted; reports are not a signed trusted audit sink",
             "Fresh DB can change findings; exact reproduction requires recorded DB and image snapshots",
         ],
     }
+    observed = None
+    if runtime_state is not None:
+        report["runtime_scope"] = {
+            "status": "inconclusive",
+            "expected_images": None,
+            "covered_images": 0,
+        }
     write_json(safe_child(root, REPORT), report)
+    if runtime_state is not None:
+        observed = image_scope.collect(root, runtime_state)
+        if any(observed[key] != report[key] for key in ("source_revision", "source_fingerprint")):
+            raise Rejected("image_audit_runtime_source_mismatch")
+        write_json(run / "runtime-before.json", observed)
+        report["runtime_scope"]["expected_images"] = len(observed["targets"])
+        write_json(safe_child(root, REPORT), report)
     tracking_materials = tracking_spike.materials(root)
     for image in (SYFT_IMAGE, GRYPE_IMAGE, STORAGE_IMAGE):
         try:
@@ -244,6 +271,8 @@ def audit(root, include_candidates=False):
         ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
         ("debian", "storage"): {"libc6", "postgresql-18"},
         ("debian", "tracking"): {"libc6", "mlflow", "mlflow-skinny", "psycopg", "uvicorn"},
+        ("debian", "system"): {"libc6"},
+        ("wolfi", "system"): {"glibc-2.44"},
         ("wolfi", "worker"): {
             "glibc-2.44",
             "python-3.12",
@@ -263,6 +292,12 @@ def audit(root, include_candidates=False):
             (role + "-candidate", role, spec["reference"], "wolfi")
             for role, spec in image_candidates.SPECS.items()
         )
+    expected_configs = {}
+    if observed is not None:
+        targets.extend(
+            (item["name"], "system", item["reference"], None) for item in observed["targets"]
+        )
+        expected_configs = {item["name"]: item["config_id"] for item in observed["targets"]}
     for name, role, reference, distro in targets:
         component = {
             "name": name,
@@ -271,11 +306,21 @@ def audit(root, include_candidates=False):
             "status": "inconclusive",
             "scan_executed": False,
             "vulnerability_count": None,
+            "coverage_profile": role if role != "system" else "unapproved-system",
         }
         report["components"].append(component)
         archive = run / f"{name}.tar"
+        expected_distro = None
         try:
-            details = inspect_image(reference)
+            try:
+                details = inspect_image(reference)
+            except Rejected:
+                if role != "system" or "@sha256:" not in reference:
+                    raise
+                command(["docker", "pull", "--platform", "linux/amd64", reference], timeout=300)
+                details = inspect_image(reference)
+            if role == "system" and expected_configs[name] is None and details["Id"] != reference:
+                raise Rejected("image_audit_runtime_image_mismatch")
             if (
                 role == "worker"
                 and details["Config"]
@@ -301,6 +346,23 @@ def audit(root, include_candidates=False):
                 ["docker", "image", "save", "--output", str(archive), details["Id"]], timeout=300
             )
             config_id = identity(archive, details)
+            if (
+                role == "system"
+                and expected_configs[name] is not None
+                and config_id != expected_configs[name]
+            ):
+                raise Rejected("image_audit_runtime_config_mismatch")
+            if role == "system":
+                known = [
+                    item
+                    for item in report["components"]
+                    if item["name"] in POLICY["scope"]
+                    and item.get("image_config_id") == config_id
+                    and item.get("sbom_validated") is True
+                ]
+                if len(known) == 1:
+                    component["coverage_profile"] = known[0]["role"]
+                    expected_distro = known[0]["distro"]
             component.update(image_config_id=config_id, archive_digest=file_hash(archive))
             exit_code, path = scanner(
                 run,
@@ -311,10 +373,21 @@ def audit(root, include_candidates=False):
             )
             if exit_code:
                 raise Rejected("image_audit_sbom_failed")
+            sbom = decode(bounded_read(path, LIMIT), LIMIT)
+            if role == "system":
+                declared = sbom.get("distro")
+                distro = declared.get("id") if isinstance(declared, dict) else None
+                if (distro, role) not in required:
+                    raise Rejected("image_audit_runtime_distro_unsupported")
+                if expected_distro is not None and distro != expected_distro:
+                    raise Rejected("image_audit_runtime_distro_mismatch")
+                component["distro"] = distro
             packages = inventory(
-                decode(bounded_read(path, LIMIT), LIMIT),
+                sbom,
                 config_id,
-                required[(distro, role)],
+                required[(distro, component["coverage_profile"])]
+                if component["coverage_profile"] != "unapproved-system"
+                else required[(distro, role)],
                 distro=distro,
             )
             component["catalogued_packages"] = len(packages)
@@ -416,7 +489,9 @@ def audit(root, include_candidates=False):
                 decode(bounded_read(path, LIMIT), LIMIT),
                 decode(bounded_read(scan_path, LIMIT), LIMIT),
                 component["image_config_id"],
-                required[(component["distro"], component["role"])],
+                required[(component["distro"], component["coverage_profile"])]
+                if component["coverage_profile"] != "unapproved-system"
+                else required[(component["distro"], component["role"])],
                 exit_code,
                 distro=component["distro"],
             )
@@ -432,6 +507,10 @@ def audit(root, include_candidates=False):
                 vulnerability_count=result["unique_vulnerabilities"],
                 report_digest=file_hash(scan_path),
             )
+            if component["coverage_profile"] == "unapproved-system":
+                component["reason"] = "image_audit_runtime_application_coverage_unapproved"
+                if component["status"] == "pass":
+                    component["status"] = "inconclusive"
         except Rejected as error:
             component["reason"] = str(error)
         write_json(safe_child(root, REPORT), report)
@@ -442,6 +521,14 @@ def audit(root, include_candidates=False):
     ):
         raise Rejected("image_audit_materials_changed")
     statuses = {component["status"] for component in report["components"]}
+    if observed is not None:
+        repeated = image_scope.collect(root, runtime_state)
+        write_json(run / "runtime-after.json", repeated)
+        if canonical(repeated) != canonical(observed):
+            raise Rejected("image_audit_runtime_changed")
+        report["runtime_scope"] = image_scope.coverage(observed, report["components"])
+        if report["runtime_scope"]["status"] != "pass":
+            statuses.add("inconclusive")
     report["status"] = (
         "fail" if "fail" in statuses else "inconclusive" if "inconclusive" in statuses else "pass"
     )
@@ -456,12 +543,17 @@ def audit(root, include_candidates=False):
     report["completed_at"] = now()
     if include_candidates:
         report["comparison"] = compare(
-            [component for component in report["components"] if component["name"] != "tracking"]
+            [
+                component
+                for component in report["components"]
+                if component["name"]
+                in {"worker", "storage", "worker-candidate", "storage-candidate"}
+            ]
         )
     return report
 
 
-def main(root=None, include_candidates=False):
+def main(root=None, include_candidates=False, runtime_state=None):
     root = Path(root or Path(__file__).resolve().parents[1]).resolve()
     output = safe_child(root, REPORT)
     write_json(
@@ -475,7 +567,7 @@ def main(root=None, include_candidates=False):
         },
     )
     try:
-        report = audit(root, include_candidates=include_candidates)
+        report = audit(root, include_candidates=include_candidates, runtime_state=runtime_state)
     except Exception as error:
         report = read_json(output)
         report.update(
@@ -494,4 +586,10 @@ if __name__ == "__main__":
         description="Audit baseline images and optional separate candidates"
     )
     parser.add_argument("--compare-candidates", action="store_true")
-    sys.exit(main(include_candidates=parser.parse_args().compare_candidates))
+    parser.add_argument(
+        "--runtime-state", type=Path, help="Owned complete lab state for observed image coverage"
+    )
+    arguments = parser.parse_args()
+    sys.exit(
+        main(include_candidates=arguments.compare_candidates, runtime_state=arguments.runtime_state)
+    )

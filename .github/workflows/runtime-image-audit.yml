@@ -1,0 +1,88 @@
+name: Observed runtime image audit
+on:
+  push:
+    branches: [codex/cp2-runtime-image-audit]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runtime-image-audit-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  observed-images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked contracts before infrastructure
+        run: |
+          uv sync --locked --python 3.12.15
+          uv run --locked ruff check scripts/image*.py
+          uv run --locked ruff format --check scripts/image*.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --source=scripts.image_scope -m unittest scripts.image_scope_qualification
+          uv run --locked coverage report --fail-under=95
+          uv run --locked coverage json -o .coverage-scope.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-scope.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+          uv run --locked python -m scripts.image_suite_qualification
+      - name: Prepare isolated workspace and pinned tools
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+      - name: Build exact worker and tracking images
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m scripts.tracking_spike build
+      - name: Bootstrap disposable cluster
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Bootstrap owned storage and controller profile
+        run: |
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.controller_bootstrap
+      - name: Bootstrap private tracking service
+        run: uv run --locked python -m scripts.tracking_service up
+      - name: Reconcile observed images and audit immutable bytes
+        run: uv run --locked python -m scripts.image_audit --runtime-state .runtime
+      - name: Publish bounded summary without raw runtime snapshots
+        if: ${{ !cancelled() }}
+        run: |
+          uv run --locked python -m scripts.image_audit_publication
+          echo 'Observed image reconciliation. Unapproved application coverage is inconclusive; this is not M18 or release approval.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop only owned tracking services
+        if: ${{ always() }}
+        run: |
+          if test -f .runtime/tracking-service/resources.json; then
+            uv run --locked python -m scripts.tracking_service stop
+          fi
+      - name: Stop and verify only owned host storage
+        if: ${{ always() }}
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('runtime_audit_storage_stop_incomplete')
+          PY
+          fi
+      - name: Remove only verified disposable cluster
+        if: ${{ always() }}
+        run: |
+          if test -f .runtime/cluster.json; then
+            uv run --locked python -m mlsecops.cluster status
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi

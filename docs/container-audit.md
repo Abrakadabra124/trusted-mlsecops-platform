@@ -14,6 +14,18 @@
 
 Publisher/scorer controllers используют образ worker по [controller bootstrap](../mlsecops/controller_bootstrap.py), однако этот audit не сверяет фактически работающие workloads. Полный deployed controller/system inventory, его соответствие image reports и остальные M18 criteria остаются обязательными. [Диагностика и плейбук](operations/image-audit-troubleshooting.md#cp2-отсутствующий-образ-tracking).
 
+## Фактические образы среды CP2
+
+Опция `--runtime-state .runtime` связывает audit с существующим owned lab через [image_scope.py](../scripts/image_scope.py). Сборщик проверяет workspace/cluster ownership, текущий controller profile и его source/config/manifest bindings, host storage и private tracking. Он включает kind node, все контейнеры workspace, tracking PostgreSQL/server и regular/init/ephemeral containers всех Pod кластера. Для Pod используются наблюдённые content/config digests; mutable tag не считается доказательством identity. Новая загрузка из registry допускается только по проверенному digest, а экспортированный config повторно сравнивается с наблюдённым.
+
+Состав повторно собирается после scan. Изменение source, controller profile, контейнеров или наблюдённых Pod images делает результат inconclusive. Ограничения: не более 256 Pod, 256 host containers, 64 уникальных image targets; неоднозначная identity и недоступный образ не пропускаются. Raw before/after snapshots остаются в ignored `.runtime/image-audit/<run_id>/`; публичный summary содержит счётчики покрытия и immutable image/config IDs без raw Docker/Kubernetes objects.
+
+Scope `observed-runtime-image-audit-only` с policy `observed-runtime-images-v1` дополняет обычные worker/storage/tracking проверки. Byte-identical runtime image наследует утверждённый package profile соответствующего базового образа. Для других system images доступный OS scan сохраняет findings, но даже без High/Critical остаётся `inconclusive`: `coverage_profile=unapproved-system`. Наличие libc не доказывает, что scanner распознал Go/application binaries. Неподдерживаемый distro также не получает pass. Профили системных приложений требуют native SBOM evidence и ещё не утверждены; это открытая часть M18, а не scanner exception.
+
+[Workflow](../.github/workflows/runtime-image-audit.yml) создаёт полный временный lab на стандартном `ubuntu-24.04` runner. Он запускается вручную либо при push только в `codex/cp2-runtime-image-audit`; `main` этим workflow автоматически не запускается. Контракты выполняются до инфраструктуры, локальные секреты не загружаются, cleanup проверяет ownership. Снимки и volumes исчезнут с hosted VM; их внешнего backup этот job не создаёт. Запуск и разбор отказов описаны в [ранбуке](operations/image-audit-troubleshooting.md#cp2-сверка-фактических-образов).
+
+Controlled evidence 2026-10-28: 176 audit cases, 430/437 statements и 143/146 branches audit modules; 11 collector methods, 107/107 statements и 46/46 branches; 16 publication regression methods. Эти результаты проверяют код на fixtures, не подтверждают native image coverage или M18. Реальный CI outcome фиксируется отдельно в STATUS.
+
 ## Что делают технологии
 
 Syft формирует SBOM (software bill of materials): перечень обнаруженных установленных пакетов и их версий. Grype сопоставляет этот перечень с базой известных уязвимостей. Это не malware scan модели, не доказательство отсутствия неизвестных уязвимостей и не оценка практической эксплуатируемости каждого finding.

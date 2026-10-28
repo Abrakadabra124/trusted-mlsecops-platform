@@ -27,6 +27,10 @@ jobs:
           uv sync --locked --python 3.12.15
           uv run --locked ruff check scripts/image*.py
           uv run --locked ruff format --check scripts/image*.py
+          uv run --locked coverage run --branch --data-file=.coverage-image-scope --source=scripts.image_scope -m unittest scripts.image_scope_qualification
+          uv run --locked coverage report --data-file=.coverage-image-scope --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-image-scope -o .coverage-image-scope.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-image-scope.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit,scripts.image_candidates,scripts.image_comparison -m scripts.image_suite_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage.json
