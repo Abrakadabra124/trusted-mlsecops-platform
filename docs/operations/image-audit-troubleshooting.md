@@ -2,8 +2,6 @@
 
 Ответственные: platform operator и security reviewer. Процедура относится к scanner evidence лаборатории, не к production-инциденту. Рабочие SQL volumes, runtime tags и foundation не меняются.
 
-## CP2: отсутствующий образ tracking
-
 ## CP2: Brotli в закреплённых Wolfi images
 
 2026-10-28, native `22371d8`, [40750705961](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40750705961): worker и storage получили по 3 Critical matches CVE-2026-111497 для `libbrotlicommon1`, `libbrotlidec1`, `libbrotlienc1` версии `1.2.0-r6`; GHSA alias дал ещё 3 Unknown matches. Это находки установленного пакета, не проверка достижимости уязвимого кода и не шесть независимых CVEs. Политика сохраняет refusal.
@@ -14,7 +12,9 @@
 
 Плейбук: запустить существующий `image-audit.yml` на точном feature ref в disposable hosted CI; проверить builds, worker compatibility, signed storage restore, все пять components и severity counts. Успех только трёх исправленных images не закрывает baseline storage, tracking и runtime system coverage. Не добавлять scanner ignores. При неуспехе сборки сохранить старый pin как исторический artifact без разрешения release; установить package/ABI/source причину и повторить новый run. Rollback working database не нужен, поскольку rehearsal использует отдельный target. Native результат нового pin фиксируется в STATUS; до него исправление не считается подтверждённым.
 
-## Обязательный tracking image
+Предыдущий Brotli playbook проверен в [40753468138](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40753468138), `edc6862`: 74 worker / 435 storage checks, 1 000 golden predictions/error 0.0, основной worker и оба candidates без Critical/High/Unknown. Storage comparison удалил все шесть прежних advisory/package pairs, новых нет. Общий workflow failure сохранён из-за baseline storage и tracking. Следующий этап - отдельная guarded publication нового storage artifact и adoption по pinned digest; эти действия данным run не выполнены. Повторный общий image audit после adoption обязателен.
+
+## CP2: отсутствующий образ tracking
 
 **Симптом:** прежний успешный worker/storage audit не содержит MLflow, хотя tracking service использует отдельный образ. Причина установлена по списку targets: в нём было только два runtime components. Это пробел покрытия CP2/R1-B02, а не подтверждённая эксплуатация уязвимости.
 
@@ -189,6 +189,7 @@ Native `1a9a26d` поднял весь disposable lab, но collector верну
 - [40749336227](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40749336227), `c8e2f23`, установил `image_scope_cri_references_missing`: config совпал, но RepoDigests пуст. Исправление сохраняет hash-checked config и bounded CRI repoTag только как локальный указатель для экспорта. `ctr images export --local --platform linux/amd64 - <alias>` читает фактический containerd image в private archive; [upstream export](https://github.com/containerd/containerd/blob/v2.1.3/cmd/ctr/commands/images/export.go) описывает совместимый manifest.json. `--local` исключает transfer progress из бинарного stdout. Перед Syft проверяются архивный config digest, OS/architecture/layers/labels; смена alias на другие bytes блокируется. Timeout 300 s, archive limit 4 GiB, stderr limit 2 MiB. Экспорт не выполняет pull, load, tag либо замену runtime. Отсутствие и tags, malformed identity либо изменившийся snapshot по-прежнему запрещают pass. Native результат исправления фиксируется в STATUS отдельно от controlled tests.
 - `image_audit_runtime_changed`: сохранить refusal; выяснить, менялся ли lab во время scan. После исправления причины допустим новый отдельный run. Старый snapshot не переписывать.
 - Если CRI сообщает RepoDigest, это ещё не доказывает возможность скачивания через registry: предзагруженный image может иметь только локальную историю. При наличии validated repoTag теперь также используется containerd export с проверкой manifest -> config -> archive. Если локального alias нет, прежний digest-only registry путь сохраняет refusal при недоступности. Native `22371d8` впервые завершил before/after inventory (14 images, 4 fully covered) и выявил отдельные scanner findings; новая ветка экспорта для RepoDigest ещё требует native подтверждения.
+- Подтверждение исправления: [40752836255](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40752836255), `4012505`, получил все 14 config/archive bindings без `required_tool_failed`, before/after inventory совпал. Шесть Debian targets не удовлетворяют текущему required-packages profile; Ubuntu и нераспознанный distro не поддержаны; два system applications остаются unapproved. Не переводить эти 10 targets в pass из-за успешного экспорта. Полное покрытие 4/14, audit fail из-за findings, все owned cleanup steps success.
 - `image_audit_runtime_application_coverage_unapproved` или `image_audit_runtime_distro_unsupported`: OS/package coverage недостаточно. По фактическому SBOM определить состав application binaries, поддерживаемые catalogers и обязательные packages; оформить профиль с отрицательными тестами. Не разрешать pass по одному наличию libc.
 - High/Critical сохраняют fail даже при неполном application coverage. Unknown, scanner crash и недоступность digest сохраняют inconclusive. Успешная печать summary не означает успешный scan.
 
