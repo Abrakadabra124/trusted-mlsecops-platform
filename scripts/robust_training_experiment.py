@@ -2,7 +2,7 @@ import importlib.metadata
 import math
 from decimal import Decimal
 
-from mlsecops import evaluation_quality, robust_training
+from mlsecops import evaluation_quality, noise_training, robust_training
 from mlsecops.contracts import Rejected, canonical, digest, require_fields
 from mlsecops.datasets import generate, validate_rows
 from mlsecops.prediction_protocol import response as prediction_response
@@ -116,8 +116,10 @@ def check_optimization(receipt, rows):
 def protocol():
     return {
         "schema_version": 1,
-        "profile": "paired-robust-training-lab-v1",
-        "training": robust_training.definition(),
+        "profile": "paired-balanced-training-lab-v2",
+        "training": noise_training.definition(True),
+        "baseline": "reference-logistic-train",
+        "candidate": "train",
         "attack": robustness.policy(),
         "quality": evaluation_quality.definition(),
         "probes": PROBES,

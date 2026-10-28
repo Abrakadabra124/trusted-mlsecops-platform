@@ -212,7 +212,7 @@ class ExperimentContracts(unittest.TestCase):
                 experiment.training_response(request, {**response, name: value}, profile)
 
     def test_optimization_receipt_cannot_hide_nonconvergence_or_change_policy(self):
-        rules = experiment.protocol()["training"]
+        rules = experiment.robust_training.definition()
         receipt = {
             "schema_version": 1,
             "algorithm": rules["algorithm"],

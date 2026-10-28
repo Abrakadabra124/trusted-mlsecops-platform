@@ -25,7 +25,7 @@ from mlsecops.sandbox import resolve_image, run_worker
 from scripts import robust_training_experiment as experiment
 from scripts import robustness, robustness_native
 
-ARMS = {"baseline": "reference-logistic-train", "candidate": "research-robust-train"}
+ARMS = {"baseline": "reference-logistic-train", "candidate": "train"}
 MATERIAL_FILES = (
     {"campaign.json", "train.json", "validation.json", "probes.json", "executions.json"}
     | {
