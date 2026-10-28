@@ -63,7 +63,16 @@ jobs:
       - name: Sanitized complete absolute-matrix outcomes including failures
         if: always()
         run: |
-          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M22.json','absolute-poisoning-gate.json')]; [print(canonical(read_json(path)).decode() if path.is_file() else path.name+': no completed report') for path in paths]"
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          for name in ('M22.json', 'absolute-poisoning-gate.json'):
+              path = Path('.runtime/evidence') / name
+              report = read_json(path) if path.is_file() else {'status': 'inconclusive', 'reason': 'missing-evidence'}
+              print(canonical({key: value for key, value in report.items() if key != 'records'}).decode())
+              for record in report.get('records', []):
+                  print(canonical({'absolute_case': record}).decode())
+          PY
           echo 'Component run only. Full M22 remains inconclusive until independent reviewer challenges; release remains prohibited.' >> "$GITHUB_STEP_SUMMARY"
       - name: Stop only verified owned disposable storage
         if: always()

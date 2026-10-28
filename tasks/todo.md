@@ -224,7 +224,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T28
 - [ ] Absolute-budget и независимые attack challenges. Зависимости: T10, T11, T12. Gate: M22.
-- Реализован [частичный M22](../docs/absolute-poisoning.md): frozen 36+6 matrix, primary reconciliation, actual-candidate replay и structured refusal. Controlled negative tests pass; native запуск ещё не подтверждён. Reviewer handoff и ранбук подготовлены, independent challenges остаются обязательными и отсутствуют. T28 не закрыта.
+- Реализован и native проверен [частичный M22](../docs/absolute-poisoning.md#native-результат-2026-10-29-мск): [40788141737](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40788141737), `e063998`, 36+6 trainings, 42/42 nonviolating, 300 primary files, actual-candidate replay 0.0, cleanup success. Component pass, полный M22 inconclusive. Reviewer handoff и ранбук подготовлены, independent challenges 0/2. T28 не закрыта.
 - Результат: 36 poisoned runs + 6 clean controls, не менее двух отложенных reviewer challenges, заранее заданные attacker capabilities и корректная единица статистического анализа.
 - Проверка: абсолютные бюджеты и доли записаны вместе, challenge не использован для tuning, hard-boundary bypass блокирует release, неопределённый результат не превращается в pass.
 
