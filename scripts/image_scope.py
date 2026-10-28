@@ -172,7 +172,7 @@ def _collect(root, state):
                     NODE,
                     "crictl",
                     "inspecti",
-                    pod["image_id"],
+                    config,
                 ],
             ).encode()
         )["status"]

@@ -153,6 +153,18 @@ class RuntimeImageScopeContracts(unittest.TestCase):
         self.assertEqual(len(observed["targets"]), 4)
         self.assertFalse(any("inspecti" in command for command in self.commands))
 
+    def test_cri_lookup_uses_resolved_config_when_pod_reports_manifest_digest(self):
+        self.pods["items"][0]["status"]["containerStatuses"][0]["imageID"] = sha("a")
+        original = self.command
+
+        def command(args, **kwargs):
+            if "inspecti" in args and args[-1] != sha("5"):
+                raise Rejected("required_tool_failed")
+            return original(args, **kwargs)
+
+        self.command = command
+        self.assertEqual(len(self.collect()["targets"]), 5)
+
     def test_refuses_changed_profile_owner_and_non_digest_container_ids(self):
         mutations = (
             lambda: self.profile.update(source_revision="a" * 40),

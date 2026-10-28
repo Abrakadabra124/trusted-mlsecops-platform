@@ -171,6 +171,8 @@ Workflow выполняет bootstrap, build worker/tracking, cluster, private s
 
 Ветви диагностики:
 
+Native `1a9a26d` поднял весь disposable lab, но collector вернул `required_tool_failed` до первого SBOM. Диагностический `eacf4f9` установил этап `pod-cri-identity`. Controlled RED воспроизвёл случай, когда Pod сообщает manifest digest, а CRI lookup принимает разрешённый image config ID. Исправление использует уже hash-checked config для `crictl inspecti`, сохраняя проверки returned ID, registry digest и экспортированных bytes. Это гипотеза причины native отказа до подтверждения следующим run; прежние failures не удаляются. CRI (Container Runtime Interface) - интерфейс Kubernetes к container runtime; manifest digest и config digest обозначают разные объекты.
+
 - `image_scope_*` / `image_audit_runtime_*`: сверить ownership, controller profile, image IDs и stage failure. Registry manifest обязан указывать на наблюдённый config. Не заменять reference на `latest` и не исключать проблемный Pod из inventory.
 - `image_audit_runtime_changed`: сохранить refusal; выяснить, менялся ли lab во время scan. После исправления причины допустим новый отдельный run. Старый snapshot не переписывать.
 - `image_audit_runtime_application_coverage_unapproved` или `image_audit_runtime_distro_unsupported`: OS/package coverage недостаточно. По фактическому SBOM определить состав application binaries, поддерживаемые catalogers и обязательные packages; оформить профиль с отрицательными тестами. Не разрешать pass по одному наличию libc.
