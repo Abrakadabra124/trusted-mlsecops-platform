@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T02 node candidate 2026-10-29: [native build/audit f8a15c4](../docs/operations/node-candidate.md#native-результат-2026-10-29-мск), builder success, audit fail; Critical/High 67/394 -> 61/349. Обновление только Kubernetes недостаточно, candidate не принят. Полный T02 остаётся открытым. Следующая обязательная работа CP2 - T12/M09 actual-candidate binding, формат, parity и frozen evasion без ослабления исходных критериев.
+
 T02 2026-10-29 МСК: [native diagnostic scan](../docs/evidence/cp2-system-images-2026-10-28.md#native-diagnostic-scan-завершён-2026-10-29-мск) завершён: 14/14 scanned, 4/14 application coverage, fail; Go controls и cleanup pass. [Node patch candidate 1.36.6](../docs/operations/node-candidate.md) реализован для отдельного hosted build/audit, без adoption, native ещё требуется. Остальные R1 blockers сохраняются. Предыдущие записи ниже являются историей этапа.
 
 T02 update: Cilium 1.20.4 regression прошла M01/M04/M05/M21; optional-distro fix подтверждён 14/14 native observations при прежнем coverage 4/14. Оба Go controls прошли native на f12476c. Diagnostic scan unapproved system inventories реализован без возможности pass: **197 audit cases + 12 tests pass**, native ожидается. [Evidence](../docs/evidence/cp2-system-images-2026-10-28.md). System application coverage, реальные CVE и model failures остаются обязательными блокерами CP2.

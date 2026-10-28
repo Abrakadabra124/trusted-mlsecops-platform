@@ -37,3 +37,21 @@ Kind обычно удаляет собственный build container чере
 Controlled tests проверяют ограничения runner, dirty checkout, нехватку места, неверный kind, archive digest/size, build failure, source/image substitution и отказ выдавать coverage при чистом diagnostic scan. Проверены **201 audit cases, 12 observation/Go/diagnostic methods и 7 node candidate methods**; builder до CLI entrypoint имеет 66/70 covered statements, 23/24 branches. Это controlled результаты, они не заменяют native сборку. Native result записывается только после terminal CI; первая проверка этого нового пути ещё требуется.
 
 Успешный build report имеет scope `node-candidate-build-only`, release_ready=false. Общий diagnostic audit закономерно остаётся fail/inconclusive при текущей старой базе и unapproved application profiles. Перед adoption нужны актуальная база, полный inventory встроенных runtime images, функциональные M01/M04/M05/M21 и security checks на тех же bytes. Новый immutable image публикуется и перепроверяется отдельно; только затем меняются node/kubectl pins и version guards согласованным commit. Rollback на этом этапе не нужен: текущий runtime pin не меняется.
+
+## Native результат 2026-10-29 МСК
+
+[40777426055](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40777426055), head `f8a15c45b4544036df4de65fa904198ed2c5d065`, job `123130219970`: **failure**, attempt 1. Builder завершился success, затем общий audit корректно отказал. Сборка 01:07:17-01:08:35 МСК; audit 01:09:01-01:12:34 МСК. Все пять inputs просканированы, detection/Wolfi/оба Go controls pass. Worker/storage/tracking имеют 0 Critical/High/Unknown.
+
+| Измерение на одной DB | Baseline 1.36.4 | Candidate 1.36.6 |
+|---|---:|---:|
+| Catalogued packages | 878 | 878 |
+| Critical matches | 67 | 61 |
+| High matches | 394 | 349 |
+| Unknown matches | 70 | 67 |
+| Medium matches | 195 | 183 |
+
+Baseline config `sha256:0fa975026f71246c4e4744409d43e2e5884bb6e960851b438e50f455808c16f4`; candidate config `sha256:801636e7c8a763aff10e5612c33d3c650e907a929a14fcf54fa564c8c8314105`; base config `sha256:816692b104dfc1ccc2bf183a2c61bf5d40c8fbc232dd5c71210f4d71f622061d`. Source materials digest `72f61cbf79b17d01b90d32bdaf46f424a5f8b473a309b492095869a98c1e854c` повторно проверен после audit.
+
+Syft наблюдает `k8s.io/kubernetes v1.36.6` в `/usr/bin/kubeadm`, `/usr/bin/kubectl`, `/usr/bin/kubelet`. Go 1.26.5 этих binaries сменился на 1.26.10, но старые runtime binaries всё ещё содержат Go 1.26.7. Matches являются package/advisory совпадениями, не уникальными CVE. Версии x/net, x/crypto и gRPC в [upstream go.mod 1.36.6](https://github.com/kubernetes/kubernetes/blob/v1.36.6/go.mod) остались прежними; patch Kubernetes не устраняет весь dependency scope.
+
+**Решение: candidate не принят и не опубликован как новый runtime artifact.** Измеренное уменьшение findings не разрешает adoption. Нужны remediation base/runtime и зависимостей, разбор Unknown, application profiles и функциональная проверка перед сменой pins. CI build container завершён штатным kind builder; cluster/SQL здесь не запускались. Артефакт жил на disposable runner, durable registry image этим run не создан.
