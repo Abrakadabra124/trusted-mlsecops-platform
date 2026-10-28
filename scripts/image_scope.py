@@ -30,6 +30,17 @@ def registry_reference(value):
     return value
 
 
+def local_reference(value):
+    if (
+        not isinstance(value, str)
+        or not re.fullmatch(r"[a-z0-9][a-z0-9./:_-]{0,511}", value)
+        or ":" not in value
+        or "://" in value
+    ):
+        raise Rejected("image_scope_local_reference_invalid")
+    return value
+
+
 def observe(stage, operation, *arguments):
     try:
         return operation(*arguments)
@@ -75,7 +86,7 @@ def _collect(root, state):
     ):
         raise Rejected("image_scope_controller_binding_invalid")
     observe("storage-resources", storage_bootstrap.validate, state)
-    targets, containers = {}, []
+    targets, containers, local_references = {}, [], {}
 
     def target(reference, config_id=None):
         if config_id is not None:
@@ -182,7 +193,19 @@ def _collect(root, state):
         if not isinstance(references, list) or len(references) > 16:
             raise Rejected("image_scope_cri_references_invalid")
         if not references:
-            raise Rejected("image_scope_cri_references_missing")
+            tags = status.get("repoTags")
+            if not isinstance(tags, list) or not 1 <= len(tags) <= 16:
+                raise Rejected("image_scope_cri_references_missing")
+            alias = min(local_reference(value) for value in tags)
+            if config not in targets:
+                target(config, config)
+                local_references[config] = alias
+            elif targets[config] not in {None, config}:
+                raise Rejected("image_scope_ambiguous_target")
+            targets[config] = config
+            if config in local_references and local_references[config] != alias:
+                raise Rejected("image_scope_local_reference_changed")
+            continue
         reference = min(registry_reference(value) for value in references)
         if observe("pod-manifest-config", image_config, reference.split("@", 1)[1]) != config:
             raise Rejected("image_scope_cri_manifest_mismatch")
@@ -197,7 +220,16 @@ def _collect(root, state):
         "containers": sorted(containers, key=canonical),
         "pods": pods,
         "targets": [
-            {"name": f"runtime-{index:03}", "reference": reference, "config_id": config}
+            {
+                "name": f"runtime-{index:03}",
+                "reference": reference,
+                "config_id": config,
+                **(
+                    {"containerd_reference": local_references[reference]}
+                    if reference in local_references
+                    else {}
+                ),
+            }
             for index, (reference, config) in enumerate(sorted(targets.items()))
         ],
     }

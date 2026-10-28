@@ -217,6 +217,59 @@ class RuntimeImageScopeContracts(unittest.TestCase):
                 with self.assertRaisesRegex(Rejected, "image_scope_cri_" + reason + "$"):
                     self.collect()
 
+    def test_local_only_cri_image_keeps_exact_config_and_export_alias(self):
+        self.cri["status"].update(repoDigests=[], repoTags=["registry.example/system:v1"])
+        target = next(row for row in self.collect()["targets"] if row["config_id"] == sha("5"))
+        self.assertEqual(target["reference"], sha("5"))
+        self.assertEqual(target["containerd_reference"], "registry.example/system:v1")
+        self.assertFalse(any("pull" in cmd or "export" in cmd for cmd in self.commands))
+
+    def test_local_export_aliases_are_bounded_and_never_accept_credentials_or_options(self):
+        for tags in (
+            None,
+            [],
+            [None],
+            ["x"] * 17,
+            ["--all"],
+            ["https://host/image:v1"],
+            ["user:password@host/image:v1"],
+            ["image:tag\n--all"],
+            ["image"],
+        ):
+            self.cri["status"].update(repoDigests=[], repoTags=tags)
+            with self.subTest(tags=tags), self.assertRaises(Rejected):
+                self.collect()
+
+    def test_local_export_deduplicates_and_reuses_an_existing_host_config(self):
+        self.cri["status"].update(repoDigests=[], repoTags=["registry.example/system:v1"])
+        self.pods["items"].append(copy.deepcopy(self.pods["items"][0]))
+        self.assertEqual(len(self.collect()["targets"]), 5)
+        original = self.command
+        count = 0
+
+        def changing(args, **kwargs):
+            nonlocal count
+            if "inspecti" in args:
+                count += 1
+                if count == 2:
+                    self.cri["status"]["repoTags"] = ["registry.example/system:v2"]
+            return original(args, **kwargs)
+
+        self.command = changing
+        with self.assertRaisesRegex(Rejected, "local_reference_changed"):
+            self.collect()
+        self.command = original
+        self.container["Image"] = sha("5")
+        target = next(t for t in self.collect()["targets"] if t["reference"] == sha("5"))
+        self.assertNotIn("containerd_reference", target)
+        self.assertEqual(target["config_id"], sha("5"))
+        self.profile["image_id"] = sha("5")
+        old_resolver = self.resolve_image
+        self.resolve_image = lambda value: sha("7") if value == sha("5") else old_resolver(value)
+        self.pods["items"][0]["status"]["containerStatuses"][0]["imageID"] = sha("a")
+        with self.assertRaisesRegex(Rejected, "ambiguous_target"):
+            self.collect()
+
     def test_refuses_duplicate_or_unbounded_container_inventory(self):
         for value in (
             self.listed + "\n" + self.listed,

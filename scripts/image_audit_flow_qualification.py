@@ -23,6 +23,7 @@ def qualify():
         "comparison-missing-tracking": "inconclusive",
         "clean": "pass",
         "runtime-clean": "inconclusive",
+        "runtime-local-export": "inconclusive",
         "runtime-known-worker": "pass",
         "runtime-distro-changed": "inconclusive",
         "runtime-source-mismatch": "rejected",
@@ -80,6 +81,10 @@ def qualify():
             }
             if name == "runtime-source-mismatch":
                 runtime_snapshot["source_revision"] = "different-revision"
+            if name == "runtime-local-export":
+                runtime_snapshot["targets"][0].update(
+                    reference=image_id, containerd_reference="registry.example/system:local"
+                )
             if name == "runtime-local-image-changed":
                 runtime_snapshot["targets"][0].update(
                     reference="sha256:" + "9" * 64, config_id=None
@@ -119,10 +124,18 @@ def qualify():
             def command(arguments, **kwargs):
                 if "--output" in arguments:
                     output = Path(arguments[arguments.index("--output") + 1])
+                    if name == "runtime-local-export" and output.stem == "runtime-000":
+                        raise AssertionError("local export must not be overwritten by Docker save")
                     if name == "worker-save-error" and output.stem == "worker":
                         raise Rejected("save_failed")
                     output.write_bytes(b"controlled archive placeholder")
                 return "" if "--porcelain" in arguments else "revision"
+
+            def local_export(target, archive):
+                if target != runtime_snapshot["targets"][0]:
+                    raise AssertionError("export must retain the observed config")
+                archive.write_bytes(b"controlled local archive")
+                return copy.deepcopy(inspected)
 
             def scanner(run, stage, image, arguments, mounts=(), network=False):
                 path = run / f"{stage}.json"
@@ -296,6 +309,9 @@ def qualify():
                     return_value={"recipe_digest": "c" * 64},
                 ),
                 patch.object(image_audit, "inspect_image", side_effect=inspect),
+                patch.object(
+                    image_audit, "export_local_image", side_effect=local_export
+                ) as exported,
                 patch.object(image_audit, "command", side_effect=command),
                 patch.object(
                     image_audit,
@@ -328,6 +344,8 @@ def qualify():
                         **({"runtime_state": root} if name.startswith("runtime-") else {}),
                     )
                     outcome = result["status"]
+                    if name == "runtime-local-export" and exported.call_count != 1:
+                        raise AssertionError("local-only runtime target was not exported")
                     if name == "runtime-known-worker":
                         if (
                             result["runtime_scope"]["status"] != "pass"

@@ -22,6 +22,7 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.inventory import command, source_fingerprint
+from mlsecops.kube_worker import image_document
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import image_candidates, image_scope, tracking_spike
 from scripts.image_archive import identity
@@ -63,13 +64,16 @@ def file_hash(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def execute(arguments, output, timeout, cidfile=None):
+def execute(arguments, output, timeout, cidfile=None, *, output_limit=None):
     process = None
     log = output.with_suffix(".log")
     deadline = time.monotonic() + timeout
 
     def check_size():
-        if output.stat().st_size > LIMIT or log.stat().st_size > 2 * 1024**2:
+        if (
+            output.stat().st_size > (LIMIT if output_limit is None else output_limit)
+            or log.stat().st_size > 2 * 1024**2
+        ):
             raise Rejected("image_audit_output_too_large")
 
     try:
@@ -99,6 +103,46 @@ def execute(arguments, output, timeout, cidfile=None):
             )
             if result.returncode:
                 raise Rejected("image_audit_cleanup_failed")
+
+
+def export_local_image(target, archive):
+    config_id = image_scope.image_digest(target["config_id"])
+    if target["reference"] != config_id:
+        raise Rejected("image_audit_local_target_invalid")
+    alias = image_scope.local_reference(target["containerd_reference"])
+    config = image_document(config_id)
+    details = {
+        "Id": config_id,
+        "Os": config["os"],
+        "Architecture": config["architecture"],
+        "RootFS": {"Layers": config["rootfs"]["diff_ids"]},
+        "Config": config["config"],
+    }
+    code = execute(
+        [
+            "docker",
+            "exec",
+            image_scope.NODE,
+            "ctr",
+            "-n",
+            "k8s.io",
+            "images",
+            "export",
+            "--local",
+            "--platform",
+            "linux/amd64",
+            "-",
+            alias,
+        ],
+        archive,
+        300,
+        output_limit=4 * 1024**3,
+    )
+    if code:
+        raise Rejected("image_audit_local_export_failed")
+    if identity(archive, details) != config_id:
+        raise Rejected("image_audit_runtime_config_mismatch")
+    return details
 
 
 def scanner(run, name, image, arguments, mounts=(), network=False):
@@ -292,12 +336,15 @@ def audit(root, include_candidates=False, runtime_state=None):
             (role + "-candidate", role, spec["reference"], "wolfi")
             for role, spec in image_candidates.SPECS.items()
         )
-    expected_configs = {}
+    expected_configs, local_exports = {}, {}
     if observed is not None:
         targets.extend(
             (item["name"], "system", item["reference"], None) for item in observed["targets"]
         )
         expected_configs = {item["name"]: item["config_id"] for item in observed["targets"]}
+        local_exports = {
+            item["name"]: item for item in observed["targets"] if "containerd_reference" in item
+        }
     for name, role, reference, distro in targets:
         component = {
             "name": name,
@@ -313,7 +360,11 @@ def audit(root, include_candidates=False, runtime_state=None):
         expected_distro = None
         try:
             try:
-                details = inspect_image(reference)
+                details = (
+                    export_local_image(local_exports[name], archive)
+                    if name in local_exports
+                    else inspect_image(reference)
+                )
             except Rejected:
                 if role != "system" or "@sha256:" not in reference:
                     raise
@@ -342,9 +393,11 @@ def audit(root, include_candidates=False, runtime_state=None):
                     raise Rejected("image_audit_tracking_materials_mismatch")
                 component["recipe_digest"] = tracking_materials
             component["runtime_image_id"] = details["Id"]
-            command(
-                ["docker", "image", "save", "--output", str(archive), details["Id"]], timeout=300
-            )
+            if name not in local_exports:
+                command(
+                    ["docker", "image", "save", "--output", str(archive), details["Id"]],
+                    timeout=300,
+                )
             config_id = identity(archive, details)
             if (
                 role == "system"

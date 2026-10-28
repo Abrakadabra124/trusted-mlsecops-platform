@@ -3,11 +3,12 @@ import copy
 import io
 import subprocess
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops.contracts import Rejected, canonical, read_json, write_json
+from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from scripts import image_audit
 
 
@@ -42,6 +43,89 @@ def qualify():
         cases.append({"id": f"inspect:{field}", "status": "pass"})
     with tempfile.TemporaryDirectory(prefix="audit-runner-contract-") as temporary:
         root = Path(temporary)
+        configuration = {
+            "os": "linux",
+            "architecture": "amd64",
+            "rootfs": {"diff_ids": ["sha256:" + "b" * 64]},
+            "config": {"Labels": {}, "Env": ["DEMO=original"]},
+        }
+        config_id = "sha256:" + digest(canonical(configuration))
+        for scenario, expected in (
+            ("exact", None),
+            ("retagged", "image_audit_runtime_config_mismatch"),
+            ("failed-export", "image_audit_local_export_failed"),
+            ("foreign-reference", "image_audit_local_target_invalid"),
+            ("unsafe-alias", "image_scope_local_reference_invalid"),
+        ):
+            target = {
+                "reference": config_id,
+                "config_id": config_id,
+                "containerd_reference": "registry.example/preloaded:v1",
+            }
+            if scenario == "foreign-reference":
+                target["reference"] = "sha256:" + "c" * 64
+            if scenario == "unsafe-alias":
+                target["containerd_reference"] = "--all"
+
+            def export(arguments, output, timeout, *, output_limit):
+                if arguments != [
+                    "docker",
+                    "exec",
+                    image_audit.image_scope.NODE,
+                    "ctr",
+                    "-n",
+                    "k8s.io",
+                    "images",
+                    "export",
+                    "--local",
+                    "--platform",
+                    "linux/amd64",
+                    "-",
+                    "registry.example/preloaded:v1",
+                ]:
+                    raise Rejected("audit_export_command_failed")
+                if output_limit != 4 * 1024**3 or timeout != 300:
+                    raise Rejected("audit_export_limits_failed")
+                config = copy.deepcopy(configuration)
+                if scenario == "retagged":
+                    config["config"]["Env"] = ["DEMO=changed"]
+                with tarfile.open(output, "w") as archive:
+                    for name, value in (
+                        ("manifest.json", [{"Config": "config.json"}]),
+                        ("config.json", config),
+                    ):
+                        content = canonical(value)
+                        member = tarfile.TarInfo(name)
+                        member.size = len(content)
+                        archive.addfile(member, io.BytesIO(content))
+                return 1 if scenario == "failed-export" else 0
+
+            with (
+                patch.object(image_audit, "image_document", return_value=configuration),
+                patch.object(image_audit, "execute", side_effect=export),
+            ):
+                try:
+                    details = image_audit.export_local_image(target, root / (scenario + ".tar"))
+                    actual = None if details["Id"] == config_id else "wrong-config"
+                except Rejected as error:
+                    actual = str(error)
+                if actual != expected:
+                    raise Rejected("audit_local_export_contract_failed:" + scenario)
+            cases.append({"id": "local-export:" + scenario, "status": "pass"})
+
+        try:
+            image_audit.execute(
+                [sys.executable, "-c", "print('x'*4096)"],
+                root / "export-limit.tar",
+                10,
+                output_limit=1024,
+            )
+        except Rejected as error:
+            if str(error) != "image_audit_output_too_large":
+                raise
+        else:
+            raise Rejected("audit_export_output_limit_missing")
+        cases.append({"id": "local-export:output-limit", "status": "pass"})
         output = root / ".runtime/evidence/image-audit.json"
         for name, outcome in (
             ("success", {"status": "pass"}),
