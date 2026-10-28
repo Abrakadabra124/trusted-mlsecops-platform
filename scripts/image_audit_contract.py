@@ -36,10 +36,15 @@ def observe_packages(sbom, image_id):
         ):
             raise Rejected("image_audit_package_observation_invalid")
         declared = sbom.get("distro")
+        if declared is not None and not isinstance(declared, dict):
+            raise Rejected("image_audit_package_observation_invalid")
         distro = (
             None
             if declared is None
-            else {name: text(declared[name], empty=True) for name in ("id", "versionID")}
+            else {
+                name: text(declared[name], empty=True) if name in declared else None
+                for name in ("id", "versionID")
+            }
         )
         packages, identifiers = [], set()
         for package in sbom["artifacts"]:

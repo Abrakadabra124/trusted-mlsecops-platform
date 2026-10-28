@@ -31,6 +31,18 @@ class PackageObservationTests(unittest.TestCase):
         self.assertEqual(result["status"], "inconclusive")
         self.assertEqual(result["packages"], [])
 
+    def test_omitted_optional_distro_fields_preserve_package_observation(self):
+        sbom, _, _, image, _ = fixtures()
+        for declared in ({}, {"id": "debian"}, {"versionID": "12"}):
+            with self.subTest(declared=declared):
+                sbom["distro"] = declared
+                result = observe_packages(sbom, image)
+                self.assertEqual(result["package_count"], 2)
+                self.assertEqual(result["status"], "inconclusive")
+                self.assertEqual(
+                    result["distro"], {key: declared.get(key) for key in ("id", "versionID")}
+                )
+
     def test_unknown_versions_remain_visible_without_inference(self):
         sbom, _, _, image, _ = fixtures()
         sbom["artifacts"][0]["version"] = ""
@@ -73,6 +85,9 @@ class PackageObservationTests(unittest.TestCase):
             lambda d: d["artifacts"][0].update(locations=[{"path": 42}]),
             lambda d: d["artifacts"][0].update(locations=[{"path": "/tmp/a"}] * 65),
             lambda d: d.update(distro={"id": "debian", "versionID": False}),
+            lambda d: d.update(distro={"id": None}),
+            lambda d: d.update(distro=[]),
+            lambda d: d.update(distro="debian"),
             lambda d: d.pop("source"),
         ):
             changed = copy.deepcopy(sbom)

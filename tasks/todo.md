@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T02 system coverage 2026-10-28: [фактические packages и main checkpoint](../docs/evidence/cp2-system-images-2026-10-28.md), observed 4/14 coverage / 13 package observations, main 7 success / 3 failure. Optional-distro diagnostics исправлена и проверена controlled tests; native verification ожидается. Cilium 1.20.4 закреплён, отдельные Kubernetes/audit runs выполняются. Следом application profiles и remediation реальных system findings, без waivers и без ослабления model gates.
+
 T02 2026-10-28: [новый storage artifact опубликован и принят компонентными проверками](../docs/evidence/cp2-runtime-adoption-2026-10-28.md), immutable/anonymous readback pass, общий pin обновлён для fresh states. filelock/MLflow fixed locks проходят audit с неизменным source output. Developer/Storage/Kubernetes на `1dc1f05`, исправленный Tracking и полный component image audit на `37fe32b` success. Полное observed system/application coverage и model gates остаются обязательными; T02/CP2/R1 не закрыты.
 
 **Активная очередь:** [R1-B01-R1-B08 и CP1-CP5](../docs/r1-delivery.md), следующий checkpoint CP2 после принятых M01/M04/M05. Общий entrypoint R1-B01 остаётся обязательным до финальной приёмки. Исторические Txx/gates ниже не удалены и не ослаблены. [FI backlog](../docs/future-improvements.md) не исполняется до R1 и явной команды владельца; новую работу привязывать к обязательному blocker/criterion.

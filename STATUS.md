@@ -1,5 +1,9 @@
 # Статус и границы доказательств
 
+## CP2: наблюдаемые системные пакеты 2026-10-28
+
+[Native 3393480 и полная main-матрица aaae245](docs/evidence/cp2-system-images-2026-10-28.md): main **7 success / 3 failure**, M08 и обе robustness campaigns сохраняют отказ. Observed audit **4/14 coverage**, состав доступен для 13 targets; обнаружены конкретные kube-proxy/kind findings, минимальные Go images и unresolved module versions. Optional-distro parser исправлен с RED/GREEN, 188 audit cases и 6 observation tests pass, contract 98/98 statements и 36/36 branches. Cilium security patch 1.20.4 закреплён на `ced7ea0`; native regression ещё ожидается. Это продвижение обязательного R1-B02, не закрытие T02/CP2/R1.
+
 ## CP2: новая публикация и adoption 2026-10-28
 
 [Storage publication 40755338187](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40755338187), `e4244d4`, success: 74 worker / 435 storage checks, 1 000 golden rows/error 0.0. Новый manifest `bd279118884568f35de40901ee9438f17af7c2e75a0623be89b36bbd69b68fe5` отдельно прочитан анонимно, hashes/config/user/source сверены; shared pin обновлён для fresh states. [Полное evidence и пять terminal-success workflows](docs/evidence/cp2-runtime-adoption-2026-10-28.md): Developer/Storage/Kubernetes на `1dc1f05`; исправленный Tracking и полный component image audit на `37fe32b`. Filelock 4.2.1, MLflow 3.17.2 и оба package audits проходят, source output побайтно неизменён. Tracking использует закреплённую Wolfi closure; все пять audited images имеют 0 Critical/High/Unknown, worker/tracking сохраняют 6 Medium/1 Negligible. M06: 6 trainings/predictions/tracking runs, 3 000 golden rows, max difference 0.0. Первый tracking version-guard failure сохранён и исправлен. Компонентный adoption проверен; полный observed image/runtime scope, model failures, CP2-CP5 и R1 остаются открытыми.

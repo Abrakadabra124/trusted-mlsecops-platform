@@ -18,6 +18,8 @@
 
 ## CP2: состав системного приложения
 
+Native [40761233745](../evidence/cp2-system-images-2026-10-28.md) сохранил состав 13/14 targets; один дал `image_audit_package_observation_invalid`. Установлен отдельный parser defect: [optional поля Syft LinuxRelease](https://github.com/anchore/syft/blob/v1.54.1/syft/format/syftjson/model/linux_release.go) ошибочно считались обязательными даже для diagnostic observation. Controlled RED/GREEN проверяет отсутствие id/versionID; теперь они сохраняются как null, неверный тип по-прежнему отвергается. Native причинная связь с единственным отказом пока не доказана. После нового run проверить наличие observation у того же config/приложения; при повторном отказе сохранить конкретный stage, не объявлять app coverage успешным и не подставлять Debian по предположению.
+
 Для system targets с `image_audit_required_packages_missing` или неподдержанным distro сначала читать `package_observation`, `observed_reference`, `local_alias` и `host_roles` в summary. Observation сохраняется до отказа coverage и связан с фактическим config digest; alias служит только указателем на containerd bytes, не доверенным release identity. Сверить имя/версию/тип/cataloguer и путь исполняемого приложения, отдельно его Go `stdlib` и dependencies. Отсутствие `libc6` у минимального образа само по себе не доказывает отсутствие пакетов. Нельзя объявлять образ scratch по пустому distro или разрешать его по наличию любого одного Go module. Новый application profile требует конкретного native inventory и отрицательной проверки отсутствующего/неверного приложения. Unknown versions и неполное покрытие сохраняют отказ.
 
 ## CP2: отсутствующий образ tracking

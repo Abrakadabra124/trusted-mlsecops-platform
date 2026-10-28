@@ -444,7 +444,6 @@ def audit(root, include_candidates=False, runtime_state=None):
                 raise Rejected("image_audit_sbom_failed")
             sbom = decode(bounded_read(path, LIMIT), LIMIT)
             if role == "system":
-                component["package_observation"] = observe_packages(sbom, config_id)
                 component["observed_reference"] = reference
                 if name in local_exports:
                     component["local_alias"] = local_exports[name]["containerd_reference"]
@@ -455,6 +454,7 @@ def audit(root, include_candidates=False, runtime_state=None):
                         if item["image_id"] in {reference, config_id}
                     }
                 )
+                component["package_observation"] = observe_packages(sbom, config_id)
                 declared = sbom.get("distro")
                 distro = declared.get("id") if isinstance(declared, dict) else None
                 component["distro"] = distro
