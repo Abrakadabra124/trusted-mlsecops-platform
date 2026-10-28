@@ -246,7 +246,9 @@ def snapshot(cache):
     return {path.relative_to(cache).as_posix(): file_hash(path) for path in paths}
 
 
-def audit(root, include_candidates=False, runtime_state=None):
+def audit(root, include_candidates=False, runtime_state=None, include_node_candidate=False):
+    if include_node_candidate and (include_candidates or runtime_state is not None):
+        raise Rejected("image_audit_candidate_scope_conflict")
     if shutil.disk_usage(root).free < 8 * 1024**3:
         raise Rejected("image_audit_disk_headroom_required")
     run_id = uuid.uuid4().hex
@@ -262,6 +264,16 @@ def audit(root, include_candidates=False, runtime_state=None):
             "scope": [*POLICY["scope"], "owned-runtime"],
         }
     )
+    node_build = None
+    if include_node_candidate:
+        from scripts import image_node_candidate
+
+        node_build = image_node_candidate.validate(root)
+        policy = {
+            **POLICY,
+            "id": "node-candidate-diagnostics-v1",
+            "scope": [*POLICY["scope"], "node-pair"],
+        }
     report = {
         "schema_version": 1,
         "status": "inconclusive",
@@ -299,6 +311,9 @@ def audit(root, include_candidates=False, runtime_state=None):
         ],
     }
     observed = None
+    if node_build is not None:
+        report["scope"] = "node-candidate-diagnostics-only"
+        report["node_candidate_build"] = node_build
     if runtime_state is not None:
         report["runtime_scope"] = {
             "status": "inconclusive",
@@ -354,6 +369,11 @@ def audit(root, include_candidates=False, runtime_state=None):
             for role, spec in image_candidates.SPECS.items()
         )
     expected_configs, local_exports = {}, {}
+    if node_build is not None:
+        for role, item in node_build["images"].items():
+            name = f"node-{role}"
+            targets.append((name, "system", item["reference"], None))
+            expected_configs[name] = item["config_id"]
     if observed is not None:
         targets.extend(
             (item["name"], "system", item["reference"], None) for item in observed["targets"]
@@ -397,7 +417,7 @@ def audit(root, include_candidates=False, runtime_state=None):
                 != fingerprint
             ):
                 raise Rejected("image_audit_worker_source_mismatch")
-            if name.endswith("-candidate"):
+            if name.endswith("-candidate") and role != "system":
                 component["recipe_digest"] = image_candidates.validate(root, role, details)[
                     "recipe_digest"
                 ]
@@ -430,7 +450,7 @@ def audit(root, include_candidates=False, runtime_state=None):
                     and item.get("image_config_id") == config_id
                     and item.get("sbom_validated") is True
                 ]
-                if len(known) == 1:
+                if len(known) == 1 and not name.startswith("node-"):
                     component["coverage_profile"] = known[0]["role"]
                     expected_distro = known[0]["distro"]
             component.update(image_config_id=config_id, archive_digest=file_hash(archive))
@@ -451,7 +471,7 @@ def audit(root, include_candidates=False, runtime_state=None):
                 component["host_roles"] = sorted(
                     {
                         item["role"]
-                        for item in observed["containers"]
+                        for item in (observed or {}).get("containers", [])
                         if item["image_id"] in {reference, config_id}
                     }
                 )
@@ -556,7 +576,7 @@ def audit(root, include_candidates=False, runtime_state=None):
             raise Rejected("image_audit_wolfi_database_changed")
         report["wolfi_detection_control"] = "pass"
         write_json(safe_child(root, REPORT), report)
-    if observed is not None:
+    if observed is not None or node_build is not None:
         report["go_detection_controls"] = {}
         for kind, (package, version) in GO_CONTROLS.items():
             observation = {"status": "inconclusive", "package": package, "version": version}
@@ -635,6 +655,8 @@ def audit(root, include_candidates=False, runtime_state=None):
     ):
         raise Rejected("image_audit_materials_changed")
     statuses = {component["status"] for component in report["components"]}
+    if node_build is not None and image_node_candidate.validate(root) != node_build:
+        raise Rejected("image_audit_node_candidate_changed")
     if observed is not None:
         repeated = image_scope.collect(root, runtime_state)
         write_json(run / "runtime-after.json", repeated)
@@ -667,7 +689,7 @@ def audit(root, include_candidates=False, runtime_state=None):
     return report
 
 
-def main(root=None, include_candidates=False, runtime_state=None):
+def main(root=None, include_candidates=False, runtime_state=None, include_node_candidate=False):
     root = Path(root or Path(__file__).resolve().parents[1]).resolve()
     output = safe_child(root, REPORT)
     write_json(
@@ -681,7 +703,12 @@ def main(root=None, include_candidates=False, runtime_state=None):
         },
     )
     try:
-        report = audit(root, include_candidates=include_candidates, runtime_state=runtime_state)
+        report = audit(
+            root,
+            include_candidates=include_candidates,
+            runtime_state=runtime_state,
+            include_node_candidate=include_node_candidate,
+        )
     except Exception as error:
         report = read_json(output)
         report.update(
@@ -700,10 +727,15 @@ if __name__ == "__main__":
         description="Audit baseline images and optional separate candidates"
     )
     parser.add_argument("--compare-candidates", action="store_true")
+    parser.add_argument("--compare-node-candidate", action="store_true")
     parser.add_argument(
         "--runtime-state", type=Path, help="Owned complete lab state for observed image coverage"
     )
     arguments = parser.parse_args()
     sys.exit(
-        main(include_candidates=arguments.compare_candidates, runtime_state=arguments.runtime_state)
+        main(
+            include_candidates=arguments.compare_candidates,
+            runtime_state=arguments.runtime_state,
+            include_node_candidate=arguments.compare_node_candidate,
+        )
     )

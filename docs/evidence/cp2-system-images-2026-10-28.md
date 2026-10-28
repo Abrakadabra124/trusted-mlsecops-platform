@@ -63,4 +63,25 @@ Commit `ced7ea067487f21523adac72c632e04a5fbdba37` закрепляет **1.20.4*
 
 Следующий реализованный diagnostic path допускает сканирование связанного непустого inventory минимальных Debian, Ubuntu и unknown-distro images. Он сохраняет findings, но никогда не возвращает pass для неподтверждённого application profile. **197 audit cases + 12 unittest methods pass**; audit runner **299/306 statements, 117/120 branches**, contract **130/130 statements, 50/50 branches**. Controlled tests подтверждают, что строгие worker/storage/tracking contracts не ослаблены, empty/foreign/malformed/suppressed evidence отклоняется. Native проверка этого path ещё требуется.
 
-Следом ввести проверяемые application profiles для системных образов и устранить реальные findings. Отдельно сохраняются M08/M09, M22 independent challenges и незавершённые CP3-CP5. Полученный inventory делает блокеры конкретными, но не закрывает их изменением статусов.
+## Native diagnostic scan завершён 2026-10-29 МСК
+
+[40767489025](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40767489025), head `1be1accc7761361d2bf1caac95d5397da3dbca1b`, завершился **failure**. Scan: 2026-10-28 20:57:45-21:01:42 UTC, то есть 23:57:45-00:01:42 МСК. Все **14/14 наблюдаемых targets** действительно просканированы; с тремя явными worker/storage/tracking inputs в отчёте 17 component entries. Повторное чтение runtime совпало. Application coverage остаётся **4/14**, release_ready=false. Отсутствие approved application profile не скрывает severity findings и не превращается в pass.
+
+| Компонент | Critical matches | High matches | Unknown matches | Результат |
+|---|---:|---:|---:|---|
+| kube-apiserver 1.36.4 | 5 | 43 | 5 | fail |
+| kube-proxy 1.36.4 | 9 | 69 | 6 | fail |
+| kube-controller-manager 1.36.4 | 7 | 58 | 6 | fail |
+| kube-scheduler 1.36.4 | 7 | 58 | 6 | fail |
+| Cilium agent 1.20.4 | 0 | 0 | 18 | inconclusive |
+| Cilium operator 1.20.4 | 0 | 1 | 3 | fail |
+| kind node 1.36.4 | 67 | 394 | 70 | fail |
+| CoreDNS image 1.14.2 | 11 | 51 | 4 | fail |
+| local-path-provisioner | 3 | 20 | 3 | fail |
+| etcd image 3.6.8-0 | 26 | 127 | 11 | fail |
+
+Это package/advisory matches, не число независимых CVE. Для Cilium operator scanner связывает `GHSA-mgcc-cww5-fp2q` с `github.com/go-jose/go-jose/v4 v4.1.4`, предлагая fixed `4.1.6`; это находка для vendor verification, не доказанная exploitability или уже выполненное исправление. Worker/storage/tracking сохраняют 0 Critical/High/Unknown. В Cilium agent отсутствие High не снимает Unknown и неподтверждённое покрытие приложения.
+
+Оба Go controls прошли с exit 2 и ожидаемым High advisory; общая detection control также pass. Все три cleanup steps - tracking, owned host SQL и disposable cluster - success. Raw snapshots/logs не опубликованы. Прежняя формулировка о pending native diagnostic выше относится к состоянию перед этим run.
+
+Следом устранить реальные findings и ввести проверяемые application profiles. Для Kubernetes готовится [изолированный patch candidate](../operations/node-candidate.md), без замены текущего pin. Отдельно сохраняются M08/M09, M22 independent challenges и незавершённые CP3-CP5. Полученный inventory делает блокеры конкретными, но не закрывает их изменением статусов.

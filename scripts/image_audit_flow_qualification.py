@@ -6,13 +6,17 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, read_json, write_json
-from scripts import image_audit, image_candidates, image_scope, tracking_spike
+from scripts import image_audit, image_candidates, image_node_candidate, image_scope, tracking_spike
 from scripts.image_audit_qualification import fixtures
 
 
 def qualify():
     cases = []
     scenarios = {
+        "node-proposal": "inconclusive",
+        "node-known-worker": "inconclusive",
+        "node-forged": "rejected",
+        "node-changed": "rejected",
         "comparison": "pass",
         "comparison-foreign": "inconclusive",
         "comparison-no-wolfi-detection": "rejected",
@@ -81,6 +85,17 @@ def qualify():
             report["descriptor"]["db"]["status"]["built"] = datetime.now(UTC).isoformat()
             fingerprint = "f" * 64
             tracking_materials = "e" * 64
+            node_binding = {
+                "images": {
+                    role: {"reference": reference, "config_id": "sha256:" + str(index) * 64}
+                    for index, (role, reference) in enumerate(
+                        image_node_candidate.IMAGES.items(), 8
+                    )
+                }
+            }
+            if name == "node-known-worker":
+                for item in node_binding["images"].values():
+                    item["config_id"] = image_id
             runtime_reference = "registry.example/system@" + image_id
             runtime_snapshot = {
                 "targets": [
@@ -113,6 +128,9 @@ def qualify():
                 if name == "missing-image-pull" and len(calls) == 1:
                     raise Rejected("missing")
                 details = copy.deepcopy(inspected)
+                for item in node_binding["images"].values():
+                    if reference == item["reference"]:
+                        details["Id"] = item["config_id"]
                 if name in {"runtime-known-worker", "runtime-distro-changed"}:
                     if reference == image_audit.STORAGE_IMAGE:
                         details["Id"] = "sha256:" + "8" * 64
@@ -153,6 +171,9 @@ def qualify():
                 path = run / f"{stage}.json"
                 document = copy.deepcopy(report)
                 observed_id = image_id
+                for role, item in node_binding["images"].items():
+                    if stage.startswith(f"node-{role}-"):
+                        observed_id = item["config_id"]
                 if name in {"runtime-known-worker", "runtime-distro-changed"}:
                     if stage.startswith("storage-"):
                         observed_id = "sha256:" + "8" * 64
@@ -381,6 +402,16 @@ def qualify():
 
             with (
                 patch.object(
+                    image_node_candidate,
+                    "validate",
+                    side_effect=[
+                        Rejected("foreign-build") if name == "node-forged" else node_binding,
+                        {**node_binding, "changed": True}
+                        if name == "node-changed"
+                        else node_binding,
+                    ],
+                ),
+                patch.object(
                     image_scope,
                     "collect",
                     side_effect=[
@@ -440,8 +471,24 @@ def qualify():
                         root,
                         include_candidates=name.startswith("comparison"),
                         **({"runtime_state": root} if name.startswith("runtime-") else {}),
+                        **({"include_node_candidate": True} if name.startswith("node-") else {}),
                     )
                     outcome = result["status"]
+                    if name in {"node-proposal", "node-known-worker"}:
+                        nodes = [c for c in result["components"] if c["name"].startswith("node-")]
+                        if (
+                            len(nodes) != 2
+                            or any(not c["scan_executed"] or c["sbom_validated"] for c in nodes)
+                            or result["release_ready"] is not False
+                            or "runtime_scope" in result
+                            or any(
+                                c["status"] != "pass"
+                                for c in result["go_detection_controls"].values()
+                            )
+                        ):
+                            raise AssertionError(
+                                "candidate scan must retain controls without granting runtime coverage"
+                            )
                     if name.startswith("runtime-"):
                         controls = result["go_detection_controls"]
                         if set(controls) != {"module", "stdlib"} or any(

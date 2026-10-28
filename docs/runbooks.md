@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Изолированный Kubernetes node candidate](operations/node-candidate.md). Verified server archive, закреплённый base, same-DB comparison, запрет локального запуска и отдельные условия adoption. Build success не закрывает image coverage или R1.
+
 - [Сквозной refusal walkthrough](operations/r1-walkthrough.md). Чистый checkout -> данные/training/evaluation -> реальный отказ promotion -> qualification HTTP/metrics/audit -> восстановление той же модели при остановленной source БД. Не full R1 acceptance; только disposable Linux/hosted CI.
 
 - [Private primary audit packet, RB-68/PB-42](operations/audit-evidence-troubleshooting.md). Parent nonce, signed permit, exact retained bytes, independent HTTP admission/outcomes и terminal observation failures; [evidence](evidence/audit-evidence-2026-10-20.md). Полный M13 не принят.

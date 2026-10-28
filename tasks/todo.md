@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T02 2026-10-29 МСК: [native diagnostic scan](../docs/evidence/cp2-system-images-2026-10-28.md#native-diagnostic-scan-завершён-2026-10-29-мск) завершён: 14/14 scanned, 4/14 application coverage, fail; Go controls и cleanup pass. [Node patch candidate 1.36.6](../docs/operations/node-candidate.md) реализован для отдельного hosted build/audit, без adoption, native ещё требуется. Остальные R1 blockers сохраняются. Предыдущие записи ниже являются историей этапа.
+
 T02 update: Cilium 1.20.4 regression прошла M01/M04/M05/M21; optional-distro fix подтверждён 14/14 native observations при прежнем coverage 4/14. Оба Go controls прошли native на f12476c. Diagnostic scan unapproved system inventories реализован без возможности pass: **197 audit cases + 12 tests pass**, native ожидается. [Evidence](../docs/evidence/cp2-system-images-2026-10-28.md). System application coverage, реальные CVE и model failures остаются обязательными блокерами CP2.
 
 T02 system coverage 2026-10-28: [фактические packages и main checkpoint](../docs/evidence/cp2-system-images-2026-10-28.md), observed 4/14 coverage / 13 package observations, main 7 success / 3 failure. Optional-distro diagnostics исправлена и проверена controlled tests; native verification ожидается. Cilium 1.20.4 закреплён, отдельные Kubernetes/audit runs выполняются. Следом application profiles и remediation реальных system findings, без waivers и без ослабления model gates.
