@@ -11,6 +11,84 @@ DISTRO_VERSIONS = {"debian": {"12", "13"}, "wolfi": {"20230201"}}
 WOLFI_OS_PACKAGES = {"glibc-2.44", "python-3.12", "postgresql-18"}
 
 
+def observe_packages(sbom, image_id):
+    """Project bound package facts without claiming application coverage or scan success."""
+
+    def text(value, empty=False):
+        if (
+            not isinstance(value, str)
+            or (not value and not empty)
+            or len(value) > 1024
+            or any(ord(char) < 32 or ord(char) > 126 for char in value)
+        ):
+            raise Rejected("image_audit_package_observation_invalid")
+        return value
+
+    try:
+        if (
+            not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id)
+            or sbom["descriptor"]["name"] != "syft"
+            or sbom["descriptor"]["version"] != SYFT_VERSION
+            or sbom["source"]["type"] != "image"
+            or sbom["source"]["metadata"]["imageID"] != image_id
+            or not isinstance(sbom["artifacts"], list)
+            or len(sbom["artifacts"]) > 4096
+        ):
+            raise Rejected("image_audit_package_observation_invalid")
+        declared = sbom.get("distro")
+        distro = (
+            None
+            if declared is None
+            else {name: text(declared[name], empty=True) for name in ("id", "versionID")}
+        )
+        packages, identifiers = [], set()
+        for package in sbom["artifacts"]:
+            identifier = text(package["id"])
+            if identifier in identifiers:
+                raise Rejected("image_audit_package_observation_invalid")
+            identifiers.add(identifier)
+            locations = package.get("locations", [])
+            if not isinstance(locations, list) or len(locations) > 64:
+                raise Rejected("image_audit_package_observation_invalid")
+            paths = sorted(
+                {
+                    text(location[key])
+                    for location in locations
+                    for key in ("path", "accessPath")
+                    if key in location
+                }
+            )
+            packages.append(
+                {
+                    **{
+                        name: text(package[name], empty=name == "version")
+                        for name in ("name", "version", "type", "foundBy")
+                    },
+                    "paths": paths,
+                }
+            )
+        return {
+            "status": "inconclusive",
+            "scope": "package-observation-not-application-coverage",
+            "image_id": image_id,
+            "distro": distro,
+            "package_count": len(packages),
+            "package_types": dict(Counter(package["type"] for package in packages)),
+            "packages": sorted(
+                packages,
+                key=lambda package: (
+                    package["name"],
+                    package["version"],
+                    package["type"],
+                    package["foundBy"],
+                    package["paths"],
+                ),
+            ),
+        }
+    except (KeyError, TypeError, AttributeError) as error:
+        raise Rejected("image_audit_package_observation_invalid") from error
+
+
 def database(report, timestamp):
     try:
         descriptor = report["descriptor"]

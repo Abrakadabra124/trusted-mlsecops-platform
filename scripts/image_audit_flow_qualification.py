@@ -367,6 +367,26 @@ def qualify():
                     if name in {"runtime-clean", "runtime-high"}:
                         if result["runtime_scope"]["status"] != "inconclusive":
                             raise AssertionError("OS-only scan cannot prove application coverage")
+                    if name in {
+                        "runtime-clean",
+                        "runtime-unsupported-distro",
+                        "runtime-local-export",
+                    }:
+                        component = next(
+                            item for item in result["components"] if item["name"] == "runtime-000"
+                        )
+                        observation = component.get("package_observation", {})
+                        if (
+                            observation.get("image_id") != image_id
+                            or observation.get("status") != "inconclusive"
+                            or observation.get("package_count") != 5
+                            or component.get("observed_reference")
+                            != runtime_snapshot["targets"][0]["reference"]
+                            or result["runtime_scope"]["status"] != "inconclusive"
+                        ):
+                            raise AssertionError(
+                                "bound observation must survive unsupported coverage without passing"
+                            )
                     if name in {"comparison-tracking-high", "comparison-missing-tracking"}:
                         if result["comparison"]["status"] != "pass" or outcome == "pass":
                             raise AssertionError(

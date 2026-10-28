@@ -27,6 +27,7 @@ jobs:
           uv run --locked ruff check scripts/image*.py
           uv run --locked ruff format --check scripts/image*.py
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.image_package_observation_qualification
           uv run --locked coverage run --branch --source=scripts.image_scope -m unittest scripts.image_scope_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage-scope.json

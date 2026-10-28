@@ -16,6 +16,10 @@
 
 Предыдущий Brotli playbook проверен в [40753468138](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40753468138), `edc6862`: 74 worker / 435 storage checks, 1 000 golden predictions/error 0.0, основной worker и оба candidates без Critical/High/Unknown. Storage comparison удалил все шесть прежних advisory/package pairs, новых нет. Общий workflow failure сохранён из-за baseline storage и tracking. Следующий этап - отдельная guarded publication нового storage artifact и adoption по pinned digest; эти действия данным run не выполнены. Повторный общий image audit после adoption обязателен.
 
+## CP2: состав системного приложения
+
+Для system targets с `image_audit_required_packages_missing` или неподдержанным distro сначала читать `package_observation`, `observed_reference`, `local_alias` и `host_roles` в summary. Observation сохраняется до отказа coverage и связан с фактическим config digest; alias служит только указателем на containerd bytes, не доверенным release identity. Сверить имя/версию/тип/cataloguer и путь исполняемого приложения, отдельно его Go `stdlib` и dependencies. Отсутствие `libc6` у минимального образа само по себе не доказывает отсутствие пакетов. Нельзя объявлять образ scratch по пустому distro или разрешать его по наличию любого одного Go module. Новый application profile требует конкретного native inventory и отрицательной проверки отсутствующего/неверного приложения. Unknown versions и неполное покрытие сохраняют отказ.
+
 ## CP2: отсутствующий образ tracking
 
 **Симптом:** прежний успешный worker/storage audit не содержит MLflow, хотя tracking service использует отдельный образ. Причина установлена по списку targets: в нём было только два runtime components. Это пробел покрытия CP2/R1-B02, а не подтверждённая эксплуатация уязвимости.

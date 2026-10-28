@@ -28,6 +28,8 @@ Controlled evidence 2026-10-28: 176 audit cases, 430/437 statements и 143/146 b
 
 ## Что делают технологии
 
+Для незакрытых system profiles audit сохраняет `package_observation`: предварительно сверяет Syft/source/config digest, затем выводит ограниченный список name/version/type/cataloguer и paths внутри образа. Поля metadata, environment, annotations и raw runtime snapshots не публикуются. Пустые или `(devel)` версии остаются такими, не выводятся из tag. Этот список позволяет проверить состав Go binaries и distroless images; его status всегда `inconclusive`, он не присваивает application coverage. Действующие required profiles и severity policy сохранены. [Официальное описание Syft Go cataloguer](https://oss.anchore.com/docs/capabilities/go/) объясняет main module и `stdlib`; [cataloguer documentation](https://oss.anchore.com/docs/guides/sbom/catalogers/) отделяет запущенный cataloguer от действительно обнаруженных packages.
+
 Syft формирует SBOM (software bill of materials): перечень обнаруженных установленных пакетов и их версий. Grype сопоставляет этот перечень с базой известных уязвимостей. Это не malware scan модели, не доказательство отсутствия неизвестных уязвимостей и не оценка практической эксплуатируемости каждого finding.
 
 Docker экспортирует образ, не запуская его приложение. SHA-256 связывает точные bytes архива, SBOM и report; digest pinning не заменяет проверку издателя. Отдельные scanner containers не получают Docker socket, kubeconfig, ML keys, БД проекта или весь checkout.
