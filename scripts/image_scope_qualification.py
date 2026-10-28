@@ -130,6 +130,23 @@ class RuntimeImageScopeContracts(unittest.TestCase):
             all("pull" not in cmd and "run" not in cmd and "rm" not in cmd for cmd in self.commands)
         )
 
+    def test_tool_failure_reports_only_the_fixed_observation_stage(self):
+        for reason in (
+            "required_tool_failed",
+            "required_tool_unavailable",
+            "image_scope_digest_invalid",
+        ):
+            with patch.object(
+                image_scope, "image_config", side_effect=Rejected(reason)
+            ) as operation:
+                expected = (
+                    "image_scope_" + reason + ":pod-manifest-config"
+                    if reason.startswith("required_tool_")
+                    else reason
+                )
+                with self.assertRaisesRegex(Rejected, expected):
+                    image_scope.observe("pod-manifest-config", operation, "sha256:" + "a" * 64)
+
     def test_known_controller_config_reuses_local_image_without_registry_pull(self):
         self.pods["items"][0]["status"]["containerStatuses"][0]["imageID"] = sha("7")
         observed = self.collect()

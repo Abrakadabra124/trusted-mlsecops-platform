@@ -30,6 +30,15 @@ def registry_reference(value):
     return value
 
 
+def observe(stage, operation, *arguments):
+    try:
+        return operation(*arguments)
+    except Rejected as error:
+        if str(error) in {"required_tool_failed", "required_tool_unavailable"}:
+            raise Rejected("image_scope_" + str(error) + ":" + stage) from error
+        raise
+
+
 def collect(root, state):
     try:
         return _collect(Path(root).resolve(), Path(state).resolve())
@@ -41,10 +50,15 @@ def collect(root, state):
 
 def _collect(root, state):
     owner = workspace_id(state)
-    cluster = validate_cluster(state)
+    cluster = observe("cluster-ownership", validate_cluster, state)
     if cluster["workspace_id"] != owner:
         raise Rejected("image_scope_workspace_changed")
-    controllers = verify_saved(state, read_json(safe_child(state, "controllers/resources.json")))
+    controllers = observe(
+        "controller-resources",
+        verify_saved,
+        state,
+        read_json(safe_child(state, "controllers/resources.json")),
+    )
     profile = controllers["profile"]
     validate_profile(profile)
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
@@ -54,11 +68,13 @@ def _collect(root, state):
         or not controllers["resources"]
         or profile["source_revision"] != revision
         or profile["source_fingerprint"] != fingerprint
-        or image_config(profile["image_id"]) != profile["config_id"]
-        or image_config(profile["manifest_id"]) != profile["config_id"]
+        or observe("controller-image-config", image_config, profile["image_id"])
+        != profile["config_id"]
+        or observe("controller-manifest-config", image_config, profile["manifest_id"])
+        != profile["config_id"]
     ):
         raise Rejected("image_scope_controller_binding_invalid")
-    storage_bootstrap.validate(state)
+    observe("storage-resources", storage_bootstrap.validate, state)
     targets, containers = {}, []
 
     def target(reference, config_id=None):
@@ -82,17 +98,21 @@ def _collect(root, state):
             or any(item["id"] == identifier for item in containers)
         ):
             raise Rejected("image_scope_container_identity_invalid")
-        reference = image_inventory(image_digest(observed["Image"]))["image_id"]
+        reference = observe(
+            "host-image-metadata", image_inventory, image_digest(observed["Image"])
+        )["image_id"]
         config = profile["config_id"] if reference == profile["image_id"] else None
         target(reference, config)
         containers.append({"id": identifier, "role": role, "image_id": reference})
 
     target(profile["image_id"], profile["config_id"])
-    node = decode(command(["docker", "inspect", NODE]).encode())[0]
+    node = decode(observe("node-inspect", command, ["docker", "inspect", NODE]).encode())[0]
     if node["Config"].get("Labels", {}).get("io.x-k8s.kind.cluster") != NAME:
         raise Rejected("image_scope_node_ownership_invalid")
     container(node, "kind-node")
-    identifiers = command(
+    identifiers = observe(
+        "workspace-container-list",
+        command,
         [
             "docker",
             "ps",
@@ -102,7 +122,7 @@ def _collect(root, state):
             f"label={WORKSPACE_LABEL}={owner}",
             "--format",
             "{{.ID}}",
-        ]
+        ],
     ).splitlines()
     if (
         len(identifiers) > 256
@@ -111,7 +131,11 @@ def _collect(root, state):
     ):
         raise Rejected("image_scope_container_list_invalid")
     for identifier in sorted(identifiers):
-        observed = decode(command(["docker", "inspect", identifier]).encode())[0]
+        observed = decode(
+            observe(
+                "workspace-container-inspect", command, ["docker", "inspect", identifier]
+            ).encode()
+        )[0]
         if (
             observed["Id"] != identifier
             or observed["Config"].get("Labels", {}).get(WORKSPACE_LABEL) != owner
@@ -119,22 +143,29 @@ def _collect(root, state):
             raise Rejected("image_scope_container_ownership_invalid")
         container(observed, "workspace")
     tracking_state = safe_child(state, "tracking-service")
-    tracking = tracking_service.verify(
-        tracking_state, read_json(safe_child(tracking_state, "configuration.json"))
+    tracking = observe(
+        "tracking-resources",
+        tracking_service.verify,
+        tracking_state,
+        read_json(safe_child(tracking_state, "configuration.json")),
     )
     for role in ("pg", "server"):
         container(tracking[role], "tracking-" + role)
-    document = decode(kubectl(state, ["get", "pods", "-A", "-o", "json"]).stdout)
+    document = decode(
+        observe("pod-list", kubectl, state, ["get", "pods", "-A", "-o", "json"]).stdout
+    )
     if not isinstance(document["items"], list) or not 1 <= len(document["items"]) <= 256:
         raise Rejected("image_scope_pod_limit")
     pods = sorted(pod_inventory(document), key=canonical)
     for pod in pods:
-        config = image_config(pod["image_id"])
+        config = observe("pod-image-config", image_config, pod["image_id"])
         if config == profile["config_id"]:
             target(profile["image_id"], config)
             continue
         status = decode(
-            command(
+            observe(
+                "pod-cri-identity",
+                command,
                 [
                     "docker",
                     "exec",
@@ -142,7 +173,7 @@ def _collect(root, state):
                     "crictl",
                     "inspecti",
                     pod["image_id"],
-                ]
+                ],
             ).encode()
         )["status"]
         references = status["repoDigests"]
@@ -153,7 +184,7 @@ def _collect(root, state):
         ):
             raise Rejected("image_scope_cri_identity_invalid")
         reference = min(registry_reference(value) for value in references)
-        if image_config(reference.split("@", 1)[1]) != config:
+        if observe("pod-manifest-config", image_config, reference.split("@", 1)[1]) != config:
             raise Rejected("image_scope_cri_manifest_mismatch")
         target(reference, config)
     return {
