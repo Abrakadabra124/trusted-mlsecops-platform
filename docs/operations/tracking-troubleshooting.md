@@ -14,6 +14,10 @@ Controlled RED воспроизвёл две ошибки: helper подгото
 
 ## CP2: dependency audit остановил сборку
 
+Актуальный повтор 2026-10-28: filelock 4.0.12 остановил Developer/Storage, MLflow 3.17.0 остановил Tracking до build. [Runs, исправленные версии и source-lock evidence](../evidence/cp2-runtime-adoption-2026-10-28.md). Для этого исправления использовать `uv lock --upgrade-package filelock==4.2.1`; после pin `mlflow[auth]==3.17.2` выполнить compile с прежними параметрами header и точечными `--upgrade-package mlflow==3.17.2 --upgrade-package mlflow-skinny==3.17.2 --upgrade-package mlflow-tracing==3.17.2`. Сверить diff до sync. Все остальные шаги проверки/восстановления ниже сохраняются.
+
+Если новый Wolfi tracking image не собирается или не проходит TLS/auth/publication, сохранить recipe hash и failing step. Сначала сверить `uv`/Python path внутри builder и runtime, hashes wheels и APK inventory, затем controlled contracts и отдельный fresh hosted tracking workflow. Не копировать Debian venv в Wolfi runtime, не добавлять root USER или plaintext TLS fallback. Startup старого state с новым materials digest должен отказать; существующую БД не удалять и configuration marker не переписывать. До native pass это кандидат на adoption, не подтверждённая миграция.
+
 На `883c262` Storage [40002307097](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40002307097) остановился до PostgreSQL из-за `certifi 2026.7.22`; Tracking [40002311281](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40002311281) остановился до сборки образа: 37 advisory matches в трёх пакетах. Это новые результаты dependency feed, не доказательство регрессии PostgreSQL или эксплуатации уязвимости.
 
 Причины и scoped исправления:

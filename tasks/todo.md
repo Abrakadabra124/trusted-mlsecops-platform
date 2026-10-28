@@ -1,5 +1,7 @@
 # Backlog реализации
 
+T02 2026-10-28: [новый storage artifact опубликован](../docs/evidence/cp2-runtime-adoption-2026-10-28.md), immutable/anonymous readback pass, общий pin обновлён для fresh states. filelock/MLflow fixed locks проходят audit с неизменным source output. Native regression нового pin и Wolfi tracking recipe ещё не завершена; T02/CP2/R1 не закрыты.
+
 **Активная очередь:** [R1-B01-R1-B08 и CP1-CP5](../docs/r1-delivery.md), следующий checkpoint CP2 после принятых M01/M04/M05. Общий entrypoint R1-B01 остаётся обязательным до финальной приёмки. Исторические Txx/gates ниже не удалены и не ослаблены. [FI backlog](../docs/future-improvements.md) не исполняется до R1 и явной команды владельца; новую работу привязывать к обязательному blocker/criterion.
 
 T16 current: [ADR 0049 private primary audit evidence](../docs/decisions/0049-private-audit-evidence.md), **[native a7a09c8 verified](../docs/evidence/audit-evidence-a7a09c8-native.md)**: 85 cases, Linux 20 packet / 26 parent-output / 56 export-IO tests без skips, 10 terminal CI: 6 success / 4 failure. [Evidence](../docs/evidence/audit-evidence-2026-10-20.md) сохраняет replay/ledger/fsync RED и review; [RB-68/PB-42](../docs/operations/audit-evidence-troubleshooting.md). Не закрывать task по этому компоненту: production lifecycle/429/503 privacy, service logs, subject composition и public gate projection ещё обязательны.

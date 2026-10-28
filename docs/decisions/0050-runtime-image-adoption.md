@@ -4,6 +4,8 @@
 
 ## Основание
 
+Продолжение 2026-10-28: [новый Brotli-patched PostgreSQL опубликован и прочитан анонимно](../evidence/cp2-runtime-adoption-2026-10-28.md); shared pin переключён на manifest `bd279118884568f35de40901ee9438f17af7c2e75a0623be89b36bbd69b68fe5`. Guarded workflow `40755338187` success, 74 worker / 435 storage checks, 1 000 golden rows/error 0.0. Consumer regression нового pin ещё не завершена. Tracking recipe также переводится на уже квалифицированную Wolfi Python closure с MLflow 3.17.2; каждый consumer и полный image audit должны подтвердить это изменение. Исторические результаты ниже не являются evidence нового tracking runtime.
+
 В `0de97b6` Wolfi candidates прошли actual worker/storage qualification, package audit и повторную сборку с точным APK closure. Baseline по-прежнему содержит High/Critical. [Evidence и digests](../image-candidates.md#проверка-полностью-закреплённых-recipes). Один успешный эксперимент не меняет default runtime.
 
 ## Решение и последовательность

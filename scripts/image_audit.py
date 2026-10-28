@@ -331,11 +331,20 @@ def audit(root, include_candidates=False, runtime_state=None):
             "cryptography",
         },
         ("wolfi", "storage"): {"glibc-2.44", "postgresql-18"},
+        ("wolfi", "tracking"): {
+            "glibc-2.44",
+            "python-3.12",
+            "mlflow",
+            "mlflow-skinny",
+            "mlflow-tracing",
+            "psycopg",
+            "uvicorn",
+        },
     }
     targets = [
         ("worker", "worker", "trusted-mlsecops:dev", "wolfi"),
         ("storage", "storage", STORAGE_IMAGE, "wolfi"),
-        ("tracking", "tracking", tracking_spike.TAG, "debian"),
+        ("tracking", "tracking", tracking_spike.TAG, "wolfi"),
     ]
     if include_candidates:
         targets.extend(

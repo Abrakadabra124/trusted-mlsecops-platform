@@ -37,6 +37,9 @@ def qualify():
         "bad-tracking-materials": "inconclusive",
         "root-tracking-image": "inconclusive",
         "missing-tracking-package": "inconclusive",
+        "missing-tracking-tracing": "inconclusive",
+        "tracking-os-only": "inconclusive",
+        "tracking-foreign-distro": "inconclusive",
         "tracking-high": "fail",
         "tracking-unknown": "inconclusive",
         "tracking-scanner-crash": "inconclusive",
@@ -172,13 +175,21 @@ def qualify():
                                 "type": "python",
                                 "foundBy": "python-package-cataloger",
                             }
-                            for package in ("mlflow", "mlflow-skinny", "psycopg", "uvicorn")
-                            if name != "missing-tracking-package" or package != "mlflow"
+                            for package in (
+                                "mlflow",
+                                "mlflow-skinny",
+                                "mlflow-tracing",
+                                "psycopg",
+                                "uvicorn",
+                            )
+                            if name != "tracking-os-only"
+                            and (name != "missing-tracking-package" or package != "mlflow")
+                            and (name != "missing-tracking-tracing" or package != "mlflow-tracing")
                         )
-                    elif stage == "runtime-000-sbom" and name != "runtime-known-worker":
+                    if stage == "runtime-000-sbom" and name != "runtime-known-worker":
                         if name == "runtime-unsupported-distro":
                             document["distro"] = {"id": "unsupported", "versionID": "1"}
-                    elif name != "debian-baseline":
+                    elif name != "debian-baseline" or stage == "tracking-sbom":
                         document["distro"] = {"id": "wolfi", "versionID": "20230201"}
                         for package in document["artifacts"]:
                             if package["name"] == "libc6":
@@ -194,6 +205,8 @@ def qualify():
                                 "foundBy": "apk-db-cataloger",
                             }
                         )
+                    if stage == "tracking-sbom" and name == "tracking-foreign-distro":
+                        document["distro"] = {"id": "debian", "versionID": "13"}
                     if name == "empty-sbom":
                         document["artifacts"] = []
                     if name == "syft-crash":
@@ -235,8 +248,7 @@ def qualify():
                 else:
                     document["distro"] = (
                         {"name": "debian", "version": "12"}
-                        if stage == "tracking-scan"
-                        or (stage == "runtime-000-scan" and name != "runtime-known-worker")
+                        if stage == "runtime-000-scan" and name != "runtime-known-worker"
                         else {"name": "wolfi", "version": "20230201"}
                     )
                     if "-candidate-" in stage and name == "comparison-wolfi-high":
@@ -246,8 +258,7 @@ def qualify():
                         returncode = 2
                     if name in {"high", "unknown"}:
                         finding = copy.deepcopy(match)
-                        if stage != "tracking-scan":
-                            finding["artifact"].update(name="glibc-2.44", type="apk")
+                        finding["artifact"].update(name="glibc-2.44", type="apk")
                         finding["vulnerability"]["severity"] = (
                             "High" if name == "high" else "Unknown"
                         )
@@ -268,6 +279,7 @@ def qualify():
                         "comparison-tracking-high",
                     }:
                         finding = copy.deepcopy(match)
+                        finding["artifact"].update(name="glibc-2.44", type="apk")
                         finding["vulnerability"]["severity"] = (
                             "Unknown" if name == "tracking-unknown" else "High"
                         )

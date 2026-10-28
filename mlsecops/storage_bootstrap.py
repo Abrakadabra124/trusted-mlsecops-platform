@@ -26,7 +26,7 @@ from mlsecops.storage_schema import DATABASE, SCHEMA_VERSION, migration_sql, rol
 
 IMAGE = (
     "ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres"
-    "@sha256:9172aa68aa0790240cd4597707d8d8fda875dcd944e0155277e2347142585b7b"
+    "@sha256:bd279118884568f35de40901ee9438f17af7c2e75a0623be89b36bbd69b68fe5"
 )
 WORKSPACE_LABEL = "org.trusted-mlsecops.workspace"
 CONFIG_LABEL = "org.trusted-mlsecops.storage-config"
