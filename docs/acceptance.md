@@ -93,6 +93,7 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 **Покрытие intake и fail-closed scanner.** Scan report связывает все входные hashes, tool/policy version, inspected/unsupported/skipped/error counts. Набор approved outputs состоит только из реально проверенных разрешённых объектов. Empty scan, renamed unsupported payload, timeout/crash, stale report, report для другого digest, traversal/symlink и modified conversion output дают reject/inconclusive, не pass. Clean allowed ONNX fixture проходит полный путь до оценки, unsafe format не допускается даже при «no findings». Evidence: support matrix и negative reports. T27.
 
 ## M22
+Частичный [исполняемый путь](absolute-poisoning.md) выполняет абсолютную матрицу и actual-candidate binding. Без independent challenges полный статус не может быть pass; зелёный component CI не закрывает критерий ниже.
 **Дополнительная assurance campaign.** Выполнены 36 absolute-budget poisoned runs + 6 clean controls по [расширенному протоколу](threat-model.md) и минимум 2 независимых challenge cases. Для сопоставимых probes сохраняются M08-пороги, нельзя выбрать только выгодные seeds. Отчёт отделяет deterministic enforcement от statistical robustness, фиксирует независимую единицу CI и запрещает объявлять per-scenario CI общей гарантией. Любой подтверждённый обход hard boundary блокирует release; недостаточные данные/неразобранный challenge = inconclusive. Для challenge с новым воздействием метрика и severity утверждаются до запуска, не подгоняются под результат. T28.
 
 ## M23

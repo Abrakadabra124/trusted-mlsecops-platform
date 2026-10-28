@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [M22 absolute matrix и reviewer handoff](absolute-poisoning.md#ранбук-диагностика-и-воспроизведение). 36+6 trainings, проверка 300 primary files, отказ при подмене fraction/candidate, owned cleanup и отдельные условия independent challenges. Partial M22 не разрешает release.
+
 - [CP2 training validation и candidate trial](noise-training-validation.md#диагностика-и-воспроизведение). Train-only параметры, раздельные v1/v2 outcomes, source lock/solver failures, actual-candidate M08/M09 и owned cleanup. Validation pass не разрешает release.
 
 - [Изолированный Kubernetes node candidate](operations/node-candidate.md). Verified server archive, закреплённый base, same-DB comparison, запрет локального запуска и отдельные условия adoption. Build success не закрывает image coverage или R1.

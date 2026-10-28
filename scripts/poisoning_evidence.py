@@ -75,6 +75,8 @@ def case_materials(
     revision,
     started,
     finished,
+    *,
+    experiment_policy=None,
 ):
     try:
         return _case_materials(
@@ -89,6 +91,7 @@ def case_materials(
             revision,
             started,
             finished,
+            experiment_policy=experiment_policy,
         )
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         if isinstance(error, Rejected):
@@ -108,6 +111,8 @@ def _case_materials(
     revision,
     started,
     finished,
+    *,
+    experiment_policy=None,
 ):
     record = decode(bounded_read(safe_child(directory, "result.json")))
     equal({name: record[name] for name in case}, case, "case_identity")
@@ -152,7 +157,8 @@ def _case_materials(
         for name, rows in (("train", mutated), ("validation", validation))
     }
     dataset = digest(canonical(split_objects))
-    lineage = digest(canonical({"protocol": policy(), "case": case, "mutation": receipt}))
+    rules = policy() if experiment_policy is None else experiment_policy
+    lineage = digest(canonical({"protocol": rules, "case": case, "mutation": receipt}))
     training = {
         "action": "train",
         "train": mutated,

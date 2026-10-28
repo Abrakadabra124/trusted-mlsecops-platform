@@ -288,7 +288,7 @@ def report(gate, profile, root, state=None):
             if isinstance(error, ClaimFailure):
                 result["diagnostics"] = {"holdout_concurrency": error.diagnostics}
         result["finished_at"] = now()
-    elif gate in {"M08", "M09"}:
+    elif gate in {"M08", "M09", "M22"}:
         if not all(
             (state / name).is_file()
             for name in (
@@ -307,6 +307,10 @@ def report(gate, profile, root, state=None):
             from mlsecops.poisoning_gate import qualify
 
             name = "poisoning"
+        elif gate == "M22":
+            from mlsecops.absolute_poisoning_gate import qualify
+
+            name = "absolute-poisoning"
         else:
             from mlsecops.robustness_gate import qualify
 

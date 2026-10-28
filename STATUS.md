@@ -1,5 +1,7 @@
 # Статус и границы доказательств
 
+Обновление 2026-10-29: [main `139d13d`](docs/evidence/main-regression-2026-10-29.md) прошёл **10/10 workflow** на disposable hosted CI. Это integration checkpoint, не M18 на одном candidate. Реализован [частичный M22](docs/absolute-poisoning.md): 36+6 matrix, 300 primary files, actual-candidate replay и запрет pass без независимых challenges. Локальные controller/protocol/dispatch tests прошли; native 42-case outcome пока не подтверждён. Полные CP2/M22/R1 остаются открытыми.
+
 ## CP2: balanced candidate trial 2026-10-29
 
 [Native balanced candidate](docs/noise-training-validation.md#подтверждённый-native-результат-2026-10-29-мск): **M08 и M09 pass на одном candidate**, [40784079343](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40784079343), `e7d166e`. M08: 68 checks, 35 scenarios / 0 violations, upper ASR max 0.0153514, AP loss max 0.00474964, 251 primary files. M09: 42 checks, 18 001 predictions, parity 2.5172e-07, recall drop 0.0318367, 12 abstentions. Shared candidate/model/evaluation verified, cleanup success. [Paired v2 40784734008](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40784734008), `2d3e43e`, также pass на всех трёх прежних наборах. Новая recipe выбрана на validation; historical v1 failures сохранены. FPR/Brier ухудшились и опубликованы, calibrated probability не заявляется. Следующий main integration должен повторить остальные regression/gates. Полные CP2/M22/M18/R1 не приняты; T02 system-image findings и CP3-CP5 остаются.

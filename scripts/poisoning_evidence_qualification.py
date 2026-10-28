@@ -115,6 +115,44 @@ class EvidenceContracts(unittest.TestCase):
             before, {path.name: digest(path.read_bytes()) for path in self.directory.iterdir()}
         )
 
+    def test_absolute_protocol_cannot_be_relabelled_as_original_matrix(self):
+        from scripts import absolute_poisoning
+
+        case = absolute_poisoning.matrix()[1]
+        rules = absolute_poisoning.policy()
+        directory = self.directory.parent / "absolute-case"
+        with patch.object(poisoning_native, "run_worker", side_effect=worker):
+            record, _ = poisoning_native.execute(
+                ROOT,
+                directory,
+                case,
+                self.train,
+                self.validation,
+                (self.probes, self.triggered),
+                self.profile,
+                IMAGE,
+                experiment_policy=rules,
+            )
+        write_json(directory / "result.json", record)
+        arguments = (
+            directory,
+            case,
+            self.profile,
+            self.train,
+            self.validation,
+            self.probes,
+            self.triggered,
+            self.inputs,
+            self.revision,
+            self.started,
+            now(),
+        )
+        self.assertEqual(
+            poisoning_evidence.case_materials(*arguments, experiment_policy=rules)[0], record
+        )
+        with self.assertRaisesRegex(Rejected, "training_materials"):
+            poisoning_evidence.case_materials(*arguments)
+
     def test_artifact_tamper_missing_and_unsafe_path(self):
         path = self.directory / "model.onnx"
         original = path.read_bytes()

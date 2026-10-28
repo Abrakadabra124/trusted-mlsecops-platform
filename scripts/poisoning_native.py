@@ -63,7 +63,9 @@ def materials(root):
     return profile, train, validation, probes, trigger(probes)
 
 
-def execute(root, directory, case, train, validation, views, profile, image):
+def execute(
+    root, directory, case, train, validation, views, profile, image, *, experiment_policy=None
+):
     if case["family"] == "clean":
         mutated = train
         receipt = {
@@ -83,7 +85,8 @@ def execute(root, directory, case, train, validation, views, profile, image):
         for name, rows in (("train", mutated), ("validation", validation))
     }
     dataset = digest(canonical(split_objects))
-    lineage = digest(canonical({"protocol": policy(), "case": case, "mutation": receipt}))
+    rules = policy() if experiment_policy is None else experiment_policy
+    lineage = digest(canonical({"protocol": rules, "case": case, "mutation": receipt}))
     current_profile = {**profile, "training_seed": case["seed"]}
     metadata, model, validation_scores = train_verified_dataset(
         dataset,
@@ -127,7 +130,7 @@ def execute(root, directory, case, train, validation, views, profile, image):
     }, scores.tolist()
 
 
-def summarize(records):
+def summarize(records, *, expected_cases=None):
     required = {"id", "family", "seed", "count", "run_id", "mutation_count", "metrics"}
     if type(records) is not list or any(
         type(record) is not dict
@@ -140,7 +143,7 @@ def summarize(records):
         for record in records
     ):
         raise Rejected("poisoning_matrix_shape_invalid")
-    expected = matrix()
+    expected = matrix() if expected_cases is None else expected_cases
     if (
         len(records) != len(expected)
         or len({record["run_id"] for record in records}) != len(expected)

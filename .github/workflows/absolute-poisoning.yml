@@ -1,0 +1,83 @@
+name: M22 absolute matrix with independent challenges pending
+on:
+  push:
+    branches: [codex/cp2-absolute-assurance]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: absolute-poisoning-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  poisoning-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked sources and negative absolute-matrix contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops/absolute_poisoning_gate.py mlsecops/acceptance.py scripts/absolute_poisoning*.py scripts/poisoning*.py
+          uv run --locked ruff format --check mlsecops/absolute_poisoning_gate.py mlsecops/acceptance.py scripts/absolute_poisoning*.py scripts/poisoning*.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.poisoning_native_qualification scripts.poisoning_evidence_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-absolute --source=mlsecops.absolute_poisoning_gate,scripts.absolute_poisoning -m unittest scripts.absolute_poisoning_gate_qualification scripts.absolute_poisoning_qualification
+          uv run --locked coverage report --data-file=.coverage-absolute --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-absolute -o .coverage-absolute.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-absolute.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+      - name: Build current offline worker
+        run: uv run --locked python -m mlsecops build
+      - name: Prepare an actual evaluated candidate in disposable owned storage
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Fresh 36 plus six matrix, candidate replay and explicit incomplete M22
+        run: |
+          if uv run --locked python -m mlsecops.acceptance --gate M22 --output .runtime/evidence/M22.json; then
+            result=0
+          else
+            result=$?
+          fi
+          test "$result" -eq 2
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected, read_json
+          report = read_json(Path('.runtime/evidence/absolute-poisoning-gate.json'))
+          metrics = report['metrics']
+          if (report['status'] != 'inconclusive' or report['component_status'] != 'pass'
+              or report['release_ready'] is not False or report['checks'] != 43
+              or metrics['training_runs'] != 42 or metrics['poisoned_runs'] != 36
+              or metrics['clean_controls'] != 6 or metrics['nonviolating_scenarios'] != 42
+              or metrics['primary_files_verified'] != 300 or metrics['independent_challenges'] != 0
+              or report['cases'][-1] != {'id': 'independent-reviewer-challenges', 'status': 'inconclusive'}):
+              raise Rejected('absolute_component_incomplete_or_threshold_failure')
+          PY
+      - name: Sanitized complete absolute-matrix outcomes including failures
+        if: always()
+        run: |
+          uv run --locked python -c "from pathlib import Path; from mlsecops.contracts import canonical,read_json; paths=[Path('.runtime/evidence')/name for name in ('M22.json','absolute-poisoning-gate.json')]; [print(canonical(read_json(path)).decode() if path.is_file() else path.name+': no completed report') for path in paths]"
+          echo 'Component run only. Full M22 remains inconclusive until independent reviewer challenges; release remains prohibited.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop only verified owned disposable storage
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('M22_storage_stop_incomplete')
+          PY
+          fi
