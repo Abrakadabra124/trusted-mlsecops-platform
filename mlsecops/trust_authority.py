@@ -10,12 +10,16 @@ from mlsecops.storage_bootstrap import admin, validate
 from mlsecops.storage_schema import TABLES
 
 
-def read(client, environment, public):
+def read(client, environment, public, *, expected_host=None):
     name(environment)
-    if storage.connection_parameters(client)["user"] not in ("ml_serving", "ml_promoter"):
+    options = {} if expected_host is None else {"expected_host": expected_host}
+    if storage.connection_parameters(client, **options)["user"] not in (
+        "ml_serving",
+        "ml_promoter",
+    ):
         raise Rejected("trust_client_identity")
     try:
-        with storage.connect(client) as connection:
+        with storage.connect(client, **options) as connection:
             row = connection.execute(
                 "SELECT settings.root_public, document.version, document.sha256, document.envelope, "
                 "floor(extract(epoch FROM clock_timestamp()))::bigint "

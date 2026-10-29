@@ -21,6 +21,7 @@ from mlsecops.kube_storage_resources import WORKSPACE, client_pod_spec
 from mlsecops.kube_worker import job_document, verify_running_image, wait_job
 from mlsecops.private_cli import Arguments
 from mlsecops.storage_pki import workspace_id
+from mlsecops.trust_targets import Target, select
 
 NAMESPACE = "ml-promoter"
 MAX_CONFIG = 512 * 1024
@@ -52,7 +53,8 @@ def validate_inputs(config, request):
             storage.object_id(request[name])
 
 
-def pod_spec(profile, config_name, request_name):
+def pod_spec(profile, config_name, request_name, *, trust_target=Target.PRIMARY):
+    trust_target = select(trust_target)
     spec = client_pod_spec(
         profile["image"],
         "promoter",
@@ -68,7 +70,7 @@ def pod_spec(profile, config_name, request_name):
         [
             {
                 "name": "trust-credentials",
-                "secret": {"secretName": "trust-client", "defaultMode": 416},
+                "secret": {"secretName": trust_target.secret, "defaultMode": 416},
             },
             {"name": "trust-client", "emptyDir": {"medium": "Memory", "sizeLimit": "1Mi"}},
         ]

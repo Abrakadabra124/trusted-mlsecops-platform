@@ -7,9 +7,15 @@ from psycopg import sql
 from mlsecops.contracts import Rejected, bounded_read, digest, read_json, require_fields, safe_child
 from mlsecops.storage_pki import CLUSTER_HOST, ROLES, TRUST_HOST
 from mlsecops.storage_schema import DATABASE, MAX_BYTES, TABLES
+from mlsecops.trust_targets import HOSTS as TRUST_HOSTS
 
 
-def connection_parameters(directory):
+def connection_parameters(directory, *, expected_host=None):
+    if expected_host is not None and (
+        type(expected_host) is not str or expected_host not in TRUST_HOSTS
+    ):
+        raise Rejected("storage_expected_host_invalid")
+    allowed = ("127.0.0.1", CLUSTER_HOST, TRUST_HOST) if expected_host is None else (expected_host,)
     directory = Path(directory)
     if directory.is_symlink():
         raise Rejected("storage_client_symlink")
@@ -21,10 +27,10 @@ def connection_parameters(directory):
         type(settings.get("schema_version")) is not int
         or settings["schema_version"] != 1
         or settings.get("role") not in ROLES
-        or settings.get("host") not in ("127.0.0.1", CLUSTER_HOST, TRUST_HOST)
+        or settings.get("host") not in allowed
         or type(settings.get("port")) is not int
         or not 1024 <= settings["port"] <= 65535
-        or (settings.get("host") in (CLUSTER_HOST, TRUST_HOST) and settings["port"] != 5432)
+        or (settings.get("host") != "127.0.0.1" and settings["port"] != 5432)
     ):
         raise Rejected("storage_client_config_invalid")
     for filename, expected in settings["certificates"].items():
@@ -68,9 +74,10 @@ def table_name(name):
     return sql.Identifier("ml", name)
 
 
-def connect(directory):
+def connect(directory, *, expected_host=None):
     try:
-        return psycopg.connect(**connection_parameters(directory))
+        options = {} if expected_host is None else {"expected_host": expected_host}
+        return psycopg.connect(**connection_parameters(directory, **options))
     except psycopg.Error as error:
         raise Rejected("storage_connection_rejected") from error
 

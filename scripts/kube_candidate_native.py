@@ -6,6 +6,7 @@ import sys
 import time
 import uuid
 from contextlib import suppress
+from functools import partial
 from pathlib import Path
 
 from mlsecops import (
@@ -33,9 +34,11 @@ from mlsecops.kube_storage_migration import ledger
 from mlsecops.kube_worker import run_worker
 from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.private_cli import Arguments
+from mlsecops.trust_targets import Target
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_candidate_faults import NONTERMINAL
 from scripts.kube_candidate_faults import exercise as exercise_faults
+from scripts.kube_candidate_terminals import exercise as exercise_terminals
 from scripts.kube_promotion_native import actual
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_native import invoke
@@ -94,6 +97,10 @@ def qualify(
     destination = safe_child(state, "candidate-inference/" + campaign)
     key = destination / "qualification.pem" if qualification_key is None else qualification_key
     qualification_public = signing.create_key(key)
+    independent = include_trust_lifecycle and include_key_revocation
+    if independent:
+        # Provision the second independent authority BEFORE issuing the one permit.
+        kube_trust.bootstrap(state, target=Target.MODEL_REVOCATION)
     # Obtain reference predictions before starting the short permit lifetime.
     features = [[value] * len(FEATURES) for value in (0.1, 0.5, 0.9)]
     batch = PredictionBatch(verified["model"], features)
@@ -126,6 +133,12 @@ def qualify(
         state, permit["environment"], qualification_public, backend=kube_trust.binding
     )
     trust_authority.update(state, permit_hash, key, backend=kube_trust.binding)
+    if independent:
+        alternate_backend = partial(kube_trust.binding, target=Target.MODEL_REVOCATION)
+        trust_authority.install(
+            state, permit["environment"], qualification_public, backend=alternate_backend
+        )
+        trust_authority.update(state, permit_hash, key, backend=alternate_backend)
     config = {
         "context": context,
         "publisher_public": public,
@@ -152,6 +165,7 @@ def qualify(
         "features": features,
         "scores": scores.tolist(),
         "clock_cache": include_trust_lifecycle,
+        "independent_authorities": independent,
         "unsigned_proposal": {
             "proposal_reference": unsigned_id,
             "permit_envelope": signing.sign(unsigned_permit, KIND, key),
@@ -168,7 +182,7 @@ def qualify(
         raise Rejected("candidate_inference_promotion_state_changed")
     revoked_key = digest(signing.decode64(public))
     faults = NONTERMINAL if include_trust_lifecycle else ()
-    if include_key_revocation:
+    if include_key_revocation and not independent:
         faults += ("key-revocation",)
     fault_results = (
         exercise_faults(
@@ -185,6 +199,24 @@ def qualify(
         if faults
         else {}
     )
+    terminals = None
+    if independent:
+        terminals = exercise_terminals(
+            state,
+            profile,
+            config,
+            expected,
+            base_probe=result,
+            key=key,
+            revoked_key=revoked_key,
+            expires_at=permit["expires_at"],
+        )
+        fault_results["model-revocation"] = terminals["model"]
+        fault_results["key-revocation"] = terminals["key"]
+        write_json(
+            destination / "independent-authorities.json",
+            {name: value for name, value in terminals.items() if name not in ("model", "key")},
+        )
     key_result = fault_results.get("key-revocation", {}).get("probe")
     for fault, value in fault_results.items():
         write_json(destination / (fault + ".json"), value["probe"])
@@ -221,6 +253,17 @@ def qualify(
         },
         **(
             {
+                "model_revocation": terminals["model"]["probe"],
+                "model_revocation_snapshot_sha256": terminals["model"]["snapshot_sha256"],
+                "independent_authorities": {
+                    name: value for name, value in terminals.items() if name not in ("model", "key")
+                },
+            }
+            if terminals is not None
+            else {}
+        ),
+        **(
+            {
                 "key_revocation": key_result,
                 "revoked_key_sha256": revoked_key,
                 "key_revocation_snapshot_sha256": fault_results["key-revocation"][
@@ -238,6 +281,7 @@ def qualify(
                 "request.json",
                 "probe.json",
                 *(name + ".json" for name in fault_results),
+                *(("independent-authorities.json",) if terminals is not None else ()),
             )
         },
         "limitations": [

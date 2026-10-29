@@ -9,7 +9,7 @@ NONTERMINAL = ("outage", "blackhole", "policy-change")
 
 def exercise(reader_factory, request, body, expected, check, *, pause=None):
     fault = expected.get("fault")
-    if fault not in (*NONTERMINAL, "key-revocation"):
+    if fault not in (*NONTERMINAL, "key-revocation", "revocation"):
         raise Rejected("candidate_trust_fault")
     if fault in {"outage", "blackhole"} and pause is None:
         raise Rejected("candidate_trust_pause_required")
@@ -41,10 +41,16 @@ def exercise(reader_factory, request, body, expected, check, *, pause=None):
         check("restored-cold-reader-model", loaded.model_sha256, expected["model"])
         check("restored-cold-reader-subject", loaded.subject_sha256, expected["bundle"])
         return trace
+    label = (
+        "cold-reader-key-revocation"
+        if fault == "key-revocation"
+        else "cold-reader-model-revocation"
+    )
+    cause = "trust_key_revoked" if fault == "key-revocation" else "trust_artifact_revoked"
     try:
         reader_factory().load()
     except Rejected as error:
-        check("cold-reader-key-revocation", str(error) == "trust_key_revoked", True)
+        check(label, str(error) == cause, True)
     else:
-        check("cold-reader-key-revocation", False, True)
+        check(label, False, True)
     return trace

@@ -19,6 +19,7 @@ from mlsecops import (
     kube_candidate_clock,
     kube_candidate_replay,
     kube_candidate_trust,
+    kube_trust_isolation,
     serving,
     serving_http,
     trust,
@@ -32,13 +33,17 @@ from mlsecops.datasets import FEATURES
 from mlsecops.kube_serving_runtime import Worker
 from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce
+from mlsecops.trust_targets import Target, select
 
 
 def candidate(config):
+    target = select(config.get("trust_target", Target.PRIMARY.value))
     environment = config["context"]["policy"]["environment"]
     public = config["permit_public"]
     lease = trust.Lease(
-        lambda: trust_authority.read("/trust-client", environment, public),
+        lambda: trust_authority.read(
+            "/trust-client", environment, public, expected_host=target.host
+        ),
         trusted_root=public,
         environment=environment,
         minimum_version=1,
@@ -46,7 +51,11 @@ def candidate(config):
     return CandidateReader(
         "/client",
         trust_lease=lease,
-        **{key: value for key, value in config.items() if key != "kubernetes_worker"},
+        **{
+            key: value
+            for key, value in config.items()
+            if key not in ("kubernetes_worker", "trust_target")
+        },
     )
 
 
@@ -257,6 +266,33 @@ def qualify(config, expected):
 
     client = Client("serving")
     check("initial-worker-absence", len(client.request("pods")["items"]), 0)
+    target = select(config.get("trust_target", Target.PRIMARY.value))
+    if expected.get("cold_only") is True:
+        if "fault" in expected:
+            raise Rejected("candidate_cold_fault_conflict")
+        label = "cold-key-revocation" if target is Target.PRIMARY else "cold-model-revocation"
+        cause = "trust_key_revoked" if target is Target.PRIMARY else "trust_artifact_revoked"
+        try:
+            candidate(config).load()
+        except Rejected as rejected:
+            check(label, cause if str(rejected) == cause else "unexpected_rejection", cause)
+        else:
+            check(label, "accepted", cause)
+        check("cold-worker-absence", len(client.request("pods")["items"]), 0)
+        return {
+            "status": "pass",
+            "release_ready": False,
+            "scope": "candidate-cold-revocation",
+            "authority_target": target.value,
+            "model_sha256": expected["model"],
+            "subject_sha256": expected["bundle"],
+            "cases": cases,
+        }
+    isolation = None
+    if expected.get("independent_authorities") is True and (
+        "fault" not in expected or expected["fault"] == "revocation"
+    ):
+        isolation = kube_trust_isolation.verify(target, check)
     calls = []
 
     def factory(model, image):
@@ -350,6 +386,8 @@ def qualify(config, expected):
         "max_golden_error": error,
         "model_sha256": expected["model"],
         "subject_sha256": expected["bundle"],
+        "authority_target": select(config.get("trust_target", Target.PRIMARY.value)).value,
+        **({"authority_isolation": isolation} if isolation is not None else {}),
         **({"clock_cache": clocks} if clocks else {}),
         **({"version_replay": replay} if replay is not None else {}),
         **({"lifecycle": lifecycle} if lifecycle is not None else {}),

@@ -7,6 +7,25 @@ from mlsecops.contracts import Rejected
 
 
 class CandidateTrustContracts(unittest.TestCase):
+    def test_actual_model_revoke_requires_exact_artifact_denial(self):
+        def check(label, actual, expected):
+            if type(actual) is not type(expected) or actual != expected:
+                raise Rejected(label)
+
+        for cause in ("trust_artifact_revoked", "trust_key_revoked", None):
+            reader = Mock()
+            if cause:
+                reader.load.side_effect = Rejected(cause)
+            with patch.object(probe.lifecycle, "exercise", return_value={"fault": "revocation"}):
+                if cause == "trust_artifact_revoked":
+                    self.assertEqual(
+                        probe.exercise(lambda: reader, Mock(), {}, {"fault": "revocation"}, check),
+                        {"fault": "revocation"},
+                    )
+                else:
+                    with self.assertRaises(Rejected):
+                        probe.exercise(lambda: reader, Mock(), {}, {"fault": "revocation"}, check)
+
     def test_outage_cannot_start_without_refresh_pause(self):
         with (
             patch.object(probe.lifecycle, "exercise") as exercise,
@@ -122,7 +141,7 @@ class CandidateTrustContracts(unittest.TestCase):
 
     def test_unknown_fault_is_not_silently_treated_as_a_key_revocation(self):
         with patch.object(probe.lifecycle, "exercise") as exercise, self.assertRaises(Rejected):
-            probe.exercise(Mock(), Mock(), b"{}", {"fault": "revocation"}, Mock())
+            probe.exercise(Mock(), Mock(), b"{}", {"fault": "unknown-revocation"}, Mock())
         exercise.assert_not_called()
 
 

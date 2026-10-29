@@ -22,6 +22,7 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import job_document, verify_running_image, wait_job
 from mlsecops.private_cli import Arguments
 from mlsecops.storage_pki import workspace_id
+from mlsecops.trust_targets import Target, select
 from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
@@ -35,7 +36,21 @@ from scripts.promotion_entrypoint_native import configuration
 NAMESPACE = "ml-serving"
 
 
-def invoke(state, profile, config, expected, *, coordinator=None, candidate_probe=False):
+def invoke(
+    state,
+    profile,
+    config,
+    expected,
+    *,
+    coordinator=None,
+    candidate_probe=False,
+    trust_target=Target.PRIMARY,
+):
+    trust_target = select(trust_target)
+    if (trust_target is not Target.PRIMARY and not candidate_probe) or select(
+        config.get("trust_target", Target.PRIMARY.value)
+    ) is not trust_target:
+        raise Rejected("candidate_authority_target")
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [
         kube_promotion.configuration_map(state, name + "-" + field, field, value)
@@ -44,7 +59,7 @@ def invoke(state, profile, config, expected, *, coordinator=None, candidate_prob
     for document in maps:
         document["metadata"]["namespace"] = NAMESPACE
     spec = kube_promotion.pod_spec(
-        profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"]
+        profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"], trust_target=trust_target
     )
     spec["serviceAccountName"] = "serving"
     spec["containers"][0]["command"][2] = (

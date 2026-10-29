@@ -8,6 +8,7 @@ import psycopg
 
 from mlsecops import storage, trust, trust_authority
 from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.trust_targets import Target
 from scripts import trust_qualification as fixtures
 
 
@@ -40,6 +41,22 @@ class AuthorityContracts(unittest.TestCase):
         self.assertEqual(envelope, self.envelope)
         self.assertEqual(clock, self.fixture.wall)
         self.assertEqual(self.connection.execute.call_count, 1)
+
+    def test_exact_host_pin_reaches_both_checks_and_connection(self):
+        for target in Target:
+            with (
+                patch.object(
+                    storage, "connection_parameters", return_value={"user": "ml_serving"}
+                ) as parameters,
+                patch.object(storage, "connect", return_value=self.connection) as connect,
+            ):
+                envelope, clock = trust_authority.read(
+                    "client", "local-cpu", self.fixture.public, expected_host=target.host
+                )
+            parameters.assert_called_once_with("client", expected_host=target.host)
+            connect.assert_called_once_with("client", expected_host=target.host)
+            self.assertEqual(envelope, self.envelope)
+            self.assertEqual(clock, self.fixture.wall)
 
     def test_wrong_role_or_root_or_missing_document_is_not_valid_policy(self):
         with (

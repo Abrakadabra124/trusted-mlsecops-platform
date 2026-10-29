@@ -4,11 +4,21 @@ import unittest
 from unittest.mock import Mock, patch
 
 from mlsecops.contracts import Rejected
+from mlsecops.trust_targets import Target
 from scripts import kube_candidate_faults as target
 
 
 class CandidateFaultCoordinatorTests(unittest.TestCase):
-    def run_faults(self, *, faults=None, mutate=None, changed=False, fail=False, expires_at=1600):
+    def run_faults(
+        self,
+        *,
+        faults=None,
+        mutate=None,
+        changed=False,
+        fail=False,
+        expires_at=1600,
+        authority=Target.PRIMARY,
+    ):
         expected = {"model": "a" * 64, "bundle": "b" * 64}
         states = [{"promotion": 1}, {"promotion": 2 if changed else 1}] * 4
         observed = []
@@ -16,6 +26,7 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
         def invoke(state, profile, config, request, **kwargs):
             observed.append(request["fault"])
             self.assertTrue(kwargs["candidate_probe"])
+            self.assertIs(kwargs["trust_target"], authority)
             if fail:
                 raise Rejected("controlled_probe_failure")
             result = {
@@ -23,6 +34,7 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
                 "release_ready": False,
                 "model_sha256": expected["model"],
                 "subject_sha256": expected["bundle"],
+                "authority_target": authority.value,
                 "lifecycle": {"fault": request["fault"]},
             }
             return {**result, **(mutate or {})}
@@ -41,13 +53,14 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
             result = target.exercise(
                 "state",
                 {},
-                {},
+                {"trust_target": authority.value},
                 expected,
                 key="key",
                 policy="c" * 64,
                 revoked_key="d" * 64,
                 faults=faults or (*target.NONTERMINAL, "key-revocation"),
                 expires_at=expires_at,
+                target=authority,
             )
         return result, observed, coordinator
 
@@ -70,6 +83,7 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
             {"model_sha256": "c" * 64},
             {"subject_sha256": "c" * 64},
             {"lifecycle": {"fault": "foreign"}},
+            {"authority_target": "model-revocation"},
         ):
             with (
                 self.subTest(mutation=mutation),
@@ -101,3 +115,30 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "controlled_probe_failure"):
             self.run_faults(fail=True)
         self.last_coordinator.__exit__.assert_called_once()
+
+    def test_model_revoke_uses_selected_target_and_rejects_other_faults(self):
+        result, observed, _ = self.run_faults(
+            faults=("revocation",), authority=Target.MODEL_REVOCATION
+        )
+        self.assertEqual(observed, ["revocation"])
+        self.assertEqual(result["revocation"]["probe"]["authority_target"], "model-revocation")
+        for faults in (target.NONTERMINAL, ("key-revocation",)):
+            with self.assertRaisesRegex(Rejected, "candidate_trust_fault_order"):
+                self.run_faults(faults=faults, authority=Target.MODEL_REVOCATION)
+
+    def test_mismatched_selected_config_refuses_before_mutation(self):
+        with patch.object(target, "Coordinator") as coordinator:
+            with self.assertRaisesRegex(Rejected, "candidate_trust_fault_order"):
+                target.exercise(
+                    None,
+                    None,
+                    {},
+                    {},
+                    key=None,
+                    policy=None,
+                    revoked_key=None,
+                    faults=("revocation",),
+                    expires_at=1600,
+                    target=Target.MODEL_REVOCATION,
+                )
+            coordinator.assert_not_called()

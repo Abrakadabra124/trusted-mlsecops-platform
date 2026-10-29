@@ -27,6 +27,10 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file=.coverage-trust-pair --source=mlsecops.trust_targets,mlsecops.kube_trust_isolation,scripts.kube_authority_pair,scripts.kube_candidate_terminals -m unittest scripts.trust_targets_qualification scripts.kube_trust_isolation_qualification scripts.kube_authority_pair_qualification scripts.kube_trust_qualification scripts.trust_authority_qualification
+          uv run --locked coverage report --data-file=.coverage-trust-pair --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-trust-pair -o .coverage-trust-pair.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-trust-pair.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --branch --data-file=.coverage-candidate-clock --source=mlsecops.kube_candidate_clock,mlsecops.kube_candidate_replay -m unittest scripts.kube_candidate_clock_qualification scripts.kube_candidate_replay_qualification
           uv run --locked coverage report --data-file=.coverage-candidate-clock --fail-under=95
           uv run --locked coverage json --data-file=.coverage-candidate-clock -o .coverage-candidate-clock.json

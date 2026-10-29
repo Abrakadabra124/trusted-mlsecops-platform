@@ -125,7 +125,7 @@ class KubernetesTrustContracts(unittest.TestCase):
                 ),
                 checksum,
             )
-            validate.assert_called_once_with(self.state)
+            validate.assert_called_once_with(self.state, target=kube_trust.Target.PRIMARY)
             self.assertIn("trust_requires_separate_empty_storage", admin.call_args_list[1].args[1])
             docker_admin.assert_not_called()
         with (
@@ -160,11 +160,11 @@ class KubernetesTrustContracts(unittest.TestCase):
             (kube_trust, "kubectl", kubectl),
             (kube_trust, "validate_cluster", lambda state: {}),
             (kube_trust, "migrate", lambda state, **kwargs: {"version": 1}),
-            (kube_trust, "admin", lambda *args: ""),
+            (kube_trust, "admin", lambda *args, **kwargs: ""),
             (
                 kube_trust,
                 "live",
-                lambda *args: {"volume_uid": "owned-volume", "pod_uid": "owned-pod"},
+                lambda *args, **kwargs: {"volume_uid": "owned-volume", "pod_uid": "owned-pod"},
             ),
         ):
             self.enterContext(patch.object(target, name, replacement))

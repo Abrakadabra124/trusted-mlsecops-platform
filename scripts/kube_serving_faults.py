@@ -1,10 +1,13 @@
 """External hosted fault coordinator; no authority rights enter serving Pods."""
 
+from functools import partial
+
 from mlsecops import kube_storage, kube_trust, trust_authority
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, decode, digest
 from mlsecops.kube_serving_lifecycle import FAULTS
 from mlsecops.storage import object_id
+from mlsecops.trust_targets import Target, select
 from scripts.kube_trust_blackhole import Blackhole
 from scripts.kube_trust_native import scale
 
@@ -48,7 +51,17 @@ def acknowledge(state, pod, phase, fault):
 
 
 class Coordinator:
-    def __init__(self, state, fault, policy, key, model, *, revoked_key=None):
+    def __init__(
+        self, state, fault, policy, key, model, *, revoked_key=None, target=Target.PRIMARY
+    ):
+        self.target = select(target)
+        if self.target is not Target.PRIMARY and fault != "revocation":
+            raise Rejected("serving_fault_target")
+        self.backend = (
+            kube_trust.binding
+            if self.target is Target.PRIMARY
+            else partial(kube_trust.binding, target=self.target)
+        )
         if fault not in FAULTS:
             raise Rejected("serving_fault_kind")
         self.state, self.fault, self.policy, self.key, self.model = state, fault, policy, key, model
@@ -97,7 +110,7 @@ class Coordinator:
                     self.state,
                     digest(b"controlled-policy-transition"),
                     self.key,
-                    backend=kube_trust.binding,
+                    backend=self.backend,
                 )
             elif self.fault == "key-revocation":
                 trust_authority.update(
@@ -105,7 +118,7 @@ class Coordinator:
                     self.policy,
                     self.key,
                     revoked_keys=[self.revoked_key],
-                    backend=kube_trust.binding,
+                    backend=self.backend,
                 )
             else:
                 trust_authority.update(
@@ -113,7 +126,7 @@ class Coordinator:
                     self.policy,
                     self.key,
                     revoked_artifacts=[self.model],
-                    backend=kube_trust.binding,
+                    backend=self.backend,
                 )
         else:
             self.restore()

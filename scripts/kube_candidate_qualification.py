@@ -13,10 +13,33 @@ from starlette.requests import Request
 from mlsecops import advisory, serving_http
 from mlsecops import kube_candidate_probe as probe
 from mlsecops.contracts import Rejected, canonical
+from mlsecops.signing import encode64
 from scripts import kube_candidate_native as native
 
 
 class CandidateInferenceContracts(unittest.TestCase):
+    def test_candidate_reader_pins_selected_authority_without_forwarding_selector(self):
+        for target in probe.Target:
+            config = {
+                "context": {"policy": {"environment": "lab"}},
+                "permit_public": encode64(b"r" * 32),
+                "trust_target": target.value,
+                "kubernetes_worker": {},
+            }
+            with (
+                patch.object(probe, "CandidateReader") as reader,
+                patch.object(probe.trust_authority, "read", return_value="response") as read,
+            ):
+                probe.candidate(config)
+                options = reader.call_args.kwargs
+                self.assertNotIn("trust_target", options)
+                self.assertNotIn("kubernetes_worker", options)
+                lease = options["trust_lease"]
+                self.assertEqual(lease.reader(), "response")
+                read.assert_called_once_with(
+                    "/trust-client", "lab", config["permit_public"], expected_host=target.host
+                )
+
     def test_replay_matrix_uses_separate_denied_and_recovered_engines(self):
         engines = [Mock(), Mock()]
         client = Mock()
