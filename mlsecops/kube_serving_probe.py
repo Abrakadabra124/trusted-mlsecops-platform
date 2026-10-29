@@ -15,6 +15,7 @@ from mlsecops import (
     kube_serving_lifecycle,
     kube_serving_runtime,
     release_reader,
+    serving_startup,
     trust,
     trust_authority,
 )
@@ -66,7 +67,7 @@ CHECKS = {
     "refused-before-worker-start",
     "response-model-and-bundle-binding",
     "same-worker-UID-across-requests",
-    "service-output-empty",
+    "service-output-allowlisted",
     "service-process-alive",
     "startup-deadline",
     "stopped-worker-503",
@@ -196,7 +197,7 @@ def qualify(config, expected, progress=None):
         output = directory / "service-output"
         with output.open("wb") as log:
             process = subprocess.Popen(
-                [sys.executable, "-m", "mlsecops.serving_http", "--config", str(config_path)],
+                [sys.executable, "-m", "mlsecops.serving_http", "--startup-diagnostics", "--config", str(config_path)],
                 stdout=log,
                 stderr=log,
                 start_new_session=True,
@@ -245,6 +246,9 @@ def qualify(config, expected, progress=None):
             ready = request("/readyz")
             if expected["ready"]:
                 if ready[0] != 200:
+                    diagnostic = serving_startup.validated(bounded_read(output, 512))
+                    if diagnostic is not None:
+                        print(canonical(diagnostic).decode(), flush=True)
                     raise Rejected("kube_serving_probe:" + diagnose(config))
                 check(
                     "ordinary-CLI-ready-after-verified-load",
@@ -298,7 +302,12 @@ def qualify(config, expected, progress=None):
         check("ordinary-CLI-termination-confirmed", process.poll() is not None)
         check("worker-cleanup-confirmed", not client.request("pods")["items"])
         progress[0] = "audit"
-        check("service-output-empty", bounded_read(output, 65536) == b"")
+        observed_output = bounded_read(output, 65536)
+        check(
+            "service-output-allowlisted",
+            observed_output == b""
+            or (not expected["ready"] and serving_startup.validated(observed_output) is not None),
+        )
         check("audit-journal-created", (directory / "audit").is_dir())
     return {
         "status": "pass",

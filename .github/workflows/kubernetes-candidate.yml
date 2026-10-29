@@ -40,6 +40,8 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-inference-gate --fail-under=95
           uv run --locked coverage json --data-file=.coverage-inference-gate -o .coverage-inference-gate.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-inference-gate.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+          uv run --locked coverage run --branch --data-file=.coverage-serving-startup --source=mlsecops.serving_startup -m unittest scripts.serving_startup_qualification
+          uv run --locked coverage report --data-file=.coverage-serving-startup --fail-under=100
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap

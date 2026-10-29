@@ -7,6 +7,7 @@ import sys
 import time
 
 from mlsecops import serving_protocol as protocol
+from mlsecops import serving_startup
 from mlsecops.contracts import Rejected, canonical, decode
 from mlsecops.controller_api import APIError, Client
 from mlsecops.controller_worker import remove, validate_profile
@@ -97,6 +98,7 @@ class Worker(StdioWorker):
         self.job_uid = None
         self.attempted = False
         self.pod_uid = None
+        self.startup_failure = None
 
     def observe_job(self):
         try:
@@ -121,10 +123,12 @@ class Worker(StdioWorker):
         if self.closed or self.initial is None:
             raise Rejected("serving_worker_start_state")
         initial, self.initial = self.initial, None
+        phase = "create"
         try:
             self.attempted = True
             created = self.client.request("jobs", method="POST", value=self.document)
             self.job_uid = created["metadata"]["uid"]
+            phase = "observe"
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 if self.observe_job() is None:
@@ -148,6 +152,7 @@ class Worker(StdioWorker):
                 time.sleep(0.25)
             else:
                 raise Rejected("serving_worker_start_deadline")
+            phase = "attach"
             process = subprocess.Popen(
                 [sys.executable, "-m", "mlsecops.kube_attach", "--pod", pod["metadata"]["name"]],
                 stdin=subprocess.PIPE,
@@ -157,9 +162,14 @@ class Worker(StdioWorker):
             )
             self.channel = Channel(process)
             self.channel.start()
+            phase = "load"
             self.send(initial, timeout=30)
             return self
-        except Exception:
+        except Exception as error:
+            self.startup_failure = (
+                phase,
+                str(error) if str(error) in serving_startup.CAUSES else "unknown",
+            )
             self.close()
             raise Rejected("serving_load_failed") from None
 

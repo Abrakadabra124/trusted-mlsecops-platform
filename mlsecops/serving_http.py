@@ -23,6 +23,7 @@ from mlsecops import (
     serving_http_audit,
     serving_lifecycle,
     serving_metrics,
+    serving_startup,
     trust,
     trust_authority,
 )
@@ -74,7 +75,14 @@ async def read_body(request):
 
 
 def create_app(
-    engine, token=None, *, clients=None, audit=None, audit_path=None, metrics_token=None
+    engine,
+    token=None,
+    *,
+    clients=None,
+    audit=None,
+    audit_path=None,
+    metrics_token=None,
+    startup_diagnostics=False,
 ):
     if clients is None:
         clients = serving_access.Access.single(token)
@@ -105,7 +113,8 @@ def create_app(
             try:
                 await asyncio.to_thread(engine.activate)
             except Rejected:
-                pass
+                if startup_diagnostics is True:
+                    print(serving_startup.content(engine).decode(), file=sys.stderr, flush=True)
             yield
         finally:
             try:
@@ -374,7 +383,7 @@ def create_app(
     return serving_lifecycle.Middleware(serving_metrics.Middleware(app, metrics))
 
 
-def configured(path):
+def configured(path, *, startup_diagnostics=False):
     config = decode(bounded_read(path, 1024 * 1024))
     credential_field = "principals_file" if "principals_file" in config else "token_file"
     require_fields(
@@ -454,6 +463,7 @@ def configured(path):
         clients=clients,
         audit_path=config["audit_directory"],
         metrics_token=metrics_token,
+        startup_diagnostics=startup_diagnostics,
     )
 
 
@@ -471,11 +481,14 @@ def main():
             prog="serving", description="Loopback-only verified Release Risk Advisor"
         )
         parser.add_argument("--config", type=Path, required=True)
+        parser.add_argument("--startup-diagnostics", action="store_true")
         parser.add_argument("--port", type=int, default=8080)
         options = parser.parse_args()
         if not 1024 <= options.port <= 65535:
             raise Rejected("http_port_invalid")
-        app = configured(options.config)
+        app = configured(
+            options.config, **({"startup_diagnostics": True} if options.startup_diagnostics else {})
+        )
         run_server(
             app,
             host="127.0.0.1",

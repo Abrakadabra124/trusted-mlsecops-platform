@@ -4,7 +4,7 @@ import time
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 
-from mlsecops import advisory, serving_context
+from mlsecops import advisory, serving_context, serving_startup
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.serving_runtime import Worker
 
@@ -42,6 +42,7 @@ class Engine:
         self.lock = threading.Lock()
         self.stopped = threading.Event()
         self.heartbeat = None
+        self.startup_failure = None
         generation = threading.Event()
         generation.set()
         self.admission = ResponseBudget(generation, 0)
@@ -151,22 +152,32 @@ class Engine:
 
     def activate(self):
         with self.exclusive():
+            phase = "clear"
+            self.startup_failure = None
             try:
                 self.clear()
+                phase = "reader"
                 loaded = self.reader.load()
+                phase = "integrity"
                 model = loaded.model
                 if type(model) is not bytes or digest(model) != loaded.model_sha256:
                     raise Rejected("serving_model_changed_before_load")
+                phase = "worker-create"
                 self.worker = (self.worker_factory or Worker)(model, self.reader.image)
+                phase = "worker-start"
                 self.worker.start()
+                phase = "worker-identity"
                 if (
                     self.worker.image != self.reader.image
                     or self.worker.binding["model_sha256"] != loaded.model_sha256
                     or digest(loaded.model) != loaded.model_sha256
                 ):
                     raise Rejected("serving_loaded_identity")
+                phase = "worker-ping"
                 self.worker.ping()
+                phase = "reader-check"
                 self.reader.check(loaded)
+                phase = "context"
                 context = serving_context.bind(
                     loaded.audit_context,
                     bundle_sha256=loaded.subject_sha256,
@@ -174,10 +185,12 @@ class Engine:
                 )
                 self.loaded = loaded
                 self.audit_context = context
+                phase = "heartbeat"
                 if self.heartbeat is None:
                     heartbeat = threading.Thread(target=self.maintain, daemon=True)
                     heartbeat.start()
                     self.heartbeat = heartbeat
+                phase = "deadline"
                 monotonic = time.monotonic()
                 wall = time.time()
                 if type(loaded.expires_at) is not int or loaded.expires_at <= wall:
@@ -186,7 +199,8 @@ class Engine:
                     threading.Event(), monotonic + loaded.expires_at - wall
                 )
                 return self.identity()
-            except Exception:
+            except Exception as error:
+                self.startup_failure = serving_startup.record(phase, self.worker, error)
                 self.clear()
                 raise Rejected("serving_activation_rejected") from None
 

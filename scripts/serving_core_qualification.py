@@ -9,6 +9,23 @@ from mlsecops.contracts import Rejected, digest
 
 
 class ServingCoreContracts(unittest.TestCase):
+    def test_startup_failure_retains_safe_phase_after_worker_cleanup(self):
+        self.worker.startup_failure = ("load", "serving_exchange_rejected")
+        self.worker.start.side_effect = RuntimeError("PRIVATE-TOKEN")
+        with self.assertRaises(Rejected):
+            self.engine.activate()
+        self.assertEqual(
+            self.engine.startup_failure,
+            {
+                "event": "serving-startup-refused",
+                "phase": "worker-start",
+                "worker_phase": "load",
+                "cause": "serving_exchange_rejected",
+            },
+        )
+        self.assertIsNone(self.engine.worker)
+        self.assertNotIn("PRIVATE-TOKEN", str(self.engine.startup_failure))
+
     def setUp(self):
         self.loaded = SimpleNamespace(
             model=b"model",

@@ -11,6 +11,7 @@ from mlsecops import (
     kube_serving_probe,
     kube_storage,
     kube_trust,
+    serving_startup,
     trust_authority,
 )
 from mlsecops.cluster import kubectl
@@ -112,6 +113,10 @@ def invoke(state, profile, config, expected, *, coordinator=None, candidate_prob
         # Raw output stays private, including on failure.
         evidence = safe_child(state, "evidence/" + name + "-private.log")
         evidence.write_bytes(raw)
+        for line in raw.splitlines():
+            diagnostic = serving_startup.validated(line)
+            if diagnostic is not None:
+                print(canonical(diagnostic).decode(), flush=True)
         statuses = pod.get("status", {}).get("containerStatuses", [])
         if (
             terminal["type"] != "Complete"
