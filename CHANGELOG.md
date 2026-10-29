@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 explicit whole-bundle rollback - 2026-10-30 МСК
+
+- Новый signed approval schema 2 связывает current/target history и следующий sequence. Старый bundle не переписывается; обычные promoter/Reader проверяют все gates, live trust и совместимость. SQL forward-only selection сохраняет идемпотентность и защиту от replay.
+- `f2f102c` / 40952320387 success: две разные ONNX-модели A -> B -> A, sequence 1 -> 2 -> 3, три точных history refusals, unchanged journal при отказах/retry, запрет revoked target и cleanup. 459 Linux method executions; пять модулей 381 statements / 134 branches, 100%.
+- [Evidence и clean-checkout инструкции](docs/evidence/bundle-rollback-2026-10-29.md), [ранбук](docs/operations/bundle-rollback.md), [ADR 0052](docs/decisions/0052-explicit-bundle-rollback.md). Full M11/M16/R1 и независимые M22 challenges не закрыты; staged rollout/rollback SLO и root/key rotation остаются отдельными требованиями.
+
 ## R1 artifact filesystem boundary - 2026-10-29
 
 - U03 в Linux scope: regular-file, size/metadata validation и no-follow directory traversal; atomic replace/cleanup привязаны к открытому parent descriptor. Windows reparse/ACL остаются вне доказанного scope.

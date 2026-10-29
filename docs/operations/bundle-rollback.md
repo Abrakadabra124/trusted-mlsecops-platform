@@ -1,6 +1,6 @@
 # Откат целого bundle с новым approval
 
-Статус: реализация и local contracts проверены, native CI ожидается. [Протокол и ограничения](../decisions/0052-explicit-bundle-rollback.md). Полные M11/M16/R1 не приняты.
+Статус: реализация, local contracts и [native A -> B -> A](../evidence/bundle-rollback-2026-10-29.md) проверены на `f2f102c` / 40952320387; завершено 2026-10-30 МСК. [Протокол и ограничения](../decisions/0052-explicit-bundle-rollback.md). Полные M11/M16/R1 не приняты.
 
 ## Предпосылки и ответственность
 
@@ -42,4 +42,4 @@ python -m mlsecops.kube_promotion submit --state .runtime --config .runtime/oper
 uv run --locked python -m unittest scripts.rollback_authorization_qualification scripts.rollback_admission_qualification scripts.kube_rollback_qualification scripts.kube_approval_fixture_qualification scripts.promotion_controller_qualification scripts.kube_promotion_qualification
 ```
 
-Native маршрут зарегистрирован в [configured-serving workflow](../../.github/workflows/kubernetes-serving.yml). После его завершения результат должен подтверждаться source/report hashes и cleanup, а не только зелёной отметкой. Не выполнять DELETE/UPDATE head, не понижать sequence, не очищать revocation lists и не заменять trust root для обхода отказа. При неизвестном state или несовпадении подписи эскалировать владельцу безопасности.
+Native маршрут зарегистрирован в [configured-serving workflow](../../.github/workflows/kubernetes-serving.yml). На `f2f102c` подтверждены source/report hashes, точные history refusals, idempotent retry, unchanged full snapshot после отказов, обычный serving и cleanup. Повторный запуск требует такой же сверки, а не только зелёной отметки. Не выполнять DELETE/UPDATE head, не понижать sequence, не очищать revocation lists и не заменять trust root для обхода отказа. При неизвестном state или несовпадении подписи эскалировать владельцу безопасности.

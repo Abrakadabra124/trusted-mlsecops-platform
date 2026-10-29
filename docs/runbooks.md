@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Откат целого bundle с новым approval](operations/bundle-rollback.md). Протокол возрастающего sequence и проверки history/target, idempotent retry и отказы. Local contracts проверены; native CI пока ожидается, M16 не закрыт.
+- [Откат целого bundle с новым approval](operations/bundle-rollback.md). Native `f2f102c` / 40952320387 verified: sequence 1 -> 2 -> 3, разные модели A -> B -> A, три history refusals, unchanged journal при отказах/retry, revoked target denied и cleanup. 459 Linux method executions; полный M16 не закрыт.
 
 - [Файловые границы артефактов U03](operations/artifact-files.md). Linux scope проверен: 22 filesystem methods, contracts 146/50 полностью покрыты, native serving/cleanup pass на `6c65a83`. Диагностика и восстановление после I/O failure; Windows compatibility не закрывает ACL/reparse races.
 

@@ -1,6 +1,6 @@
 # ADR 0052: новый selection для отката неизменного bundle
 
-Дата: 2026-10-29. Статус: implemented, local contracts passed; native CI pending. T14/M11 и подготовка T19/M16. Ротация root/key, staged traffic и общая приёмка R1 остаются отдельными обязательными работами.
+Дата: 2026-10-29. Статус: implemented, local contracts и [native CI verified](../evidence/bundle-rollback-2026-10-29.md), run 40952320387 завершён 2026-10-30 МСК. T14/M11 и подготовка T19/M16. Ротация root/key, staged traffic и общая приёмка R1 остаются отдельными обязательными работами.
 
 ## Требование
 
@@ -35,6 +35,6 @@
 
 Локальные тесты сначала подтвердили отсутствие rollback protocol, затем отсутствие history guard после добавления схемы. Сейчас проверяются новый signed sequence, unchanged subject, target/from/history tampering, rollback на revoked model/selection, недоступная история, idempotent retry, Reader previous-link validation и bounded diagnostics. Три публичных кода истории имеют конечный allowlist; произвольный текст ошибки не выводится.
 
-Native workflow должен выбрать две разные контрольные ONNX-модели и вернуть первую: sequence 1 -> 2 -> 3, модель A -> B -> A. Проверяются ordinary isolated promoter, обычный serving CLI, независимый worker, golden scores, точные history refusals и отсутствие записей после них, повтор, отзыв и очистка. Это controlled qualification с test approvals, не acceptance настоящего candidate, не staged traffic 10/50/100 и не измерение M16 <=120 s. Production path не получает fixture bypass.
+Native workflow выбрал две разные контрольные ONNX-модели и вернул первую: sequence 1 -> 2 -> 3, модель A -> B -> A. Проверены ordinary isolated promoter, обычный serving CLI, независимый worker, golden scores, три точных history refusals и отсутствие записей после них, повтор, отзыв и очистка. 459 Linux method executions, пять модулей проверенного scope: 381 statements / 134 branches, 100%; по 22 ordinary serving checks на A/B/A. Это controlled qualification с test approvals, не acceptance настоящего candidate, не staged traffic 10/50/100 и не измерение M16 <=120 s. Production path не получает fixture bypass.
 
 Существующий trusted SQL admin остаётся вне adversary scope. Не обещается distributed transaction между trust authority и model storage; неизвестный commit остаётся unconfirmed и требует readback. Автоматический выбор предыдущего bundle и auto-approval отсутствуют: оператор и approver должны явно выбрать совместимый target. [Ранбук](../operations/bundle-rollback.md).
