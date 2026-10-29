@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Файлы signing keys и SQL probe при оптимизации Python](operations/signing-files-and-sql-probes.md). U01/U02: exclusive private creation, descriptor checks, optimized refusal и порядок восстановления без молчаливой регенерации. Linux native validation pending; общий U03 и Windows ACL остаются открытыми.
+
 - [Независимые authority: отзыв модели и ключа на одном candidate](operations/independent-authority-revocation.md). Реализация и локальные contracts; native verification pending. Отдельные CA/PVC/history, точные cold causes, неизменный соседний state и безопасный повтор целой campaign.
 
 - [Actual candidate: повтор старого подписанного trust-документа](candidate-trust-replay.md). Native dba0f75 / 40922974146 success: still-valid v5 отказан после v7, exact replay cause, cache invalidation, no-late-ML, новый working Engine и cleanup; полный M11 открыт.

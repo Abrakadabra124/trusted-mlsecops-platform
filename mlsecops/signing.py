@@ -6,7 +6,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, require_fields
+from mlsecops import key_files
+from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 
 ROLES = ("curator", "evaluator", "approver", "trust")
 
@@ -31,7 +32,7 @@ def pae(payload_type, payload):
 
 def create_key(path):
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if path.is_symlink() or path.parent.is_symlink():
         raise Rejected("symlink_key")
     if not path.exists():
@@ -41,16 +42,16 @@ def create_key(path):
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
         )
-        with path.open("xb") as output:
+        with key_files.opened(path, create=True) as output:
             output.write(content)
-        path.chmod(0o600)
     key = load_key(path)
     return encode64(key.public_key().public_bytes_raw())
 
 
 def load_key(path):
+    content = key_files.read(path)
     try:
-        key = serialization.load_pem_private_key(bounded_read(path, 4096), password=None)
+        key = serialization.load_pem_private_key(content, password=None)
     except (ValueError, TypeError) as error:
         raise Rejected("invalid_signing_key") from error
     if not isinstance(key, Ed25519PrivateKey):
