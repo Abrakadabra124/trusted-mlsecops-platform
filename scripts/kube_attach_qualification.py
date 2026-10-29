@@ -10,6 +10,47 @@ from mlsecops.contracts import Rejected, canonical
 
 
 class AttachContracts(unittest.TestCase):
+    def test_fragmented_stderr_is_classified_without_changing_refusal(self):
+        connection = Mock()
+        connection.recv.side_effect = [
+            b"\x02\x1b[0;93m",
+            b"\x02[W:onnxruntime:Default, device_discovery.cc:1] ",
+            b"\x02GPU device discovery failed: PRIVATE\n",
+        ]
+        with self.assertRaisesRegex(Rejected, "^serving_attach_ort_device_warning$"):
+            attach.exchange(connection, self.request)
+
+    def test_stderr_diagnostics_are_byte_frame_and_time_bounded(self):
+        for following in (TimeoutError("PRIVATE"), b"", "text", b"\x01PRIVATE"):
+            connection = Mock()
+            if isinstance(following, Exception):
+                connection.recv.side_effect = following
+            else:
+                connection.recv.return_value = following
+            self.assertEqual(
+                attach.stderr_code(connection, b"\x02PRIVATE", float("inf")),
+                "serving_attach_stderr",
+            )
+            self.assertEqual(connection.recv.call_count, 1)
+        connection = Mock()
+        self.assertEqual(
+            attach.stderr_code(connection, b"\x02" + b"x" * 10000, float("inf")),
+            "serving_attach_stderr",
+        )
+        connection.recv.assert_not_called()
+        connection.recv.return_value = b"\x02"
+        with patch.object(attach.time, "monotonic", return_value=10):
+            self.assertEqual(
+                attach.stderr_code(connection, b"\x02PRIVATE", 20), "serving_attach_stderr"
+            )
+        self.assertEqual(connection.recv.call_count, 8)
+        connection.reset_mock()
+        with patch.object(attach.time, "monotonic", side_effect=[10, 10.6]):
+            self.assertEqual(
+                attach.stderr_code(connection, b"\x02PRIVATE", 20), "serving_attach_stderr"
+            )
+        connection.recv.assert_not_called()
+
     def test_stderr_diagnostics_classify_only_finite_codes_without_accepting_payload(self):
         for payload, code in (
             (b"", "serving_attach_empty_stderr"),

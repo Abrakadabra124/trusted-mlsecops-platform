@@ -14,6 +14,8 @@ Production timeout, verification и HTTP semantics не ослабляются. 
 
 Первый запуск `4d97e0d` / [40821440191](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40821440191) остановился до injection: ordinary CLI после approval, исходная диагностика `worker-start / load / serving_attach_stderr`, Reader verified. Linux 99 + 26 + 17 tests pass; lifecycle/coordinator/fault 208 statements и 88 branches полностью покрыты. SQL stop и cluster cleanup success. Это уточняет прежний intermittent startup failure до канала stderr, но ещё не устанавливает содержание/причину. Следующий диагностический запуск различает пустой stderr, фиксированный worker refusal и известное семейство ONNX Runtime device-discovery warning; все варианты по-прежнему дают отказ, текст кадров не публикуется.
 
+На `78a6d62` / [40822103126](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40822103126) сохранился общий `serving_attach_stderr`; cleanup success. Проверка диагностики выявила, что она классифицировала только первый WebSocket fragment. Новый RED regression воспроизвёл потерю классификации при отдельном ANSI prefix и фрагментированном сообщении. Исправляется только bounded сбор диагностического stderr: <=4096 bytes, <=8 дополнительных кадров и <=0.5 s в пределах исходного exchange deadline. Stderr всё ещё отвергает запуск; payload не выводится. Конкретная runtime-причина ещё требует native evidence.
+
 ## Ранбук
 
 Ответственный - оператор isolated lab. Запуск: [configured-serving workflow](../.github/workflows/kubernetes-serving.yml), ветка `codex/cp3-m11-trust`; CLI внутри runner: `python -m scripts.kube_serving_native --state .runtime`. Не запускать инфраструктуру на текущей Windows.

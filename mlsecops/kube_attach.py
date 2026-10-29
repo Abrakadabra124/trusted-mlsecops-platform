@@ -68,6 +68,29 @@ def open_connection(pod):
             sock.close()
 
 
+def stderr_code(connection, frame, deadline):
+    if len(frame) == 1:
+        return "serving_attach_empty_stderr"
+    content = bytearray(frame[1:4097])
+    end = min(deadline, time.monotonic() + 0.5)
+    for _ in range(8):
+        remaining = end - time.monotonic()
+        if b"\n" in content or len(content) >= 4096 or remaining <= 0:
+            break
+        try:
+            following = connection.recv(timeout=remaining)
+        except Exception:
+            break
+        if not isinstance(following, bytes) or not following or following[0] != 2:
+            break
+        content.extend(following[1 : 4097 - len(content)])
+    if content == b"serving_worker_rejected\n":
+        return "serving_attach_worker_rejected"
+    if b"[W:onnxruntime:" in content and b"GPU device discovery failed" in content:
+        return "serving_attach_ort_device_warning"
+    return "serving_attach_stderr"
+
+
 def exchange(connection, request):
     protocol.validate(request)
     content = canonical(request) + b"\n"
@@ -83,14 +106,9 @@ def exchange(connection, request):
         if not isinstance(frame, bytes) or not frame:
             raise Rejected("serving_attach_frame")
         if frame[0] == 2:
-            code = "serving_attach_stderr"
-            if len(frame) == 1:
-                code = "serving_attach_empty_stderr"
-            elif frame[1:] == b"serving_worker_rejected\n":
-                code = "serving_attach_worker_rejected"
-            elif b"[W:onnxruntime:" in frame and b"GPU device discovery failed" in frame:
-                code = "serving_attach_ort_device_warning"
-            raise Rejected(code)
+            # Stderr remains a failure. Only bounded diagnostics are assembled;
+            # fragmented/color-prefixed messages must never be emitted raw.
+            raise Rejected(stderr_code(connection, frame, deadline))
         if frame[0] != 1:
             raise Rejected(
                 "serving_attach_" + {3: "status", 255: "closed"}.get(frame[0], "channel")
