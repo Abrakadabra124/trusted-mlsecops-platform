@@ -45,7 +45,8 @@ def prepare(before, old_key, new_key):
     }
 
 
-def snapshot(state):
+def snapshot(state, *, target=Target.PRIMARY):
+    options = {} if target is Target.PRIMARY else {"target": target}
     records = decode(
         kube_trust.admin(
             state,
@@ -53,9 +54,10 @@ def snapshot(state):
         'migrations', (SELECT jsonb_agg(jsonb_build_array(version, sha256) ORDER BY version) FROM ml_trust.migrations),
         'documents', (SELECT jsonb_agg(jsonb_build_array(version, sha256) ORDER BY version) FROM ml_trust.documents),
         'rotations', (SELECT coalesce(jsonb_agg(jsonb_build_array(version, sha256) ORDER BY version), '[]'::jsonb) FROM ml_trust.root_rotations));""",
+            **options,
         ).encode()
     )
-    return {"authority": authority_snapshot(state, Target.PRIMARY), "records": records}
+    return {"authority": authority_snapshot(state, target), "records": records}
 
 
 def transition(before, after, receipt):

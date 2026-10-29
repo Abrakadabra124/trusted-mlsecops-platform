@@ -222,8 +222,12 @@ class NativeRootRotation(unittest.TestCase):
                 native, "authority_snapshot", return_value=expected["authority"]
             ) as authority,
         ):
-            self.assertEqual(self.real_snapshot("state"), expected)
-        authority.assert_called_once_with("state", Target.PRIMARY)
+            for target in Target:
+                self.assertEqual(self.real_snapshot("state", target=target), expected)
+                authority.assert_called_with("state", target)
+                self.assertEqual(
+                    admin.call_args.kwargs, {} if target is Target.PRIMARY else {"target": target}
+                )
         for table in ("ml_trust.documents", "ml_trust.root_rotations", "ml_trust.migrations"):
             self.assertIn(table, admin.call_args.args[1])
 

@@ -38,6 +38,16 @@ python -m mlsecops.trust_root_store rotate --state .runtime --backend kubernetes
 
 ## Отказы и восстановление
 
+### Live qualification на том же candidate
+
+[ADR 0054](../decisions/0054-candidate-trust-root-separation.md) разделяет permit signer и online root. Локальные contracts прошли; native live trace пока ожидается. В существующем `kubernetes-serving.yml` host coordinator применяет primary rotation только после подтверждённого успешного HTTP prediction. Старый Engine должен дать точный root refusal и остаться fenced. Новый процесс получает explicit root/version, прежний permit и модель; golden и HTTP checks обязательны.
+
+После успешной primary recovery peer ротируется отдельной транзакцией. Если этот шаг не завершён, histories могут иметь разные roots. Сохранить оба состояния и receipts, не копировать settings между БД. Повтор допускается только для exact действующего package при подтверждённом current head. При истечении package trust owner формирует новый переход из фактического состояния; не сбрасывать version и не отзывать отзыв старого ключа. Для peer использовать его подтверждённый version floor, не primary floor.
+
+`candidate_root_window` требует нового планового эксперимента до начала mutation; он не разрешает продлить подписанный permit. `candidate_root_probe_binding`, `candidate_root_trace`, `candidate_root_peer_changed` и `candidate_root_storage_changed` оставляют результат непринятым. Сохранить private diagnostics, сверить actual HTTP outcomes и snapshots, затем выполнить стандартный cleanup owned CI. Native success и full M11 не выводятся из локального pass.
+
+### Общие диагностические причины
+
 | Симптом в private diagnostics | Действие |
 | --- | --- |
 | `rotation_migration_required` / `trust_migration_mismatch` | Проверить явную миграцию и её checksum. Не сбрасывать schema или историю. |

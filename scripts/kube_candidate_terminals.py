@@ -9,7 +9,7 @@ from scripts.kube_serving_native import invoke
 
 
 def exercise(state, profile, config, expected, *, base_probe, key, revoked_key, expires_at):
-    public, policy = config["permit_public"], config["expected_permit"]
+    public, policy = config.get("trust_root", config["permit_public"]), config["expected_permit"]
     before = capture(state, public, policy)
     isolation(base_probe, before, Target.PRIMARY)
     if any(
@@ -19,6 +19,8 @@ def exercise(state, profile, config, expected, *, base_probe, key, revoked_key, 
         raise Rejected("candidate_terminal_baseline_revoked")
     journal = snapshot(state)
     alternate = {**config, "trust_target": Target.MODEL_REVOCATION.value}
+    if "minimum_trust_version" in config:
+        alternate["minimum_trust_version"] = before[Target.MODEL_REVOCATION.value]["version"]
     model = faults(
         state,
         profile,

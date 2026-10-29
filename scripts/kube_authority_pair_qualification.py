@@ -220,6 +220,7 @@ class TerminalTests(unittest.TestCase):
         final_mutation=False,
         journal_changed=False,
         bad_base=False,
+        pinned_roots=False,
     ):
         current = states() if baseline is None else baseline
         initial = copy.deepcopy(current)
@@ -229,11 +230,16 @@ class TerminalTests(unittest.TestCase):
             "expected_permit": POLICY,
             "permit_envelope": {"signed": "unchanged"},
         }
+        if pinned_roots:
+            config.update(
+                trust_root=PUBLIC, permit_public=encode64(b"p" * 32), minimum_trust_version=7
+            )
         expected = {"model": MODEL, "bundle": SUBJECT}
         captures = 0
 
         def capture(*args):
             nonlocal captures
+            self.assertEqual(args[1], PUBLIC)
             captures += 1
             result = copy.deepcopy(current)
             if captures == 4 and final_mutation:
@@ -248,6 +254,11 @@ class TerminalTests(unittest.TestCase):
                 {
                     **config,
                     **({"trust_target": target.value} if target is not Target.PRIMARY else {}),
+                    **(
+                        {"minimum_trust_version": initial[target.value]["version"]}
+                        if pinned_roots and target is not Target.PRIMARY
+                        else {}
+                    ),
                 },
             )
             self.assertEqual(request, expected)
@@ -317,6 +328,12 @@ class TerminalTests(unittest.TestCase):
         result = self.execute()
         self.assertIn(MODEL, result["states"]["after_key"]["model-revocation"]["revoked_artifacts"])
         self.assertIn(KEY, result["states"]["after_key"]["primary"]["revoked_keys"])
+
+    def test_separate_signer_and_rotated_root_preserve_each_authority_floor(self):
+        baseline = states()
+        baseline[Target.MODEL_REVOCATION.value]["version"] = 2
+        result = self.execute(baseline=baseline, pinned_roots=True)
+        self.assertEqual(result["states"]["after_key"][Target.MODEL_REVOCATION.value]["version"], 3)
 
     def test_already_revoked_baseline_cannot_fake_second_positive(self):
         for target in Target:

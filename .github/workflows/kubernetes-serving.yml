@@ -28,6 +28,10 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.data_source_lock_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-live-root --source=scripts.kube_candidate_root,mlsecops.kube_candidate_trust,mlsecops.kube_serving_lifecycle -m unittest scripts.kube_candidate_root_qualification scripts.candidate_serving_reader_qualification scripts.kube_candidate_qualification scripts.kube_candidate_trust_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_serving_faults_qualification scripts.kube_authority_pair_qualification scripts.kube_root_rotation_qualification
+          uv run --locked coverage report --data-file=.coverage-live-root --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-live-root -o .coverage-live-root.json
+          uv run --locked python -c "import json; fs=json.load(open('.coverage-live-root.json'))['files']; raise SystemExit(0 if all(f['summary']['num_branches'] and f['summary']['covered_branches']/f['summary']['num_branches'] >= 0.95 for f in fs.values()) else 1)"
           uv run --locked coverage run --branch --data-file=.coverage-root-rotation --source=mlsecops.trust_rotation,mlsecops.trust_root_store,mlsecops.trust_authority,scripts.kube_root_rotation -m unittest scripts.trust_rotation_qualification scripts.trust_root_store_qualification scripts.trust_authority_qualification scripts.trust_qualification scripts.kube_root_rotation_qualification
           uv run --locked coverage report --data-file=.coverage-root-rotation --fail-under=95
           uv run --locked coverage json --data-file=.coverage-root-rotation -o .coverage-root-rotation.json

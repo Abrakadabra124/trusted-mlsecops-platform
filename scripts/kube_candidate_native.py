@@ -38,6 +38,7 @@ from mlsecops.trust_targets import Target
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_candidate_faults import NONTERMINAL
 from scripts.kube_candidate_faults import exercise as exercise_faults
+from scripts.kube_candidate_root import exercise as exercise_root
 from scripts.kube_candidate_terminals import exercise as exercise_terminals
 from scripts.kube_promotion_native import actual
 from scripts.kube_promotion_snapshot import read as snapshot
@@ -96,8 +97,12 @@ def qualify(
     )
     campaign = uuid.uuid4().hex
     destination = safe_child(state, "candidate-inference/" + campaign)
-    key = destination / "qualification.pem" if qualification_key is None else qualification_key
+    key = destination / "qualification.pem"
+    authority_key = (
+        destination / "authority.pem" if qualification_key is None else qualification_key
+    )
     qualification_public = signing.create_key(key)
+    authority_public = signing.create_key(authority_key)
     independent = include_trust_lifecycle and include_key_revocation
     if independent:
         # Provision the second independent authority BEFORE issuing the one permit.
@@ -133,21 +138,23 @@ def qualify(
     envelope = signing.sign(permit, KIND, key)
     permit_hash = digest(canonical(permit))
     trust_authority.install(
-        state, permit["environment"], qualification_public, backend=kube_trust.binding
+        state, permit["environment"], authority_public, backend=kube_trust.binding
     )
-    trust_authority.update(state, permit_hash, key, backend=kube_trust.binding)
+    trust_authority.update(state, permit_hash, authority_key, backend=kube_trust.binding)
     if independent:
         alternate_backend = partial(kube_trust.binding, target=Target.MODEL_REVOCATION)
         trust_authority.install(
-            state, permit["environment"], qualification_public, backend=alternate_backend
+            state, permit["environment"], authority_public, backend=alternate_backend
         )
-        trust_authority.update(state, permit_hash, key, backend=alternate_backend)
+        trust_authority.update(state, permit_hash, authority_key, backend=alternate_backend)
     config = {
         "context": context,
         "publisher_public": public,
         "proposal_reference": refusal["proposal"],
         "permit_envelope": envelope,
         "permit_public": qualification_public,
+        "trust_root": authority_public,
+        "minimum_trust_version": 1,
         "expected_permit": permit_hash,
         "expected_campaign": campaign,
         "kubernetes_worker": profile,
@@ -179,6 +186,25 @@ def qualify(
     write_json(destination / "request.json", expected)
     before = ledger(state)
     base_snapshot = snapshot(state)
+    root_rotation = None
+    if independent:
+        next_key = destination / "rotated-authority.pem"
+        root_rotation = exercise_root(
+            state,
+            profile,
+            config,
+            expected,
+            old_key=authority_key,
+            new_key=next_key,
+            expires_at=permit["expires_at"],
+        )
+        config.update(
+            trust_root=root_rotation["next_public"],
+            minimum_trust_version=root_rotation["minimum_trust_version"],
+        )
+        authority_key = next_key
+        write_json(destination / "root-rotation.json", root_rotation)
+        write_json(destination / "config.json", config)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     result = invoke(state, profile, config, expected, candidate_probe=True)
     if snapshot(state) != base_snapshot:
@@ -193,7 +219,7 @@ def qualify(
             profile,
             config,
             expected,
-            key=key,
+            key=authority_key,
             policy=permit_hash,
             revoked_key=revoked_key,
             faults=faults,
@@ -210,7 +236,7 @@ def qualify(
             config,
             expected,
             base_probe=result,
-            key=key,
+            key=authority_key,
             revoked_key=revoked_key,
             expires_at=permit["expires_at"],
         )
@@ -251,6 +277,7 @@ def qualify(
         "qualification_permit_sha256": permit_hash,
         "native": result,
         "base_snapshot_sha256": digest(canonical(base_snapshot)),
+        **({"root_rotation": root_rotation} if root_rotation is not None else {}),
         "trust_lifecycle": {
             name: value for name, value in fault_results.items() if name in NONTERMINAL
         },
@@ -283,6 +310,7 @@ def qualify(
                 "config.json",
                 "request.json",
                 "probe.json",
+                *(("root-rotation.json",) if root_rotation is not None else ()),
                 *(name + ".json" for name in fault_results),
                 *(("independent-authorities.json",) if terminals is not None else ()),
             )
