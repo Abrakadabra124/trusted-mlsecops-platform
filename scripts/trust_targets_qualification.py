@@ -3,7 +3,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops import kube_promotion, kube_storage, kube_trust, storage, storage_pki
+from mlsecops import (
+    kube_promotion,
+    kube_storage,
+    kube_storage_resources,
+    kube_trust,
+    storage,
+    storage_pki,
+)
 from mlsecops.contracts import Rejected, read_json, write_json
 from mlsecops.storage_bootstrap import export_clients
 from mlsecops.trust_targets import Target, select
@@ -12,6 +19,26 @@ from scripts import kube_trust_qualification as fixtures
 
 
 class TrustTargetContracts(unittest.TestCase):
+    def test_combined_storage_and_authorities_fit_namespace_secret_quotas(self):
+        documents = kube_storage_resources.resources(
+            "a" * 32, {}, {role: {} for role in storage_pki.ROLES}
+        )
+        for target in Target:
+            documents.extend(
+                kube_trust.resources(
+                    "a" * 32, {}, {role: {} for role in kube_trust.READERS}, target=target
+                )
+            )
+        for quota in (d for d in documents if d["kind"] == "ResourceQuota"):
+            namespace = quota["metadata"]["namespace"]
+            count = sum(
+                d["kind"] == "Secret" and d["metadata"]["namespace"] == namespace for d in documents
+            )
+            limit = int(quota["spec"]["hard"]["count/secrets"])
+            with self.subTest(namespace=namespace):
+                self.assertLessEqual(count, limit)
+                self.assertEqual(limit, 3 if namespace in ("ml-serving", "ml-promoter") else 2)
+
     def test_alternate_fault_coordinator_only_allows_irreversible_model_revoke(self):
         for fault in ("outage", "key-revocation", "policy-change", "blackhole"):
             with (

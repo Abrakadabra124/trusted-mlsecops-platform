@@ -72,6 +72,7 @@ def qualify(
         refusal = actual(root, state, image)
     else:
         profile, refusal = prepared
+    print(canonical({"stage": "actual-candidate-bind-proposal"}).decode(), flush=True)
     proposal = read_json(
         safe_child(state, "release-proposals/" + refusal["campaign_id"] + "/report.json")
     )
@@ -100,7 +101,9 @@ def qualify(
     independent = include_trust_lifecycle and include_key_revocation
     if independent:
         # Provision the second independent authority BEFORE issuing the one permit.
+        print(canonical({"stage": "actual-model-authority-bootstrap"}).decode(), flush=True)
         kube_trust.bootstrap(state, target=Target.MODEL_REVOCATION)
+        print(canonical({"stage": "actual-model-authority-ready"}).decode(), flush=True)
     # Obtain reference predictions before starting the short permit lifetime.
     features = [[value] * len(FEATURES) for value in (0.1, 0.5, 0.9)]
     batch = PredictionBatch(verified["model"], features)

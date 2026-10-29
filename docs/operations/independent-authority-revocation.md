@@ -22,6 +22,7 @@ gh run view <RUN_ID> --repo Abrakadabra124/trusted-mlsecops-platform --json stat
 
 | Код или симптом | Проверка и действие |
 | --- | --- |
+| Bootstrap второй authority остановился до HTTP matrix | Сверить Secret quota в `ml-promoter` и `ml-serving`: требуются `storage-client`, `trust-client`, `trust-client-model`. Старый предел 2 недостаточен; новый manifest резервирует 3 только в этих двух namespaces. Другие квоты сохранены. Изменение spec существующего state требует отдельной миграции; для CI создать новый disposable state, не править ownership marker. |
 | `candidate_authorities_not_independent` | Сверить CA, host, UID inventory, volume UID и spec digest. Совпадение требует исправления provisioning; не разрешать aliasing. |
 | `candidate_authorities_policy_or_root` | Сверить исходный public root и permit policy. Не переиздавать permit ради успешного отчёта. |
 | `candidate_authority_isolation_binding` | Сверить CA hash и target отчёта с локальным owned inventory. Проверить, что `cross_ca_denied` является boolean true. |
@@ -53,3 +54,9 @@ gh run view <RUN_ID> --repo Abrakadabra124/trusted-mlsecops-platform --json stat
 6. Подтвердить success обоих cleanup steps: остановлена собственная source SQL, удалён только verified owned disposable cluster. Этот cleanup уничтожает тестовый стенд, а не снимает отзыв в работающей системе.
 
 При отказе сохранить конкретный fault/stage/commit, отделить local contract tests от native результата. Повтор возможен после установленной причины и исправления. Rollback к отозванному ключу/модели запрещён; для нового опыта создаётся целиком новый disposable state с новой campaign. Ни успешный unit test, ни отдельный 503 не закрывают M11 или R1.
+
+## Обнаруженное ограничение provisioning
+
+Run [40933488855](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40933488855), commit `3f52fcc`, завершился fail после controlled revocation и до actual HTTP matrix. Все 327 подготовительных Linux tests прошли; оба cleanup steps завершились success. Runtime сохранил только generic rejection, поэтому точная причина этого исторического отказа не доказана. Строка `probe_failure: unclassified` относится к unit fixture и не является runtime evidence.
+
+При разборе найден воспроизводимый дефект manifests: объединённый inventory требует по 3 Secret в двух reader namespaces при quota 2. Новый composition test до исправления даёт два отказа, после исправления сверяет полный inventory и точные limits. Это подтверждает дефект конфигурации, но не восстанавливает отсутствующий diagnostic исторического run. Добавлены отдельные stage markers для binding и bootstrap второй authority, без ключей, payloads или SQL в логах. Native результат исправления ещё ожидается.

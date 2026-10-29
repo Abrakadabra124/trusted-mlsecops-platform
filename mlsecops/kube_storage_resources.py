@@ -96,7 +96,8 @@ def namespace_resources(namespace, account, workspace):
                     "limits.memory": "1Gi",
                     "requests.storage": "2Gi",
                     "persistentvolumeclaims": "1",
-                    "count/secrets": "2",
+                    # Model storage plus two independently pinned trust clients.
+                    "count/secrets": "3" if namespace in ("ml-promoter", "ml-serving") else "2",
                     "count/configmaps": "4",
                     "count/jobs.batch": "3",
                 }
