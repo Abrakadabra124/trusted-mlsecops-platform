@@ -22,11 +22,15 @@ def qualify():
             observed = database.execute(
                 "SELECT current_user, current_database(), version FROM pg_stat_ssl WHERE pid=pg_backend_pid()"
             ).fetchone()
-            assert observed == (role, role, "TLSv1.3"), "role_database_or_tls_changed"
+            if observed != (role, role, "TLSv1.3"):
+                raise AssertionError("role_database_or_tls_changed")
             flags = database.execute(
                 "SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication FROM pg_roles WHERE rolname=current_user"
             ).fetchone()
-            assert flags == (False, False, False, False), "database_role_escalated"
+            if flags != (False, False, False, False) or any(
+                type(flag) is not bool for flag in flags
+            ):
+                raise AssertionError("database_role_escalated")
         cases.extend([role + "-tls-positive", role + "-least-privilege"])
         foreign = "tracking_auth" if role == "tracking_metadata" else "tracking_metadata"
         for name, change in (

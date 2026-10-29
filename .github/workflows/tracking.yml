@@ -28,6 +28,8 @@ jobs:
           uv run --locked ruff check mlsecops scripts/tracking*.py scripts/reproducibility*.py images/tracking/*.py
           uv run --locked ruff format --check mlsecops scripts/tracking*.py scripts/reproducibility*.py images/tracking/*.py
           uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file=.coverage-sql-probe --source=scripts.tracking_sql_probe -m unittest scripts.tracking_sql_probe_qualification
+          uv run --locked coverage report --data-file=.coverage-sql-probe --fail-under=100
           uv run --locked python -m scripts.tracking_spike_qualification
           uv run --locked python -m scripts.tracking_config_qualification
           uv run --locked python -m scripts.tracking_client_qualification
