@@ -181,7 +181,9 @@ def prepare(root, state, image):
     }
 
 
-def qualify(root, state, image, *, include_candidate=False, prepared=None):
+def qualify(
+    root, state, image, *, include_candidate=False, prepared=None, include_key_revocation=False
+):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     prepared = prepare(root, state, image) if prepared is None else prepared
@@ -294,7 +296,7 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
         ):
             raise Rejected("kube_serving_source_or_ledger_changed")
         candidate_result = None
-        if include_candidate:
+        if include_candidate or include_key_revocation:
             from scripts.kube_candidate_native import qualify as candidate_qualify
 
             candidate_result = candidate_qualify(
@@ -303,6 +305,7 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
                 image,
                 prepared=(profile, actual_result),
                 qualification_key=fixture.trust_fixture.key,
+                include_key_revocation=include_key_revocation,
             )
         return {
             "schema_version": 1,
@@ -330,7 +333,7 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
                 "expired_retry_ledger_unchanged": True,
             },
             "live_trust": lifecycle,
-            **({"actual_inference": candidate_result} if include_candidate else {}),
+            **({"actual_inference": candidate_result} if candidate_result is not None else {}),
             "limitations": [
                 "Controlled approvals are not acceptance of the actual candidate",
                 "Full M11/M13/M14 and durable audit/recovery remain required",
@@ -352,7 +355,12 @@ def main(arguments=None):
         options = parser.parse_args(arguments)
         output = safe_child(options.state, "evidence/kubernetes-serving.json")
         write_json(output, {"status": "inconclusive", "release_ready": False})
-        report = qualify(Path(__file__).resolve().parents[1], options.state, options.image)
+        report = qualify(
+            Path(__file__).resolve().parents[1],
+            options.state,
+            options.image,
+            include_key_revocation=True,
+        )
         write_json(output, report)
         print(canonical(report).decode())
         return 0

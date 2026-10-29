@@ -1,5 +1,6 @@
 # Эксплуатационные процедуры
 
+- [Actual-candidate key revocation: положительный inference, live trace и точный cold Reader refusal](candidate-key-revocation.md). Native проверка ещё требуется; ключ не удаляется из revocation set.
 - [Approval expiry: HTTP trace, cold refusal, expired retry и явный release sequence 2](approval-expiry.md). Native `9485893` verified: отказ до expiry, expired retry без ledger writes и recovery CLI. Полный M11 ещё не закрыт.
 - [Trust blackhole: TCP timeout, исходный lease deadline, UID-bound cleanup и восстановление](trust-blackhole.md). Native `b5a933e` verified: первый HTTP 503 за 13.149598977 s, TCP recovery без auto-reactivation; обязательный компонент M11, не весь gate. Причина intermittent worker startup stderr остаётся открытой.
 

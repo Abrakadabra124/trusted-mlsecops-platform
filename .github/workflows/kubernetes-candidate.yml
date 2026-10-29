@@ -32,10 +32,14 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-kube-serving --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-serving -o .coverage-kube-serving.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-kube-serving.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
-          uv run --locked coverage run --branch --data-file=.coverage-kube-lifecycle --source=mlsecops.kube_serving_lifecycle,scripts.kube_serving_faults,scripts.kube_trust_blackhole -m unittest scripts.kube_serving_lifecycle_qualification scripts.kube_serving_faults_qualification scripts.kube_trust_blackhole_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-kube-lifecycle --source=mlsecops.kube_candidate_trust,mlsecops.kube_serving_lifecycle,scripts.kube_serving_faults,scripts.kube_trust_blackhole -m unittest scripts.kube_candidate_trust_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_serving_faults_qualification scripts.kube_trust_blackhole_qualification
           uv run --locked coverage report --data-file=.coverage-kube-lifecycle --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-lifecycle -o .coverage-kube-lifecycle.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-kube-lifecycle.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+          uv run --locked coverage run --branch --data-file=.coverage-kube-expiry --source=mlsecops.kube_serving_expiry,scripts.kube_approval_fixture -m unittest scripts.kube_serving_expiry_qualification scripts.kube_approval_fixture_qualification
+          uv run --locked coverage report --data-file=.coverage-kube-expiry --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-kube-expiry -o .coverage-kube-expiry.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-kube-expiry.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --branch --data-file=.coverage-inference-gate --source=mlsecops.inference_gate -m unittest scripts.inference_gate_qualification
           uv run --locked coverage report --data-file=.coverage-inference-gate --fail-under=95
           uv run --locked coverage json --data-file=.coverage-inference-gate -o .coverage-inference-gate.json

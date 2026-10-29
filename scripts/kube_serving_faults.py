@@ -4,6 +4,7 @@ from mlsecops import kube_storage, kube_trust, trust_authority
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, decode, digest
 from mlsecops.kube_serving_lifecycle import FAULTS
+from mlsecops.storage import object_id
 from scripts.kube_trust_blackhole import Blackhole
 from scripts.kube_trust_native import scale
 
@@ -47,10 +48,11 @@ def acknowledge(state, pod, phase, fault):
 
 
 class Coordinator:
-    def __init__(self, state, fault, policy, key, model):
+    def __init__(self, state, fault, policy, key, model, *, revoked_key=None):
         if fault not in FAULTS:
             raise Rejected("serving_fault_kind")
         self.state, self.fault, self.policy, self.key, self.model = state, fault, policy, key, model
+        self.revoked_key = object_id(revoked_key) if fault == "key-revocation" else None
         self.marker = self.document = self.uid = None
         self.changed = False
         self.phases = []
@@ -95,6 +97,14 @@ class Coordinator:
                     self.state,
                     digest(b"controlled-policy-transition"),
                     self.key,
+                    backend=kube_trust.binding,
+                )
+            elif self.fault == "key-revocation":
+                trust_authority.update(
+                    self.state,
+                    self.policy,
+                    self.key,
+                    revoked_keys=[self.revoked_key],
                     backend=kube_trust.binding,
                 )
             else:

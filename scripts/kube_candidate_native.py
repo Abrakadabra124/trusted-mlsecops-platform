@@ -35,11 +35,14 @@ from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.private_cli import Arguments
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_promotion_native import actual
+from scripts.kube_serving_faults import Coordinator
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
 
 
-def qualify(root, state, image, *, prepared=None, qualification_key=None):
+def qualify(
+    root, state, image, *, prepared=None, qualification_key=None, include_key_revocation=False
+):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     if command(["git", "-C", str(root), "status", "--porcelain"]):
@@ -150,6 +153,27 @@ def qualify(root, state, image, *, prepared=None, qualification_key=None):
     before = ledger(state)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     result = invoke(state, profile, config, expected, candidate_probe=True)
+    key_result = None
+    if include_key_revocation:
+        revoked_key = digest(signing.decode64(public))
+        print(canonical({"stage": "actual-candidate-key-revocation"}).decode(), flush=True)
+        with Coordinator(
+            state, "key-revocation", permit_hash, key, refusal["model"], revoked_key=revoked_key
+        ) as coordinator:
+            key_result = invoke(
+                state,
+                profile,
+                config,
+                {**expected, "fault": "key-revocation"},
+                coordinator=coordinator,
+                candidate_probe=True,
+            )
+        if (
+            key_result["model_sha256"] != refusal["model"]
+            or key_result["subject_sha256"] != verified["subject_sha256"]
+        ):
+            raise Rejected("candidate_key_revocation_binding_changed")
+        write_json(destination / "key-revocation.json", key_result)
     if (
         ledger(state) != before
         or source_fingerprint(root) != fingerprint
@@ -177,9 +201,20 @@ def qualify(root, state, image, *, prepared=None, qualification_key=None):
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
+        **(
+            {"key_revocation": key_result, "revoked_key_sha256": revoked_key}
+            if key_result is not None
+            else {}
+        ),
         "artifact_hashes": {
             name: digest(bounded_read(destination / name))
-            for name in ("reference.json", "config.json", "request.json", "probe.json")
+            for name in (
+                "reference.json",
+                "config.json",
+                "request.json",
+                "probe.json",
+                *(["key-revocation.json"] if key_result is not None else []),
+            )
         },
         "limitations": [
             "Candidate qualification does not authorize release or create assurance",

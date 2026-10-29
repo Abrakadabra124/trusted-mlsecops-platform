@@ -15,7 +15,7 @@ from pathlib import Path
 
 import uvicorn
 
-from mlsecops import serving, serving_http, trust, trust_authority
+from mlsecops import kube_candidate_trust, serving, serving_http, trust, trust_authority
 from mlsecops.candidate_serving_reader import CandidateReader
 from mlsecops.contracts import Rejected, canonical, decode, digest, read_json
 from mlsecops.controller_api import Client
@@ -249,20 +249,26 @@ def qualify(config, expected):
         check(fault + "-cleanup", len(client.request("pods")["items"]), 0)
 
     engine = serving.Engine(candidate(config), worker_factory=factory)
+    lifecycle = None
     with site(engine) as request:
         body, error = matrix(request, engine, expected, check)
         workers = client.request("pods")["items"]
         check("one-persistent-worker", len(workers), 1)
         check("actual-candidate-not-release", engine.loaded.release_ready, False)
         check("qualification-audit-context", engine.audit_context.kind, "candidate-qualification")
-        worker = workers[0]
-        owner = worker["metadata"]["ownerReferences"][0]
-        remove(client, "jobs", worker["metadata"]["labels"]["job-name"], owner["uid"])
-        deadline = time.monotonic() + 15
-        while client.request("pods")["items"] and time.monotonic() < deadline:
-            time.sleep(0.1)
-        check("stopped-worker-503", request("/v1/predict", body)[0], 503)
-        check("stopped-worker-not-ready", request("/readyz")[0], 503)
+        if "fault" in expected:
+            lifecycle = kube_candidate_trust.exercise(
+                lambda: candidate(config), request, body, expected, check
+            )
+        else:
+            worker = workers[0]
+            owner = worker["metadata"]["ownerReferences"][0]
+            remove(client, "jobs", worker["metadata"]["labels"]["job-name"], owner["uid"])
+            deadline = time.monotonic() + 15
+            while client.request("pods")["items"] and time.monotonic() < deadline:
+                time.sleep(0.1)
+            check("stopped-worker-503", request("/v1/predict", body)[0], 503)
+            check("stopped-worker-not-ready", request("/readyz")[0], 503)
     check("final-worker-absence", len(client.request("pods")["items"]), 0)
     return {
         "status": "pass",
@@ -271,6 +277,7 @@ def qualify(config, expected):
         "max_golden_error": error,
         "model_sha256": expected["model"],
         "subject_sha256": expected["bundle"],
+        **({"lifecycle": lifecycle} if lifecycle is not None else {}),
     }
 
 

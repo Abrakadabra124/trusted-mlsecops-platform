@@ -6,6 +6,31 @@ from scripts import kube_serving_faults as faults
 
 
 class FaultContracts(unittest.TestCase):
+    def test_key_revocation_requires_explicit_key_and_never_unrevokes_it(self):
+        with patch.object(faults.trust_authority, "update") as update:
+            with faults.Coordinator(
+                "state",
+                "key-revocation",
+                "a" * 64,
+                "authority",
+                "b" * 64,
+                revoked_key="c" * 64,
+            ) as coordinator:
+                coordinator("ready")
+                coordinator("denied")
+            update.assert_called_once_with(
+                "state",
+                "a" * 64,
+                "authority",
+                revoked_keys=["c" * 64],
+                backend=faults.kube_trust.binding,
+            )
+            for key in (None, "", "PRIVATE"):
+                with self.assertRaises(Rejected):
+                    faults.Coordinator(
+                        "state", "key-revocation", "a" * 64, "authority", "b" * 64, revoked_key=key
+                    )
+
     def test_blackhole_is_closed_after_failed_start_or_probe_and_after_denial(self):
         for failure in ("start", "probe", None):
             with patch.object(faults, "Blackhole") as constructor:
