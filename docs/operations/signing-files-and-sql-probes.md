@@ -10,6 +10,16 @@
 
 Это ограниченная защита signing files. Доверенная иерархия родительских каталогов и отсутствие враждебного процесса с той же identity остаются предпосылками. Это не универсальная защита всех path races и не исправление `contracts.bounded_read`, `safe_child` или `atomic_write` из U03. POSIX mode не является Windows ACL: существующие Windows ACL не проверяются и не исправляются этим helper. Cross-user denial на Windows пока не доказан.
 
+Для следующего исправления U03 при source inspection выделены следующие границы:
+
+| Точка входа | Что уже проверяется | Что ещё не доказано |
+| --- | --- | --- |
+| `intake.submit`, CLI `--file` | После чтения: schema, source approval и подпись snapshot; approved publish требует отдельного curator action | Чтение специального файла может произойти до проверки содержимого. Нужен bounded regular-file open без зависания на FIFO. Сам путь выбирает оператор CLI; удалённый доступ к нему не установлен. |
+| `artifact_intake.inspect_file` | `safe_child`, expected digest, isolated parser и повторная сверка bytes | Path checks и последующее открытие остаются разными операциями. Требуется определить доверенный root и проверять открытый descriptor; повторное чтение не делает pathname race невозможным. |
+| Общие `read_json` / `atomic_write` | Ограничение размера/JSON, temporary file и atomic replace | Temporary file защищает от частично записанного JSON, но не доказывает неизменность parent path. Нужны scoped read/write contracts и проверка совместимости всех затронутых callers. |
+
+Это карта незавершённого исправления, не эксплуатация или доказательство обхода подписи. Общий helper в этом increment не менялся; новый защищённый helper применяется только к ключам.
+
 U02 касалось двух `assert` в [tracking_sql_probe.py](../../scripts/tracking_sql_probe.py). При оптимизации Python такие инструкции исчезают. Теперь несоответствие identity/database/TLS или привилегированной роли вызывает явный отказ независимо от optimization level; privilege flags должны быть именно boolean. Отрицательные соединения по-прежнему требуют положительного control после каждого отказа. Ошибка соединения без работающего control не считается доказательством изоляции.
 
 ## Диагностика
