@@ -31,6 +31,7 @@ from scripts.kube_promotion_replay import exercise as exercise_replay
 from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_rollback_native import exercise as exercise_rollback
 from scripts.kube_rollback_native import variant as rollback_variant
+from scripts.kube_root_rotation import exercise as exercise_root_rotation
 from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
 from scripts.promotion_entrypoint_native import configuration
@@ -330,6 +331,23 @@ def qualify(
         rollback["serving"] = invoke(state, profile, config, expected)
         rollback.update(target_model=model, from_model=renewed_model)
         after = ledger(state)
+        print(canonical({"stage": "planned-authority-root-rotation"}).decode(), flush=True)
+        next_key = fixture.trust_fixture.key.with_name("rotated-authority.pem")
+        rotation = exercise_root_rotation(state, fixture.trust_fixture.key, next_key)
+        rotation["old_config_refusal"] = invoke(
+            state,
+            profile,
+            config,
+            {**expected, "ready": False, "reader_refusal": "trust_authority_missing_or_foreign"},
+        )
+        fixture.trust_fixture.key = next_key
+        fixture.trust_fixture.public = rotation["next_public"]
+        for operator_config in (config, rollback_config):
+            operator_config.update(
+                trust_root=rotation["next_public"],
+                minimum_trust_version=rotation["receipt"]["version"],
+            )
+        rotation["serving"] = invoke(state, profile, config, expected)
         lifecycle = {}
         for fault in ("outage", "blackhole", "policy-change", "revocation"):
             print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
@@ -385,6 +403,7 @@ def qualify(
             "controlled_model": model,
             "controlled_renewed_model": renewed_model,
             "authorized_rollback": rollback,
+            "authority_root_rotation": rotation,
             "before_approval": refused,
             "approved": admitted,
             "after_revocation": revoked,
