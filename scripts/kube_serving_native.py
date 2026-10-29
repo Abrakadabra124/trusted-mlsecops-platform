@@ -18,7 +18,6 @@ from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_child, write_json
 from mlsecops.controller_resources import mount_api
 from mlsecops.inventory import command, source_fingerprint
-from mlsecops.kube_storage_migration import ledger
 from mlsecops.kube_worker import job_document, verify_running_image, wait_job
 from mlsecops.private_cli import Arguments
 from mlsecops.storage_pki import workspace_id
@@ -26,6 +25,7 @@ from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
 from scripts.kube_promotion_native import actual, stage
+from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
 from scripts.promotion_entrypoint_native import configuration
@@ -255,6 +255,7 @@ def qualify(
         expired_retry = kube_promotion.invoke(root, state, promotion, request, image)
         if expired_retry["status"] != "rejected" or ledger(state) != after:
             raise Rejected("kube_serving_expired_retry_admitted_or_wrote")
+        expired_snapshot_hash = digest(canonical(after))
         old_subject = expected["bundle"]
         renew(fixture, profile["image_id"])
         renewed_request = stage(
@@ -331,6 +332,13 @@ def qualify(
                 "renewed_receipt": receipt,
                 "recovery": recovery,
                 "expired_retry_ledger_unchanged": True,
+                "expired_retry_snapshot_sha256": expired_snapshot_hash,
+                "expired_retry_snapshot_scope": [
+                    "CAS",
+                    "promotion-authorities",
+                    "promotion-events",
+                    "promotion-heads",
+                ],
             },
             "live_trust": lifecycle,
             **({"actual_inference": candidate_result} if candidate_result is not None else {}),

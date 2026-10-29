@@ -35,6 +35,7 @@ from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.private_cli import Arguments
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_promotion_native import actual
+from scripts.kube_promotion_snapshot import read as promotion_snapshot
 from scripts.kube_serving_faults import Coordinator
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
@@ -155,6 +156,7 @@ def qualify(
     result = invoke(state, profile, config, expected, candidate_probe=True)
     key_result = None
     if include_key_revocation:
+        journal_before = promotion_snapshot(state)
         revoked_key = digest(signing.decode64(public))
         print(canonical({"stage": "actual-candidate-key-revocation"}).decode(), flush=True)
         with Coordinator(
@@ -171,6 +173,7 @@ def qualify(
         if (
             key_result["model_sha256"] != refusal["model"]
             or key_result["subject_sha256"] != verified["subject_sha256"]
+            or promotion_snapshot(state) != journal_before
         ):
             raise Rejected("candidate_key_revocation_binding_changed")
         write_json(destination / "key-revocation.json", key_result)
@@ -202,7 +205,11 @@ def qualify(
         "qualification_permit_sha256": permit_hash,
         "native": result,
         **(
-            {"key_revocation": key_result, "revoked_key_sha256": revoked_key}
+            {
+                "key_revocation": key_result,
+                "revoked_key_sha256": revoked_key,
+                "key_revocation_snapshot_sha256": digest(canonical(journal_before)),
+            }
             if key_result is not None
             else {}
         ),
