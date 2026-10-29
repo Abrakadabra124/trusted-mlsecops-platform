@@ -25,6 +25,7 @@ INPUTS = (
     "mlsecops/data_source.py",
     "mlsecops/datasets.py",
     "mlsecops/intake.py",
+    "mlsecops/key_files.py",
     "mlsecops/signing.py",
     "policies/local-cpu.json",
     "uv.lock",

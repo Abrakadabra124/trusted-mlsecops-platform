@@ -27,6 +27,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.data_source_lock_qualification
           uv run --locked coverage run --branch --data-file=.coverage-trust-pair --source=mlsecops.trust_targets,mlsecops.kube_trust_isolation,scripts.kube_authority_pair,scripts.kube_candidate_terminals -m unittest scripts.trust_targets_qualification scripts.kube_trust_isolation_qualification scripts.kube_authority_pair_qualification scripts.kube_trust_qualification scripts.trust_authority_qualification
           uv run --locked coverage report --data-file=.coverage-trust-pair --fail-under=95
           uv run --locked coverage json --data-file=.coverage-trust-pair -o .coverage-trust-pair.json

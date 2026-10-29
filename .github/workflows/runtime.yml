@@ -28,6 +28,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts/check_docs.py
           uv run --locked ruff format --check mlsecops scripts/check_docs.py
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.data_source_lock_qualification
           uv run --locked pip-audit --strict --progress-spinner off
       - name: Signing key permissions and cross-UID canary
         run: |
