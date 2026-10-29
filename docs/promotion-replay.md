@@ -1,6 +1,6 @@
 # M11: отказ действующему предыдущему выпуску
 
-Реализация и локальные проверки подготовлены; native проверка ещё не выполнена. Это controlled synthetic integration обычного isolated promotion CLI, не независимая приёмка actual candidate и не разрешённый rollback.
+[Native 801a9ed / 40905790753](evidence/runtime-bootstrap-replay-2026-10-29.md) проверен: действующий sequence 1 отказан точно по `promotion_sequence_conflict`, journal unchanged, текущий sequence 2 идемпотентен и затем работает в обычном serving CLI. Это controlled synthetic integration обычного isolated promotion CLI, не независимая приёмка actual candidate и не разрешённый rollback. Прежний 45361ca / 40901465590 остановился до этого сценария из-за runtime startup warning.
 
 ## Что проверяется
 

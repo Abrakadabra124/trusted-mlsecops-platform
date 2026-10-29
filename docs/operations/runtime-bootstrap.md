@@ -8,6 +8,8 @@
 
 ## Исправление
 
+**Native подтверждение:** [801a9ed / 40905790753](../evidence/runtime-bootstrap-replay-2026-10-29.md) success. 14 bootstrap tests, 41/41 statements и 12/12 branches; все свежие workers сквозного run успешно прошли initialization. Проверены expiry, новый sequence, отказ старому действующему sequence и trust faults; cleanup success. Статус ниже описывает процедуру для последующих изменений, не заменяет проверку каждого нового commit.
+
 [Bootstrap](../../mlsecops/runtime_bootstrap.py) вызывается только из свежего Linux serving worker, после запрета core dumps и до чтения входного кадра. Таймаут 120 s действует уже во время импорта; родитель сохраняет свой меньший timeout. Предзагруженный ORT и версия, отличная от pinned 1.30.0, отвергаются.
 
 На короткое время доверенного импорта native stderr направляется в анонимный `memfd`. Он живёт в памяти и освобождается при закрытии дескрипторов; файла в workspace нет. Soft `RLIMIT_FSIZE` ограничен 4096 bytes, hard limit не меняется, прежний более строгий soft limit не повышается. [Linux memfd](https://man7.org/linux/man-pages/man2/memfd_create.2.html) и [RLIMIT_FSIZE](https://man7.org/linux/man-pages/man2/getrlimit.2.html) дают эту механику без reader thread или постоянного log file.
@@ -23,7 +25,7 @@
 1. Проверить конкретный commit и terminal state существующего run; сохранить приватный log в `.runtime/evidence`. Ошибка чтения статуса не является основанием для повторного dispatch.
 2. Сопоставить stage и finite startup cause. `serving_worker_rejected` после bootstrap не доказывает проблему модели: проверить pinned runtime, раннюю инициализацию, неизвестные diagnostics и поддержку Linux primitive. Не публиковать raw stderr.
 3. Запустить `python -m unittest scripts.runtime_bootstrap_qualification.DiagnosticTests scripts.runtime_bootstrap_qualification.BootstrapBoundaryTests scripts.worker_privacy_qualification scripts.serving_session_qualification scripts.model_contract_qualification`. На Windows проверены 43 methods. Два новых boundary tests были RED до изменения.
-4. В Linux workflow запустить `python -m unittest scripts.runtime_bootstrap_qualification`. Native tests проверяют настоящий fd2/memfd/limit, ошибки import/setup/restore, overflow, меньший limit, отсутствие descriptor leaks и свежий реальный CPU import. До результата CI это подготовленные тесты, не проверенное Linux evidence.
+4. В Linux workflow запустить `python -m unittest scripts.runtime_bootstrap_qualification`. Native tests проверяют настоящий fd2/memfd/limit, ошибки import/setup/restore, overflow, меньший limit, отсутствие descriptor leaks и свежий реальный CPU import. На 801a9ed эти 14 tests прошли; для следующего code change требуется его собственный результат.
 5. Сквозной запуск обязан пройти actual refusal, обычный controlled inference, expiry/renewal, unexpired replay и trust faults. Только его полный результат вместе с cleanup подтверждает integration данного commit.
 6. При новом unknown warning остановить qualification и исследовать его источник. Не расширять whitelist по substring, не направлять stderr в `/dev/null`, не удалять input validation и не повышать таймаут ради зелёного статуса.
 7. Rollback - возврат code change в отдельном commit с сохранением failed evidence. Он возвращает прежнее строгое поведение и может вернуть отказ при известном предупреждении; не считать rollback восстановлением работоспособности без повторной проверки. Если stderr/limits невозможно восстановить, процесс завершается, его нельзя переиспользовать.

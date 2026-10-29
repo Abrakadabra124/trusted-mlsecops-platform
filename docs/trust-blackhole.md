@@ -2,6 +2,8 @@
 
 ## Повторный startup refusal 2026-10-29
 
+Актуально: [801a9ed / 40905790753](evidence/runtime-bootstrap-replay-2026-10-29.md) success после отдельной инициализации ORT до чтения модели. 243 Linux method executions, bootstrap 41 statements / 12 branches полностью покрыт; ordinary serving, expiry, unexpired replay, faults и actual key revocation подтверждены, cleanup success. Это проверенный результат данного commit; ниже сохранена история поиска причины.
+
 Последующий `45361ca` / [40901465590](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40901465590) снова отказал: `serving_attach_ort_device_warning` при свежем worker на expiry, cleanup success. Global logger перед session недостаточен для import-time initialization. Подготовлен [отдельный bootstrap до чтения модели](operations/runtime-bootstrap.md); его Linux/native проверка ещё требуется. Это уточняет состояние после прежнего успешного run ниже.
 
 После настройки глобального logger `b191555` / [40898945667](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40898945667) завершился успешно: 200 Linux methods, ordinary serving, expiry/recovery, четыре trust faults и actual-candidate key revocation; source/cleanup verified. [Полный snapshot и bindings](promotion-snapshot.md#проверенный-hosted-result-2026-10-29). Это проверка исправленной конфигурации в данном native run. Все прежние intermittent failures не объявляются доказанно имеющими одну причину.
