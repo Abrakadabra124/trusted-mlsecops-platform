@@ -1,6 +1,6 @@
 # M11: отзыв ключа издателя actual candidate
 
-Реализация подготовлена, native проверка ещё требуется. Это проверка actual candidate с отдельным qualification permit, не разрешённый production release и не полный M11. Controlled approval не используется для допуска actual candidate.
+Native проверка подтверждена на `71a77b0`: [evidence и run 40826185111](evidence/candidate-key-revocation-2026-10-29.md). Первый полный HTTP 503 через 5.290494312 s, 70 typed cases pass, cold Reader отказал точно по `trust_key_revoked`, worker и owned infrastructure cleanup подтверждены. Это проверка actual candidate с отдельным qualification permit, не разрешённый production release и не полный M11. Controlled approval не используется для допуска actual candidate.
 
 ## Сценарий и границы
 
@@ -23,4 +23,4 @@
 5. Подтвердить no-auto-reactivation, worker absence, unchanged ledger/source, затем owned SQL stop/cluster cleanup. Не отключать verification и не восстанавливать старую trust policy ради зелёного результата.
 6. При отказе сохранить приватные первичные отчёты и finite codes. Безопасное состояние - serving отказан. Новый deployment/ротация требует отдельного подписанного разрешения и повторной проверки; этот сценарий её не выполняет.
 
-Локальная проверка: `python -m unittest scripts.kube_candidate_trust_qualification scripts.kube_serving_faults_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_trust_blackhole_qualification`. Native результат и полная M11-приёмка пока не заявляются.
+Локальная проверка: `python -m unittest scripts.kube_candidate_trust_qualification scripts.kube_serving_faults_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_trust_blackhole_qualification`. В native evidence этого commit SQL ledger означает CAS inventory, не отдельный snapshot promotion journal. Полная M11-приёмка ещё не завершена.
