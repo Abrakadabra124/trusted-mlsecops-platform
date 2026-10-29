@@ -1,6 +1,6 @@
 # M11: часы и недействительный trust cache на actual candidate
 
-Статус: реализация и локальные проверки готовы; native evidence ещё не получено. Полные M11/CP3/R1 остаются открыты. Это компонент candidate qualification, а не разрешённый production release.
+Статус: [native 2b11bf5 / 40916783930](evidence/candidate-clock-cache-2026-10-29.md) success. Пять injected fault cases, exact causes, 25 denial observations, zero late worker calls и same-candidate recovery подтверждены. Полные M11/CP3/R1 остаются открыты. Это компонент candidate qualification, а не разрешённый production release.
 
 ## Что проверяется
 
@@ -41,4 +41,4 @@
 
 Настоящий operational clock incident диагностируется отдельно на владельце инфраструктуры: проверить источник времени и логи синхронизации, восстановить корректное время, затем создать новый Reader/Engine и повторно проверить доверие. Нельзя вручную сбрасывать broken_clock, generation, version floor или revocations в старом процессе. Этот hosted тест подтверждает fail-closed код и recovery path, но не выполняет ремонт NTP.
 
-Локально 72 method executions pass без skipped; новая probe имеет 81/81 statements и 10/10 branches (100%). В тесты входят восстановление dependencies при исключении транспорта, отказ на wrong recovered candidate, обнаружение позднего Worker.predict даже при HTTP 503 и отсутствие raw private exception в диагностике. Native результат фиксируется отдельно после terminal CI и проверки первичных артефактов.
+Локально 72 method executions pass без skipped; новая probe имеет 81/81 statements и 10/10 branches (100%). В тесты входят восстановление dependencies при исключении транспорта, отказ на wrong recovered candidate, обнаружение позднего Worker.predict даже при HTTP 503 и отсутствие raw private exception в диагностике. В native CI выполнены 264 method executions, 185 typed assertions базового candidate Job и 653 assertions всей actual-candidate группы с повторениями. Source/report hashes, одинаковый snapshot всех Jobs и cleanup проверены; [primary evidence](evidence/candidate-clock-cache-2026-10-29.md) отделяет injected cases от реальных network/SQL faults.
