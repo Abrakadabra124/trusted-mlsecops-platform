@@ -29,6 +29,8 @@ from scripts.kube_approval_fixture import renew, shorten
 from scripts.kube_promotion_native import actual, stage
 from scripts.kube_promotion_replay import exercise as exercise_replay
 from scripts.kube_promotion_snapshot import read as ledger
+from scripts.kube_rollback_native import exercise as exercise_rollback
+from scripts.kube_rollback_native import variant as rollback_variant
 from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
 from scripts.promotion_entrypoint_native import configuration
@@ -283,6 +285,14 @@ def qualify(
         expired_snapshot_hash = digest(canonical(after))
         old_subject = expected["bundle"]
         renew(fixture, profile["image_id"])
+        renewed_model, renewed_scores = rollback_variant(fixture, profile["image_id"], features)
+        if (
+            renewed_model == model
+            or max(abs(a - b) for a, b in zip(scores, renewed_scores, strict=True)) <= 1e-5
+        ):
+            raise Rejected("rollback_fixture_models_not_distinct")
+        promotion["context"] = copy.deepcopy(arguments["context"])
+        config["context"] = copy.deepcopy(arguments["context"])
         renewed_request = stage(
             state,
             arguments["package"],
@@ -297,11 +307,29 @@ def qualify(
             raise Rejected("kube_serving_recovery_binding")
         config["minimum_sequence"] = 2
         expected["bundle"] = receipt["subject_sha256"]
+        expected.update(model=renewed_model, scores=renewed_scores)
         print(canonical({"stage": "unexpired-previous-sequence"}).decode(), flush=True)
         replay = exercise_replay(root, state, image, promotion, previous, renewed_request, receipt)
         after = ledger(state)
         print(canonical({"stage": "explicit-release-renewal"}).decode(), flush=True)
         recovery = invoke(state, profile, config, expected)
+        print(canonical({"stage": "authorized-whole-bundle-rollback"}).decode(), flush=True)
+        rollback_config = {**promotion, "context": copy.deepcopy(previous["context"])}
+        rollback = exercise_rollback(
+            root,
+            state,
+            image,
+            rollback_config,
+            previous,
+            accepted["receipt"],
+            receipt,
+            fixture.fixture.authorities.keys["approver"],
+        )
+        config.update(context=copy.deepcopy(previous["context"]), minimum_sequence=3)
+        expected.update(bundle=old_subject, model=model, scores=scores)
+        rollback["serving"] = invoke(state, profile, config, expected)
+        rollback.update(target_model=model, from_model=renewed_model)
+        after = ledger(state)
         lifecycle = {}
         for fault in ("outage", "blackhole", "policy-change", "revocation"):
             print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
@@ -317,6 +345,11 @@ def qualify(
                 )
         print(canonical({"stage": "controlled-after-revocation"}).decode(), flush=True)
         revoked = invoke(state, profile, config, {**expected, "ready": False})
+        rollback["revoked_retry"] = kube_promotion.invoke(
+            root, state, rollback_config, rollback["request"], image
+        )
+        if rollback["revoked_retry"]["status"] != "rejected":
+            raise Rejected("rollback_revoked_target_admitted")
         if (
             ledger(state) != after
             or source_fingerprint(root) != fingerprint
@@ -350,6 +383,8 @@ def qualify(
             "image_id": profile["image_id"],
             "actual": actual_result,
             "controlled_model": model,
+            "controlled_renewed_model": renewed_model,
+            "authorized_rollback": rollback,
             "before_approval": refused,
             "approved": admitted,
             "after_revocation": revoked,

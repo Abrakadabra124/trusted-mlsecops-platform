@@ -1,6 +1,13 @@
 import psycopg
 
-from mlsecops import promotion_state, release_authorization, release_bundle, signing, storage
+from mlsecops import (
+    promotion_state,
+    release_authorization,
+    release_bundle,
+    release_rollback,
+    signing,
+    storage,
+)
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.release_policy import checked
 
@@ -40,6 +47,8 @@ def trust_scope(arguments, decision, authority):
         *(item["sha256"] for item in split["objects"].values()),
         *(digest(content) for content in arguments["reports"].values()),
     }
+    if "rollback" in decision:
+        artifacts.add(decision["rollback"]["target_request_sha256"])
     keys = {
         digest(signing.decode64(public))
         for public in (
@@ -78,17 +87,8 @@ def promote(client, *, trust_lease=None, **arguments):
         "release-approval",
         authority["identities"]["approver"]["public_key"],
     )
-    proposal = release_bundle.publish(
-        client,
-        arguments["package"],
-        context=arguments["context"],
-        publisher_public=authority["identities"]["publisher"]["public_key"],
-        expected_serving_image=arguments["expected_serving_image"],
-        clock=clock,
-    )
-    report_references = {
-        gate: publish(client, content) for gate, content in arguments["reports"].items()
-    }
+    proposal = digest(canonical(arguments["package"]["envelope"]))
+    report_references = {gate: digest(content) for gate, content in arguments["reports"].items()}
     authorization = {
         "schema_version": 1,
         "policy_envelope": policy,
@@ -97,7 +97,7 @@ def promote(client, *, trust_lease=None, **arguments):
         "reports": report_references,
         "decision": decision,
     }
-    proof = publish(client, canonical(authorization))
+    proof = digest(canonical(authorization))
     selection = {
         "schema_version": 1,
         "kind": "promotion-selection",
@@ -112,6 +112,22 @@ def promote(client, *, trust_lease=None, **arguments):
     }
     content = canonical(selection)
     promotion_state.request(content)
+    reference = digest(content)
+    if "rollback" in decision:
+        release_rollback.history(client, decision["rollback"], selection, reference)
+    observed_proposal = release_bundle.publish(
+        client,
+        arguments["package"],
+        context=arguments["context"],
+        publisher_public=authority["identities"]["publisher"]["public_key"],
+        expected_serving_image=arguments["expected_serving_image"],
+        clock=clock,
+    )
+    if observed_proposal != proposal:
+        raise Rejected("promotion_proposal_receipt_mismatch")
+    for report in arguments["reports"].values():
+        publish(client, report)
+    publish(client, canonical(authorization))
     reference = publish(client, content)
     trust_lease.refresh()
     trust_lease.check(**scope)
@@ -131,6 +147,8 @@ def promote(client, *, trust_lease=None, **arguments):
         raise Rejected(f"promotion_commit_unconfirmed:{error.sqlstate or 'unavailable'}") from None
     if observed != (reference,) or storage.get(client, "releases", reference) != content:
         raise Rejected("promotion_state_readback_mismatch")
+    if "rollback" in decision:
+        release_rollback.history(client, decision["rollback"], selection, reference, selected=True)
     trust_lease.refresh()
     trust_observation = trust_lease.check(**scope)
     return {

@@ -243,6 +243,17 @@ class KubernetesPromotionContracts(unittest.TestCase):
             with self.assertRaisesRegex(Rejected, "job_failed"):
                 self.invoke()
 
+    def test_rollback_history_refusal_is_exact_and_cleanup_completes(self):
+        for reason in ("rollback_from_history", "rollback_target_history", "rollback_head_changed"):
+            self.cluster(terminal="Failed", code=1, content=(reason + "\n").encode())
+            result = self.invoke()
+            self.assertEqual(result["reason"], reason)
+            self.assertIsNone(result["receipt"])
+            self.assertEqual(self.objects, {})
+            self.cluster(terminal="Failed", code=1, content=(reason + ":private\n").encode())
+            with self.assertRaisesRegex(Rejected, "job_failed"):
+                self.invoke()
+
     def test_image_pod_and_source_changes_block_success_and_cleanup_still_runs(self):
         self.cluster()
         self.profile["image_id"] = "sha256:" + "e" * 64

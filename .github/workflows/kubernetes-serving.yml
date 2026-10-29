@@ -28,6 +28,10 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.data_source_lock_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-rollback --source=mlsecops.release_rollback,mlsecops.release_authorization,mlsecops.promotion,mlsecops.release_reader,scripts.kube_rollback_native -m unittest scripts.rollback_authorization_qualification scripts.rollback_admission_qualification scripts.kube_rollback_qualification scripts.kube_approval_fixture_qualification scripts.promotion_qualification scripts.release_reader_qualification scripts.promotion_controller_qualification scripts.release_authorization_qualification
+          uv run --locked coverage report --data-file=.coverage-rollback --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-rollback -o .coverage-rollback.json
+          uv run --locked python -c "import json; fs=json.load(open('.coverage-rollback.json'))['files']; raise SystemExit(0 if all(f['summary']['num_branches'] and f['summary']['covered_branches']/f['summary']['num_branches'] >= 0.95 for f in fs.values()) else 1)"
           uv run --locked coverage run --branch --data-file=.coverage-artifact-files --source=mlsecops.contracts -m unittest scripts.artifact_files_qualification
           uv run --locked coverage report --data-file=.coverage-artifact-files --fail-under=95
           uv run --locked coverage json --data-file=.coverage-artifact-files -o .coverage-artifact-files.json

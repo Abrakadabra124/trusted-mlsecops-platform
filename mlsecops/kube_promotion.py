@@ -11,6 +11,7 @@ from mlsecops import (
     promotion_controller,
     promotion_state,
     release_policy,
+    release_rollback,
     storage,
 )
 from mlsecops.cluster import kubectl
@@ -119,21 +120,21 @@ def outcome(terminal, pod, content, config, request):
     if len(statuses) != 1:
         raise Rejected("kube_promotion_missing_exit")
     code = statuses[0].get("state", {}).get("terminated", {}).get("exitCode")
+    rejection_codes = {
+        (reason + "\n").encode(): reason
+        for reason in ("promotion_sequence_conflict", *release_rollback.PUBLIC_REJECTIONS)
+    }
     if (
         terminal["type"] == "Failed"
         and type(code) is int
         and code == 1
-        and content in (b"promotion_rejected\n", b"promotion_sequence_conflict\n")
+        and content in (b"promotion_rejected\n", *rejection_codes)
     ):
         return {
             "status": "rejected",
             "receipt": None,
             "release_ready": False,
-            **(
-                {"reason": "promotion_sequence_conflict"}
-                if content == b"promotion_sequence_conflict\n"
-                else {}
-            ),
+            **({"reason": rejection_codes[content]} if content in rejection_codes else {}),
         }
     if terminal["type"] != "Complete" or type(code) is not int or code != 0:
         raise Rejected("kube_promotion_job_failed")

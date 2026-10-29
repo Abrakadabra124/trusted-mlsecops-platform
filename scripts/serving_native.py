@@ -28,22 +28,29 @@ from mlsecops.serving_runtime import Worker
 
 def bind_real_runtime(fixture, image):
     from scripts import model_contract_qualification as model_fixtures
-    from scripts.artifact_intake_fixture import receipt as intake_receipt
 
     model_fixtures.ModelContractTests.setUpClass()
     generated = model_fixtures.ModelContractTests
+    bind_model(fixture, image, generated.content, generated.trained)
+    return generated.features[:3], generated.trained["python_scores"][:3]
+
+
+def bind_model(fixture, image, content, trained):
+    """Rebind controlled metadata to actual ONNX bytes; not production assurance."""
+    from scripts.artifact_intake_fixture import receipt as intake_receipt
+
     authorization = fixture.fixture
     bundle = authorization.bundle
     candidate = bundle.materials.fixture
-    candidate.model = generated.content
+    candidate.model = content
     reference = digest(candidate.model)
     candidate.metadata["model_digest"] = reference
     candidate.record["model_object"] = candidate.put("candidates", candidate.model)
     candidate.bound["report"]["model_digest"] = reference
     candidate.bound["report"]["prediction_protocol"]["model_digest"] = reference
-    candidate.bound["report"]["scan"] = generated.trained["scan"]
+    candidate.bound["report"]["scan"] = trained["scan"]
     candidate.bound["report"]["intake"] = intake_receipt(
-        candidate.model, candidate.expected["image_id"], generated.trained["scan"]
+        candidate.model, candidate.expected["image_id"], trained["scan"]
     )
     candidate.rebound_candidate()
     bundle.materials.context.update(
@@ -51,7 +58,6 @@ def bind_real_runtime(fixture, image):
     )
     bundle.capsule = bundle.materials.create()
     bind_release(fixture, image)
-    return generated.features[:3], generated.trained["python_scores"][:3]
 
 
 def bind_release(fixture, image):

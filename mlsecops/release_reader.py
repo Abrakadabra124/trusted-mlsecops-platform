@@ -13,6 +13,7 @@ from mlsecops import (
     release_authorization,
     release_bundle,
     release_policy,
+    release_rollback,
     serving_context,
     storage,
     trust,
@@ -208,6 +209,10 @@ class Reader:
                 authorization["decision"]
             ) != canonical(decision):
                 raise Rejected("serving_authorization_binding")
+            if "rollback" in decision:
+                release_rollback.history(
+                    self.client, decision["rollback"], selection, reference, selected=True
+                )
             scope = promotion.trust_scope(arguments, decision, authority)
             scope["artifacts"].update((reference, proof))
             manifest = release_bundle.index(

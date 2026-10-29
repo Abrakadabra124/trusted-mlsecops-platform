@@ -11,6 +11,7 @@ class ReplayContracts(unittest.TestCase):
         self.previous = dict.fromkeys(
             ("package", "policy_envelope", "assurance_envelope", "approval_envelope", "reports")
         )
+        self.previous["context"] = {"candidate_reference": "old"}
         self.decision = {"sequence": 1, "environment": "local-cpu", "expires_at": 1000}
         self.receipt = {
             "state": "recorded-not-activated",

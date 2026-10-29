@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Откат целого bundle с новым approval](operations/bundle-rollback.md). Протокол возрастающего sequence и проверки history/target, idempotent retry и отказы. Local contracts проверены; native CI пока ожидается, M16 не закрыт.
+
 - [Файловые границы артефактов U03](operations/artifact-files.md). Linux scope проверен: 22 filesystem methods, contracts 146/50 полностью покрыты, native serving/cleanup pass на `6c65a83`. Диагностика и восстановление после I/O failure; Windows compatibility не закрывает ACL/reparse races.
 
 - [Файлы signing keys и SQL probe при оптимизации Python](operations/signing-files-and-sql-probes.md). U01/U02: Linux canary 6/6, оба модуля 100% statements/branches, native serving/tracking/M06 на 9362c04 pass. Последующее исправление U03 в Linux scope описано отдельно; Windows ACL остаётся открытым.

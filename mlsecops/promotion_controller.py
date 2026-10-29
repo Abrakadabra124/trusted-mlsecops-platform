@@ -5,7 +5,15 @@ from pathlib import Path
 
 import psycopg
 
-from mlsecops import promotion, release_bundle, release_policy, storage, trust, trust_authority
+from mlsecops import (
+    promotion,
+    release_bundle,
+    release_policy,
+    release_rollback,
+    storage,
+    trust,
+    trust_authority,
+)
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, require_fields
 from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce as enforce_privacy
@@ -153,6 +161,8 @@ def main(arguments=None):
             if isinstance(error, Rejected) and str(error) == "promotion_commit_unconfirmed:P1004"
             else "promotion_rejected"
         )
+        if isinstance(error, Rejected) and str(error) in release_rollback.PUBLIC_REJECTIONS:
+            reason = str(error)
         print(reason, file=sys.stderr)
         return 130 if isinstance(error, KeyboardInterrupt) else 1
 

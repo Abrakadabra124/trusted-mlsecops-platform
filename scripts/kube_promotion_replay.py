@@ -24,7 +24,8 @@ def exercise(root, state, image, config, previous, current_request, current_rece
         previous["approval_envelope"],
         previous["reports"],
     )
-    refused = kube_promotion.invoke(root, state, config, old_request, image)
+    prior_config = {**config, "context": previous["context"]}
+    refused = kube_promotion.invoke(root, state, prior_config, old_request, image)
     if refused["status"] != "rejected" or refused.get("reason") != "promotion_sequence_conflict":
         raise Rejected("kube_promotion_replay_reason")
     after = snapshot(state)

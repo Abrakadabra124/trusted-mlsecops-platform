@@ -1,12 +1,12 @@
 import re
 from datetime import datetime
 
-from mlsecops import release_bundle, release_policy, signing
+from mlsecops import release_bundle, release_policy, release_rollback, signing
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 from mlsecops.storage import object_id
 
 
-def bound(envelope, kind, role, policy, release, clock, fields):
+def bound(envelope, kind, role, policy, release, clock, fields, *, schema_version=1):
     if envelope is None:
         raise Rejected(f"{kind.replace('-', '_')}_required")
     identity = policy["identities"][role]
@@ -25,7 +25,7 @@ def bound(envelope, kind, role, policy, release, clock, fields):
         ),
     )
     expected = {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "issuer": identity["issuer"],
         "subject_sha256": release["subject_sha256"],
         "environment": policy["environment"],
@@ -164,6 +164,14 @@ def verify(
         assurance_envelope, "release-assurance", "assessor", policy, release, clock, ("reports",)
     )
     verify_reports(reports, assurance, release, policy)
+    version = 1
+    if approval_envelope is not None:
+        signed = release_policy.checked(
+            approval_envelope, "release-approval", policy["identities"]["approver"]["public_key"]
+        )
+        version = signed.get("schema_version")
+        if type(version) is not int or version not in (1, 2):
+            raise Rejected("release_approval_schema")
     approval = bound(
         approval_envelope,
         "release-approval",
@@ -171,22 +179,29 @@ def verify(
         policy,
         release,
         clock,
-        ("assurance_sha256", "sequence", "action"),
+        ("assurance_sha256", "sequence", "action", *(("rollback",) if version == 2 else ())),
+        schema_version=version,
     )
     if (
         approval["assurance_sha256"] != digest(canonical(assurance))
-        or approval["action"] != "promote"
         or type(approval["sequence"]) is not int
-        or approval["sequence"] != release["manifest"]["sequence"]
+        or version == 1
+        and (
+            approval["action"] != "promote"
+            or approval["sequence"] != release["manifest"]["sequence"]
+        )
     ):
         raise Rejected("release_approval_binding")
+    rollback = (
+        release_rollback.intent(approval, release["manifest"]["sequence"]) if version == 2 else None
+    )
     if (
         approval["issued_at"] < assurance["issued_at"]
         or approval["expires_at"] > assurance["expires_at"]
     ):
         raise Rejected("release_approval_time_binding")
     return {
-        "schema_version": 1,
+        "schema_version": version,
         "subject_sha256": release["subject_sha256"],
         "policy_sha256": expected_policy,
         "assurance_sha256": digest(canonical(assurance)),
@@ -197,4 +212,5 @@ def verify(
         "authorization_valid": True,
         "state": "authorized-not-activated",
         "release_ready": False,
+        **({"rollback": rollback} if rollback is not None else {}),
     }

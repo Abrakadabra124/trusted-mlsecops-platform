@@ -249,6 +249,22 @@ class CliContracts(unittest.TestCase):
         self.assertEqual(stopped.exception.code, 1)
         self.assertTrue(err.getvalue().endswith("promotion_rejected\n"))
 
+    def test_rollback_diagnostics_are_finite_and_never_include_extra_content(self):
+        for reason in ("rollback_from_history", "rollback_target_history", "rollback_head_changed"):
+            for message, expected in (
+                (reason, reason),
+                (reason + ":private", "promotion_rejected"),
+            ):
+                with (
+                    patch.object(controller, "enforce_privacy"),
+                    patch.object(controller, "configured", side_effect=Rejected(message)),
+                    contextlib.redirect_stdout(io.StringIO()) as out,
+                    contextlib.redirect_stderr(io.StringIO()) as err,
+                ):
+                    self.assertEqual(controller.main(["--config", "c", "--request", "r"]), 1)
+                self.assertEqual(out.getvalue(), "")
+                self.assertEqual(err.getvalue(), expected + "\n")
+
     def test_private_failures_and_interrupt_never_echo_config_or_credentials(self):
         for failure, expected in [
             (RuntimeError("private-config-secret"), 1),
