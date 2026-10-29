@@ -5,7 +5,14 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
-from mlsecops import controller_bootstrap, kube_promotion, kube_storage, kube_trust, trust_authority
+from mlsecops import (
+    controller_bootstrap,
+    kube_promotion,
+    kube_serving_probe,
+    kube_storage,
+    kube_trust,
+    trust_authority,
+)
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_child, write_json
 from mlsecops.controller_resources import mount_api
@@ -76,27 +83,30 @@ def invoke(state, profile, config, expected):
             or len(statuses) != 1
             or statuses[0].get("state", {}).get("terminated", {}).get("exitCode") != 0
         ):
-            allowed = {
-                "startup-deadline",
-                "ordinary-CLI-ready-after-verified-load",
-                "ONNX-golden-parity",
-                "unapproved-or-revoked-ready-503",
-                "unapproved-or-revoked-predict-503",
-                "service-output-empty",
-                "refused-before-worker-start",
-                "service-process-alive",
-                "worker-cleanup-confirmed",
-                "stopped-worker-503",
-            }
-            reason = next(
-                (
-                    label
-                    for label in allowed
-                    if raw.strip() == ("kube_serving_probe:" + label).encode()
-                ),
-                "unclassified",
-            )
-            print(canonical({"probe_failure": reason, "release_ready": False}).decode(), flush=True)
+            failure = {"probe_failure": "unclassified", "release_ready": False}
+            with suppress(Rejected):
+                document = decode(raw, 65536)
+                if (
+                    isinstance(document, dict)
+                    and set(document) == {"status", "phase", "error", "code"}
+                    and document["status"] == "fail"
+                    and document["phase"] in kube_serving_probe.PHASES
+                    and document["error"] in kube_serving_probe.ERRORS
+                    and document["code"] in kube_serving_probe.CODES
+                ):
+                    failure.update(document)
+            if len(statuses) == 1:
+                terminated = statuses[0].get("state", {}).get("terminated", {})
+                if type(terminated.get("exitCode")) is int:
+                    failure["exit_code"] = terminated["exitCode"]
+                if terminated.get("reason") in {
+                    "OOMKilled",
+                    "Error",
+                    "Completed",
+                    "ContainerCannotRun",
+                }:
+                    failure["container_reason"] = terminated["reason"]
+            print(canonical(failure).decode(), flush=True)
             raise Rejected("kube_serving_probe_job_failed")
         report = decode(raw, 65536)
         if report.get("status") != "pass" or report.get("release_ready") is not False:

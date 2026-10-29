@@ -83,7 +83,7 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(container["image"], PROFILE["image"])
         self.assertTrue(container["stdin"])
         self.assertTrue(container["stdinOnce"])
-        self.assertFalse(container["tty"])
+        self.assertFalse(container.get("tty", False))
         self.assertEqual(container["resources"]["limits"]["memory"], "1Gi")
         self.assertEqual(container["resources"]["limits"]["cpu"], "1")
         self.assertEqual(worker.document["spec"]["activeDeadlineSeconds"], 3600)
@@ -246,6 +246,17 @@ class RuntimeContracts(unittest.TestCase):
             pod["status"]["containerStatuses"] = status
             with self.assertRaises(Rejected):
                 runtime.verify_pod(pod, api.job["spec"]["template"]["spec"], "job-uid", PROFILE)
+
+    def test_kubernetes_omitted_false_tty_is_accepted_but_true_is_rejected(self):
+        worker, api = self.worker()
+        api.job = copy.deepcopy(worker.document)
+        pod = api.pod()
+        pod["spec"]["containers"][0].pop("tty", None)
+        expected = worker.document["spec"]["template"]["spec"]
+        runtime.verify_pod(pod, expected, "job-uid", PROFILE)
+        pod["spec"]["containers"][0]["tty"] = True
+        with self.assertRaises(Rejected):
+            runtime.verify_pod(pod, expected, "job-uid", PROFILE)
 
     def test_cleanup_waits_for_foreground_deletion_and_rejects_remaining_pod(self):
         worker, api = self.worker()

@@ -19,7 +19,8 @@ from mlsecops.serving_runtime import Worker as StdioWorker
 def document(profile, session):
     spec = pod_spec(profile["image"], "serving", ["mlsecops.serving_worker"], memory="1Gi")
     container = spec["containers"][0]
-    container.update(stdin=True, stdinOnce=True, tty=False)
+    # TTY defaults to false and Kubernetes omits false from its JSON response.
+    container.update(stdin=True, stdinOnce=True)
     container["resources"]["limits"]["cpu"] = "1"
     container["resources"]["requests"]["memory"] = "1Gi"
     value = job_document(f"serving-worker-{session}", "ml-serve", spec, 3600)
@@ -59,6 +60,7 @@ def verify_pod(pod, expected, uid, profile):
                 "livenessProbe",
                 "readinessProbe",
                 "startupProbe",
+                "tty",
             )
         )
         or container["securityContext"].get("privileged")
