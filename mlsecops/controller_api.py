@@ -9,6 +9,7 @@ from mlsecops.contracts import Rejected, canonical, decode
 
 HOST = "kubernetes.default.svc"
 TARGETS = {"publisher": ("ml-train", "trainer"), "scorer": ("ml-eval", "evaluator")}
+API_TARGETS = {**TARGETS, "serving": ("ml-serve", "serving")}
 MAX_JSON = 1024 * 1024
 MAX_LOG = 16 * 1024 * 1024
 
@@ -28,9 +29,9 @@ def identifier(value):
 
 class Client:
     def __init__(self, role, credentials=Path("/api")):
-        if not isinstance(role, str) or role not in TARGETS:
+        if not isinstance(role, str) or role not in API_TARGETS:
             raise Rejected("controller_api_role_invalid")
-        self.namespace = TARGETS[role][0]
+        self.namespace = API_TARGETS[role][0]
         self.credentials = Path(credentials)
 
     def request(self, resource, name=None, method="GET", value=None, job=None):
@@ -65,16 +66,20 @@ class Client:
         output = self.exchange(method, path, content, limit)
         return output if resource == "logs" else decode(output, limit)
 
+    def authorization(self):
+        with (self.credentials / "token").open("rb") as source:
+            token = source.read(16385).strip()
+        if len(token) > 16384 or not re.fullmatch(
+            rb"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", token
+        ):
+            raise Rejected("controller_api_token_invalid")
+        context = ssl.create_default_context(cafile=str(self.credentials / "ca.crt"))
+        context.minimum_version = ssl.TLSVersion.TLSv1_3
+        return token.decode("ascii"), context
+
     def exchange(self, method, path, content, limit):
         try:
-            with (self.credentials / "token").open("rb") as source:
-                token = source.read(16385).strip()
-            if len(token) > 16384 or not re.fullmatch(
-                rb"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", token
-            ):
-                raise Rejected("controller_api_token_invalid")
-            context = ssl.create_default_context(cafile=str(self.credentials / "ca.crt"))
-            context.minimum_version = ssl.TLSVersion.TLSv1_3
+            token, context = self.authorization()
             connection = http.client.HTTPSConnection(HOST, 443, timeout=20, context=context)
             try:
                 connection.request(
@@ -82,7 +87,7 @@ class Client:
                     path,
                     body=content,
                     headers={
-                        "Authorization": "Bearer " + token.decode("ascii"),
+                        "Authorization": "Bearer " + token,
                         "Content-Type": "application/json",
                         "Accept": "application/json",
                     },

@@ -2,7 +2,7 @@ from mlsecops.controller_api import TARGETS
 from mlsecops.kube_storage_resources import ACCOUNT, WORKSPACE
 
 
-def resources(workspace, image):
+def resources(workspace, image, *, serving=False):
     documents = []
 
     def add(kind, version, name, namespace=None, **fields):
@@ -11,7 +11,8 @@ def resources(workspace, image):
             metadata["namespace"] = namespace
         documents.append({"apiVersion": version, "kind": kind, "metadata": metadata, **fields})
 
-    for role, (namespace, worker) in TARGETS.items():
+    targets = {"serving": ("ml-serve", "serving")} if serving else TARGETS
+    for role, (namespace, worker) in targets.items():
         controller_namespace = f"ml-{role}"
         add(
             "CiliumNetworkPolicy",
@@ -86,6 +87,16 @@ def resources(workspace, image):
                 "variables.container.volumeMounts.size() == 2 && variables.container.volumeMounts.exists(volume, volume.name == 'scratch' && volume.mountPath == '/tmp' && !has(volume.subPath) && !has(volume.subPathExpr)) && variables.container.volumeMounts.exists(volume, volume.name == 'request' && volume.mountPath == '/input' && volume.readOnly && !has(volume.subPath) && !has(volume.subPathExpr))",
             ),
         ]
+        if serving:
+            overrides = {
+                "job-name": "object.metadata.name.matches('^serving-worker-[0-9a-f]{32}$')",
+                "job-budget": "has(object.spec.activeDeadlineSeconds) && object.spec.activeDeadlineSeconds > 0 && object.spec.activeDeadlineSeconds <= 3600 && object.spec.backoffLimit == 0 && object.spec.parallelism == 1 && object.spec.completions == 1 && object.spec.ttlSecondsAfterFinished == 300",
+                "worker-command": "variables.container.name == 'worker' && variables.container.command == ['python','-m','mlsecops.serving_worker'] && (!has(variables.container.args) || variables.container.args.size() == 0) && (!has(variables.container.env) || variables.container.env.size() == 0) && (!has(variables.container.envFrom) || variables.container.envFrom.size() == 0) && !has(variables.container.lifecycle) && !has(variables.container.livenessProbe) && !has(variables.container.readinessProbe) && !has(variables.container.startupProbe) && (!has(variables.container.ports) || variables.container.ports.size() == 0) && variables.container.stdin && variables.container.stdinOnce && !variables.container.tty",
+                "worker-resources": "variables.container.resources.limits.cpu == '1' && variables.container.resources.limits.memory == '1Gi' && variables.container.resources.requests.memory == '1Gi' && variables.container.resources.requests.cpu == '100m' && variables.container.resources.limits['ephemeral-storage'] == '64Mi'",
+                "worker-volumes": "variables.pod.volumes.size() == 1 && variables.pod.volumes[0].name == 'scratch' && has(variables.pod.volumes[0].emptyDir) && variables.pod.volumes[0].emptyDir.medium == 'Memory' && variables.pod.volumes[0].emptyDir.sizeLimit == '64Mi'",
+                "worker-mounts": "variables.container.volumeMounts.size() == 1 && variables.container.volumeMounts[0].name == 'scratch' && variables.container.volumeMounts[0].mountPath == '/tmp' && !has(variables.container.volumeMounts[0].subPath) && !has(variables.container.volumeMounts[0].subPathExpr)",
+            }
+            rules = [(key, overrides.get(key, expression)) for key, expression in rules]
         policy_name = f"ml-{role}-jobs"
         add(
             "ValidatingAdmissionPolicy",
@@ -142,13 +153,23 @@ def resources(workspace, image):
                     "resources": ["jobs"],
                     "verbs": ["create", "get", "delete"],
                 },
+                *(
+                    []
+                    if serving
+                    else [
+                        {
+                            "apiGroups": [""],
+                            "resources": ["configmaps"],
+                            "verbs": ["create", "get", "delete"],
+                        }
+                    ]
+                ),
+                {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list"]},
                 {
                     "apiGroups": [""],
-                    "resources": ["configmaps"],
-                    "verbs": ["create", "get", "delete"],
+                    "resources": ["pods/attach" if serving else "pods/log"],
+                    "verbs": ["get", "create"] if serving else ["get"],
                 },
-                {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list"]},
-                {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
             ],
         )
         add(

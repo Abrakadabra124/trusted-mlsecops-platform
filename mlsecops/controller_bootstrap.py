@@ -101,8 +101,8 @@ def verify_saved(state, marker):
     return marker
 
 
-def no_active_jobs(state):
-    for namespace in ("ml-publisher", "ml-scorer", "ml-train", "ml-eval"):
+def no_active_jobs(state, namespaces=("ml-publisher", "ml-scorer", "ml-train", "ml-eval")):
+    for namespace in namespaces:
         jobs = decode(kubectl(state, ["get", "jobs", "-n", namespace, "-o", "json"]).stdout)[
             "items"
         ]
@@ -131,19 +131,22 @@ def check_policy(state, document):
     raise Rejected("controller_admission_not_checked")
 
 
-def bootstrap(root, state, image, replace=False):
+def bootstrap(root, state, image, replace=False, *, serving=False):
     state = Path(state).resolve()
     kube_storage.validate(state)
     profile = image_profile(root, state, image)
-    documents = resources(workspace_id(state), profile["image"])
+    documents = resources(workspace_id(state), profile["image"], serving=serving)
     fingerprint = digest(canonical(documents))
-    path = state / "controllers/resources.json"
+    path = state / ("serving/resources.json" if serving else "controllers/resources.json")
     if path.exists():
         marker = verify_saved(state, read_json(path))
         if marker["spec_digest"] != fingerprint:
             if not replace:
                 raise Rejected("controller_profile_change_requires_replace")
-            no_active_jobs(state)
+            if serving:
+                no_active_jobs(state, ("ml-serving", "ml-serve"))
+            else:
+                no_active_jobs(state)
             if set(marker["resources"]) != {kube_storage.reference(item) for item in documents}:
                 raise Rejected("controller_resource_set_change_requires_migration")
     else:
@@ -197,6 +200,7 @@ def main():
     parser.add_argument("--state", type=Path, default=Path(".runtime"))
     parser.add_argument("--image", default="trusted-mlsecops:dev")
     parser.add_argument("--replace-profile", action="store_true")
+    parser.add_argument("--serving", action="store_true")
     arguments = parser.parse_args()
     try:
         report = bootstrap(
@@ -204,6 +208,7 @@ def main():
             arguments.state,
             arguments.image,
             arguments.replace_profile,
+            serving=arguments.serving,
         )
         print(canonical(report).decode())
         return 0

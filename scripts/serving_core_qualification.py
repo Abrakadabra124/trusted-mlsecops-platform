@@ -36,6 +36,19 @@ class ServingCoreContracts(unittest.TestCase):
                 operation()
         self.constructor.assert_not_called()
 
+    def test_explicit_worker_backend_never_falls_back_to_docker(self):
+        factory = Mock(return_value=self.worker)
+        self.engine.worker_factory = factory
+        self.engine.activate()
+        factory.assert_called_once_with(self.loaded.model, self.reader.image)
+        self.constructor.assert_not_called()
+        self.engine.clear()
+        factory.side_effect = Rejected("backend unavailable")
+        with self.assertRaises(Rejected):
+            self.engine.activate()
+        self.constructor.assert_not_called()
+        self.assertIsNone(self.engine.loaded)
+
     def test_response_budget_bounds_and_expired_generation_cannot_fence_new_activation(self):
         with self.assertRaises(Rejected):
             self.engine.response_budget()

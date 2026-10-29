@@ -5,6 +5,7 @@ import secrets
 import sys
 import time
 from contextlib import asynccontextmanager, suppress
+from functools import partial
 from pathlib import Path
 
 import uvicorn
@@ -391,8 +392,19 @@ def configured(path):
             "audit_directory",
             credential_field,
         )
-        + (("metrics_token_file",) if "metrics_token_file" in config else ()),
+        + (("metrics_token_file",) if "metrics_token_file" in config else ())
+        + (("kubernetes_worker",) if "kubernetes_worker" in config else ()),
     )
+    worker_factory = None
+    if "kubernetes_worker" in config:
+        from mlsecops.controller_worker import validate_profile
+        from mlsecops.kube_serving_runtime import Worker
+
+        profile = config["kubernetes_worker"]
+        validate_profile(profile)
+        if profile["image_id"] != config["expected_serving_image"]:
+            raise Rejected("serving_image_pin")
+        worker_factory = partial(Worker, profile=profile)
     if (
         not isinstance(config["audit_directory"], str)
         or not Path(config["audit_directory"]).is_absolute()
@@ -438,7 +450,7 @@ def configured(path):
         trust_lease=lease,
     )
     return create_app(
-        serving.Engine(reader),
+        serving.Engine(reader, worker_factory=worker_factory),
         clients=clients,
         audit_path=config["audit_directory"],
         metrics_token=metrics_token,

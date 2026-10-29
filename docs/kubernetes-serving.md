@@ -1,0 +1,35 @@
+# Постоянный serving worker в Kubernetes
+
+Неделя 9, T15 «Inference API и loader», CP3. Реализован явный Kubernetes backend для обычного `mlsecops.serving_http --config`. До native run это локально проверенный код, не full M12 или завершённый R1.
+
+## Решение и границы
+
+HTTP controller в `ml-serving` читает releases и текущую trust policy через раздельные SQL identities. `kubernetes_worker` в конфигурации содержит полный закреплённый image profile: `image`, `image_id`, `config_id`, `manifest_id`, `source_fingerprint`, `source_revision`. Его `image_id` должен совпадать с `expected_serving_image`. Поле явно выбирает backend; ошибка Kubernetes никогда не вызывает fallback к Docker.
+
+Controller создаёт один Job в `ml-serve`. Worker запускает существующий `mlsecops.serving_worker`, один раз загружает проверенные ONNX bytes и отвечает по тому же протоколу session/model/request binding. После первого load повторные predictions используют тот же процесс. Pod не получает API token, SQL certificates, approval/signing keys или сетевые разрешения. Существующая deny-all policy, UID 65532, read-only root, cap-drop, RuntimeDefault seccomp, память 1 GiB и 1 CPU сохраняют границу execution.
+
+`attach` проходит через Kubernetes API по TLS 1.3, с проверкой CA/hostname и `v5.channel.k8s.io`. Закреплена `websockets==17.3`; proxy, compression и redirects запрещены. Проверены [версии каналов Kubernetes 1.36.4](https://github.com/kubernetes/apimachinery/blob/v0.36.4/pkg/util/remotecommand/constants.go) и [реализация клиента websockets 17.3](https://github.com/python-websockets/websockets/blob/17.3/src/websockets/sync/client.py). Используется готовый WebSocket клиент, собственный код только маршрутизирует bounded stdin/stdout protocol. Это транспорт к уже работающему worker, не API для исполнения произвольных команд.
+
+Транспорт работает отдельным дочерним процессом controller. Существующий `Channel` ограничивает полное время обмена, включая DNS, handshake и заблокированную запись. Вход разбит на 16 KiB chunks; ответ ограничен 64 KiB, очередь WebSocket ограничена двумя frames, stderr/status/лишние/noncanonical/misbound replies отклоняются. При потере транспорта controller закрывает readiness, останавливает собственный bridge и удаляет Job с UID precondition, подтверждая отсутствие Job и Pods. Неудачная очистка остаётся ошибкой.
+
+RBAC разрешает serving только create/get/delete Jobs, get/list Pods и get/create pods/attach в `ml-serve`. `exec`, port-forward, secrets, service accounts, другие namespaces и изменения Role не выдаются. Admission фиксирует command, образ, stdio, security context, volumes и ресурсы. Жизнь Job ограничена 3600 s; перезапуск или новое activation требует актуальной проверки Reader и trust. Это lab lifetime, не доказательство непрерывного production обслуживания.
+
+## Воспроизведение на разрешённом disposable CI
+
+Workflow [.github/workflows/kubernetes-serving.yml](../.github/workflows/kubernetes-serving.yml) запускается на `codex/cp3-kubernetes-serving` или вручную. Он проверяет locked dependencies, targeted tests и branch coverage, создаёт owned cluster/storage/trust, проверяет actual-candidate refusal, затем отдельно controlled release через обычный serving CLI. Ожидаются 503 до approval, verified readiness и golden ONNX predictions после controlled promotion, один worker на повторных запросах, 401/413/422, 503 после удаления worker и после signed revocation, реальные admission/RBAC denials и подтверждённая очистка.
+
+Native entrypoint: `uv run --locked python -m scripts.kube_serving_native --state .runtime`. Он разрешён только на disposable hosted runner. Из текущей Windows его не запускать. Подготовка serving API permissions выполняется оператором через `uv run --locked python -m mlsecops.controller_bootstrap --serving`; вызов проверяет ownership, digest profile и admission type warnings. Замена существующего profile требует отдельного `--replace-profile` и отсутствия активных Jobs в обоих serving namespaces.
+
+Probe запускает настоящий `mlsecops.serving_http` отдельным процессом, с private token file и audit directory в RAM. Эти временные credentials/audit fixtures не являются persistent deployment, retention evidence или M17 backup. Actual candidate не получает искусственный all-pass assurance. Controlled approvals используются только для проверки соединения компонентов. Full M10-M19/M23, системные image findings, независимые M22 challenges и final same-candidate acceptance остаются обязательными.
+
+## Runbook: 503 или незавершённая очистка
+
+Ответственный - оператор owned lab. Сначала read-only: подтвердить revision/image profile, последнюю trust policy, release head и UID/spec ресурсов в `.runtime/serving/resources.json`; проверить состояние Jobs/Pods в `ml-serving` и `ml-serve` через kubeconfig этого стенда. Не выводить token, SQL connection files, raw request/features или полный audit в публичный лог.
+
+- До approval, после revocation и при неподтверждённом образе 503 является ожидаемым отказом. Не менять trust root, minimum sequence или пороги для обхода.
+- Если CLI жив, но ready=false, проверить terminal status worker, imageID, admission reason, projected API token, CA/hostname и scoped `pods/attach` permissions. Не выдавать cluster-admin, не монтировать Docker socket и не снимать default-deny.
+- При transport timeout readiness должна стать false. Старый bridge и worker не переиспользуются. Удалять только ресурс с проверенным workspace ownership и UID, затем подтвердить отсутствие и только после этого повторить activation с текущим разрешённым bundle.
+- Если ответ на create потерян, runtime проверяет уникальное имя и исходный spec перед удалением. Другой UID/spec считается конфликтом. Не выполнять namespace-wide delete или global prune.
+- При неизвестном состоянии очистки остановить новые activation и сохранить private diagnostics. В disposable CI финальная проверенная teardown всего owned cluster остаётся последним уровнем очистки, а не доказательством корректности локального shutdown.
+
+Playbook восстановления: подтвердить отказ и прекратить новый трафик -> проверить ownership/UID -> восстановить доступный trust/API либо удалить свой зависший worker -> подтвердить отсутствие старых процессов/Pods -> запустить CLI с теми же pins -> проверить authenticated readiness, bundle/model digest и golden prediction. Если bundle отозван, требуется новый разрешённый release; cached/revoked fallback запрещён. Шаги runtime recovery до native проверки не заявляются выполненными.

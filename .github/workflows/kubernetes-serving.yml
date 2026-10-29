@@ -1,0 +1,87 @@
+name: Configured serving with persistent isolated Kubernetes worker
+on:
+  push:
+    branches: [codex/cp3-kubernetes-serving]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-serving-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kubernetes-serving:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked dependencies and serving boundary tests
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.kube_promotion_qualification scripts.kube_serving_native_qualification scripts.promotion_state_qualification scripts.controller_readback_qualification scripts.serving_core_qualification scripts.serving_runtime_qualification scripts.serving_http_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-kube-serving --source=mlsecops.kube_attach,mlsecops.kube_serving_runtime -m unittest scripts.kube_attach_qualification scripts.kube_serving_runtime_qualification
+          uv run --locked coverage report --data-file=.coverage-kube-serving --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-kube-serving -o .coverage-kube-serving.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-kube-serving.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+      - name: Prepare pinned tools and image
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Prepare model storage and actual source candidate
+        run: |
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Actual refusal and configured serving before approval, after approval and revocation
+        run: uv run --locked python -m scripts.kube_serving_native --state .runtime
+      - name: Sanitized serving outcome
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          path = Path('.runtime/evidence/kubernetes-serving.json')
+          report = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False}
+          print(canonical(report).decode())
+          PY
+          echo 'Actual candidate remains denied. Configured serving component checks are not full M12/M18 or R1 acceptance.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop verified owned source SQL
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('promotion_source_cleanup_incomplete')
+          PY
+          fi
+      - name: Remove verified owned disposable cluster
+        if: always() && steps.bootstrap.outcome == 'success'
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import validate_cluster
+          validate_cluster(Path('.runtime'))
+          PY
+          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"

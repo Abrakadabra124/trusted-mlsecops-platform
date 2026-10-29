@@ -15,6 +15,7 @@ dependencies = [
   "scipy==1.18.1",
   "skl2onnx==1.20.0",
   "uvicorn==0.54.0",
+  "websockets==17.3",
 ]
 
 [tool.uv]

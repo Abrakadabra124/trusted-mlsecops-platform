@@ -141,7 +141,7 @@ def outcome(terminal, pod, content, config, request):
     return {"status": "recorded-not-activated", "receipt": receipt, "release_ready": False}
 
 
-def cleanup(state, created):
+def cleanup(state, created, *, namespace=NAMESPACE):
     failed = False
     for document, uid in reversed(created):
         try:
@@ -153,7 +153,7 @@ def cleanup(state, created):
                     document["kind"],
                     document["metadata"]["name"],
                     "-n",
-                    NAMESPACE,
+                    namespace,
                     "--wait=true",
                     "--timeout=30s",
                 ],

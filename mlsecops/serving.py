@@ -31,8 +31,9 @@ class ServingResult:
 
 
 class Engine:
-    def __init__(self, reader):
+    def __init__(self, reader, *, worker_factory=None):
         self.reader = reader
+        self.worker_factory = worker_factory
         self.loaded = None
         self.audit_context = None
         self.worker = None
@@ -153,7 +154,7 @@ class Engine:
             try:
                 self.clear()
                 loaded = self.reader.load()
-                self.worker = Worker(loaded.model, self.reader.image)
+                self.worker = (self.worker_factory or Worker)(loaded.model, self.reader.image)
                 self.worker.start()
                 if (
                     self.worker.image != self.reader.image
