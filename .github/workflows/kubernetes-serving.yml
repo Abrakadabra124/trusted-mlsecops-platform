@@ -27,6 +27,10 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file=.coverage-candidate-clock --source=mlsecops.kube_candidate_clock -m unittest scripts.kube_candidate_clock_qualification
+          uv run --locked coverage report --data-file=.coverage-candidate-clock --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-candidate-clock -o .coverage-candidate-clock.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-candidate-clock.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked python -m unittest scripts.model_contract_qualification scripts.kube_candidate_qualification scripts.candidate_serving_reader_qualification scripts.kube_promotion_qualification scripts.kube_serving_native_qualification scripts.promotion_state_qualification scripts.controller_readback_qualification scripts.serving_core_qualification scripts.serving_runtime_qualification scripts.serving_http_qualification
           uv run --locked coverage run --branch --data-file=.coverage-kube-serving --source=mlsecops.kube_attach,mlsecops.kube_serving_runtime -m unittest scripts.kube_attach_qualification scripts.kube_serving_runtime_qualification
           uv run --locked coverage report --data-file=.coverage-kube-serving --fail-under=95

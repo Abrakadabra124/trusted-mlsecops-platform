@@ -37,6 +37,7 @@ from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_candidate_faults import NONTERMINAL
 from scripts.kube_candidate_faults import exercise as exercise_faults
 from scripts.kube_promotion_native import actual
+from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
 
@@ -150,6 +151,7 @@ def qualify(
         "bundle": verified["subject_sha256"],
         "features": features,
         "scores": scores.tolist(),
+        "clock_cache": include_trust_lifecycle,
         "unsigned_proposal": {
             "proposal_reference": unsigned_id,
             "permit_envelope": signing.sign(unsigned_permit, KIND, key),
@@ -159,8 +161,11 @@ def qualify(
     write_json(destination / "config.json", config)
     write_json(destination / "request.json", expected)
     before = ledger(state)
+    base_snapshot = snapshot(state)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     result = invoke(state, profile, config, expected, candidate_probe=True)
+    if snapshot(state) != base_snapshot:
+        raise Rejected("candidate_inference_promotion_state_changed")
     revoked_key = digest(signing.decode64(public))
     faults = NONTERMINAL if include_trust_lifecycle else ()
     if include_key_revocation:
@@ -210,6 +215,7 @@ def qualify(
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
+        "base_snapshot_sha256": digest(canonical(base_snapshot)),
         "trust_lifecycle": {
             name: value for name, value in fault_results.items() if name in NONTERMINAL
         },

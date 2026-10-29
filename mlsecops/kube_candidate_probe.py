@@ -15,7 +15,14 @@ from pathlib import Path
 
 import uvicorn
 
-from mlsecops import kube_candidate_trust, serving, serving_http, trust, trust_authority
+from mlsecops import (
+    kube_candidate_clock,
+    kube_candidate_trust,
+    serving,
+    serving_http,
+    trust,
+    trust_authority,
+)
 from mlsecops.candidate_serving_reader import CandidateReader
 from mlsecops.contracts import Rejected, canonical, decode, digest, read_json
 from mlsecops.controller_api import Client
@@ -171,6 +178,33 @@ def matrix(request, engine, expected, check):
     return body, error
 
 
+def clock_matrix(config, expected, check, client, factory):
+    """Fresh Engine per injected fault; no repeated matrix in live fault Jobs."""
+    if expected.get("clock_cache") is not True or "fault" in expected:
+        return []
+    body = {
+        "schema_version": 1,
+        "instances": [dict(zip(FEATURES, row, strict=True)) for row in expected["features"]],
+    }
+    reports = []
+    for fault in kube_candidate_clock.FAULTS:
+        engine = serving.Engine(candidate(config), worker_factory=factory)
+        with site(engine) as request:
+            reports.append(
+                kube_candidate_clock.exercise(
+                    engine,
+                    request,
+                    body,
+                    expected,
+                    check,
+                    fault=fault,
+                    reader_factory=lambda: candidate(config),
+                )
+            )
+        check(fault + "-worker-cleanup", len(client.request("pods")["items"]), 0)
+    return reports
+
+
 def qualify(config, expected):
     cases = []
 
@@ -248,6 +282,8 @@ def qualify(config, expected):
             )
         check(fault + "-cleanup", len(client.request("pods")["items"]), 0)
 
+    clocks = clock_matrix(config, expected, check, client, factory)
+    # The subsequent fresh Engine also verifies same-candidate inference recovery.
     engine = serving.Engine(candidate(config), worker_factory=factory)
     lifecycle = None
     with site(engine) as request:
@@ -277,6 +313,7 @@ def qualify(config, expected):
         "max_golden_error": error,
         "model_sha256": expected["model"],
         "subject_sha256": expected["bundle"],
+        **({"clock_cache": clocks} if clocks else {}),
         **({"lifecycle": lifecycle} if lifecycle is not None else {}),
     }
 

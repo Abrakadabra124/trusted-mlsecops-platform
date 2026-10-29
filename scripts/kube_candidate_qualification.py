@@ -3,6 +3,7 @@ import io
 import tempfile
 import threading
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -16,6 +17,43 @@ from scripts import kube_candidate_native as native
 
 
 class CandidateInferenceContracts(unittest.TestCase):
+    def test_clock_matrix_uses_new_engine_per_fault_and_checks_cleanup(self):
+        expected = {"clock_cache": True, "features": [[0.5] * len(probe.FEATURES)]}
+        client = Mock()
+        client.request.return_value = {"items": []}
+        engines = [Mock() for _ in probe.kube_candidate_clock.FAULTS]
+        checks = []
+
+        def check(label, actual, wanted):
+            self.assertEqual(actual, wanted, label)
+            checks.append(label)
+
+        with (
+            patch.object(probe, "candidate") as reader,
+            patch.object(probe.serving, "Engine", side_effect=engines) as construct,
+            patch.object(probe, "site", side_effect=lambda engine: nullcontext(Mock())),
+            patch.object(
+                probe.kube_candidate_clock, "exercise", return_value={"pass": True}
+            ) as exercise,
+        ):
+            result = probe.clock_matrix({}, expected, check, client, Mock())
+            self.assertEqual(len(result), 5)
+            self.assertEqual(construct.call_count, 5)
+            self.assertEqual([call.args[0] for call in exercise.call_args_list], engines)
+            self.assertEqual(
+                [call.kwargs["fault"] for call in exercise.call_args_list],
+                list(probe.kube_candidate_clock.FAULTS),
+            )
+            exercise.call_args.kwargs["reader_factory"]()
+            self.assertEqual(reader.call_count, 6)
+        self.assertEqual(len(checks), 5)
+
+    def test_clock_matrix_never_repeats_in_authority_fault_jobs_or_implicit_opt_in(self):
+        with patch.object(probe.serving, "Engine") as construct:
+            for expected in ({}, {"clock_cache": 1}, {"clock_cache": True, "fault": "outage"}):
+                self.assertEqual(probe.clock_matrix({}, expected, Mock(), Mock(), Mock()), [])
+            construct.assert_not_called()
+
     def test_matrix_uses_actual_parser_and_advisory_and_rejects_wrong_status(self):
         engine = SimpleNamespace(lock=threading.Lock())
         expected = {
