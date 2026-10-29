@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Импорт CPU runtime: известное PCI warning, bounded capture, отказ и восстановление](operations/runtime-bootstrap.md). Исправление подготовлено; native результат ещё требуется.
+
 - [Действующий предыдущий sequence: отказ откату и идемпотентный retry текущего](promotion-replay.md). Реализация и pure/mocked tests подготовлены; native проверка ещё требуется.
 
 - [Совместный snapshot CAS и promotion journal](promotion-snapshot.md). Native `b191555` / 40898945667: unchanged CAS + authorities/events/heads при expired retry и key revocation; owned cleanup подтверждён. Полный M11 открыт.

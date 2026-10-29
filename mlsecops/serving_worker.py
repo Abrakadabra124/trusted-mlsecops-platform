@@ -4,6 +4,7 @@ import sys
 
 from mlsecops.contracts import Rejected, canonical
 from mlsecops.process_privacy import enforce as enforce_privacy
+from mlsecops.runtime_bootstrap import initialize as initialize_runtime
 
 
 def serve(source, destination, diagnostic, arm_timeout=lambda: None):
@@ -62,7 +63,9 @@ def serve(source, destination, diagnostic, arm_timeout=lambda: None):
 def main():
     try:
         enforce_privacy()
-    except Rejected:
+        signal.alarm(120)
+        initialize_runtime()
+    except Exception:
         sys.stderr.write("serving_worker_rejected\n")
         return 1
     return serve(sys.stdin.buffer, sys.stdout.buffer, sys.stderr, lambda: signal.alarm(120))

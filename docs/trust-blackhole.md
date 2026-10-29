@@ -2,6 +2,8 @@
 
 ## Повторный startup refusal 2026-10-29
 
+Последующий `45361ca` / [40901465590](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40901465590) снова отказал: `serving_attach_ort_device_warning` при свежем worker на expiry, cleanup success. Global logger перед session недостаточен для import-time initialization. Подготовлен [отдельный bootstrap до чтения модели](operations/runtime-bootstrap.md); его Linux/native проверка ещё требуется. Это уточняет состояние после прежнего успешного run ниже.
+
 После настройки глобального logger `b191555` / [40898945667](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40898945667) завершился успешно: 200 Linux methods, ordinary serving, expiry/recovery, четыре trust faults и actual-candidate key revocation; source/cleanup verified. [Полный snapshot и bindings](promotion-snapshot.md#проверенный-hosted-result-2026-10-29). Это проверка исправленной конфигурации в данном native run. Все прежние intermittent failures не объявляются доказанно имеющими одну причину.
 
 Уточнение после `c800d94` / [40897245168](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40897245168): воспроизведён `serving_attach_ort_other_warning`, cleanup success. В приватном log предыдущего run обнаружены два предупреждения `GetPciBusId` о неподходящем формате PCI identifier виртуального устройства; его путь/идентификатор не публикуется. Это конкретная известная причина предупреждений на runner; прежние generic startup failures не объявляются автоматически объяснёнными.

@@ -48,8 +48,10 @@ except SystemExit:
 
     def test_runtime_import_failure_is_constant_in_fresh_cli_process(self):
         source = """
-import builtins, runpy, sys, types
+import builtins, runpy, signal, sys, types
 sys.modules['mlsecops.process_privacy'] = types.SimpleNamespace(enforce=lambda: None)
+sys.modules['mlsecops.runtime_bootstrap'] = types.SimpleNamespace(initialize=lambda: None)
+signal.alarm = lambda seconds: None
 original = builtins.__import__
 def controlled(name, *args, **kwargs):
     if name == 'mlsecops.model':
@@ -112,6 +114,8 @@ runpy.run_module(module, run_name='__main__')
             patch.object(
                 serving_worker, "enforce_privacy", side_effect=lambda: events.append("guard")
             ),
+            patch.object(serving_worker.signal, "alarm", create=True),
+            patch.object(serving_worker, "initialize_runtime"),
             patch.object(
                 serving_worker, "serve", side_effect=lambda *args: events.append("serve") or 0
             ),
