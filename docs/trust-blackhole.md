@@ -1,5 +1,11 @@
 # M11: зависшее сетевое чтение trust authority
 
+## Повторный startup refusal 2026-10-29
+
+Snapshot increment `475204b` / [40895316123](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40895316123) остановился на `controlled-after-approval`: `worker-start/load/serving_attach_stderr`, Reader verified. 178 Linux methods (122 + 29 + 22 + 5) pass; source SQL stop и owned cluster removal success. Новый journal snapshot пока не получил полный native результат.
+
+Отдельные отрицательные tests выявили два пробела диагностики: пустой stdout frame между stderr fragments прерывал сбор; classifier узнавал только одну из нескольких формулировок device discovery. В [исходниках ONNX Runtime v1.30.0](https://github.com/microsoft/onnxruntime/blob/v1.30.0/onnxruntime/core/platform/linux/device_discovery.cc) есть также NPU warning и отказ обнаружения отдельного устройства. Это источник диагностических сигнатур, не доказательство причины нашего отказа. Теперь учитываются эти формы и отдельный finite code для других ORT warnings. Ограничения 4096 bytes / 8 frames / 0.5 s сохранены; любой stderr по-прежнему отвергает exchange, его текст не публикуется. Root cause требует native подтверждения, предупреждения не игнорируются.
+
 Требование M11: serving прекращает ML-ответы не позднее 60 s после последней успешной проверки policy, включая медленное или зависшее соединение. Отдельный TCP refusal при остановленном PostgreSQL не доказывает этот случай. Полный M11 также требует expiry, keys, replay/rollback и clock checks; этот сценарий не заменяет остальные.
 
 ## Исполнение и границы

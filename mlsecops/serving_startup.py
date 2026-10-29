@@ -28,6 +28,7 @@ ATTACH_CODES = {
     "serving_attach_empty_stderr",
     "serving_attach_worker_rejected",
     "serving_attach_ort_device_warning",
+    "serving_attach_ort_other_warning",
     "serving_attach_status",
     "serving_attach_closed",
     "serving_attach_channel",

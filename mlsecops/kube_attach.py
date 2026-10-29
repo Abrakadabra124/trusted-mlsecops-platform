@@ -81,13 +81,26 @@ def stderr_code(connection, frame, deadline):
             following = connection.recv(timeout=remaining)
         except Exception:
             break
+        if following == b"\x01":
+            # Empty stdout can interleave stderr fragments. The exchange is already
+            # rejected; only bounded classification continues.
+            continue
         if not isinstance(following, bytes) or not following or following[0] != 2:
             break
         content.extend(following[1 : 4097 - len(content)])
     if content == b"serving_worker_rejected\n":
         return "serving_attach_worker_rejected"
-    if b"[W:onnxruntime:" in content and b"GPU device discovery failed" in content:
-        return "serving_attach_ort_device_warning"
+    if b"[W:onnxruntime:" in content:
+        if b"device_discovery.cc" in content and any(
+            text in content
+            for text in (
+                b"GPU device discovery failed",
+                b"NPU device discovery failed",
+                b"Failed to detect devices under",
+            )
+        ):
+            return "serving_attach_ort_device_warning"
+        return "serving_attach_ort_other_warning"
     return "serving_attach_stderr"
 
 

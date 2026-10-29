@@ -20,6 +20,24 @@ class AttachContracts(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "^serving_attach_ort_device_warning$"):
             attach.exchange(connection, self.request)
 
+    def test_device_discovery_variants_and_interleaved_stdout_preserve_diagnostic_only(self):
+        for warning in (b"NPU device discovery failed", b"Failed to detect devices under"):
+            connection = Mock()
+            connection.recv.side_effect = [
+                b"\x02\x1b[0;93m",
+                b"\x01",
+                b"\x02[W:onnxruntime:Default, device_discovery.cc:1] ",
+                b"\x02" + warning + b": PRIVATE\n",
+            ]
+            with self.assertRaisesRegex(Rejected, "^serving_attach_ort_device_warning$"):
+                attach.exchange(connection, self.request)
+
+    def test_unknown_ort_warning_is_classified_without_disclosing_or_accepting_it(self):
+        connection = Mock()
+        connection.recv.return_value = b"\x02[W:onnxruntime:Default, PRIVATE] unrelated warning\n"
+        with self.assertRaisesRegex(Rejected, "^serving_attach_ort_other_warning$"):
+            attach.exchange(connection, self.request)
+
     def test_stderr_diagnostics_are_byte_frame_and_time_bounded(self):
         for following in (TimeoutError("PRIVATE"), b"", "text", b"\x01PRIVATE"):
             connection = Mock()
