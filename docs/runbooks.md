@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Kubernetes serving: 503, attach/RBAC, UID-bound cleanup и восстановление](kubernetes-serving.md#runbook-503-или-незавершённая-очистка). Native проверка выполняется отдельно; full M12/M13/R1 не заявляются.
+
 - [Изолированный promotion: отказ верификатора, crash/deadline, неизвестный SQL commit и owned cleanup](kubernetes-promotion.md#ранбук-отказ-неизвестный-commit-или-cleanup).
 
 - [Kubernetes authority: ownership, TLS/SQL/network диагностика, неопределённый исход публикации и outage recovery](kubernetes-trust.md#ранбук-authority-не-запускается-или-не-читается).

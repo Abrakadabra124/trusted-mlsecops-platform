@@ -22,7 +22,11 @@ Native entrypoint: `uv run --locked python -m scripts.kube_serving_native --stat
 
 Probe запускает настоящий `mlsecops.serving_http` отдельным процессом, с private token file и audit directory в RAM. Эти временные credentials/audit fixtures не являются persistent deployment, retention evidence или M17 backup. Actual candidate не получает искусственный all-pass assurance. Controlled approvals используются только для проверки соединения компонентов. Full M10-M19/M23, системные image findings, независимые M22 challenges и final same-candidate acceptance остаются обязательными.
 
+Отдельная граница M13: Kubernetes CRI сохраняет stdout worker, включая typed prediction replies, model/session/request identifiers и request hash. В отличие от Docker `log-driver=none`, здесь это дополнительный приватный канал. Raw features по протоколу в stdout не выводятся, но scores/hashes нельзя автоматически считать безопасными для публикации. До полного M13 нужны наблюдение этого канала, canaries и явная retention policy. Native probe проверяет пустой вывод HTTP CLI, но не доказывает privacy всего CRI log pipeline.
+
 ## Runbook: 503 или незавершённая очистка
+
+Первый native run [40802380904](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40802380904), code `e476a86`, остановлен до serving: `source_lock_mismatch_explicit_update_required`. Linux 92 adjacent/harness и 23 transport/runtime tests прошли; SQL stop и cluster deletion подтверждены. Причина: добавление `websockets` изменило `uv.lock`, но прежний data provenance ещё ссылался на старые bytes. До correction дважды заново сгенерированы source bytes и сверены с прежним output: 1 915 576 bytes / SHA-256 `1a96301cdec7f66ab56265db150befb99147350f0ccef6fab8dd6f2887df6473`. Из inputs изменился только `uv.lock`; явный lock update, fresh generation и verified cache проверены без инфраструктуры. CI сам lock не обновляет. Это исправление воспроизводимости не означает успеха пока не выполненного serving run.
 
 Ответственный - оператор owned lab. Сначала read-only: подтвердить revision/image profile, последнюю trust policy, release head и UID/spec ресурсов в `.runtime/serving/resources.json`; проверить состояние Jobs/Pods в `ml-serving` и `ml-serve` через kubeconfig этого стенда. Не выводить token, SQL connection files, raw request/features или полный audit в публичный лог.
 
