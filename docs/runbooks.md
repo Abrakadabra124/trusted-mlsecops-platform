@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [M12 candidate inference: подпись, input contract, startup/attach, timestamps и cleanup](candidate-inference-contract.md#runbook-отказа). [Native 180 cases pass](evidence/m12-inference-2026-10-29.md); прежний intermittent load failure не объявлен исправленным. Разбирать только фиксированные diagnostic codes, не публиковать raw stderr и не отключать verification ради ready.
+
 - [Kubernetes serving: 503, attach/RBAC, UID-bound cleanup и восстановление](kubernetes-serving.md#runbook-503-или-незавершённая-очистка). Native component `e068328` verified, предыдущие отказы/source-lock/TTY/audit/HTTP fixes сохранены; full M12/M13/R1 не заявляются.
 
 - [Изолированный promotion: отказ верификатора, crash/deadline, неизвестный SQL commit и owned cleanup](kubernetes-promotion.md#ранбук-отказ-неизвестный-commit-или-cleanup).

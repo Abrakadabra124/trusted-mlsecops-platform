@@ -16,6 +16,8 @@ Engine теперь проверяет тип `bytes` и SHA-256 до вызов
 
 ## Воспроизведение
 
+Native M12 на `5fd9d30` прошёл в [40819797749](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40819797749): 180 cases, 169 подготовительных Linux methods без skips, descriptor предшествует проверкам, source/model/subject и artifact digest сверены, cleanup success. [Полное очищенное evidence](evidence/m12-inference-2026-10-29.md) сохраняет предыдущие отказы и неизвестную причину intermittent startup failure. Это M12 конкретного candidate, не полный R1 или разрешение production release.
+
 Локально разрешены только unit/contract tests:
 
 ```powershell
