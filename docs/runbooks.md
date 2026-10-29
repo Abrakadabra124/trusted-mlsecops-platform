@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Плановая ротация ключа trust authority](operations/authority-root-rotation.md). Две подписи, operator pins, additive migration, сохранённые revocations и explicit serving reconfiguration. Local contracts passed; native CI pending, полный M11 не закрыт.
+
 - [Откат целого bundle с новым approval](operations/bundle-rollback.md). Native `f2f102c` / 40952320387 verified: sequence 1 -> 2 -> 3, разные модели A -> B -> A, три history refusals, unchanged journal при отказах/retry, revoked target denied и cleanup. 459 Linux method executions; полный M16 не закрыт.
 
 - [Файловые границы артефактов U03](operations/artifact-files.md). Linux scope проверен: 22 filesystem methods, contracts 146/50 полностью покрыты, native serving/cleanup pass на `6c65a83`. Диагностика и восстановление после I/O failure; Windows compatibility не закрывает ACL/reparse races.

@@ -3,7 +3,7 @@ import sys
 
 import psycopg
 
-from mlsecops import signing, storage, trust
+from mlsecops import signing, storage, trust, trust_rotation
 from mlsecops.contracts import Rejected, canonical, decode, digest, read_json
 from mlsecops.release_policy import MAX_DOCUMENT, name
 from mlsecops.storage_bootstrap import admin, validate
@@ -73,6 +73,18 @@ def commands(state, backend):
     return (validate(state)["name"], admin) if backend is None else backend(state)
 
 
+def migration_version(container, execute):
+    observed = execute(
+        container, "SELECT version || ':' || sha256 FROM ml_trust.migrations ORDER BY version;"
+    )
+    first = "1:" + digest(migration_sql().encode())
+    if observed == first:
+        return 1
+    if observed == first + "\n2:" + digest(trust_rotation.migration_sql().encode()):
+        return 2
+    raise Rejected("trust_migration_mismatch")
+
+
 def install(state, environment, public, *, backend=None):
     name(environment)
     if len(signing.decode64(public)) != 32 or signing.encode64(signing.decode64(public)) != public:
@@ -96,11 +108,7 @@ INSERT INTO ml_trust.migrations VALUES (1, '{checksum}');
 INSERT INTO ml_trust.settings VALUES (true, '{environment}', '{public}');
 COMMIT;""",
         )
-    if (
-        execute(container, "SELECT version || ':' || sha256 FROM ml_trust.migrations;")
-        != f"1:{checksum}"
-    ):
-        raise Rejected("trust_migration_mismatch")
+    migration_version(container, execute)
     if (
         execute(container, "SELECT environment || ':' || root_public FROM ml_trust.settings;")
         != f"{environment}:{public}"
@@ -111,12 +119,7 @@ COMMIT;""",
 
 def current(state, *, backend=None):
     container, execute = commands(state, backend)
-    checksum = digest(migration_sql().encode())
-    if (
-        execute(container, "SELECT version || ':' || sha256 FROM ml_trust.migrations;")
-        != f"1:{checksum}"
-    ):
-        raise Rejected("trust_migration_mismatch")
+    migration_version(container, execute)
     result = decode(
         execute(
             container,
