@@ -162,17 +162,17 @@ GRANT EXECUTE ON FUNCTION ml_promotion.record_selection(text) TO ml_promoter;
 """
 
 
-def install(state):
-    name = validate(state)["name"]
+def install(state, *, backend=None):
+    name, execute = (validate(state)["name"], admin) if backend is None else backend(state)
     script = migration_sql()
     checksum = digest(script.encode())
-    if not admin(name, "SELECT to_regclass('ml_promotion.migrations');"):
-        admin(
+    if not execute(name, "SELECT to_regclass('ml_promotion.migrations');"):
+        execute(
             name,
             f"BEGIN;\n{script}\nINSERT INTO ml_promotion.migrations VALUES (1, '{checksum}');\nCOMMIT;",
         )
     if (
-        admin(
+        execute(
             name, "SELECT version || ':' || sha256 FROM ml_promotion.migrations ORDER BY version;"
         )
         != f"1:{checksum}"
@@ -186,17 +186,17 @@ def require_legacy_backup_scope(name):
         raise Rejected("backup_promotion_ledger_not_supported")
 
 
-def configure(state, environment, policy_sha256):
-    name = validate(state)["name"]
+def configure(state, environment, policy_sha256, *, backend=None):
+    name, execute = (validate(state)["name"], admin) if backend is None else backend(state)
     release_policy.name(environment)
     storage.object_id(policy_sha256)
-    observed = admin(
+    observed = execute(
         name,
         f"SELECT policy_sha256 FROM ml_promotion.authorities WHERE environment = '{environment}';",
     )
     if observed and observed != policy_sha256:
         raise Rejected("promotion_configuration_conflict")
-    admin(
+    execute(
         name,
         f"""BEGIN;
 SET LOCAL ROLE ml_owner;
@@ -205,7 +205,7 @@ INSERT INTO ml_promotion.heads (environment) VALUES ('{environment}') ON CONFLIC
 COMMIT;""",
     )
     if (
-        admin(
+        execute(
             name,
             f"SELECT policy_sha256 FROM ml_promotion.authorities WHERE environment = '{environment}';",
         )

@@ -209,6 +209,11 @@ def validate(state):
     return {**marker, **live_state(state, marker)}
 
 
+def binding(state):
+    validate(state)
+    return state, admin
+
+
 def bootstrap(state):
     state = Path(state).resolve()
     validate_cluster(state)

@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Изолированный promotion: отказ верификатора, crash/deadline, неизвестный SQL commit и owned cleanup](kubernetes-promotion.md#ранбук-отказ-неизвестный-commit-или-cleanup).
+
 - [Kubernetes authority: ownership, TLS/SQL/network диагностика, неопределённый исход публикации и outage recovery](kubernetes-trust.md#ранбук-authority-не-запускается-или-не-читается).
 
 - [Promotion CLI и передача в Reader](promotion-entrypoint.md#ранбук-и-плейбук). Подписанные CAS references, отдельные operator pins, отказ без assurance, exact retry и разбор неоднозначного commit. Credential scope не заменяет отдельную OS/Kubernetes-изоляцию promoter.
