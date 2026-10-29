@@ -323,12 +323,17 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
     async def test_deadline_returns_503_but_retains_pending_task_and_slot(self):
         entered, release = threading.Event(), threading.Event()
         generation = threading.Event()
-        budget = serving.ResponseBudget(generation, time.monotonic() + 0.05)
+        budget = serving.ResponseBudget(generation, time.monotonic() + 10)
         self.engine.response_budget.return_value = budget
         self.engine.response_budget.side_effect = None
         self.engine.expire.side_effect = lambda selected: selected.set()
 
         def blocked(features, *, generation):
+            # Start the short deadline after audit admission actually reached
+            # this worker, not before platform-dependent fsync/thread startup.
+            self.engine.response_budget.return_value = serving.ResponseBudget(
+                generation, time.monotonic() + 0.05
+            )
             entered.set()
             release.wait(3)
             return {"schema_version": 1, "predictions": [{"score": 0.123, "raw": "PRIVATE-CANARY"}]}
