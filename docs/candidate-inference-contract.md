@@ -32,6 +32,8 @@ Engine теперь проверяет тип `bytes` и SHA-256 до вызов
 
 ## Runbook отказа
 
+Первый общий gate [40815547435](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40815547435), `a87e126`, завершился fail до native serving. Выявлена ошибка инвентаризации controlled tests: AST-список учитывал `FunctionDef`, но пропускал `AsyncFunctionDef`, поэтому ожидал 90 методов вместо фактически загруженных 113. Новый regression test сначала подтвердил отсутствие 23 async HTTP tests; исправление включает их в обязательный набор, не исключает из исполнения и не разрешает skips. SQL stop и cluster cleanup проверяются по terminal CI status. Повтор нужен на исправленном commit.
+
 Ответственный - оператор disposable lab. Сначала проверить terminal status и failed step в GitHub Actions, затем приватные stage/failed-case markers. Не перезапускать ещё работающий job. Отсутствие итогового report или status=inconclusive не означает успеха.
 
 1. `dirty_source`, source/image mismatch или короткое окно permit: остановить принятие результата; проверить commit, fingerprint, pinned image и timestamp. Не менять ожидаемый digest ради прохода.

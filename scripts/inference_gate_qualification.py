@@ -11,6 +11,18 @@ from mlsecops.contracts import Rejected, canonical, read_json
 
 
 class InferenceGateContracts(unittest.TestCase):
+    def test_contract_inventory_includes_async_methods_and_matches_loader(self):
+        from scripts.evaluation_contracts import case_ids as loaded_ids
+
+        loaded = loaded_ids(
+            unittest.defaultTestLoader.loadTestsFromNames(gate.inference_contracts.MODULES)
+        )
+        self.assertEqual(gate.inference_contracts.case_ids(), loaded)
+        self.assertIn(
+            "scripts.serving_http_qualification.ServingHttpContracts.test_strict_schema_and_nonfinite_input_are_422",
+            loaded,
+        )
+
     def test_dispatcher_has_fail_closed_prerequisites_and_maps_gate_results(self):
         from mlsecops import acceptance
 

@@ -29,7 +29,8 @@ def case_ids(root=None):
         ).body
         if isinstance(cls, ast.ClassDef)
         for method in cls.body
-        if isinstance(method, ast.FunctionDef) and method.name.startswith("test_")
+        if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and method.name.startswith("test_")
     }
 
 
