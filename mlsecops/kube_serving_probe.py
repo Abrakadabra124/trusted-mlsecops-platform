@@ -197,7 +197,14 @@ def qualify(config, expected, progress=None):
         output = directory / "service-output"
         with output.open("wb") as log:
             process = subprocess.Popen(
-                [sys.executable, "-m", "mlsecops.serving_http", "--startup-diagnostics", "--config", str(config_path)],
+                [
+                    sys.executable,
+                    "-m",
+                    "mlsecops.serving_http",
+                    "--startup-diagnostics",
+                    "--config",
+                    str(config_path),
+                ],
                 stdout=log,
                 stderr=log,
                 start_new_session=True,
