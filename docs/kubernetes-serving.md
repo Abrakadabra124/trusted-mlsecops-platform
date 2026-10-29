@@ -2,7 +2,7 @@
 
 Неделя 9, T15 «Inference API и loader», CP3. Реализован и проверен native явный Kubernetes backend для обычного `mlsecops.serving_http --config`. Это component pass, не full M12 или завершённый R1.
 
-**Native component pass:** code `e068328`, [run 40806590954](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40806590954). Полный M12 inconclusive, release_ready=false. Предыдущие отказы и исправления сохранены ниже.
+**Native component pass:** normal CLI `e068328` / [40806590954](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40806590954), затем live trust `df580e7` / [40811175913](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40811175913). Полные M11/M12 inconclusive, release_ready=false. Предыдущие отказы и исправления сохранены ниже; причина initial-readiness отказа в первом live-trust run пока не установлена.
 
 ## Решение и границы
 
@@ -84,3 +84,20 @@ Commit `e068328bb6e054540781dce862e37083a246232e`, [run 40806590954](https://git
 При локальной регрессии найден тестовый race: `test_deadline_returns_503_but_retains_pending_task_and_slot` начинал 50 ms до audit fsync и запуска worker, иногда получая отказ ещё до входа в проверяемую pending operation. Тест теперь начинает короткий дедлайн внутри уже запущенной блокируемой операции. Production budgets не менялись; по-прежнему проверяются быстрый 503, отсутствие private payload, сохранение in-flight slot до завершения потока и его последующее освобождение. После исправления 131 метод: 129 pass / 2 Linux-only skips на Windows; native должен выполнить их без этих skips.
 
 Первая native попытка: `d874f0d`, [40809707714](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40809707714), job `123236861566`, **failure**. Linux 96 + 24 + 11 tests pass без skips. Ordinary CLI до/после approval и live outage завершились; следующий `policy-change` отказал на initial readiness до инъекции изменения policy. Исходный run не сохранил итоговый численный outage trace, поэтому точный latency здесь не заявляется. Причина повторной activation не установлена; нельзя считать её доказанной сетевой проблемой или исчерпанием срока approval. Source SQL stop и cluster deletion/absence success. Добавлена read-only Reader-диагностика только после failed HTTP readiness, без worker start или превращения отказа в success; разрешён фиксированный список кодов, неизвестный текст редактируется. Каждый завершённый fault report теперь сохраняется немедленно. Ветка не принята в main как пройденная live trust интеграция.
+
+### Подтверждённый live trust run
+
+`df580e7d0b5086f67a76f9c279cd2c454586efec`, [40811175913](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40811175913), job `123241583087`, attempt 1: **success**. Native период 06:19:03.435 - 06:22:59.861 МСК. [Очищенные evidence и 42 записи HTTP trace](evidence/kubernetes-serving-trust-2026-10-29.md) содержат source/image bindings, относительные timestamps и статусы; raw logs и private audit в Git не включены.
+
+| Сценарий | Результат |
+| --- | --- |
+| Outage authority | 38 HTTP наблюдений: 33 ответа 200 в пределах lease, 5 отказов 503. Первый client-completed 503 через `59.80172422300001 s` от нижней границы последнего успешного trust read; последний отказ подтверждён после 60 s. Поздних ML-ответов нет |
+| Смена разрешённой policy | Два 503, первый через `5.383441565 s` от начала успешного запроса перед fault. Это включает координацию и signed update, не точное время от публикации policy |
+| Отзыв model digest | Два 503, первый через `4.891434488 s` от той же границы. Revocation set не очищался |
+| Восстановление | Owned authority с тем же volume UID восстановлен; policy возвращена новым trust version. В обоих случаях старая HTTP generation осталась fenced, ready/predict 503. Следующие самостоятельные CLI успешно активировали допустимый release; revoked cold-start отказал |
+| Повтор исходного сценария | 13 before-approval + 22 approved + 13 cold-revoked checks. Один persistent worker, model/bundle binding, golden max error `7.583384781240099e-08`, 401/413/422 и stopped-worker 503 |
+| Linux и cleanup | 97 adjacent/harness + 24 core + 11 lifecycle tests pass без skips; новые probe/coordinator 137/137 statements и 60/60 branches. CLI/worker cleanup, source SQL stop, owned cluster deletion/absence success |
+
+252 контрольные проверки включают повторы assertions и статусы на каждом шаге trace; это не количество уникальных требований. Actual candidate `4936306ee730d265554d83d059f5aee13bf81092a63b1cfbfb27eb9d57eab612`, model `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`, proposal `42ac4bcabac3709ce4222fc96c834c367f662817b6686716d9ba879d40cf6522` отдельно отказан без assurance и без записи. Live fault checks используют отдельную controlled model `6e4e5e65497470e5fe72af895107f291245c1bfc70070378cf3cdf95d2058169`.
+
+Source fingerprint `c0fd54822baaadd832e2e6c00f6333e2d90b3e18c1a35d1863fec1636ec665db`, image `sha256:ed85e290706975d1fafd60918612e33284f88abe2560c6f469e8157f57cc608e`, source clean. Это успешное воспроизведение на новом frozen source; оно **не объясняет и не устраняет доказательно** intermittent initial-readiness отказ предыдущего `d874f0d`. Диагностика после отказа в успешном run не потребовалась. Не заявлять стабильный SLO, завершённый M11/M12 или R1: остаются полный candidate-bound gate, expiry/clock/rollback/slow-trust матрица, M13/retention, нагрузка и причина исторического startup failure. При повторении собирать fixed Reader code и private runtime evidence, без автоматической маскировки отказа повторными activation.
