@@ -1,5 +1,7 @@
 # R1: границы и конечный маршрут поставки
 
+CP3/T13 update 2026-10-29: [Kubernetes authority](kubernetes-trust.md) добавляет отдельный закрытый SQL/TLS service и изолированных readers, необходимых для deployed promotion/serving. Local 39 tests pass, native validation ожидается. Полные M10/M11/M12, подключение production entrypoints и CP3 остаются открытыми.
+
 CP3/T13 update 2026-10-29: [promotion entrypoint](promotion-entrypoint.md#native-результат-2026-10-29-мск) прошёл targeted native `d78e451`, [40792286657](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40792286657). 44 cases связывают обычный CLI, signed CAS, SQL selection, Reader/HTTP и отзыв на controlled fixture; настоящий candidate отказан без assurance. Это закрывает отсутствие исполняемого promotion entrypoint, но не OS/Kubernetes-изоляцию promoter, full M10/M12 или CP3. Полная CI-матрица на этом промежуточном шаге не повторялась.
 
 CP2 update 2026-10-29: [main regression](evidence/main-regression-2026-10-29.md) `139d13d` завершилась 10/10 workflow success. Последующая [M22 absolute matrix](absolute-poisoning.md#native-результат-2026-10-29-мск) на `e063998` прошла 42/42 scenarios, 300 primary files, replay error 0.0, cleanup success. Полный M22 inconclusive из-за 0/2 independent challenges. 11 полных dispatch paths + частичный M22, 11 placeholders M10-M19/M23. R1-B07 остаётся открыт в части independent challenges; R1-B02 system-image findings и CP3-CP5 не закрыты. Разные CI candidates не объединяются автоматически в M18.

@@ -64,16 +64,21 @@ GRANT SELECT ON ml_trust.settings, ml_trust.documents TO ml_serving, ml_promoter
 """
 
 
-def install(state, environment, public):
+def commands(state, backend):
+    # The backend is a trusted operator dependency, never a request/CLI field.
+    return (validate(state)["name"], admin) if backend is None else backend(state)
+
+
+def install(state, environment, public, *, backend=None):
     name(environment)
     if len(signing.decode64(public)) != 32 or signing.encode64(signing.decode64(public)) != public:
         raise Rejected("trust_root_invalid")
-    container = validate(state)["name"]
+    container, execute = commands(state, backend)
     script = migration_sql()
     checksum = digest(script.encode())
-    if not admin(container, "SELECT to_regnamespace('ml_trust');"):
+    if not execute(container, "SELECT to_regnamespace('ml_trust');"):
         nonempty = " OR ".join(f"EXISTS (SELECT FROM ml.{table})" for table in TABLES)
-        admin(
+        execute(
             container,
             f"""BEGIN;
 SELECT pg_advisory_xact_lock(19293822);
@@ -88,28 +93,28 @@ INSERT INTO ml_trust.settings VALUES (true, '{environment}', '{public}');
 COMMIT;""",
         )
     if (
-        admin(container, "SELECT version || ':' || sha256 FROM ml_trust.migrations;")
+        execute(container, "SELECT version || ':' || sha256 FROM ml_trust.migrations;")
         != f"1:{checksum}"
     ):
         raise Rejected("trust_migration_mismatch")
     if (
-        admin(container, "SELECT environment || ':' || root_public FROM ml_trust.settings;")
+        execute(container, "SELECT environment || ':' || root_public FROM ml_trust.settings;")
         != f"{environment}:{public}"
     ):
         raise Rejected("trust_configuration_conflict")
     return checksum
 
 
-def current(state):
-    container = validate(state)["name"]
+def current(state, *, backend=None):
+    container, execute = commands(state, backend)
     checksum = digest(migration_sql().encode())
     if (
-        admin(container, "SELECT version || ':' || sha256 FROM ml_trust.migrations;")
+        execute(container, "SELECT version || ':' || sha256 FROM ml_trust.migrations;")
         != f"1:{checksum}"
     ):
         raise Rejected("trust_migration_mismatch")
     result = decode(
-        admin(
+        execute(
             container,
             "SELECT jsonb_build_object('environment', settings.environment, 'root_public', settings.root_public, "
             "'version', document.version, 'sha256', document.sha256, 'envelope', encode(document.envelope, 'hex'), "
@@ -131,8 +136,8 @@ def current(state):
     return container, result
 
 
-def publish(state, envelope):
-    container, before = current(state)
+def publish(state, envelope, *, backend=None):
+    container, before = current(state, backend=backend)
     payload = trust.validate(
         envelope, before["root_public"], before["environment"], before["clock"]
     )
@@ -149,7 +154,8 @@ def publish(state, envelope):
         raise Rejected("trust_initial_version")
     previous_version = before["version"] or 0
     previous_reference = before["sha256"] or ""
-    admin(
+    execute = admin if backend is None else backend(state)[1]
+    execute(
         container,
         f"""BEGIN;
 SELECT pg_advisory_xact_lock(19293822);
@@ -171,7 +177,7 @@ INSERT INTO ml_trust.documents VALUES ({payload["version"]}, '{reference}', deco
 COMMIT;""",
     )
     if (
-        admin(
+        execute(
             container,
             f"SELECT sha256 FROM ml_trust.documents WHERE version = {payload['version']};",
         )
@@ -181,12 +187,14 @@ COMMIT;""",
     return {"version": payload["version"], "document_sha256": reference, "reused": False}
 
 
-def update(state, policy_sha256, key, *, revoked_artifacts=(), revoked_keys=(), lifetime=3600):
+def update(
+    state, policy_sha256, key, *, revoked_artifacts=(), revoked_keys=(), lifetime=3600, backend=None
+):
     from mlsecops.release_policy import integer
 
     storage.object_id(policy_sha256)
     integer(lifetime, maximum=86400)
-    _, previous = current(state)
+    _, previous = current(state, backend=backend)
     payload = {
         "schema_version": 1,
         "environment": previous["environment"],
@@ -207,13 +215,14 @@ def update(state, policy_sha256, key, *, revoked_artifacts=(), revoked_keys=(), 
         payload[field] = sorted(
             set(payload[field]) | {storage.object_id(value) for value in additions}
         )
-    return publish(state, signing.sign(payload, "trust-policy", key))
+    return publish(state, signing.sign(payload, "trust-policy", key), backend=backend)
 
 
 def main(arguments=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("install", "publish", "update", "show"))
     parser.add_argument("--state", required=True)
+    parser.add_argument("--backend", choices=("docker", "kubernetes"), default="docker")
     parser.add_argument("--confirm-authority", action="store_true")
     parser.add_argument("--environment", default="local-cpu")
     parser.add_argument("--root-public")
@@ -225,16 +234,23 @@ def main(arguments=None):
     parser.add_argument("--lifetime", type=int, default=3600)
     options = parser.parse_args(arguments)
     try:
+        backend = None
+        if options.backend == "kubernetes":
+            from mlsecops.kube_trust import binding
+
+            backend = binding
         if options.action != "show" and not options.confirm_authority:
             raise Rejected("trust_explicit_authority_confirmation_required")
         if options.action == "install":
             result = {
-                "migration_sha256": install(options.state, options.environment, options.root_public)
+                "migration_sha256": install(
+                    options.state, options.environment, options.root_public, backend=backend
+                )
             }
         elif options.action == "publish":
             if options.document is None:
                 raise Rejected("trust_signed_document_required")
-            result = publish(options.state, read_json(options.document))
+            result = publish(options.state, read_json(options.document), backend=backend)
         elif options.action == "update":
             if options.key is None:
                 raise Rejected("trust_signing_key_required")
@@ -245,9 +261,10 @@ def main(arguments=None):
                 revoked_artifacts=options.revoke_artifact,
                 revoked_keys=options.revoke_key,
                 lifetime=options.lifetime,
+                backend=backend,
             )
         else:
-            _, value = current(options.state)
+            _, value = current(options.state, backend=backend)
             result = {
                 "environment": value["environment"],
                 "version": value["version"],

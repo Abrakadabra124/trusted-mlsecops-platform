@@ -100,7 +100,7 @@ def verify_resource(document, observed, expected_uid):
         raise Rejected("cluster_storage_external_service_forbidden")
 
 
-def command_arguments(state, arguments):
+def command_arguments(state, arguments, *, namespace=NAMESPACE):
     return [
         "kubectl",
         "--kubeconfig",
@@ -112,7 +112,7 @@ def command_arguments(state, arguments):
         "-i",
         "postgres-0",
         "-n",
-        NAMESPACE,
+        namespace,
         "-c",
         "postgres",
         "--",

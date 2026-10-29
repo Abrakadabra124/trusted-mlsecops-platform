@@ -1,0 +1,68 @@
+name: Separate Kubernetes trust authority and restricted readers
+on:
+  push:
+    branches: [codex/cp3-kubernetes-trust]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-trust-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kubernetes-trust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked dependencies and authority contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.trust_authority_qualification scripts.promotion_controller_qualification scripts.kube_trust_probe_qualification scripts.kube_trust_native_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-kube-trust --source=mlsecops.kube_trust -m unittest scripts.kube_trust_qualification
+          uv run --locked coverage report --data-file=.coverage-kube-trust --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-kube-trust -o .coverage-kube-trust.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-kube-trust.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+      - name: Prepare pinned disposable cluster
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Bootstrap model storage prerequisite
+        run: uv run --locked python -m mlsecops.kube_storage
+      - name: Separate authority TLS, SQL, network, revocation and recovery
+        run: uv run --locked python -m scripts.kube_trust_native --state .runtime
+      - name: Sanitized authority evidence
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          path = Path('.runtime/evidence/kubernetes-trust.json')
+          report = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False}
+          print(canonical(report).decode())
+          PY
+          echo 'Separate authority and isolated readers only. Full promotion, serving, M10/M11/M18 are not accepted by this workflow.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove verified owned disposable cluster
+        if: always() && steps.bootstrap.outcome == 'success'
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import validate_cluster
+          validate_cluster(Path('.runtime'))
+          PY
+          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"

@@ -22,12 +22,13 @@ from mlsecops.contracts import (
 ROLES = ("ingestor", "curator", "publisher", "scorer", "promoter", "serving")
 IDENTITIES = ("ca", "server", *(f"ml_{role}" for role in ROLES))
 CLUSTER_HOST = "postgres.ml-storage.svc.cluster.local"
+TRUST_HOST = "postgres.ml-trust.svc.cluster.local"
 
 
 def server_names(host):
     if host == "127.0.0.1":
         return [x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address(host))]
-    if host == CLUSTER_HOST:
+    if host in (CLUSTER_HOST, TRUST_HOST):
         return [x509.DNSName(host)]
     raise Rejected("storage_server_host_invalid")
 

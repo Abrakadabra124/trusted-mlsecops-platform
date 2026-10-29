@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Kubernetes authority: ownership, TLS/SQL/network диагностика, неопределённый исход публикации и outage recovery](kubernetes-trust.md#ранбук-authority-не-запускается-или-не-читается).
+
 - [Promotion CLI и передача в Reader](promotion-entrypoint.md#ранбук-и-плейбук). Подписанные CAS references, отдельные operator pins, отказ без assurance, exact retry и разбор неоднозначного commit. Credential scope не заменяет отдельную OS/Kubernetes-изоляцию promoter.
 
 - [M22 absolute matrix и reviewer handoff](absolute-poisoning.md#ранбук-диагностика-и-воспроизведение). 36+6 trainings, проверка 300 primary files, отказ при подмене fraction/candidate, owned cleanup и отдельные условия independent challenges. Partial M22 не разрешает release.
