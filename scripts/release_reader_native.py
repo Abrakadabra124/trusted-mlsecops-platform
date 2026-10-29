@@ -77,7 +77,7 @@ def disposable(root, state, campaign, suffix, port):
             shutil.rmtree(destination)
 
 
-def qualify(root, state, image=None):
+def qualify(root, state, image=None, *, promotion_entrypoint=False):
     from scripts import promotion_qualification as fixtures
 
     state = Path(state).resolve()
@@ -147,7 +147,13 @@ def qualify(root, state, image=None):
                 serving, **options, trust_lease=lease(), minimum_sequence=1
             )
             rejected("empty-head-denied", reader.load, "release_invalid_integer")
-            receipt = promotion.promote(promoter, trust_lease=lease(), **fixture.arguments)
+            if promotion_entrypoint:
+                from scripts.promotion_entrypoint_native import controlled
+
+                receipt = controlled(root, models, authority, fixture.arguments, public)
+                confirmed("controlled-promotion-CLI-exact-retry", not receipt["release_ready"])
+            else:
+                receipt = promotion.promote(promoter, trust_lease=lease(), **fixture.arguments)
             confirmed("controlled-signed-fixture-recorded", not receipt["release_ready"])
             before = storage_restore.ledger(storage_bootstrap.validate(models)["name"])
             loaded = reader.load()

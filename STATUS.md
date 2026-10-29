@@ -1,5 +1,7 @@
 # Статус и границы доказательств
 
+CP3/T13 в работе: [promotion CLI](docs/promotion-entrypoint.md) соединяет signed CAS references, внешние pins, verifier, online trust и SQL selection. 11 controller tests, 100% statements/branches; native CLI/Reader проверка ещё ожидается. Реального approval для непрошедшего все gates candidate нет; OS/Kubernetes-изоляция promoter и полный M10 остаются открытыми.
+
 Обновление 2026-10-29: [main `139d13d`](docs/evidence/main-regression-2026-10-29.md) прошёл **10/10 workflow** на disposable hosted CI. Затем [native M22 matrix](docs/absolute-poisoning.md#native-результат-2026-10-29-мск), `e063998`, [40788141737](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40788141737): **36 poisoned + 6 controls, 42/42 nonviolating, 300 primary files, replay error 0.0**. Component pass; полный M22 **inconclusive**, independent challenges **0/2**, release_ready=false. Source clean и owned SQL cleanup success. 11 полных dispatch paths + частичный M22; 11 placeholders M10-M19/M23. Эти числа не являются процентом готовности. Полные CP2/M22/R1 остаются открытыми из-за independent challenges, system-image findings и CP3-CP5.
 
 ## CP2: balanced candidate trial 2026-10-29

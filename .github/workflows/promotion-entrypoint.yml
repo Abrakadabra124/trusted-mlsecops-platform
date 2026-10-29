@@ -1,0 +1,69 @@
+name: Promotion CLI integration with actual candidate refusal
+on:
+  push:
+    branches: [codex/cp3-promotion-entrypoint]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: promotion-entrypoint-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  promotion-entrypoint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked dependencies and negative entrypoint contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.promotion_entrypoint_qualification scripts.promotion_qualification scripts.release_native_qualification scripts.release_reader_native_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-promotion-controller --source=mlsecops.promotion_controller -m unittest scripts.promotion_controller_qualification
+          uv run --locked coverage report --data-file=.coverage-promotion-controller --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-promotion-controller -o .coverage-promotion-controller.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-promotion-controller.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+      - name: Prepare actual candidate in fresh owned SQL
+        run: |
+          uv run --locked python -m mlsecops build
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Actual candidate refusal and controlled CLI to Reader to HTTP
+        run: uv run --locked python -m scripts.promotion_entrypoint_native --state .runtime
+      - name: Sanitized outcome with explicit acceptance boundary
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          path = Path('.runtime/evidence/promotion-entrypoint.json')
+          report = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False}
+          print(canonical(report).decode())
+          PY
+          echo 'CLI integration only: controlled positive fixture, actual candidate denied without assurance. Full M10/M12/M18 remain separate.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Stop only verified owned source SQL
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('promotion_source_cleanup_incomplete')
+          PY
+          fi
