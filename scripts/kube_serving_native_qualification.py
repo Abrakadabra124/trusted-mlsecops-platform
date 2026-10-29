@@ -254,11 +254,20 @@ class NativeContracts(unittest.TestCase):
             qualify.assert_not_called()
 
     def test_harness_uses_real_cli_profile_and_private_failure_logs_with_cleanup(self):
-        for success in [True, False]:
+        from unittest.mock import Mock
+
+        for success, coordinated, foreign in [
+            (True, False, False),
+            (False, False, False),
+            (True, True, False),
+            (True, True, True),
+        ]:
             with tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
                 (state / "evidence").mkdir()
                 created = []
+                coordinator, acknowledgements = Mock(), Mock()
+                markers = []
 
                 def mapping(state, name, field, value):
                     return {
@@ -283,31 +292,35 @@ class NativeContracts(unittest.TestCase):
                         observed["metadata"]["uid"] = "owned-uid"
                         created.append(observed)
                         return SimpleNamespace(stdout=canonical(observed))
-                    return SimpleNamespace(
-                        stdout=canonical(
-                            {"status": "pass", "release_ready": False, "cases": ["verified"]}
-                        )
+                    result = (
+                        canonical({"status": "pass", "release_ready": False, "cases": ["verified"]})
                         if success
                         else b"PRIVATE-DIAGNOSTIC"
                     )
+                    return SimpleNamespace(stdout=b"\n".join([*markers, result]))
 
-                def wait(*args):
-                    return (
-                        {"type": "Complete" if success else "Failed"},
-                        {
-                            "metadata": {
-                                "name": "probe-pod",
-                                "ownerReferences": [{"uid": "owned-uid"}],
-                            },
-                            "spec": created[-1]["spec"]["template"]["spec"],
-                            "status": {
-                                "containerStatuses": [
-                                    {"state": {"terminated": {"exitCode": 0 if success else 1}}}
-                                ]
-                            },
+                def wait(*args, **kwargs):
+                    pod = {
+                        "metadata": {
+                            "name": "probe-pod",
+                            "ownerReferences": [{"uid": "foreign-uid" if foreign else "owned-uid"}],
                         },
-                        2.5,
-                    )
+                        "spec": created[-1]["spec"]["template"]["spec"],
+                        "status": {
+                            "containerStatuses": [
+                                {"state": {"terminated": {"exitCode": 0 if success else 1}}}
+                            ]
+                        },
+                    }
+                    if coordinated:
+                        for phase in ["ready", "denied"]:
+                            markers.append(
+                                canonical(
+                                    {"event": "trust-fault", "phase": phase, "fault": "outage"}
+                                )
+                            )
+                            kwargs["observe"](pod)
+                    return {"type": "Complete" if success else "Failed"}, pod, 2.5
 
                 with (
                     patch.object(native.kube_promotion, "configuration_map", side_effect=mapping),
@@ -321,9 +334,31 @@ class NativeContracts(unittest.TestCase):
                     patch.object(native, "verify_running_image"),
                     patch.object(native.kube_storage, "verify_resource"),
                     patch.object(native.kube_promotion, "cleanup") as cleanup,
+                    patch.object(native, "acknowledge", acknowledgements),
                 ):
-                    if success:
-                        self.assertEqual(native.invoke(state, PROFILE, {}, {})["status"], "pass")
+                    if foreign:
+                        with self.assertRaisesRegex(Rejected, "pod_changed"):
+                            native.invoke(
+                                state, PROFILE, {}, {"fault": "outage"}, coordinator=coordinator
+                            )
+                        coordinator.assert_not_called()
+                        acknowledgements.assert_not_called()
+                    elif success:
+                        self.assertEqual(
+                            native.invoke(
+                                state,
+                                PROFILE,
+                                {},
+                                {"fault": "outage"} if coordinated else {},
+                                coordinator=coordinator if coordinated else None,
+                            )["status"],
+                            "pass",
+                        )
+                        if coordinated:
+                            self.assertEqual(
+                                [c.args[0] for c in coordinator.call_args_list], ["ready", "denied"]
+                            )
+                            self.assertEqual(acknowledgements.call_count, 2)
                     else:
                         with self.assertRaisesRegex(Rejected, "job_failed"):
                             native.invoke(state, PROFILE, {}, {})
@@ -331,7 +366,9 @@ class NativeContracts(unittest.TestCase):
                 pod = created[-1]["spec"]["template"]["spec"]
                 self.assertEqual(pod["serviceAccountName"], "serving")
                 self.assertEqual(pod["containers"][0]["command"][2], "mlsecops.kube_serving_probe")
-                self.assertEqual(len(list((state / "evidence").glob("*-private.log"))), 1)
+                self.assertEqual(
+                    len(list((state / "evidence").glob("*-private.log"))), 0 if foreign else 1
+                )
 
     def test_normal_config_selects_kubernetes_only_with_valid_matching_profile(self):
         with tempfile.TemporaryDirectory() as temporary:

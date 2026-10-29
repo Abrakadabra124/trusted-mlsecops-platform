@@ -11,7 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from mlsecops import kube_serving_runtime
+from mlsecops import kube_serving_lifecycle, kube_serving_runtime
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, read_json, write_json
 from mlsecops.controller_api import APIError, Client
 from mlsecops.controller_worker import remove
@@ -38,6 +38,8 @@ CODES = {
     "kube_serving_shutdown_deadline",
     "cli_arguments_invalid",
     "unclassified",
+    "kube_serving_lifecycle_coordination_deadline",
+    "kube_serving_lifecycle_coordination_binding",
 }
 
 
@@ -68,6 +70,7 @@ CHECKS = {
     "unauthenticated-401",
     "worker-cleanup-confirmed",
 }
+CHECKS |= kube_serving_lifecycle.CHECKS
 CODES |= {"kube_serving_probe:" + label for label in CHECKS}
 
 
@@ -163,7 +166,7 @@ def qualify(config, expected, progress=None):
             finally:
                 connection.close()
 
-        max_error = None
+        max_error, lifecycle = None, None
         try:
             deadline = time.monotonic() + 100
             while time.monotonic() < deadline:
@@ -217,12 +220,17 @@ def qualify(config, expected, progress=None):
                 check("unauthenticated-401", request("/v1/predict", body, False)[0] == 401)
                 check("malformed-422", request("/v1/predict", b"{}")[0] == 422)
                 check("oversized-413", request("/v1/predict", b"x" * 65537)[0] == 413)
-                owner = worker["metadata"]["ownerReferences"][0]
-                remove(client, "jobs", worker["metadata"]["labels"]["job-name"], owner["uid"])
-                deadline = time.monotonic() + 15
-                while client.request("pods")["items"] and time.monotonic() < deadline:
-                    time.sleep(0.25)
-                check("stopped-worker-503", request("/v1/predict", body)[0] == 503)
+                if "fault" in expected:
+                    lifecycle = kube_serving_lifecycle.exercise(
+                        process, request, body, expected, check
+                    )
+                else:
+                    owner = worker["metadata"]["ownerReferences"][0]
+                    remove(client, "jobs", worker["metadata"]["labels"]["job-name"], owner["uid"])
+                    deadline = time.monotonic() + 15
+                    while client.request("pods")["items"] and time.monotonic() < deadline:
+                        time.sleep(0.25)
+                    check("stopped-worker-503", request("/v1/predict", body)[0] == 503)
             else:
                 check("unapproved-or-revoked-ready-503", ready[0] == 503)
                 check("unapproved-or-revoked-predict-503", request("/v1/predict", body)[0] == 503)
@@ -237,7 +245,13 @@ def qualify(config, expected, progress=None):
         progress[0] = "audit"
         check("service-output-empty", bounded_read(output, 65536) == b"")
         check("audit-journal-created", (directory / "audit").is_dir())
-    return {"status": "pass", "cases": cases, "max_golden_error": max_error, "release_ready": False}
+    return {
+        "status": "pass",
+        "cases": cases,
+        "max_golden_error": max_error,
+        "release_ready": False,
+        **({"lifecycle": lifecycle} if lifecycle is not None else {}),
+    }
 
 
 def main():

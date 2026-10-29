@@ -1,7 +1,7 @@
 name: Configured serving with persistent isolated Kubernetes worker
 on:
   push:
-    branches: [codex/cp3-kubernetes-serving]
+    branches: [codex/cp3-kubernetes-serving, codex/cp3-serving-trust-lifecycle]
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,6 +32,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-kube-serving --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-serving -o .coverage-kube-serving.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-kube-serving.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+          uv run --locked coverage run --branch --data-file=.coverage-kube-lifecycle --source=mlsecops.kube_serving_lifecycle,scripts.kube_serving_faults -m unittest scripts.kube_serving_lifecycle_qualification scripts.kube_serving_faults_qualification
+          uv run --locked coverage report --data-file=.coverage-kube-lifecycle --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-kube-lifecycle -o .coverage-kube-lifecycle.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-kube-lifecycle.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -46,7 +50,7 @@ jobs:
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
-      - name: Actual refusal and configured serving before approval, after approval and revocation
+      - name: Actual refusal, configured serving and live authority faults
         run: uv run --locked python -m scripts.kube_serving_native --state .runtime
       - name: Sanitized serving outcome
         if: always()

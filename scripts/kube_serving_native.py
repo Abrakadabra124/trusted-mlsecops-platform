@@ -24,13 +24,14 @@ from mlsecops.storage_pki import workspace_id
 from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 from scripts.kube_promotion_native import actual, stage
+from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
 from scripts.promotion_entrypoint_native import configuration
 
 NAMESPACE = "ml-serving"
 
 
-def invoke(state, profile, config, expected):
+def invoke(state, profile, config, expected, *, coordinator=None):
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [
         kube_promotion.configuration_map(state, name + "-" + field, field, value)
@@ -49,13 +50,45 @@ def invoke(state, profile, config, expected):
     job = job_document(name, NAMESPACE, spec, 240)
     job["metadata"]["labels"]["trusted-mlsecops/workspace"] = workspace_id(state)
     created = []
+    phases = []
+
+    def observe(pod):
+        verify_running_image(pod, profile["image_id"])
+        if (
+            not kube_storage.matches(spec, pod["spec"])
+            or pod["metadata"]["ownerReferences"][0]["uid"] != created[-1][1]
+        ):
+            raise Rejected("kube_serving_probe_pod_changed")
+        raw = kubectl(
+            state,
+            [
+                "logs",
+                pod["metadata"]["name"],
+                "-n",
+                NAMESPACE,
+                "-c",
+                "worker",
+                "--limit-bytes=65537",
+            ],
+        ).stdout
+        safe_child(state, "evidence/" + name + "-private.log").write_bytes(raw)
+        observed = progress(raw, expected["fault"])
+        if observed[: len(phases)] != phases:
+            raise Rejected("kube_serving_fault_progress_changed")
+        for phase in observed[len(phases) :]:
+            coordinator(phase)
+            acknowledge(state, pod["metadata"]["name"], phase, expected["fault"])
+            phases.append(phase)
+
     try:
         for document in [*maps, job]:
             observed = decode(kubectl(state, ["create", "-f", "-", "-o", "json"], document).stdout)
             uid = observed["metadata"]["uid"]
             created.append((document, uid))
             kube_storage.verify_resource(document, observed, uid)
-        terminal, pod, elapsed = wait_job(state, NAMESPACE, name, 240)
+        terminal, pod, elapsed = wait_job(
+            state, NAMESPACE, name, 240, **({"observe": observe} if coordinator is not None else {})
+        )
         verify_running_image(pod, profile["image_id"])
         if (
             not kube_storage.matches(spec, pod["spec"])
@@ -85,7 +118,7 @@ def invoke(state, profile, config, expected):
         ):
             failure = {"probe_failure": "unclassified", "release_ready": False}
             with suppress(Rejected):
-                document = decode(raw, 65536)
+                document = decode(raw.splitlines()[-1] if raw else raw, 65536)
                 if (
                     isinstance(document, dict)
                     and set(document) == {"status", "phase", "error", "code"}
@@ -108,7 +141,9 @@ def invoke(state, profile, config, expected):
                     failure["container_reason"] = terminated["reason"]
             print(canonical(failure).decode(), flush=True)
             raise Rejected("kube_serving_probe_job_failed")
-        report = decode(raw, 65536)
+        report = decode(raw.splitlines()[-1] if raw else raw, 65536)
+        if coordinator is not None and phases != ["ready", "denied"]:
+            raise Rejected("kube_serving_fault_not_exercised")
         if report.get("status") != "pass" or report.get("release_ready") is not False:
             raise Rejected("kube_serving_probe_report")
         return {**report, "elapsed_seconds": elapsed}
@@ -175,13 +210,15 @@ def qualify(root, state, image):
         after = ledger(state)
         print(canonical({"stage": "controlled-after-approval"}).decode(), flush=True)
         admitted = invoke(state, profile, config, expected)
-        trust_authority.update(
-            state,
-            promotion["expected_policy"],
-            fixture.trust_fixture.key,
-            revoked_artifacts=[model],
-            backend=kube_trust.binding,
-        )
+        lifecycle = {}
+        for fault in ("outage", "policy-change", "revocation"):
+            print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
+            with Coordinator(
+                state, fault, promotion["expected_policy"], fixture.trust_fixture.key, model
+            ) as coordinator:
+                lifecycle[fault] = invoke(
+                    state, profile, config, {**expected, "fault": fault}, coordinator=coordinator
+                )
         print(canonical({"stage": "controlled-after-revocation"}).decode(), flush=True)
         revoked = invoke(state, profile, config, {**expected, "ready": False})
         if (
@@ -207,6 +244,7 @@ def qualify(root, state, image):
             "before_approval": refused,
             "approved": admitted,
             "after_revocation": revoked,
+            "live_trust": lifecycle,
             "limitations": [
                 "Controlled approvals are not acceptance of the actual candidate",
                 "Full M11/M13/M14 and durable audit/recovery remain required",
