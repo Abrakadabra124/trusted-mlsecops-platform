@@ -1,6 +1,6 @@
 # Файлы ключей и проверки SQL при оптимизации Python
 
-Статус: исправления U01/U02 реализованы, Windows pure/mocked tests пройдены; Linux native validation ожидается. Полный внешний аудит не закрыт. U03 для общих файловых helpers остаётся отдельной незавершённой работой. Эти проверки не заменяют независимые ML challenge cases M22.
+Статус: [Linux canary, optimized SQL contracts и native serving/tracking пройдены](../evidence/unsafe-api-fixes-2026-10-29.md), `9362c04`, runs `40940461445` / `40940542906`. Полный внешний аудит не закрыт. U03 для общих файловых helpers остаётся отдельной незавершённой работой. Эти проверки не заменяют независимые ML challenge cases M22.
 
 ## Что обнаружено и изменено
 
@@ -49,6 +49,7 @@ Get-Acl -LiteralPath 'C:\absolute\owned\path\key.pem' | Format-List Owner,Access
 | `invalid_signing_key` после прерванного создания | Пустой/частичный файл остаётся отказом; повтор не генерирует новый ключ поверх него. Восстановление должно сохранять привязку к опубликованному trust root. |
 | `signing_key_file_unavailable` | Проверить отсутствие/права/доступность parent. Сообщение специально не содержит файловый путь или OS stderr. |
 | SQL probe `status=fail` | Сверить role/database/TLS, privilege flags и positive controls в закрытом окружении. Запуск с `-O` не должен превращать отказ в pass. |
+| `source_lock_mismatch_explicit_update_required` после изменения signing code | Сверить declared inputs с Git blobs и включить новую signing dependency. До явного обновления lock воспроизвести источник и сравнить output с прежним pin; изменение данных требует отдельного решения. Не пропускать верификацию и не переписывать lock автоматически в CI. |
 
 ## Плейбук восстановления
 
@@ -63,7 +64,7 @@ Get-Acl -LiteralPath 'C:\absolute\owned\path\key.pem' | Format-List Owner,Access
 Локально разрешены pure/mocked tests без Docker/WSL/SQL/Kubernetes:
 
 ```powershell
-uv run --locked python -m unittest scripts.key_files_qualification scripts.bootstrap_qualification scripts.tracking_sql_probe_qualification
+uv run --locked python -m unittest scripts.data_source_lock_qualification scripts.key_files_qualification scripts.bootstrap_qualification scripts.tracking_sql_probe_qualification
 ```
 
 В Windows три POSIX-only test methods будут явно skipped. Linux native canary запускается только внутри GitHub-hosted runner:

@@ -1,6 +1,6 @@
 # Два независимых отзыва на одном actual candidate
 
-Статус: реализация и локальные тесты, native verification pending. [Решение ADR 0051](../decisions/0051-independent-trust-qualification.md). Это qualification двух тестовых состояний, полный M11/R1 ещё не принят.
+Статус: [native bfe295b / 40936376995 подтверждён](../evidence/independent-authorities-2026-10-29.md). [Решение ADR 0051](../decisions/0051-independent-trust-qualification.md). Это qualification двух тестовых состояний, полный M11/R1 ещё не принят.
 
 ## Причина и границы
 
@@ -59,4 +59,4 @@ gh run view <RUN_ID> --repo Abrakadabra124/trusted-mlsecops-platform --json stat
 
 Run [40933488855](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40933488855), commit `3f52fcc`, завершился fail после controlled revocation и до actual HTTP matrix. Все 327 подготовительных Linux tests прошли; оба cleanup steps завершились success. Runtime сохранил только generic rejection, поэтому точная причина этого исторического отказа не доказана. Строка `probe_failure: unclassified` относится к unit fixture и не является runtime evidence.
 
-При разборе найден воспроизводимый дефект manifests: объединённый inventory требует по 3 Secret в двух reader namespaces при quota 2. Новый composition test до исправления даёт два отказа, после исправления сверяет полный inventory и точные limits. Это подтверждает дефект конфигурации, но не восстанавливает отсутствующий diagnostic исторического run. Добавлены отдельные stage markers для binding и bootstrap второй authority, без ключей, payloads или SQL в логах. Native результат исправления ещё ожидается.
+При разборе найден воспроизводимый дефект manifests: объединённый inventory требует по 3 Secret в двух reader namespaces при quota 2. Новый composition test до исправления даёт два отказа, после исправления сверяет полный inventory и точные limits. Это подтверждает дефект конфигурации, но не восстанавливает отсутствующий diagnostic исторического run. Добавлены отдельные stage markers для binding и bootstrap второй authority, без ключей, payloads или SQL в логах. Native run `40936376995` после исправления прошёл bootstrap и оба terminal revoke, проверены конечные состояния и cleanup; подробности в связанном evidence.

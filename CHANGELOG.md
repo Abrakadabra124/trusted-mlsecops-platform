@@ -1,5 +1,13 @@
 # История исследовательского проекта
 
+## R1 trust qualification и external audit fixes - 2026-10-29
+
+- [Проверены два необратимых отзыва](docs/evidence/independent-authorities-2026-10-29.md) на одном actual candidate/permit с независимыми CA/PVC/history и двумя final cold Jobs. Full M11/R1 открыт.
+- Исправлена квота Secret для двух reader namespaces: нужные 3 credentials теперь помещаются в закреплённый manifest. Совместимость существующего state требует отдельной миграции, silent rewrite ownership marker не допускается.
+- Signing files создаются с private mode до записи; существующий POSIX файл с широкими правами или чужим owner теперь отклоняется без автоматической смены identity. Добавлены descriptor checks и отказ special files. Linux native canary 6/6; Windows ACL и общий U03 не закрыты.
+- Security checks SQL probe больше не исчезают с Python optimization. Controlled tests охватывают optimize=0/1/2. [Ранбук восстановления и ограничения](docs/operations/signing-files-and-sql-probes.md).
+- Новый signing helper включён в data.lock после проверки неизменности synthetic output. Stale lock теперь отклоняется preflight до развёртывания инфраструктуры. [Evidence и отдельные статусы component/full run](docs/evidence/unsafe-api-fixes-2026-10-29.md).
+
 ## R1 bounded public audit export - 2026-10-19
 
 - Отдельный Linux reader закрытого private spool с exclusive lease, verified immutable bytes и без writer rotation/manifest rewrite.

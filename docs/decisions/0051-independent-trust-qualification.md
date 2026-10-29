@@ -1,6 +1,6 @@
 # ADR 0051: независимые authority states для terminal revoke qualification
 
-Дата: 2026-10-29. Статус: implementation in progress, native proof pending.
+Дата: 2026-10-29. Статус: реализовано; [native component proof bfe295b / 40936376995](../evidence/independent-authorities-2026-10-29.md) подтверждён. Полный M11/R1 открыт.
 
 ## Требование
 
