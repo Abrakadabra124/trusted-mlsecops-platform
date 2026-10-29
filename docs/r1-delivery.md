@@ -1,6 +1,6 @@
 # R1: границы и конечный маршрут поставки
 
-CP3/T13 update 2026-10-29: [isolated promotion Job](kubernetes-promotion.md) реализован с двумя client bundles и прежним verifier CLI, local 41 tests pass / driver 100% branches. Native actual refusal и separate controlled positive ещё требуют CI. Full M10, serving integration и CP3 не закрыты.
+CP3/T13 update 2026-10-29: [isolated promotion Job](kubernetes-promotion.md#native-результат-2026-10-29-мск), native `a5452ee`, [40797761104](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40797761104) success: 13 cases / 5 real CLI Jobs, actual assurance refusal/no-write, separate controlled positive/readback/retry/revocation, cleanup verified. Linux 41 tests / driver 100% branches. Full M10, normal serving configuration/worker transport и CP3 остаются открытыми.
 
 CP3/T13 update 2026-10-29: [Kubernetes authority](kubernetes-trust.md#native-результат-2026-10-29-мск), `eb1fc5c`, [40795449072](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40795449072) success: 79 native cases, separate SQL/TLS service, restricted readers, signed revocation, outage recovery и owned cleanup. Linux 39 tests pass. Следующий шаг - подключение promotion/serving entrypoints к этому профилю. Полные M10/M11/M12 и CP3 остаются открытыми; эта проверка не разрешает настоящий candidate.
 

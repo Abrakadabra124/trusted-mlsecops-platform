@@ -27,11 +27,37 @@ Operator config соответствует [CONFIG_FIELDS](../mlsecops/promotion
 
 ## Проверки и границы результата
 
-Локально прошли 41 test: 9 нового driver, 3 native harness и 29 существующих ledger/trust/controller. Driver: 131/131 statements, 40/40 branches. Native CI ещё требуется.
+Локально и затем в Linux CI прошли 41 test: 9 нового driver, 3 native harness и 29 существующих ledger/trust/controller. Driver: 131/131 statements, 40/40 branches. Native результат подтверждён ниже.
 
 Native campaign отдельно формирует настоящий candidate и доказывает отказ `release_assurance_required` исходным верификатором. Его неизменённые proposal/policy bytes переносит в cluster CAS, запускает обычный CLI в Job и проверяет отказ без записи admission objects. Положительный сценарий использует явно обозначенный controlled signed fixture: missing approval отказан, initial head=0, разрешённая запись head=1, независимый SQL readback, exact retry с тем же receipt и без новых объектов, отзыв модели и отказ повторного promotion. Контрольные all-pass reports не выдаются за actual candidate acceptance.
 
 Это соединение promotion CLI с изоляцией и authority. Оно не подтверждает штатный serving HTTP/ONNX в Kubernetes, полный M10/M11/M12/M13/M19, общий inventory или M18. [Все CP2-CP5](r1-delivery.md) сохраняются, включая system-image findings и независимые M22 challenges.
+
+## Native результат 2026-10-29 МСК
+
+[Run 40797761104](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40797761104), job `123198252561`, attempt 1, **success** на commit `a5452eebb1c60234996d646bda8d1588f1ec4d41`. Чистый checkout, `source_dirty=false`. Admission campaign: **04:03:32-04:05:14 МСК**. Пять настоящих Kubernetes Jobs выполняли прежний promotion CLI; каждый проверен по фактическому image/config, терминальному состоянию и owned cleanup.
+
+**13/13 integration cases pass:**
+
+| Проверка | Cases | Результат |
+|---|---:|---|
+| Настоящий candidate | 3 | Исходный verifier возвращает `release_assurance_required`; обычный CLI в изолированном Job отказывает по тем же staged proposal/policy references; CAS ledger не изменён после подачи |
+| Контрольный release | 9 | Initial head 0; отсутствующий approval отказан без записи; корректная запись даёт head 1 и `recorded-not-activated`; независимый SQL readback совпадает; exact retry возвращает тот же receipt без новых объектов/sequence; signed model revocation запрещает повтор без изменения ledger |
+| Source preservation | 1 | Исходный owned SQL container и source revision/fingerprint сохранены |
+
+Привязки:
+
+- Source fingerprint: `bddb0606ee2b535b95757e747459b9680511d7c16800375fe654343b204d3724`.
+- Actual candidate: `7ead97623164afdcb10160956bac6eff13f9eb6b1b860278e649d39de905139f`.
+- Actual proposal: `47f01ba582d9f330805823276afcd601f75c4c4be7ea8134298f9f19d151c29d`.
+- Actual model: `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`.
+- Worker config/image ID: `sha256:324cd9e21d4d199324f5b10911adc1d63711e5b1c7ab735757447c19edaf63e1`.
+- Controlled model: `6e4e5e65497470e5fe72af895107f291245c1bfc70070378cf3cdf95d2058169`.
+- Controlled request: `2ba4bb753d9d92f782c00a38267aeaae3727ff564230a9d29392c9f34788badc`.
+
+После campaign отдельные cleanup steps подтвердили остановку owned source SQL (`State.Running=false`), удаление owned cluster и отсутствие его имени в `kind get clusters`. Linux CI: 32 adjacent/harness tests + 9 driver tests pass, driver coverage 100% statements/branches. Положительный controlled result не присвоен actual candidate; `full_M10=inconclusive`, `release_ready=false`.
+
+Следующая обязательная интеграция - обычный serving configuration path и transport его постоянного изолированного ONNX worker. В текущем коде `serving_runtime.Worker` использует Docker stdin/stdout, поэтому запуск HTTP-контроллера внутри restricted Kubernetes Pod требует отдельного подходящего transport; Docker socket/hostPath для обхода ограничения не добавлялись. Это ещё не работающий Kubernetes serving и не завершённый CP3.
 
 ## Ранбук: отказ, неизвестный commit или cleanup
 
