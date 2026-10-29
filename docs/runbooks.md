@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Approval expiry: HTTP trace, cold refusal, expired retry и явный release sequence 2](approval-expiry.md). Native проверка ещё требуется; ledger не сбрасывается.
+- [Approval expiry: HTTP trace, cold refusal, expired retry и явный release sequence 2](approval-expiry.md). Native `9485893` verified: отказ до expiry, expired retry без ledger writes и recovery CLI. Полный M11 ещё не закрыт.
 - [Trust blackhole: TCP timeout, исходный lease deadline, UID-bound cleanup и восстановление](trust-blackhole.md). Native `b5a933e` verified: первый HTTP 503 за 13.149598977 s, TCP recovery без auto-reactivation; обязательный компонент M11, не весь gate. Причина intermittent worker startup stderr остаётся открытой.
 
 - [M12 candidate inference: подпись, input contract, startup/attach, timestamps и cleanup](candidate-inference-contract.md#runbook-отказа). [Native 180 cases pass](evidence/m12-inference-2026-10-29.md); прежний intermittent load failure не объявлен исправленным. Разбирать только фиксированные diagnostic codes, не публиковать raw stderr и не отключать verification ради ready.

@@ -1,6 +1,6 @@
 # M11: истечение approval и явное восстановление
 
-Реализован hosted сценарий, native результат ещё не подтверждён. Это controlled release, отдельно от actual candidate, которому по-прежнему требуется полная assurance. Production verifier, часы и пороги не меняются.
+Hosted сценарий подтверждён на `9485893` / [40824901925](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40824901925): 68 HTTP observations, первый полный 503 за 0.994447708 s до expiry, cold Reader refusal, rejected expired promotion retry без ledger writes и явное восстановление sequence 2 с работающим CLI. [Evidence и trace](evidence/approval-expiry-2026-10-29.md). Это controlled release, отдельно от actual candidate, которому по-прежнему требуется полная assurance. Production verifier, часы и пороги не меняются. Полный M11/CP3/R1 остаётся открыт.
 
 ## Последовательность
 
