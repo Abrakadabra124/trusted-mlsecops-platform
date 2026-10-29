@@ -103,6 +103,8 @@ def qualify(config, expected, progress=None):
         token_path.chmod(0o600)
         config = copy.deepcopy(config)
         config.update(token_file=str(token_path), audit_directory=str(directory / "audit"))
+        # Journal deliberately requires an existing, owned private directory.
+        (directory / "audit").mkdir(mode=0o700)
         config_path = directory / "config.json"
         write_json(config_path, config)
         output = directory / "service-output"

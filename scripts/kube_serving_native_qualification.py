@@ -13,6 +13,63 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeContracts(unittest.TestCase):
+    def test_refusal_probe_prepares_private_audit_before_ordinary_cli_start(self):
+        from unittest.mock import Mock
+
+        from mlsecops.contracts import read_json
+        from mlsecops.controller_api import APIError
+
+        api = Mock()
+
+        def api_request(resource, *args, **kwargs):
+            if kwargs.get("method") == "POST":
+                raise APIError(403, "Forbidden")
+            return {"items": []}
+
+        api.request.side_effect = api_request
+        api.exchange.side_effect = APIError(403, "Forbidden")
+        process = Mock(returncode=0)
+        process.poll.return_value = None
+        connection = Mock()
+        pending = []
+        connection.request.side_effect = lambda method, path, **kwargs: pending.append(path)
+
+        def response():
+            path = pending.pop(0)
+            return Mock(
+                status=200 if path == "/livez" else 503,
+                read=lambda n: canonical({"status": "controlled"}),
+            )
+
+        connection.getresponse.side_effect = response
+        temporary = tempfile.TemporaryDirectory
+
+        def launch(args, **kwargs):
+            config = read_json(Path(args[-1]))
+            audit = Path(config["audit_directory"])
+            self.assertTrue(audit.is_dir(), "audit directory must preexist before CLI starts")
+            return process
+
+        def stop(process):
+            process.poll.return_value = 0
+
+        with (
+            patch.object(kube_serving_probe, "Client", return_value=api),
+            patch.object(
+                kube_serving_probe.tempfile,
+                "TemporaryDirectory",
+                side_effect=lambda **kwargs: temporary(prefix="serving-probe-test-"),
+            ),
+            patch.object(kube_serving_probe.subprocess, "Popen", side_effect=launch),
+            patch.object(kube_serving_probe.http.client, "HTTPConnection", return_value=connection),
+            patch.object(kube_serving_probe, "stop", side_effect=stop),
+        ):
+            result = kube_serving_probe.qualify(
+                {"kubernetes_worker": PROFILE}, {"ready": False, "features": [[0.5] * 6]}
+            )
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("refused-before-worker-start", result["cases"])
+
     def test_owned_sigterm_is_accepted_only_after_process_wait(self):
         import signal
         from unittest.mock import Mock
