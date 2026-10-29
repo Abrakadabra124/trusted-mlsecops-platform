@@ -1,5 +1,6 @@
 import copy
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -25,6 +26,10 @@ class LifecycleContracts(unittest.TestCase):
             if fail_signal:
                 raise Rejected("coordinator_failed")
             phase[0] = name
+
+        def cold_denial():
+            self.assertEqual(phase[0], "ready", "cold read must precede authority restoration")
+            checks.append("cold-read-before-restoration")
 
         def request(path, body=None):
             if phase[0] == "denied" and resurrect:
@@ -66,7 +71,9 @@ class LifecycleContracts(unittest.TestCase):
             patch.object(lifecycle.signal, "SIGSTOP", 19, create=True),
             patch.object(lifecycle.signal, "SIGCONT", 18, create=True),
         ):
-            result = lifecycle.exercise(process, request, b"{}", expected, check)
+            result = lifecycle.exercise(
+                process, request, b"{}", expected, check, on_denied=cold_denial
+            )
         return result, process, checks
 
     def test_outage_bounds_client_completed_503_from_lower_bound_and_stays_fenced(self):
@@ -74,6 +81,7 @@ class LifecycleContracts(unittest.TestCase):
         self.assertLessEqual(result["first_503_seconds"], 60)
         self.assertGreater(result["observations"], 3)
         self.assertIn("no-automatic-reactivation", checks)
+        self.assertEqual(checks.count("cold-read-before-restoration"), 1)
         self.assertEqual(process.send_signal.call_count, 2)
 
     def test_live_policy_change_and_revocation_are_not_cached_or_auto_restored(self):
@@ -135,6 +143,36 @@ class LifecycleContracts(unittest.TestCase):
                 process, lambda *args: (200, {}), b"{}", {"fault": "outage"}, lambda *args: None
             )
         self.assertEqual([c.args[0] for c in process.send_signal.call_args_list], [19, 18])
+
+    def test_candidate_pause_holds_real_engine_lock_and_releases_on_coordinator_error(self):
+        from mlsecops.serving import Engine
+
+        engine = Engine(Mock())
+        process = Mock()
+        observed = []
+
+        def checkpoint(*args):
+            contender = threading.Thread(target=lambda: observed.append(engine.lock.acquire(False)))
+            contender.start()
+            contender.join(timeout=1)
+            self.assertEqual(observed, [False])
+            raise Rejected("coordinator_failed")
+
+        with (
+            patch.object(lifecycle, "checkpoint", side_effect=checkpoint),
+            patch.object(lifecycle, "valid", return_value=True),
+            self.assertRaisesRegex(Rejected, "coordinator_failed"),
+        ):
+            lifecycle.exercise(
+                process,
+                lambda *args: (200, {}),
+                b"{}",
+                {"fault": "outage"},
+                lambda *args: None,
+                pause=engine.exclusive,
+            )
+        self.assertFalse(engine.lock.locked())
+        process.send_signal.assert_not_called()
 
     def test_checkpoint_accepts_only_exact_ack_and_has_bounded_wait(self):
         import io

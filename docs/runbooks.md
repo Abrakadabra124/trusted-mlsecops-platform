@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Actual candidate: outage, blackhole, policy change и восстановление](candidate-trust-lifecycle.md). Реализация и локальные tests подготовлены; native результат ожидается.
+
 - [Импорт CPU runtime: известное PCI warning, bounded capture, отказ и восстановление](operations/runtime-bootstrap.md). Native 801a9ed / 40905790753 success, 14 Linux tests и весь configured-serving сценарий.
 
 - [Действующий предыдущий sequence: отказ откату и идемпотентный retry текущего](promotion-replay.md). Native 801a9ed / 40905790753: exact sequence refusal, unchanged journal, current retry и working serving; полный M11 открыт.

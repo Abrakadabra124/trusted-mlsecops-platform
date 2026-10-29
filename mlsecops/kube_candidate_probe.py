@@ -258,7 +258,7 @@ def qualify(config, expected):
         check("qualification-audit-context", engine.audit_context.kind, "candidate-qualification")
         if "fault" in expected:
             lifecycle = kube_candidate_trust.exercise(
-                lambda: candidate(config), request, body, expected, check
+                lambda: candidate(config), request, body, expected, check, pause=engine.exclusive
             )
         else:
             worker = workers[0]

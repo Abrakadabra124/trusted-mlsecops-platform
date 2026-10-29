@@ -184,7 +184,14 @@ def prepare(root, state, image):
 
 
 def qualify(
-    root, state, image, *, include_candidate=False, prepared=None, include_key_revocation=False
+    root,
+    state,
+    image,
+    *,
+    include_candidate=False,
+    prepared=None,
+    include_key_revocation=False,
+    include_trust_lifecycle=False,
 ):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
@@ -302,7 +309,7 @@ def qualify(
         ):
             raise Rejected("kube_serving_source_or_ledger_changed")
         candidate_result = None
-        if include_candidate or include_key_revocation:
+        if include_candidate or include_key_revocation or include_trust_lifecycle:
             from scripts.kube_candidate_native import qualify as candidate_qualify
 
             candidate_result = candidate_qualify(
@@ -312,6 +319,7 @@ def qualify(
                 prepared=(profile, actual_result),
                 qualification_key=fixture.trust_fixture.key,
                 include_key_revocation=include_key_revocation,
+                include_trust_lifecycle=include_trust_lifecycle,
             )
         return {
             "schema_version": 1,
@@ -374,6 +382,7 @@ def main(arguments=None):
             options.state,
             options.image,
             include_key_revocation=True,
+            include_trust_lifecycle=True,
         )
         write_json(output, report)
         print(canonical(report).decode())

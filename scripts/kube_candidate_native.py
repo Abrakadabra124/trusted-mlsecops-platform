@@ -34,15 +34,22 @@ from mlsecops.kube_worker import run_worker
 from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.private_cli import Arguments
 from scripts.candidate_serving_reader import bind_proposal
+from scripts.kube_candidate_faults import NONTERMINAL
+from scripts.kube_candidate_faults import exercise as exercise_faults
 from scripts.kube_promotion_native import actual
-from scripts.kube_promotion_snapshot import read as promotion_snapshot
-from scripts.kube_serving_faults import Coordinator
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
 
 
 def qualify(
-    root, state, image, *, prepared=None, qualification_key=None, include_key_revocation=False
+    root,
+    state,
+    image,
+    *,
+    prepared=None,
+    qualification_key=None,
+    include_key_revocation=False,
+    include_trust_lifecycle=False,
 ):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
@@ -154,29 +161,28 @@ def qualify(
     before = ledger(state)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     result = invoke(state, profile, config, expected, candidate_probe=True)
-    key_result = None
+    revoked_key = digest(signing.decode64(public))
+    faults = NONTERMINAL if include_trust_lifecycle else ()
     if include_key_revocation:
-        journal_before = promotion_snapshot(state)
-        revoked_key = digest(signing.decode64(public))
-        print(canonical({"stage": "actual-candidate-key-revocation"}).decode(), flush=True)
-        with Coordinator(
-            state, "key-revocation", permit_hash, key, refusal["model"], revoked_key=revoked_key
-        ) as coordinator:
-            key_result = invoke(
-                state,
-                profile,
-                config,
-                {**expected, "fault": "key-revocation"},
-                coordinator=coordinator,
-                candidate_probe=True,
-            )
-        if (
-            key_result["model_sha256"] != refusal["model"]
-            or key_result["subject_sha256"] != verified["subject_sha256"]
-            or promotion_snapshot(state) != journal_before
-        ):
-            raise Rejected("candidate_key_revocation_binding_changed")
-        write_json(destination / "key-revocation.json", key_result)
+        faults += ("key-revocation",)
+    fault_results = (
+        exercise_faults(
+            state,
+            profile,
+            config,
+            expected,
+            key=key,
+            policy=permit_hash,
+            revoked_key=revoked_key,
+            faults=faults,
+            expires_at=permit["expires_at"],
+        )
+        if faults
+        else {}
+    )
+    key_result = fault_results.get("key-revocation", {}).get("probe")
+    for fault, value in fault_results.items():
+        write_json(destination / (fault + ".json"), value["probe"])
     if (
         ledger(state) != before
         or source_fingerprint(root) != fingerprint
@@ -204,11 +210,16 @@ def qualify(
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
+        "trust_lifecycle": {
+            name: value for name, value in fault_results.items() if name in NONTERMINAL
+        },
         **(
             {
                 "key_revocation": key_result,
                 "revoked_key_sha256": revoked_key,
-                "key_revocation_snapshot_sha256": digest(canonical(journal_before)),
+                "key_revocation_snapshot_sha256": fault_results["key-revocation"][
+                    "snapshot_sha256"
+                ],
             }
             if key_result is not None
             else {}
@@ -220,7 +231,7 @@ def qualify(
                 "config.json",
                 "request.json",
                 "probe.json",
-                *(["key-revocation.json"] if key_result is not None else []),
+                *(name + ".json" for name in fault_results),
             )
         },
         "limitations": [

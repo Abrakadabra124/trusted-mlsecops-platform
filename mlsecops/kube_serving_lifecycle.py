@@ -4,6 +4,7 @@ import math
 import signal
 import socket
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 from mlsecops.contracts import Rejected, canonical, read_json
@@ -89,7 +90,7 @@ def valid(status, reply, expected):
     )
 
 
-def exercise(process, request, body, expected, check):
+def exercise(process, request, body, expected, check, *, pause=None, on_denied=lambda: None):
     fault = expected["fault"]
     check("trust-fault-kind", fault in FAULTS)
     # Resolve before injection; DNS remains outside the targeted drop rule.
@@ -99,17 +100,18 @@ def exercise(process, request, body, expected, check):
     anchor_wall, anchor = time.time(), time.monotonic()
     status, reply = request("/v1/predict", body)
     check("trust-fault-initial-prediction", status == 200 and valid(status, reply, expected))
-    # Freeze only the owned HTTP child during outage injection, so its heartbeat
-    # cannot renew the lease while the external operator stops the authority.
-    if fault in {"outage", "blackhole"}:
-        process.send_signal(signal.SIGSTOP)
-    try:
+    # Quiesce refresh during fault injection: owned child signal by default,
+    # or the actual candidate Engine lock when HTTP runs in this process.
+    with ExitStack() as suspended:
+        if fault in {"outage", "blackhole"}:
+            if pause is None:
+                process.send_signal(signal.SIGSTOP)
+                suspended.callback(process.send_signal, signal.SIGCONT)
+            else:
+                suspended.enter_context(pause())
         checkpoint("ready", fault)
         if fault == "blackhole":
             check("trust-blackhole-TCP-blocked", tcp_state(address, blocked=True))
-    finally:
-        if fault in {"outage", "blackhole"}:
-            process.send_signal(signal.SIGCONT)
     records, first_denial, successes, denials = [], None, 0, 0
     previous = anchor
     while len(records) < 512 and time.monotonic() < anchor + 65:
@@ -141,6 +143,7 @@ def exercise(process, request, body, expected, check):
         time.sleep(2 if remaining > 2.1 else 0.05)
     check("trust-fault-complete-trace", denials >= 2 and (fault != "outage" or successes > 0))
     check("trust-fault-readiness-503", request("/readyz")[0] == 503)
+    on_denied()
     checkpoint("denied", fault)
     if fault == "blackhole":
         check("trust-blackhole-TCP-restored", tcp_state(address, blocked=False))
