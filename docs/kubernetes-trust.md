@@ -37,7 +37,31 @@ Native campaign проверяет повтор bootstrap/install/publication, �
 
 ## Статус проверки
 
-Локально: 10 deployment tests, 4 reader-probe tests, 5 native-harness tests и 20 существующих authority/promotion-controller tests pass. Deployment: 132/132 statements, 42/42 branches; probe: 73/73 statements, 24/24 branches. Native CI на чистом checkout ещё требуется. Это компонентная проверка, не M10/M11/M18 acceptance.
+Локально и затем в Linux CI: 10 deployment tests, 4 reader-probe tests, 5 native-harness tests и 20 существующих authority/promotion-controller tests pass. Deployment: 132/132 statements, 42/42 branches; локально probe: 73/73 statements, 24/24 branches. Дополнительно локально прошли 6 существующих cluster-command/storage-egress regression tests. Это компонентная проверка, не M10/M11/M18 acceptance.
+
+## Native результат 2026-10-29 МСК
+
+[Run 40795449072](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40795449072), job `123190708317`, attempt 1, **success**, commit `eb1fc5ccd1c78b8e314370894d4b16736e71f882`. Clean checkout, `source_dirty=false`. Проверка authority выполнялась с **03:41:08 до 03:43:02 МСК**. Последующий шаг удаления owned cluster и проверка его отсутствия завершились success.
+
+Все **79 cases pass**:
+
+| Участок | Количество | Подтверждённый результат |
+|---|---:|---|
+| Bootstrap, независимые CA, migration, exact publication retry | 4 | Повтор сохраняет объект/том; model и trust CA различны; повтор документа идемпотентен |
+| Promoter v1, serving v1, serving v2, promoter v2 после восстановления | 64 | По 16 проверок: настоящие SQL/TLS identity, подписанная policy/version/revocations, отсутствие запрещённых mounts, запреты записи/owner/superuser/model CAS, неправильного hostname/certificate и plaintext; policy неизменна после negatives |
+| Trainer, evaluator, publisher, scorer, ingestor, curator | 6 | Каждый реальный Job получил network timeout к trust Service, при работающих разрешённых readers |
+| Подписанный отзыв | 1 | Наблюдается version 2 с точным revocation set |
+| Outage и восстановление | 2 | Reader наблюдает `trust.Unavailable` при остановленной authority; затем подтверждён тот же PV и чтение version 2 |
+| Model storage и исходники | 2 | Ledger моделей и Git/source fingerprint не изменились |
+
+Привязки native результата:
+
+- Source fingerprint: `f13738ec64eb883642e8c8a2caecabe208252f3c9363235e773f98d9b25b6d19`.
+- Worker config/image ID: `sha256:6b5e91dd89e8cd8562d2d0580a4aaf6b26a6d1f6913c17f0fe1a02dc44aebcf0`.
+- Worker manifest: `sha256:03cd69af1d3155cef9eb0cedaa60f4bf386ff2171a0a2b65884c6e198cb97ce5`. Это импорт в disposable kind, не отдельная публикация worker в registry.
+- PostgreSQL: `ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres@sha256:bd279118884568f35de40901ee9438f17af7c2e75a0623be89b36bbd69b68fe5`.
+
+Проверяется отдельная controlled trust policy, а не настоящий approved candidate. `full_M10=inconclusive`, `full_M11=inconclusive`, `release_ready=false`. Следующий обязательный участок - монтирование двух раздельных client bundles в scoped promotion Job и подключение обычного serving configuration path. Полный inventory нового runtime на общем candidate, system-image findings, M22 independent challenges и CP3-CP5 сохраняются. Зелёный workflow не устраняет эти блокеры.
 
 ## Ранбук: authority не запускается или не читается
 
