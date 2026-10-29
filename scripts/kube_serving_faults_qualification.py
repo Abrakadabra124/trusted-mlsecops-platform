@@ -6,6 +6,10 @@ from scripts import kube_serving_faults as faults
 
 
 class FaultContracts(unittest.TestCase):
+    def test_rotation_requires_its_explicit_coordinator_not_generic_revoke(self):
+        with self.assertRaisesRegex(Rejected, "serving_fault_kind"):
+            faults.Coordinator("state", "root-rotation", "a" * 64, "key", "b" * 64)
+
     def test_key_revocation_requires_explicit_key_and_never_unrevokes_it(self):
         with patch.object(faults.trust_authority, "update") as update:
             with faults.Coordinator(

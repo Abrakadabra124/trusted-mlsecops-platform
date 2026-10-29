@@ -18,6 +18,81 @@ from scripts import kube_candidate_native as native
 
 
 class CandidateInferenceContracts(unittest.TestCase):
+    def test_root_recovery_uses_explicit_new_pin_same_permit_and_fresh_engine(self):
+        config = {
+            "trust_root": encode64(b"r" * 32),
+            "permit_public": encode64(b"p" * 32),
+            "permit_envelope": {"fixed": True},
+            "expected_permit": "a" * 64,
+            "minimum_trust_version": 2,
+        }
+        recovery = {"trust_root": encode64(b"n" * 32), "minimum_trust_version": 3}
+        expected = {"fault": "root-rotation", "root_recovery": recovery}
+        client, engine, check = Mock(), Mock(), Mock()
+        engine.reader.permit = config["permit_envelope"]
+        engine.loaded.permit_sha256 = config["expected_permit"]
+        client.request.return_value = {"items": []}
+        with (
+            patch.object(probe, "candidate") as reader,
+            patch.object(probe.serving, "Engine", return_value=engine),
+            patch.object(probe, "site", return_value=nullcontext(Mock())),
+            patch.object(probe, "matrix", return_value=({}, 0.0)) as matrix,
+        ):
+            result = probe.root_matrix(config, expected, check, client, Mock())
+            self.assertEqual(reader.call_args.args[0], {**config, **recovery})
+            self.assertIs(matrix.call_args.args[1], engine)
+            matrix.call_args.args[-1]("golden-status", 200, 200)
+            check.assert_any_call("root-recovery-golden-status", 200, 200)
+            check.assert_any_call("root-recovery-permit-payload", "a" * 64, "a" * 64)
+            self.assertEqual(result, {**recovery, "max_golden_error": 0.0})
+            self.assertEqual(config["minimum_trust_version"], 2)
+
+    def test_root_recovery_rejects_implicit_pin_permit_key_and_version_rollback(self):
+        config = {
+            "trust_root": encode64(b"r" * 32),
+            "permit_public": encode64(b"p" * 32),
+            "minimum_trust_version": 2,
+        }
+        valid = {"trust_root": encode64(b"n" * 32), "minimum_trust_version": 3}
+        with patch.object(probe.serving, "Engine") as construct:
+            self.assertIsNone(probe.root_matrix(config, {}, Mock(), Mock(), Mock()))
+            for recovery in (
+                None,
+                {},
+                {**valid, "extra": 1},
+                {**valid, "trust_root": config["trust_root"]},
+                {**valid, "trust_root": config["permit_public"]},
+                {**valid, "minimum_trust_version": 2},
+                {**valid, "minimum_trust_version": True},
+            ):
+                with self.subTest(recovery=recovery), self.assertRaises(Rejected):
+                    probe.root_matrix(
+                        config,
+                        {"fault": "root-rotation", "root_recovery": recovery},
+                        Mock(),
+                        Mock(),
+                        Mock(),
+                    )
+            construct.assert_not_called()
+
+    def test_explicit_root_and_floor_are_not_inferred_from_permit(self):
+        config = {
+            "context": {"policy": {"environment": "lab"}},
+            "permit_public": encode64(b"p" * 32),
+            "trust_root": encode64(b"r" * 32),
+            "minimum_trust_version": 9,
+            "kubernetes_worker": {},
+        }
+        with patch.object(probe, "CandidateReader") as reader:
+            probe.candidate(config)
+            options = reader.call_args.kwargs
+            self.assertEqual(options["trust_lease"].root, config["trust_root"])
+            self.assertEqual(options["trust_lease"].floor, 9)
+            self.assertEqual(options["trust_root_public"], config["trust_root"])
+            self.assertEqual(options["permit_public"], config["permit_public"])
+            self.assertNotIn("trust_root", options)
+            self.assertNotIn("minimum_trust_version", options)
+
     def test_candidate_reader_pins_selected_authority_without_forwarding_selector(self):
         for target in probe.Target:
             config = {

@@ -20,13 +20,15 @@ from mlsecops import (
     kube_candidate_replay,
     kube_candidate_trust,
     kube_trust_isolation,
+    release_policy,
     serving,
     serving_http,
     trust,
     trust_authority,
+    trust_rotation,
 )
 from mlsecops.candidate_serving_reader import CandidateReader
-from mlsecops.contracts import Rejected, canonical, decode, digest, read_json
+from mlsecops.contracts import Rejected, canonical, decode, digest, read_json, require_fields
 from mlsecops.controller_api import Client
 from mlsecops.controller_worker import remove
 from mlsecops.datasets import FEATURES
@@ -39,22 +41,24 @@ from mlsecops.trust_targets import Target, select
 def candidate(config):
     target = select(config.get("trust_target", Target.PRIMARY.value))
     environment = config["context"]["policy"]["environment"]
-    public = config["permit_public"]
+    public = config.get("trust_root", config["permit_public"])
     lease = trust.Lease(
         lambda: trust_authority.read(
             "/trust-client", environment, public, expected_host=target.host
         ),
         trusted_root=public,
         environment=environment,
-        minimum_version=1,
+        minimum_version=config.get("minimum_trust_version", 1),
     )
     return CandidateReader(
         "/client",
         trust_lease=lease,
+        trust_root_public=public,
         **{
             key: value
             for key, value in config.items()
-            if key not in ("kubernetes_worker", "trust_target")
+            if key
+            not in ("kubernetes_worker", "trust_target", "trust_root", "minimum_trust_version")
         },
     )
 
@@ -247,6 +251,39 @@ def replay_matrix(config, expected, body, saved, check, client, factory):
     return {**report, "recovery_max_golden_error": error}
 
 
+def root_matrix(config, expected, check, client, factory):
+    if expected.get("fault") != "root-rotation":
+        return None
+    recovery = expected.get("root_recovery")
+    require_fields(recovery, ("trust_root", "minimum_trust_version"))
+    trust_rotation.key_id(recovery["trust_root"])
+    release_policy.integer(recovery["minimum_trust_version"])
+    if recovery["trust_root"] in (
+        config.get("trust_root", config["permit_public"]),
+        config["permit_public"],
+    ) or recovery["minimum_trust_version"] <= config.get("minimum_trust_version", 1):
+        raise Rejected("candidate_root_recovery_binding")
+    check("root-recovery-worker-absence", len(client.request("pods")["items"]), 0)
+    engine = serving.Engine(candidate({**config, **recovery}), worker_factory=factory)
+    with site(engine) as request:
+        _, error = matrix(
+            request,
+            engine,
+            expected,
+            lambda label, actual, wanted: check("root-recovery-" + label, actual, wanted),
+        )
+        check(
+            "root-recovery-permit-payload", engine.loaded.permit_sha256, config["expected_permit"]
+        )
+        check(
+            "root-recovery-permit-envelope",
+            digest(canonical(engine.reader.permit)),
+            digest(canonical(config["permit_envelope"])),
+        )
+    check("root-recovery-worker-cleanup", len(client.request("pods")["items"]), 0)
+    return {**recovery, "max_golden_error": error}
+
+
 def qualify(config, expected):
     cases = []
 
@@ -361,6 +398,14 @@ def qualify(config, expected):
         check("one-persistent-worker", len(workers), 1)
         check("actual-candidate-not-release", engine.loaded.release_ready, False)
         check("qualification-audit-context", engine.audit_context.kind, "candidate-qualification")
+        check(
+            "qualification-permit-payload", engine.loaded.permit_sha256, config["expected_permit"]
+        )
+        check(
+            "qualification-permit-envelope",
+            digest(canonical(engine.reader.permit)),
+            digest(canonical(config["permit_envelope"])),
+        )
         if "fault" in expected:
             if expected["fault"] == "policy-change":
                 with engine.exclusive():
@@ -378,6 +423,7 @@ def qualify(config, expected):
             check("stopped-worker-503", request("/v1/predict", body)[0], 503)
             check("stopped-worker-not-ready", request("/readyz")[0], 503)
     replay = replay_matrix(config, expected, body, saved, check, client, factory)
+    root_recovery = root_matrix(config, expected, check, client, factory)
     check("final-worker-absence", len(client.request("pods")["items"]), 0)
     return {
         "status": "pass",
@@ -391,6 +437,7 @@ def qualify(config, expected):
         **({"clock_cache": clocks} if clocks else {}),
         **({"version_replay": replay} if replay is not None else {}),
         **({"lifecycle": lifecycle} if lifecycle is not None else {}),
+        **({"root_recovery": root_recovery} if root_recovery is not None else {}),
     }
 
 

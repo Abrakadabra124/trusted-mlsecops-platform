@@ -11,7 +11,7 @@ from mlsecops.contracts import Rejected, canonical, read_json
 from mlsecops.storage_pki import TRUST_HOST
 
 DIRECTORY = Path("/tmp")
-FAULTS = {"outage", "blackhole", "policy-change", "revocation", "key-revocation"}
+FAULTS = {"outage", "blackhole", "policy-change", "revocation", "key-revocation", "root-rotation"}
 CHECKS = {
     "trust-fault-kind",
     "trust-fault-initial-prediction",

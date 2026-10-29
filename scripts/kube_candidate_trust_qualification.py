@@ -7,6 +7,31 @@ from mlsecops.contracts import Rejected
 
 
 class CandidateTrustContracts(unittest.TestCase):
+    def test_root_change_requires_exact_cold_refusal_and_never_restores_old_root(self):
+        for cause in ("trust_authority_missing_or_foreign", "trust_key_revoked", None):
+            reader = Mock()
+            if cause:
+                reader.load.side_effect = Rejected(cause)
+
+            def check(label, actual, expected):
+                if type(actual) is not type(expected) or actual != expected:
+                    raise Rejected(label)
+
+            with patch.object(probe.lifecycle, "exercise", return_value={"fault": "root-rotation"}):
+                if cause == "trust_authority_missing_or_foreign":
+                    self.assertEqual(
+                        probe.exercise(
+                            lambda: reader, Mock(), {}, {"fault": "root-rotation"}, check
+                        ),
+                        {"fault": "root-rotation"},
+                    )
+                    reader.load.assert_called_once()
+                else:
+                    with self.assertRaises(Rejected):
+                        probe.exercise(
+                            lambda: reader, Mock(), {}, {"fault": "root-rotation"}, check
+                        )
+
     def test_actual_model_revoke_requires_exact_artifact_denial(self):
         def check(label, actual, expected):
             if type(actual) is not type(expected) or actual != expected:

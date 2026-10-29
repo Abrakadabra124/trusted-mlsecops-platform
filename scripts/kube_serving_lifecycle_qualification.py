@@ -85,7 +85,7 @@ class LifecycleContracts(unittest.TestCase):
         self.assertEqual(process.send_signal.call_count, 2)
 
     def test_live_policy_change_and_revocation_are_not_cached_or_auto_restored(self):
-        for fault in ["policy-change", "revocation"]:
+        for fault in ["policy-change", "revocation", "root-rotation"]:
             with self.subTest(fault=fault):
                 result, process, checks = self.exercise(fault)
                 self.assertLess(result["first_503_seconds"], 60)

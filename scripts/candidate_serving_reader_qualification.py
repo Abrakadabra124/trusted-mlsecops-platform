@@ -128,6 +128,31 @@ class CandidateReaderContracts(unittest.TestCase):
         with self.assertRaises(Rejected):
             reader.check(loaded)
 
+    def test_explicit_authority_rotation_preserves_permit_but_not_retired_root(self):
+        root_key = self.key.with_name("authority.pem")
+        root_public = signing.create_key(root_key)
+        lease = trust.Lease(
+            lambda: (signing.sign(self.policy, "trust-policy", root_key), int(self.wall)),
+            trusted_root=root_public,
+            environment="local-cpu",
+            minimum_version=1,
+            wall_clock=lambda: self.wall,
+            monotonic_clock=lambda: self.monotonic,
+        )
+        loaded = self.reader(trust_lease=lease, trust_root_public=root_public).load()
+        self.assertEqual(loaded.permit_sha256, digest(canonical(self.permit)))
+        self.assertEqual(loaded.model, self.verified["model"])
+        self.assertFalse(loaded.release_ready)
+        # A different pinned root never exempts the unchanged permit signer from revocation.
+        self.policy["revoked_keys"] = [digest(signing.decode64(self.public))]
+        self.policy["version"] += 1
+        with self.assertRaisesRegex(Rejected, "trust_key_revoked"):
+            self.reader(trust_lease=lease, trust_root_public=root_public).load()
+        with self.assertRaisesRegex(Rejected, "qualification_trust_binding"):
+            self.reader(trust_lease=lease)
+        with self.assertRaisesRegex(Rejected, "qualification_trust_binding"):
+            self.reader(trust_lease=lease, trust_root_public=self.public)
+
     def test_private_trace_matches_primary_sources_without_inventing_release_approval(self):
         context = self.bundle.materials.context
         objects = self.package["capsule"]["objects"]

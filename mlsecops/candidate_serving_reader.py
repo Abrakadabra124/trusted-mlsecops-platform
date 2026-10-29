@@ -56,6 +56,7 @@ class CandidateReader:
         expected_permit,
         expected_campaign,
         trust_lease,
+        trust_root_public=None,
     ):
         self.client = client
         self.context = copy.deepcopy(context)
@@ -82,7 +83,7 @@ class CandidateReader:
         self.campaign = expected_campaign
         if (
             trust_lease is None
-            or trust_lease.root != self.public
+            or trust_lease.root != (self.public if trust_root_public is None else trust_root_public)
             or trust_lease.environment != self.environment
         ):
             raise Rejected("qualification_trust_binding")

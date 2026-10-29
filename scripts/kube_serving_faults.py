@@ -62,7 +62,7 @@ class Coordinator:
             if self.target is Target.PRIMARY
             else partial(kube_trust.binding, target=self.target)
         )
-        if fault not in FAULTS:
+        if fault not in FAULTS - {"root-rotation"}:
             raise Rejected("serving_fault_kind")
         self.state, self.fault, self.policy, self.key, self.model = state, fault, policy, key, model
         self.revoked_key = object_id(revoked_key) if fault == "key-revocation" else None
