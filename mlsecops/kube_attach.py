@@ -97,6 +97,7 @@ def stderr_code(connection, frame, deadline):
                 b"GPU device discovery failed",
                 b"NPU device discovery failed",
                 b"Failed to detect devices under",
+                b"Skipping pci_bus_id for PCI path at",
             )
         ):
             return "serving_attach_ort_device_warning"

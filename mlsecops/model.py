@@ -129,6 +129,9 @@ def inspect_model(content):
 def session(content):
     scan = inspect_model(content)
     try:
+        # Provider discovery uses the global logger before session options apply.
+        # Keep errors/fatal diagnostics; CPU discovery warnings are not model output.
+        ort.set_default_logger_severity(3)
         options = ort.SessionOptions()
         options.intra_op_num_threads = 1
         options.inter_op_num_threads = 1

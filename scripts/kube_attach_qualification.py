@@ -21,7 +21,11 @@ class AttachContracts(unittest.TestCase):
             attach.exchange(connection, self.request)
 
     def test_device_discovery_variants_and_interleaved_stdout_preserve_diagnostic_only(self):
-        for warning in (b"NPU device discovery failed", b"Failed to detect devices under"):
+        for warning in (
+            b"NPU device discovery failed",
+            b"Failed to detect devices under",
+            b"Skipping pci_bus_id for PCI path at",
+        ):
             connection = Mock()
             connection.recv.side_effect = [
                 b"\x02\x1b[0;93m",

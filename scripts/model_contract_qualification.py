@@ -204,6 +204,39 @@ class ModelContractTests(unittest.TestCase):
             with self.assertRaisesRegex(Rejected, "model_runtime_rejected"):
                 model.session(self.content)
 
+    def test_global_device_discovery_logger_is_configured_before_session_construction(self):
+        severity = [2]
+        real_constructor = model.ort.InferenceSession
+
+        def create(*args, **kwargs):
+            if severity[0] != 3:
+                raise RuntimeError("global device discovery warning on strict stderr transport")
+            self.assertEqual(kwargs["providers"], ["CPUExecutionProvider"])
+            self.assertEqual(kwargs["sess_options"].log_severity_level, 3)
+            return real_constructor(*args, **kwargs)
+
+        with (
+            patch.object(
+                model.ort,
+                "set_default_logger_severity",
+                side_effect=lambda n: severity.__setitem__(0, n),
+            ),
+            patch.object(model.ort, "InferenceSession", side_effect=create),
+        ):
+            runtime, _ = model.session(self.content)
+            self.assertEqual(len(model.predict(runtime, self.features[:1])), 1)
+
+    def test_global_logger_configuration_failure_does_not_load_the_model(self):
+        with (
+            patch.object(
+                model.ort, "set_default_logger_severity", side_effect=RuntimeError("private")
+            ),
+            patch.object(model.ort, "InferenceSession") as constructor,
+        ):
+            with self.assertRaisesRegex(Rejected, "model_runtime_rejected"):
+                model.session(self.content)
+            constructor.assert_not_called()
+
     def test_missing_interface_and_checker_failure_cannot_reach_runtime(self):
         invalid = copy.deepcopy(self.valid)
         del invalid.graph.output[:]
