@@ -1,6 +1,6 @@
 # M11: недоступность и смена policy на actual candidate
 
-Реализация подготовлена; native CI результат пока отсутствует. Это продолжение [проверенного key revocation](evidence/runtime-bootstrap-replay-2026-10-29.md) на настоящем обученном candidate. Полный M11 и R1 остаются открыты.
+[Native 0485996 / 40911041271](evidence/candidate-trust-lifecycle-2026-10-29.md) success: outage, blackhole и policy change проверены на одном actual candidate перед key revocation. Первый полный 503: 59.797690113 / 12.733832126 / 4.250479163 s соответственно; cold denial, same-candidate recovery, unchanged journal и cleanup подтверждены. Это продолжение [проверенного key revocation](evidence/runtime-bootstrap-replay-2026-10-29.md). Полный M11 и R1 остаются открыты.
 
 ## Сценарий и границы
 
@@ -25,4 +25,4 @@ Outage останавливает owned trust StatefulSet; blackhole добав�
 5. При сбое coordinator lock освобождается, внешний context восстанавливает принадлежащий прогону nonterminal fault. Незавершённая последовательность остаётся fail/inconclusive. Отзыв ключа сохраняется даже при последующем отказе.
 6. Подтвердить worker absence после каждого probe, source SQL stopped и cluster absence в cleanup. При неподтверждённой очистке не объявлять результат успешным. Не выполнять global reset/prune.
 
-Локально: `python -m unittest scripts.kube_candidate_trust_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_candidate_faults_qualification` - 19 methods, три изменённых модуля 142/142 statements и 48/48 branches. Ещё 70 adjacent methods pass. RED tests до реализации показали отсутствие pause/cold-denial интерфейса. Это pure/mocked evidence; реальная SQL/network проверка требуется отдельно.
+Локально: `python -m unittest scripts.kube_candidate_trust_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_candidate_faults_qualification` - 19 methods, три изменённых модуля 142/142 statements и 48/48 branches. Расширенная группа snapshot/coordinator - 30 methods, 274/274 statements и 104/104 branches. Ещё 70 adjacent methods pass. RED tests до реализации показали отсутствие pause/cold-denial интерфейса. В native CI выполнены 251 method execution и реальные SQL/network faults; [очищенное evidence](evidence/candidate-trust-lifecycle-2026-10-29.md) отделяет их от локальных mocks.
