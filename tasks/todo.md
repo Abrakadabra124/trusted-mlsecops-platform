@@ -128,6 +128,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T14
 - [ ] Trust lifecycle. Зависимость: T13. Gate: M11.
+- CP3 2026-10-29: [native blackhole](../docs/evidence/trust-blackhole-2026-10-29.md), `b5a933e` / [40823156897](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40823156897) success. Первый полный 503 за 13.149598977 s, 41 denial, TCP timeout/recovery и no-auto-reactivation; outage/policy/revocation pass. 145 Linux tests, fault modules 100% branches, source/cleanup verified. Полный M11 остаётся открыт: candidate-bound expiry/key/replay/rollback/negative clock и общая приёмка; intermittent worker stderr не объяснён.
 - Increment 2026-10-14: [ADR 0029](../docs/decisions/0029-online-trust.md), отдельная TLS SQL authority, root-signed policy/version, irreversible revoke и lease максимум 60 s с учётом задержки/expiry/clock rollback. На `214cc3c` 45 native checks pass, реальный outage denial 59.992019191 s; 156 local adjacent methods pass. Promotion SDK требует fresh read; [PB-23/RB-44/RB-45](../docs/operations/trust-troubleshooting.md) и [evidence](../docs/evidence/online-trust-2026-10-14.md). Serving endpoint, root rotation, rollback authorization и полный M11 не закрыты этим компонентом.
 - Результат: revocation/expiry policy, trust lease, key rotation и контролируемый rollback authorization.
 - Проверка: old policy/foreign environment/replay/revoked signer/clock skew; отказ после истечения lease без тихого fallback.

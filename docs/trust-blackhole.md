@@ -10,7 +10,13 @@
 
 После отказа coordinator удаляет только созданную политику, с UID precondition. Неопределённый исход create разрешается readback полного spec, случайного имени и labels; чужая identity не удаляется. Проверяются отсутствие политики, прежние Pod/PVC UID и работоспособность authority. Probe подтверждает восстановленный TCP connect, но уже отозванное поколение serving остаётся 503 без auto-reactivation.
 
-Production timeout, verification и HTTP semantics не ослабляются. Fault injection выполняется только в disposable GitHub-hosted CI. На Windows разрешены лишь unit tests. Native результат пока не подтверждён.
+Production timeout, verification и HTTP semantics не ослабляются. Fault injection выполняется только в disposable GitHub-hosted CI. На Windows разрешены лишь unit tests.
+
+## Подтверждённый native результат
+
+На `b5a933e` / [40823156897](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40823156897) blackhole **pass**: TCP timeout, первый полный 503 за 13.149598977 s, 41 HTTP отказ до и после 60 s, UID-bound policy cleanup, тот же Pod/PVC, TCP recovery и отсутствие auto-reactivation. Outage, policy-change и model-revocation также pass; source SQL stop и cluster absence подтверждены. 145 Linux tests, fault scope 100% statements/branches. [Полный очищенный trace и bindings](evidence/trust-blackhole-2026-10-29.md). Это controlled component, не полный M11 или release actual candidate. Intermittent worker startup failure не воспроизведён и остаётся необъяснённым.
+
+## История диагностики
 
 Первый запуск `4d97e0d` / [40821440191](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40821440191) остановился до injection: ordinary CLI после approval, исходная диагностика `worker-start / load / serving_attach_stderr`, Reader verified. Linux 99 + 26 + 17 tests pass; lifecycle/coordinator/fault 208 statements и 88 branches полностью покрыты. SQL stop и cluster cleanup success. Это уточняет прежний intermittent startup failure до канала stderr, но ещё не устанавливает содержание/причину. Следующий диагностический запуск различает пустой stderr, фиксированный worker refusal и известное семейство ONNX Runtime device-discovery warning; все варианты по-прежнему дают отказ, текст кадров не публикуется.
 
