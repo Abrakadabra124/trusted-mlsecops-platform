@@ -36,6 +36,21 @@ class ServingCoreContracts(unittest.TestCase):
                 operation()
         self.constructor.assert_not_called()
 
+    def test_changed_or_mutable_model_never_reaches_worker_constructor(self):
+        for value in (
+            b"changed-after-reader-verification",
+            bytearray(b"model"),
+            memoryview(b"model"),
+        ):
+            with self.subTest(value=type(value).__name__):
+                self.loaded.model = value
+                self.constructor.reset_mock()
+                with self.assertRaises(Rejected):
+                    self.engine.activate()
+                self.constructor.assert_not_called()
+                self.assertIsNone(self.engine.loaded)
+                self.assertIsNone(self.engine.worker)
+
     def test_explicit_worker_backend_never_falls_back_to_docker(self):
         factory = Mock(return_value=self.worker)
         self.engine.worker_factory = factory

@@ -154,7 +154,10 @@ class Engine:
             try:
                 self.clear()
                 loaded = self.reader.load()
-                self.worker = (self.worker_factory or Worker)(loaded.model, self.reader.image)
+                model = loaded.model
+                if type(model) is not bytes or digest(model) != loaded.model_sha256:
+                    raise Rejected("serving_model_changed_before_load")
+                self.worker = (self.worker_factory or Worker)(model, self.reader.image)
                 self.worker.start()
                 if (
                     self.worker.image != self.reader.image

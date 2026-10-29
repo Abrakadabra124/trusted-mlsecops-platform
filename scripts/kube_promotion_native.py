@@ -111,6 +111,7 @@ def actual(root, state, image):
     if result["status"] != "rejected" or ledger(state) != before:
         raise Rejected("kube_promotion_actual_refusal_changed_storage")
     return {
+        "campaign_id": proposal["campaign_id"],
         "candidate": context["candidate_reference"],
         "proposal": proposal["proposal_reference"],
         "model": proposal["model_sha256"],

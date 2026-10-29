@@ -31,7 +31,7 @@ from scripts.promotion_entrypoint_native import configuration
 NAMESPACE = "ml-serving"
 
 
-def invoke(state, profile, config, expected, *, coordinator=None):
+def invoke(state, profile, config, expected, *, coordinator=None, candidate_probe=False):
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [
         kube_promotion.configuration_map(state, name + "-" + field, field, value)
@@ -43,7 +43,9 @@ def invoke(state, profile, config, expected, *, coordinator=None):
         profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"]
     )
     spec["serviceAccountName"] = "serving"
-    spec["containers"][0]["command"][2] = "mlsecops.kube_serving_probe"
+    spec["containers"][0]["command"][2] = (
+        "mlsecops.kube_candidate_probe" if candidate_probe else "mlsecops.kube_serving_probe"
+    )
     spec["containers"][0]["resources"]["limits"]["memory"] = "1Gi"
     spec["containers"][0]["resources"]["requests"]["memory"] = "256Mi"
     mount_api(spec)
