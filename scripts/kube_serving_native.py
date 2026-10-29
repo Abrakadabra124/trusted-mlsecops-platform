@@ -153,7 +153,7 @@ def invoke(state, profile, config, expected, *, coordinator=None, candidate_prob
         kube_promotion.cleanup(state, created, namespace=NAMESPACE)
 
 
-def qualify(root, state, image):
+def qualify(root, state, image, *, include_candidate=False):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     kube_storage.validate(state)
@@ -233,6 +233,17 @@ def qualify(root, state, image):
             or command(["git", "-C", str(root), "status", "--porcelain"])
         ):
             raise Rejected("kube_serving_source_or_ledger_changed")
+        candidate_result = None
+        if include_candidate:
+            from scripts.kube_candidate_native import qualify as candidate_qualify
+
+            candidate_result = candidate_qualify(
+                root,
+                state,
+                image,
+                prepared=(profile, actual_result),
+                qualification_key=fixture.trust_fixture.key,
+            )
         return {
             "schema_version": 1,
             "status": "pass",
@@ -251,6 +262,7 @@ def qualify(root, state, image):
             "approved": admitted,
             "after_revocation": revoked,
             "live_trust": lifecycle,
+            **({"actual_inference": candidate_result} if include_candidate else {}),
             "limitations": [
                 "Controlled approvals are not acceptance of the actual candidate",
                 "Full M11/M13/M14 and durable audit/recovery remain required",

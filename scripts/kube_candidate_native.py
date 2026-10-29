@@ -17,7 +17,16 @@ from mlsecops import (
     trust_authority,
 )
 from mlsecops.candidate_serving_reader import KIND
-from mlsecops.contracts import Rejected, canonical, digest, now, read_json, safe_child, write_json
+from mlsecops.contracts import (
+    Rejected,
+    bounded_read,
+    canonical,
+    digest,
+    now,
+    read_json,
+    safe_child,
+    write_json,
+)
 from mlsecops.datasets import FEATURES
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_storage_migration import ledger
@@ -30,7 +39,7 @@ from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
 
 
-def qualify(root, state, image):
+def qualify(root, state, image, *, prepared=None, qualification_key=None):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     if command(["git", "-C", str(root), "status", "--porcelain"]):
@@ -40,11 +49,14 @@ def qualify(root, state, image):
         source_fingerprint(root),
     )
     started = now()
-    kube_storage.validate(state)
-    kube_trust.bootstrap(state)
-    profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
-    print(canonical({"stage": "actual-proposal-refusal"}).decode(), flush=True)
-    refusal = actual(root, state, image)
+    if prepared is None:
+        kube_storage.validate(state)
+        kube_trust.bootstrap(state)
+        profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
+        print(canonical({"stage": "actual-proposal-refusal"}).decode(), flush=True)
+        refusal = actual(root, state, image)
+    else:
+        profile, refusal = prepared
     proposal = read_json(
         safe_child(state, "release-proposals/" + refusal["campaign_id"] + "/report.json")
     )
@@ -68,7 +80,7 @@ def qualify(root, state, image):
     )
     campaign = uuid.uuid4().hex
     destination = safe_child(state, "candidate-inference/" + campaign)
-    key = destination / "qualification.pem"
+    key = destination / "qualification.pem" if qualification_key is None else qualification_key
     qualification_public = signing.create_key(key)
     # Obtain reference predictions before starting the short permit lifetime.
     features = [[value] * len(FEATURES) for value in (0.1, 0.5, 0.9)]
@@ -165,7 +177,7 @@ def qualify(root, state, image):
         "qualification_permit_sha256": permit_hash,
         "native": result,
         "artifact_hashes": {
-            name: digest(canonical(read_json(destination / name)))
+            name: digest(bounded_read(destination / name))
             for name in ("reference.json", "config.json", "request.json", "probe.json")
         },
         "limitations": [

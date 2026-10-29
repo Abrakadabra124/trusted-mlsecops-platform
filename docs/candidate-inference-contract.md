@@ -1,6 +1,6 @@
 # Проверка inference настоящего кандидата в Kubernetes
 
-Статус на подготовке 2026-10-29: реализация и локальные contract tests; native результат ещё не подтверждён. Полный M12 и R1 не приняты. [Критерии M12](acceptance.md#m12) и исходные пороги сохраняются.
+Первый native-прогон 2026-10-29 на `682a3e2`: [40814625074](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40814625074) success, 60/60 candidate checks, golden error 0.0, model `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`, probe 17.419958 s. Source SQL stop и cluster cleanup success. Это отдельная candidate qualification. Общая приёмка ниже реализована, её native результат пока не подтверждён. Полный M12 и R1 не приняты. [Критерии M12](acceptance.md#m12) и исходные пороги сохраняются.
 
 ## Что исполняется
 
@@ -24,7 +24,11 @@ Engine теперь проверяет тип `bytes` и SHA-256 до вызов
 
 Полная последовательность подготовки, сборки image, owned cluster/storage, исполнения и очистки находится в [workflow](../.github/workflows/kubernetes-candidate.yml). Она запускается в disposable GitHub-hosted runner на ветке `codex/cp3-m12-inference`. На текущей Windows инфраструктуру не запускать. Для воспроизведения native нужен чистый checkout: runner отвергает dirty source и не переписывает lockfiles.
 
-Приватный итог: `.runtime/evidence/kubernetes-candidate-inference.json`; исходные reference/request/config/probe сохраняются в `.runtime/candidate-inference/<campaign>/`, signing key остаётся приватным. Публично разрешены проверенные summary и hashes, не raw logs, credentials, полный config или keys.
+Для общей приёмки workflow вызывает `python -m mlsecops.acceptance --gate M12 --state .runtime --output .runtime/evidence/M12.json`. [Gate](../mlsecops/inference_gate.py) в новом процессе исполняет [полный набор controlled contracts](../scripts/inference_contracts.py), не принимает skips или неполный набор test IDs. Затем на одном image и source выполняет обычный CLI до approval, после controlled approval и после revocation, а также 60 проверок настоящего кандидата. Typed expected/actual сравниваются без смешивания `True` и `1`; смена source, model, subject или пропущенный case не разрешает pass.
+
+Обычный CLI использует отдельно обозначенный controlled release. Настоящий кандидат остаётся без approval и выполняется только по qualification permit. Один ephemeral trust root сохраняется между этапами; новая подписанная policy меняет purpose-bound hash, а предыдущие revocations сохраняются. Это позволяет испытать candidate до окончательной M18 acceptance без фиктивного all-pass assurance и без подмены настоящей модели controlled fixture.
+
+Приватные итоги: `.runtime/evidence/M12.json`, `inference-gate.json`, `inference-native.json`, `inference-contracts.json`; исходные reference/request/config/probe сохраняются в `.runtime/candidate-inference/<campaign>/`, signing key остаётся приватным. Публично разрешены проверенные summary и hashes, не raw logs, credentials, полный config или keys.
 
 ## Runbook отказа
 
@@ -36,4 +40,4 @@ Engine теперь проверяет тип `bytes` и SHA-256 до вызов
 4. Оставшиеся worker Pods: сохранить UID и parent job identity. Очистку выполняет owned cleanup с проверкой UID; workflow завершает удаление disposable cluster и проверяет его отсутствие. Не применять global prune или удаление чужих ресурсов.
 5. Повтор разрешён после исправления подтверждённой причины или отдельного воспроизводимого эксперимента. Сохранять первый failure и не объявлять его исправленным только потому, что повтор прошёл.
 
-После исправления требуется весь targeted workflow, неизменность source и ledger, отсутствие worker и успешная cleanup. Принятие полного M12 дополнительно требует общей source-bound acceptance aggregation; M13-M18, image findings и независимые M22 challenges этой проверкой не закрываются.
+После исправления требуется весь targeted workflow, неизменность source и ledger, отсутствие worker и успешная cleanup. M13-M18, image findings и независимые M22 challenges этой проверкой не закрываются. Missing prerequisites дают M12 inconclusive/exit 2; реальный отказ проверки даёт fail/exit 1. Standalone candidate probe не заменяет полную команду M12.

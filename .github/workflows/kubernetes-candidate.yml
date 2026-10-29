@@ -36,6 +36,10 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-kube-lifecycle --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-lifecycle -o .coverage-kube-lifecycle.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-kube-lifecycle.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
+          uv run --locked coverage run --branch --data-file=.coverage-inference-gate --source=mlsecops.inference_gate -m unittest scripts.inference_gate_qualification
+          uv run --locked coverage report --data-file=.coverage-inference-gate --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-inference-gate -o .coverage-inference-gate.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-inference-gate.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -51,18 +55,21 @@ jobs:
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
       - name: Actual signed candidate and inference negatives
-        run: uv run --locked python -m scripts.kube_candidate_native --state .runtime
+        run: uv run --locked python -m mlsecops.acceptance --gate M12 --state .runtime --output .runtime/evidence/M12.json
       - name: Sanitized serving outcome
         if: always()
         run: |
           uv run --locked python - <<'PY'
           from pathlib import Path
           from mlsecops.contracts import canonical, read_json
-          path = Path('.runtime/evidence/kubernetes-candidate-inference.json')
+          path = Path('.runtime/evidence/M12.json')
           report = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False}
           print(canonical(report).decode())
+          native = Path('.runtime/evidence/inference-native.json')
+          if native.is_file():
+              print(canonical(read_json(native)).decode())
           PY
-          echo 'Actual candidate remains denied. Candidate qualification does not authorize promotion; acceptance aggregation remains required.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Actual candidate remains denied. M12 does not independently authorize promotion; all M01-M23 on one candidate remain required.' >> "$GITHUB_STEP_SUMMARY"
       - name: Stop verified owned source SQL
         if: always()
         run: |
