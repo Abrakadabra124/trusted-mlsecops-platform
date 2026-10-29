@@ -219,6 +219,10 @@ def qualify(root, state, image):
                 lifecycle[fault] = invoke(
                     state, profile, config, {**expected, "fault": fault}, coordinator=coordinator
                 )
+                print(
+                    canonical({"completed_fault": fault, "result": lifecycle[fault]}).decode(),
+                    flush=True,
+                )
         print(canonical({"stage": "controlled-after-revocation"}).decode(), flush=True)
         revoked = invoke(state, profile, config, {**expected, "ready": False})
         if (

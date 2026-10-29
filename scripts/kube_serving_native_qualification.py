@@ -13,6 +13,35 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeContracts(unittest.TestCase):
+    def test_failed_readiness_diagnostic_is_read_only_and_does_not_echo_private_errors(self):
+        config = {
+            key: "unused"
+            for key in (
+                "storage_client",
+                "trust_client",
+                "trusted_root",
+                "expected_policy",
+                "expected_serving_image",
+                "minimum_sequence",
+                "trust_root",
+                "minimum_trust_version",
+            )
+        }
+        config["context"] = {"policy": {"environment": "local-cpu"}}
+        with (
+            patch("mlsecops.release_reader.Reader") as reader,
+            patch("mlsecops.trust.Lease"),
+            patch("mlsecops.kube_serving_runtime.Worker") as worker,
+        ):
+            self.assertEqual(kube_serving_probe.diagnose(config), "reader-verified")
+            reader.return_value.load.side_effect = Rejected("trust_service_unavailable")
+            self.assertEqual(
+                kube_serving_probe.diagnose(config), "reader-trust_service_unavailable"
+            )
+            reader.return_value.load.side_effect = Rejected("PRIVATE-CREDENTIAL")
+            self.assertEqual(kube_serving_probe.diagnose(config), "reader-other-refusal")
+            worker.assert_not_called()
+
     def test_probe_error_codes_preserve_known_assertions_without_private_text(self):
         import json
 

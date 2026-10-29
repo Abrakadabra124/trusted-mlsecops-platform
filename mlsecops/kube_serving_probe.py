@@ -11,7 +11,13 @@ import tempfile
 import time
 from pathlib import Path
 
-from mlsecops import kube_serving_lifecycle, kube_serving_runtime
+from mlsecops import (
+    kube_serving_lifecycle,
+    kube_serving_runtime,
+    release_reader,
+    trust,
+    trust_authority,
+)
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, read_json, write_json
 from mlsecops.controller_api import APIError, Client
 from mlsecops.controller_worker import remove
@@ -71,7 +77,54 @@ CHECKS = {
     "worker-cleanup-confirmed",
 }
 CHECKS |= kube_serving_lifecycle.CHECKS
+READER_ERRORS = {
+    "trust_service_unavailable",
+    "trust_server_clock_skew",
+    "trust_clock_invalid",
+    "trust_lease_expired",
+    "trust_policy_changed",
+    "trust_artifact_revoked",
+    "serving_head_unavailable",
+    "serving_head_missing",
+    "serving_clock_skew",
+    "serving_release_expired",
+    "storage_connection_rejected",
+    "release_expired_or_future_document",
+    "trust_authority_missing_or_foreign",
+}
+CHECKS |= {"reader-verified", "reader-other-refusal"} | {"reader-" + code for code in READER_ERRORS}
 CODES |= {"kube_serving_probe:" + label for label in CHECKS}
+
+
+def diagnose(config):
+    # Only after failed HTTP readiness. Never starts a worker or turns failure
+    # into success; SQL and trust reads have no authority to change state.
+    try:
+        environment = config["context"]["policy"]["environment"]
+        lease = trust.Lease(
+            lambda: trust_authority.read(config["trust_client"], environment, config["trust_root"]),
+            trusted_root=config["trust_root"],
+            environment=environment,
+            minimum_version=config["minimum_trust_version"],
+        )
+        reader = release_reader.Reader(
+            config["storage_client"],
+            trust_lease=lease,
+            **{
+                key: config[key]
+                for key in (
+                    "context",
+                    "trusted_root",
+                    "expected_policy",
+                    "expected_serving_image",
+                    "minimum_sequence",
+                )
+            },
+        )
+        reader.load()
+        return "reader-verified"
+    except Exception as error:
+        return "reader-" + str(error) if str(error) in READER_ERRORS else "reader-other-refusal"
 
 
 def stop(process):
@@ -191,6 +244,8 @@ def qualify(config, expected, progress=None):
             progress[0] = "HTTP"
             ready = request("/readyz")
             if expected["ready"]:
+                if ready[0] != 200:
+                    raise Rejected("kube_serving_probe:" + diagnose(config))
                 check(
                     "ordinary-CLI-ready-after-verified-load",
                     ready[0] == 200 and ready[1]["ready"] is True,
