@@ -30,9 +30,23 @@ CLI предназначен для Linux и включает существую
 
 Локально 11 negative/positive contract tests новой команды прошли, 73/73 statements и 24/24 branches. Проверены signed references, exact retry, отсутствующие reports/assurance/approval, чужая identity, подмена pins, noncanonical/forged envelopes, revocation/outage и transport budgets. Fixtures имеют искусственные all-pass reports и явно не являются приёмкой настоящей модели. 38 adjacent/controller tests и 6 probe tests также прошли; группы пересекаются и не складываются в число уникальных проверок.
 
-[Hosted workflow](../.github/workflows/promotion-entrypoint.yml) выполняет два разных сценария. Настоящий evaluated candidate должен получить `release_assurance_required` в parent и отказ отдельного CLI process без записей после admission. Отдельные disposable model/trust stores содержат только controlled signed fixture; CLI записывает и повторяет selection, затем прежние Reader/HTTP/ONNX probes проверяют readback, запросы и отзыв. Положительная fixture не переносится на настоящий candidate. Native результат пока не подтверждён.
+[Hosted workflow](../.github/workflows/promotion-entrypoint.yml) выполняет два разных сценария. Настоящий evaluated candidate должен получить `release_assurance_required` в parent и отказ отдельного CLI process без записей после admission. Отдельные disposable model/trust stores содержат только controlled signed fixture; CLI записывает и повторяет selection, затем прежние Reader/HTTP/ONNX probes проверяют readback, запросы и отзыв. Положительная fixture не переносится на настоящий candidate. Native результат подтверждён ниже.
 
 Это CLI с отдельными SQL credentials, **не доказанная OS/Kubernetes-изоляция promoter**. Operator host остаётся доверенным; read-only mounts, отсутствие signing keys/API token и сетевые ограничения отдельного deployed controller ещё требуют интеграции. Полные M10/M12/M18 и настоящий production promotion остаются открытыми; новая команда не меняет критерии R1.
+
+## Native результат 2026-10-29 МСК
+
+[Run 40792286657](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40792286657), job `123180164943`, commit `d78e451a948d04ec00532ce9ad54ef7f4828b2e8`, attempt 1: **success**. Clean checkout, source_dirty=false. Native integration 03:11:34-03:12:00 МСК. До неё на Linux прошли 33 adjacent/probe tests и 11 controller tests, 73/73 statements и 24/24 branches. Все **44 integration cases pass**: три actual-candidate refusal checks и 41 controlled Reader/HTTP case.
+
+Настоящий candidate: `0fbf8d2ab375cdfa8286f43bed57eee27a14487d29b57b7229001cfad9f06dec`. Proposal: `8f3bae5717c73bbdb9574fa35e4b44c19054b1d09d37cfb85fdea8ddec899b11`. Model: `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`. Source fingerprint: `2ff22e6d695ced09e99c99999ae2790ca31f832c82f521a466140b5da450bb37`. Request digest: `d124d5642422788390f374839bf6bb92156fc2ccd76fe3a5ff86f59af2f8888f`.
+
+- Parent получил точный `release_assurance_required`. Отдельный CLI с теми же сохранёнными config/request вернул exit 1, пустой stdout и постоянный stderr. Список immutable releases objects не изменился после отказа. CLI не выдаёт текст внутреннего exception, поэтому конкретная причина подтверждена parent-проверкой, а не угадана из exit code.
+- В отдельных controlled model/trust stores два вызова реального CLI вернули один и тот же selection receipt. Production Reader прочитал и проверил current head, signed chain и точные model bytes; fixture не стала реальной acceptance-моделью.
+- Controlled HTTP/ONNX: три golden rows, max error `7.583387712228884e-08`, правильный running digest, смешанные score/abstain. Проверены 401, 413, 422, 429 и 503; quota refill восстановил 200. Остановленный worker дал отказ за `2.0257453749999854` s, explicit verified reload восстановил путь. Это не нагрузочный M14 и не полный M12.
+- Реальный отзыв controlled модели дал 503 для inference/readiness, старый handoff и новый load отвергнуты. SQL selection без signed authorization также отвергнут. Private audit correlation pass.
+- Owned model/trust workspaces и их контейнеры/network/volumes удалены с проверкой отсутствия. Source state/checkout сохранены; cleanup исходной SQL БД success с `State.Running=false`.
+
+Итог отчёта: `status=pass`, **full_M10=inconclusive**, `release_ready=false`; вложенный Reader report сохраняет full_M12=inconclusive. Исходный actual candidate не получал искусственную assurance. Тестовые root/signing keys и credential/config/request files не публикуются. После удаления runner приватный runtime state не сохраняется как production environment; повторение требует свежего disposable checkout.
 
 ## Ранбук и плейбук
 
