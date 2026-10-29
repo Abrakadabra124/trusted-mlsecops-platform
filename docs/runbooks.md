@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Совместный snapshot CAS и promotion journal](promotion-snapshot.md). Реализована read-only сверка authorities/events/heads; native проверка расширенного snapshot ещё требуется.
+- [Совместный snapshot CAS и promotion journal](promotion-snapshot.md). Native `b191555` / 40898945667: unchanged CAS + authorities/events/heads при expired retry и key revocation; owned cleanup подтверждён. Полный M11 открыт.
 
 - [Actual-candidate key revocation: положительный inference, live trace и точный cold Reader refusal](candidate-key-revocation.md). [Native evidence](evidence/candidate-key-revocation-2026-10-29.md): first 503 за 5.290494312 s, 70 cases pass; ключ не удаляется из revocation set. Полный M11 открыт.
 - [Approval expiry: HTTP trace, cold refusal, expired retry и явный release sequence 2](approval-expiry.md). Native `9485893` verified: отказ до expiry, expired retry без ledger writes и recovery CLI. Полный M11 ещё не закрыт.
