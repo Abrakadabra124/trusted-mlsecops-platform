@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Kubernetes serving: 503, attach/RBAC, UID-bound cleanup и восстановление](kubernetes-serving.md#runbook-503-или-незавершённая-очистка). Native проверка выполняется отдельно; full M12/M13/R1 не заявляются.
+- [Kubernetes serving: 503, attach/RBAC, UID-bound cleanup и восстановление](kubernetes-serving.md#runbook-503-или-незавершённая-очистка). Native component `e068328` verified, предыдущие отказы/source-lock/TTY/audit/HTTP fixes сохранены; full M12/M13/R1 не заявляются.
 
 - [Изолированный promotion: отказ верификатора, crash/deadline, неизвестный SQL commit и owned cleanup](kubernetes-promotion.md#ранбук-отказ-неизвестный-commit-или-cleanup).
 

@@ -1,8 +1,8 @@
 # Постоянный serving worker в Kubernetes
 
-Неделя 9, T15 «Inference API и loader», CP3. Реализован явный Kubernetes backend для обычного `mlsecops.serving_http --config`. До native run это локально проверенный код, не full M12 или завершённый R1.
+Неделя 9, T15 «Inference API и loader», CP3. Реализован и проверен native явный Kubernetes backend для обычного `mlsecops.serving_http --config`. Это component pass, не full M12 или завершённый R1.
 
-**Текущий native статус: failure, не принят.** Последний проверенный code `ef3ce2f`, [run 40804862684](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40804862684): 94 adjacent/harness + 24 transport/runtime tests pass; native подтвердил actual-candidate refusal, завершил `controlled-before-approval` и перешёл к `controlled-after-approval`. Последний probe отказал в фазе HTTP (`Rejected`, exit 1); точный failing assertion и причина отказа approved runtime пока не установлены. SQL stop и cluster deletion success. Следующий обязательный шаг - локализовать activation/HTTP refusal и повторить весь сценарий на новом frozen source. Полный M12 и R1 не пройдены.
+**Native component pass:** code `e068328`, [run 40806590954](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40806590954). Полный M12 inconclusive, release_ready=false. Предыдущие отказы и исправления сохранены ниже.
 
 ## Решение и границы
 
@@ -47,3 +47,22 @@ Run [40804120526](https://github.com/Abrakadabra124/trusted-mlsecops-platform/ac
 - При неизвестном состоянии очистки остановить новые activation и сохранить private diagnostics. В disposable CI финальная проверенная teardown всего owned cluster остаётся последним уровнем очистки, а не доказательством корректности локального shutdown.
 
 Playbook восстановления: подтвердить отказ и прекратить новый трафик -> проверить ownership/UID -> восстановить доступный trust/API либо удалить свой зависший worker -> подтвердить отсутствие старых процессов/Pods -> запустить CLI с теми же pins -> проверить authenticated readiness, bundle/model digest и golden prediction. Если bundle отозван, требуется новый разрешённый release; cached/revoked fallback запрещён. Шаги runtime recovery до native проверки не заявляются выполненными.
+
+## Native результат 2026-10-29 МСК
+
+Commit `e068328bb6e054540781dce862e37083a246232e`, [run 40806590954](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40806590954), job `123226915016`, attempt 1: **success**. Период native scenario: 05:31:25.641 - 05:33:02.875 МСК. Source clean; fingerprint `4fbd05e54279c2ed788e49549108892b9bf06a33e80e06f94d78bc363d8700c9`; runtime image `sha256:e1aa758164d9babf15b63aee3cc3150d50ab7d86b13f03f0d105630af25e27a8`.
+
+| Проверка | Наблюдаемый результат |
+| --- | --- |
+| Actual candidate / proposal | `edf2a4580640cc48b7657e513673665513bec0868072e8eea270f7f88df69662` / `2548824b42185dac47abc2b7e9ef5b81c2af03f9b197be63b4e13e3603254e35` |
+| Actual model | `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`; parent и isolated promotion отказали без assurance, без изменения ledger |
+| До controlled approval | 13 checks pass: ready/predict 503, worker не создан, реальные admission/RBAC denials, shutdown и отсутствие worker подтверждены |
+| После controlled approval | 22 checks pass: ordinary CLI ready, один persistent worker, три HTTP запроса по три строки, same worker UID, model/bundle binding каждого ответа |
+| Golden parity | Max absolute error `7.583384781240099e-08` при лимите `1e-6` |
+| API и остановка worker | 401 без credentials, 422 malformed input, 413 oversized body, 503 после удаления собственного worker Job |
+| После signed revocation | 13 checks pass: новая активация ready/predict 503 до запуска worker; запреты доступа и cleanup повторно подтверждены |
+| Controlled model | `6e4e5e65497470e5fe72af895107f291245c1bfc70070378cf3cdf95d2058169`; отдельная fixture, не actual acceptance |
+| Linux regression | 96 adjacent/harness + 24 core tests pass; core 201/202 statements и 61/62 branches, runtime module полностью покрыт |
+| Очистка | Private service output пуст, audit directory создан; CLI termination/worker absence подтверждены. Owned source SQL stopped и cluster deletion/absence steps success |
+
+48 probe checks включают повторения на трёх стадиях; это не 48 уникальных M-критериев. Actual-candidate refusal проверяется отдельно. Raw Job logs остаются private `.runtime/evidence`, не включены в Git. Полные M11/M12/M13/M14 не заявляются: требуются live revocation/outage, полная input/TOCTOU матрица, все output channels/retention, нагрузка и final same-candidate acceptance. Этот run не проверяет restart после pod/node failure, persistent audit restore или production HA. Next CP3 step - live trust lifecycle на этом normal configured runtime и объединение обязательных privacy/readiness доказательств.
