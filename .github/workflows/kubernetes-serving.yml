@@ -28,6 +28,10 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.data_source_lock_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-artifact-files --source=mlsecops.contracts -m unittest scripts.artifact_files_qualification
+          uv run --locked coverage report --data-file=.coverage-artifact-files --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-artifact-files -o .coverage-artifact-files.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-artifact-files.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --branch --data-file=.coverage-key-files --source=mlsecops.key_files -m unittest scripts.key_files_qualification scripts.bootstrap_qualification
           uv run --locked coverage report --data-file=.coverage-key-files --fail-under=95
           uv run --locked coverage json --data-file=.coverage-key-files -o .coverage-key-files.json

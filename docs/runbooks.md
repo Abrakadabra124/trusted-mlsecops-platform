@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Файловые границы артефактов U03](operations/artifact-files.md). Descriptor-based read/write, отказы special files и изменение данных, диагностика и восстановление. Linux CI ещё ожидается; Windows compatibility не закрывает ACL/reparse races.
+
 - [Файлы signing keys и SQL probe при оптимизации Python](operations/signing-files-and-sql-probes.md). U01/U02: Linux canary 6/6, оба модуля 100% statements/branches, native serving/tracking/M06 на 9362c04 pass. Общий U03 и Windows ACL остаются открытыми.
 
 - [Независимые authority: отзыв модели и ключа на одном candidate](operations/independent-authority-revocation.md). Native bfe295b / 40936376995 verified: отдельные CA/PVC/history, точные final cold causes/no-worker, неизменный соседний state, journal и cleanup. Full M11 открыт.

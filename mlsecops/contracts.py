@@ -1,7 +1,9 @@
 import hashlib
 import json
 import os
-import tempfile
+import secrets
+import stat
+from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -49,18 +51,75 @@ def now():
     return datetime.now(UTC).isoformat()
 
 
-def bounded_read(path, limit=16 * 1024 * 1024):
-    path = Path(path)
-    if path.is_symlink():
-        raise Rejected("symlink_rejected")
+@contextmanager
+def _parent(path, *, create=False):
+    """Pin every POSIX parent component without following links.
+
+    Windows is a compatibility path with static reparse checks, not a claim of
+    race-safe Win32 handles or ACL enforcement. Write directories must be trusted.
+    """
+    path = Path(path).absolute()
+    if ".." in path.parts or "\x00" in str(path) or not path.name:
+        raise Rejected("invalid_artifact_path")
     try:
-        with path.open("rb") as source:
+        if os.name != "posix":
+            if any(p.is_symlink() or p.is_junction() for p in (path, *path.parents)):
+                raise Rejected("symlink_rejected")
+            if create:
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            yield path, {}
+            return
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK
+        directory = os.open(path.anchor, flags)
+        try:
+            for component in path.parts[1:-1]:
+                if create:
+                    try:
+                        os.mkdir(component, 0o700, dir_fd=directory)
+                    except FileExistsError:
+                        pass
+                child = os.open(component, flags, dir_fd=directory)
+                os.close(directory)
+                directory = child
+            yield path.name, {"dir_fd": directory}
+        finally:
+            os.close(directory)
+    except OSError:
+        raise Rejected("artifact_unavailable") from None
+
+
+def _regular(metadata):
+    if not stat.S_ISREG(metadata.st_mode):
+        raise Rejected("artifact_file_type")
+
+
+def _stamp(metadata):
+    return tuple(
+        getattr(metadata, field)
+        for field in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    )
+
+
+def bounded_read(path, limit=16 * 1024 * 1024):
+    if type(limit) is not int or limit < 0:
+        raise Rejected("artifact_read_limit")
+    with _parent(path) as (name, options), ExitStack() as cleanup:
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        descriptor = os.open(name, flags | getattr(os, "O_BINARY", 0), **options)
+        cleanup.callback(os.close, descriptor)
+        before = os.fstat(descriptor)
+        _regular(before)
+        if before.st_size > limit:
+            raise Rejected("artifact_too_large")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
             content = source.read(limit + 1)
-    except OSError as error:
-        raise Rejected("artifact_unavailable") from error
-    if len(content) > limit:
-        raise Rejected("artifact_too_large")
-    return content
+        after = os.fstat(descriptor)
+        _regular(after)
+        if len(content) > limit:
+            raise Rejected("artifact_too_large")
+        if len(content) != before.st_size or _stamp(before) != _stamp(after):
+            raise Rejected("artifact_changed")
+        return content
 
 
 def read_json(path):
@@ -68,21 +127,40 @@ def read_json(path):
 
 
 def atomic_write(path, content, mode=0o600):
-    path = Path(path)
-    if path.is_symlink() or path.parent.is_symlink():
-        raise Rejected("symlink_rejected")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "wb") as output:
-            output.write(content)
-            output.flush()
-            os.fsync(output.fileno())
-        os.chmod(temporary, mode)
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    with _parent(path, create=True) as (name, options):
+        try:
+            target = os.stat(name, follow_symlinks=False, **options)
+        except FileNotFoundError:
+            pass
+        else:
+            if stat.S_ISLNK(target.st_mode):
+                raise Rejected("symlink_rejected")
+            _regular(target)
+        temporary = ".pending-" + secrets.token_hex(16)
+        if not options:
+            temporary = Path(name).parent / temporary
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(temporary, flags | getattr(os, "O_BINARY", 0), 0o600, **options)
+        try:
+            with ExitStack() as cleanup:
+                cleanup.callback(os.close, descriptor)
+                with os.fdopen(descriptor, "wb", closefd=False) as output:
+                    output.write(content)
+                    output.flush()
+                if os.name == "posix":
+                    os.fchmod(descriptor, mode)
+                else:
+                    os.chmod(temporary, mode)
+                os.fsync(descriptor)
+            directory = options.get("dir_fd")
+            os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
+            if directory is not None:
+                os.fsync(directory)
+        finally:
+            try:
+                os.unlink(temporary, **options)
+            except FileNotFoundError:
+                pass
 
 
 def write_json(path, value):

@@ -14,7 +14,7 @@ class SourceLockContracts(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         data_source.validate_lock(root)
 
-    def test_signing_helper_is_pinned_and_each_signing_input_mutation_rejects(self):
+    def test_file_helpers_are_pinned_and_each_input_mutation_rejects(self):
         origin = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -28,7 +28,12 @@ class SourceLockContracts(unittest.TestCase):
             )
             data_source.validate_lock(root)
             self.assertIn("mlsecops/key_files.py", data_source.INPUTS)
-            for name in ("mlsecops/key_files.py", "mlsecops/signing.py", "mlsecops/data_source.py"):
+            for name in (
+                "mlsecops/contracts.py",
+                "mlsecops/key_files.py",
+                "mlsecops/signing.py",
+                "mlsecops/data_source.py",
+            ):
                 with self.subTest(name=name):
                     target = root / name
                     original = target.read_bytes()
