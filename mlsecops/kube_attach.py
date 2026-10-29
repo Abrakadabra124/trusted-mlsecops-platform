@@ -82,10 +82,18 @@ def exchange(connection, request):
         frame = connection.recv(timeout=remaining)
         if not isinstance(frame, bytes) or not frame:
             raise Rejected("serving_attach_frame")
+        if frame[0] == 2:
+            code = "serving_attach_stderr"
+            if len(frame) == 1:
+                code = "serving_attach_empty_stderr"
+            elif frame[1:] == b"serving_worker_rejected\n":
+                code = "serving_attach_worker_rejected"
+            elif b"[W:onnxruntime:" in frame and b"GPU device discovery failed" in frame:
+                code = "serving_attach_ort_device_warning"
+            raise Rejected(code)
         if frame[0] != 1:
             raise Rejected(
-                "serving_attach_"
-                + {2: "stderr", 3: "status", 255: "closed"}.get(frame[0], "channel")
+                "serving_attach_" + {3: "status", 255: "closed"}.get(frame[0], "channel")
             )
         result.extend(frame[1:])
         if len(result) > protocol.MAX_FRAME:

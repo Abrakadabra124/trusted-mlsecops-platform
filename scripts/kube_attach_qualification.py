@@ -10,6 +10,21 @@ from mlsecops.contracts import Rejected, canonical
 
 
 class AttachContracts(unittest.TestCase):
+    def test_stderr_diagnostics_classify_only_finite_codes_without_accepting_payload(self):
+        for payload, code in (
+            (b"", "serving_attach_empty_stderr"),
+            (b"serving_worker_rejected\n", "serving_attach_worker_rejected"),
+            (
+                b"[W:onnxruntime:Default, device_discovery.cc:1] GPU device discovery failed: PRIVATE",
+                "serving_attach_ort_device_warning",
+            ),
+            (b"PRIVATE", "serving_attach_stderr"),
+        ):
+            connection = Mock()
+            connection.recv.return_value = b"\x02" + payload
+            with self.assertRaisesRegex(Rejected, "^" + code + "$"):
+                attach.exchange(connection, self.request)
+
     def test_cli_distinguishes_finite_transport_codes_without_exception_text(self):
         from types import SimpleNamespace
 
