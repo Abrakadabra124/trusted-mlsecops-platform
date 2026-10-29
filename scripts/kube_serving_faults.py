@@ -4,6 +4,7 @@ from mlsecops import kube_storage, kube_trust, trust_authority
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, decode, digest
 from mlsecops.kube_serving_lifecycle import FAULTS
+from scripts.kube_trust_blackhole import Blackhole
 from scripts.kube_trust_native import scale
 
 
@@ -53,8 +54,11 @@ class Coordinator:
         self.marker = self.document = self.uid = None
         self.changed = False
         self.phases = []
+        self.blackhole = None
 
     def __enter__(self):
+        if self.fault == "blackhole":
+            self.blackhole = Blackhole(self.state)
         if self.fault == "outage":
             self.marker = kube_trust.validate(self.state)
             self.document = next(
@@ -67,7 +71,10 @@ class Coordinator:
         if [*self.phases, phase] != ["ready", "denied"][: len(self.phases) + 1]:
             raise Rejected("serving_fault_operator_order")
         if phase == "ready":
-            if self.fault == "outage":
+            if self.fault == "blackhole":
+                self.changed = True
+                self.blackhole.start()
+            elif self.fault == "outage":
                 self.changed = True
                 scale(self.state, self.document, self.uid, 0)
                 kubectl(
@@ -105,7 +112,9 @@ class Coordinator:
     def restore(self):
         if not self.changed:
             return
-        if self.fault == "outage":
+        if self.fault == "blackhole":
+            self.blackhole.close()
+        elif self.fault == "outage":
             observed = kube_storage.get(self.state, self.document)
             if (observed or {}).get("spec", {}).get("replicas") == 0:
                 scale(self.state, self.document, self.uid, 1)

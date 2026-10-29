@@ -6,6 +6,26 @@ from scripts import kube_serving_faults as faults
 
 
 class FaultContracts(unittest.TestCase):
+    def test_blackhole_is_closed_after_failed_start_or_probe_and_after_denial(self):
+        for failure in ("start", "probe", None):
+            with patch.object(faults, "Blackhole") as constructor:
+                instance = constructor.return_value
+                if failure == "start":
+                    instance.start.side_effect = Rejected("injected")
+                coordinator = faults.Coordinator("state", "blackhole", "a" * 64, "key", "b" * 64)
+                try:
+                    with coordinator:
+                        coordinator("ready")
+                        if failure == "probe":
+                            raise Rejected("injected")
+                        coordinator("denied")
+                except Rejected as error:
+                    self.assertEqual(str(error), "injected")
+                else:
+                    self.assertIsNone(failure)
+                instance.start.assert_called_once()
+                instance.close.assert_called_once()
+
     def test_progress_rejects_wrong_fault_order_duplicates_and_private_text(self):
         ready = {"event": "trust-fault", "phase": "ready", "fault": "outage"}
         denied = {**ready, "phase": "denied"}

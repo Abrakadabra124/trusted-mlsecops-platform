@@ -2,13 +2,15 @@
 
 import math
 import signal
+import socket
 import time
 from pathlib import Path
 
 from mlsecops.contracts import Rejected, canonical, read_json
+from mlsecops.storage_pki import TRUST_HOST
 
 DIRECTORY = Path("/tmp")
-FAULTS = {"outage", "policy-change", "revocation"}
+FAULTS = {"outage", "blackhole", "policy-change", "revocation"}
 CHECKS = {
     "trust-fault-kind",
     "trust-fault-initial-prediction",
@@ -19,7 +21,28 @@ CHECKS = {
     "trust-fault-readiness-503",
     "no-automatic-reactivation",
     "trust-fault-clock-order",
+    "trust-blackhole-TCP-blocked",
+    "trust-blackhole-TCP-restored",
 }
+
+
+def tcp_state(address, *, blocked):
+    """Require an actual connect timeout; a refused socket is not a blackhole."""
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            connection = socket.create_connection((address, 5432), timeout=1)
+        except TimeoutError:
+            if blocked:
+                return True
+        except OSError:
+            pass
+        else:
+            connection.close()
+            if not blocked:
+                return True
+        time.sleep(0.1)
+    return False
 
 
 def checkpoint(phase, fault):
@@ -69,6 +92,8 @@ def valid(status, reply, expected):
 def exercise(process, request, body, expected, check):
     fault = expected["fault"]
     check("trust-fault-kind", fault in FAULTS)
+    # Resolve before injection; DNS remains outside the targeted drop rule.
+    address = socket.gethostbyname(TRUST_HOST) if fault == "blackhole" else None
     # A successful ordinary request performs fresh trust reads. Its start is a
     # lower bound on the final successful read, not an invented exact timestamp.
     anchor_wall, anchor = time.time(), time.monotonic()
@@ -76,12 +101,14 @@ def exercise(process, request, body, expected, check):
     check("trust-fault-initial-prediction", status == 200 and valid(status, reply, expected))
     # Freeze only the owned HTTP child during outage injection, so its heartbeat
     # cannot renew the lease while the external operator stops the authority.
-    if fault == "outage":
+    if fault in {"outage", "blackhole"}:
         process.send_signal(signal.SIGSTOP)
     try:
         checkpoint("ready", fault)
+        if fault == "blackhole":
+            check("trust-blackhole-TCP-blocked", tcp_state(address, blocked=True))
     finally:
-        if fault == "outage":
+        if fault in {"outage", "blackhole"}:
             process.send_signal(signal.SIGCONT)
     records, first_denial, successes, denials = [], None, 0, 0
     previous = anchor
@@ -108,13 +135,15 @@ def exercise(process, request, body, expected, check):
             if first_denial is None:
                 first_denial = end - anchor
             check("trust-fault-first-503-within-60s", first_denial <= 60)
-        if denials >= 2 and (fault != "outage" or start >= anchor + 60):
+        if denials >= 2 and (fault not in {"outage", "blackhole"} or start >= anchor + 60):
             break
         remaining = anchor + 60 - time.monotonic()
         time.sleep(2 if remaining > 2.1 else 0.05)
     check("trust-fault-complete-trace", denials >= 2 and (fault != "outage" or successes > 0))
     check("trust-fault-readiness-503", request("/readyz")[0] == 503)
     checkpoint("denied", fault)
+    if fault == "blackhole":
+        check("trust-blackhole-TCP-restored", tcp_state(address, blocked=False))
     # The parent has now restored availability / a fresh compatible policy.
     # A revoked model stays revoked; a fenced generation never silently reloads.
     check(

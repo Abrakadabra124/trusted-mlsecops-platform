@@ -61,6 +61,8 @@ class LifecycleContracts(unittest.TestCase):
                 side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay),
             ),
             patch.object(lifecycle, "checkpoint", side_effect=checkpoint),
+            patch.object(lifecycle.socket, "gethostbyname", return_value="10.0.0.2"),
+            patch.object(lifecycle, "tcp_state", return_value=True),
             patch.object(lifecycle.signal, "SIGSTOP", 19, create=True),
             patch.object(lifecycle.signal, "SIGCONT", 18, create=True),
         ):
@@ -81,6 +83,39 @@ class LifecycleContracts(unittest.TestCase):
                 self.assertLess(result["first_503_seconds"], 60)
                 process.send_signal.assert_not_called()
                 self.assertIn("trust-fault-readiness-503", checks)
+
+    def test_blackhole_requires_drop_recovery_and_denial_past_original_lease(self):
+        result, process, checks = self.exercise("blackhole")
+        self.assertLessEqual(result["first_503_seconds"], 60)
+        self.assertGreaterEqual(result["trace"][-1]["start_seconds"], 60)
+        self.assertIn("trust-blackhole-TCP-blocked", checks)
+        self.assertIn("trust-blackhole-TCP-restored", checks)
+        self.assertEqual(process.send_signal.call_count, 2)
+
+    def test_tcp_timeout_is_distinguished_from_refused_and_restored_connections(self):
+        for blocked, replies, expected in (
+            (True, [TimeoutError()], True),
+            (False, [TimeoutError(), Mock()], True),
+            (True, [Mock(), TimeoutError()], True),
+            (True, [ConnectionRefusedError()], False),
+        ):
+            clock = [0.0]
+
+            def connect(*args, **kwargs):
+                self.assertEqual(args, (("10.0.0.2", 5432),))
+                self.assertEqual(kwargs, {"timeout": 1})
+                clock[0] += 1
+                reply = replies.pop(0) if len(replies) > 1 else replies[0]
+                if isinstance(reply, Exception):
+                    raise reply
+                return reply
+
+            with (
+                patch.object(lifecycle.socket, "create_connection", side_effect=connect),
+                patch.object(lifecycle.time, "monotonic", side_effect=lambda: clock[0]),
+                patch.object(lifecycle.time, "sleep"),
+            ):
+                self.assertIs(lifecycle.tcp_state("10.0.0.2", blocked=blocked), expected)
 
     def test_late_denial_resurrection_and_invalid_scores_cannot_pass(self):
         for options in [{"late": True}, {"resurrect": True}, {"invalid": True}]:

@@ -241,7 +241,7 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
         print(canonical({"stage": "controlled-after-approval"}).decode(), flush=True)
         admitted = invoke(state, profile, config, expected)
         lifecycle = {}
-        for fault in ("outage", "policy-change", "revocation"):
+        for fault in ("outage", "blackhole", "policy-change", "revocation"):
             print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
             with Coordinator(
                 state, fault, promotion["expected_policy"], fixture.trust_fixture.key, model
