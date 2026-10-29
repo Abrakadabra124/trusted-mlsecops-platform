@@ -1,6 +1,6 @@
 # Плановая смена ключа online trust authority
 
-Статус: local contracts passed; native CI pending. [ADR и полный контракт](../decisions/0053-authority-root-rotation.md). Применимо к существующей owned authority с действительным старым ключом. Потеря/компрометация root и authority disaster recovery требуют отдельного решения; эта процедура не снимает отзыв.
+Статус: [native operator API и serving verified](../evidence/authority-root-rotation-2026-10-30.md), `d18c361` / 40959762631 success. 502 Linux test methods / 0 skips; ротация 2 -> 3, четыре точных отказа, unchanged retry/history, 14 old-config cold и 22 new-config serving checks. CLI routing/confirmation проверены контрактными tests; отдельный native mutation через CLI не заявляется. [ADR и полный контракт](../decisions/0053-authority-root-rotation.md). Применимо к существующей owned authority с действительным старым ключом. Потеря/компрометация root и authority disaster recovery требуют отдельного решения; эта процедура не снимает отзыв.
 
 ## Ответственные и предпосылки
 

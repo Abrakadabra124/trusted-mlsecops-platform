@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 planned authority-root rotation - 2026-10-30 МСК
+
+- Добавлена явная смена ключа online trust-policy с подтверждением старым и новым ключами. Migration 2, одна SQL transaction и readback сохраняют историю, отозванные assets и исходную migration 1. Потребители принимают новый public pin только через операторскую конфигурацию.
+- `d18c361` / 40959762631 success: переход 2 -> 3, четыре точных отказа без mutation, unchanged retry, 14 old-config cold и 22 new-config serving checks. 502 Linux method executions / 0 skips; protocol/store/authority/coordinator 326 statements / 108 branches, 100%. Audit fixes, rollback и actual trust regression прошли.
+- [Evidence и проверенная инструкция fresh checkout](docs/evidence/authority-root-rotation-2026-10-30.md), [ранбук](docs/operations/authority-root-rotation.md), [ADR 0053](docs/decisions/0053-authority-root-rotation.md). Live root-change trace, release-signing key rotation и полный M11/R1 остаются открытыми.
+
 ## R1 explicit whole-bundle rollback - 2026-10-30 МСК
 
 - Новый signed approval schema 2 связывает current/target history и следующий sequence. Старый bundle не переписывается; обычные promoter/Reader проверяют все gates, live trust и совместимость. SQL forward-only selection сохраняет идемпотентность и защиту от replay.

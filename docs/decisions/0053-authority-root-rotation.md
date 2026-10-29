@@ -1,6 +1,6 @@
 # ADR 0053: явная плановая ротация ключа trust authority
 
-Дата: 2026-10-30. Статус: implemented, local contracts passed; native CI pending. T14, отдельная часть полного M11. Это смена ключа подписания online trust-policy, не смена release approver/publisher и не аварийное восстановление утраченного root.
+Дата: 2026-10-30. Статус: implemented, [native verified на d18c361 / 40959762631](../evidence/authority-root-rotation-2026-10-30.md). T14, отдельная часть полного M11. Это смена ключа подписания online trust-policy, не смена release approver/publisher и не аварийное восстановление утраченного root.
 
 ## Требование и границы доверия
 
@@ -49,6 +49,6 @@ Policy digest и artifact revocations не меняются. Key revocations р�
 
 Local: 43 methods, 326 statements / 108 branches в protocol/store/authority/native coordinator, 100%. Проверяются missing/mismatched signatures, чужие pins, schema/types/size/time, history/reference mismatch, снятие revocations, key reuse, migration checksum, unchanged retry, unconfirmed commit, bounded CLI errors и native evidence guards. SQL/HTTP локально не запускались.
 
-Native сценарий подключён после разрешённого whole-bundle rollback. Он сохраняет synthetic revoked artifact/key, проверяет подписанные отказы, выполняет ротацию и retry, проверяет прежнюю history prefix и отказ update старым ключом. Затем обычный serving CLI со старым config должен дать exact root refusal без worker; явный новый config должен загрузить прежнюю модель и пройти golden checks. Последующая trust regression продолжает работать новым ключом. До завершения CI эти шаги не объявляются проверенными.
+Native сценарий после разрешённого whole-bundle rollback прошёл: synthetic revoked artifact/key сохранены, четыре точных отказа не меняют snapshot, ротация 2 -> 3 и retry сохраняют прежнюю history prefix. Обычный serving CLI со старым config дал exact root refusal без worker (14 checks), явный новый config загрузил прежнюю модель (22 checks, golden error 7.583384781240099e-08). Последующая actual trust regression прошла новым ключом: 900 typed assertions с повторами, production release отказан без assurance. Всего CI выполнил 502 test methods без skips; source/reports/cleanup сверены. Fresh Windows GitHub clone отдельно воспроизвёл 43 контрактных tests.
 
 [Ранбук и плейбук](../operations/authority-root-rotation.md). Full M11/M18/R1, release-signing key rotation, M22 independent challenges и system-image findings остаются открытыми.
