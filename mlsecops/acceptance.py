@@ -365,6 +365,7 @@ def report(gate, profile, root, state=None):
             evidence = qualify(root, state)
             result.update(
                 status=evidence["status"],
+                started_at=evidence["started_at"],
                 source_dirty=evidence["source_dirty"],
                 cases=evidence["cases"],
                 exit_code=0,

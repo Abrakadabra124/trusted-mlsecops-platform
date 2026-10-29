@@ -34,6 +34,7 @@ class InferenceGateContracts(unittest.TestCase):
                 (state / name).write_bytes(b"fixture")
             evidence = {
                 "status": "pass",
+                "started_at": "2026-10-29T00:00:00+00:00",
                 "source_dirty": False,
                 "cases": [],
                 "checks": 0,
@@ -77,6 +78,7 @@ class InferenceGateContracts(unittest.TestCase):
                 "proposal_reference": "d" * 64,
                 "model_sha256": "e" * 64,
                 "subject_sha256": "b" * 64,
+                "proposal_issued_at": 1,
                 "artifact_hashes": {},
                 "native": {
                     "status": "pass",
@@ -204,7 +206,7 @@ class InferenceGateContracts(unittest.TestCase):
         controlled = {
             "cases": [{"id": "contract", "status": "pass", "expected": True, "actual": True}]
         }
-        for changed in (False, True):
+        for changed in (False, True, "late-descriptor"):
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 state = root / "state"
@@ -225,13 +227,25 @@ class InferenceGateContracts(unittest.TestCase):
 
                 def native(*args, **kwargs):
                     self.assertTrue(kwargs["include_candidate"])
-                    if changed:
+                    self.assertEqual(kwargs["prepared"], {"prepared": True})
+                    if changed is True:
                         (root / "data.lock").write_bytes(b"changed")
+                    if changed == "late-descriptor":
+                        value = copy.deepcopy(self.native)
+                        value["actual_inference"]["proposal_issued_at"] = 2**50
+                        return value
                     return self.native
+
+                def contracts(root):
+                    preparation.assert_called_once()
+                    return controlled
 
                 with (
                     patch.object(gate, "hosted"),
-                    patch.object(gate, "contracts", return_value=controlled),
+                    patch.object(
+                        gate.kube_serving_native, "prepare", return_value={"prepared": True}
+                    ) as preparation,
+                    patch.object(gate, "contracts", side_effect=contracts),
                     patch.object(gate.kube_serving_native, "qualify", side_effect=native),
                     patch.object(
                         gate, "source_fingerprint", return_value=self.source["source_fingerprint"]
@@ -245,7 +259,12 @@ class InferenceGateContracts(unittest.TestCase):
                     ),
                 ):
                     if changed:
-                        with self.assertRaisesRegex(Rejected, "inputs_changed"):
+                        with self.assertRaisesRegex(
+                            Rejected,
+                            "descriptor_must_precede_checks"
+                            if changed == "late-descriptor"
+                            else "inputs_changed",
+                        ):
                             gate.qualify(root, state)
                         self.assertEqual(
                             read_json(state / "evidence/inference-gate.json")["status"],
@@ -253,6 +272,7 @@ class InferenceGateContracts(unittest.TestCase):
                         )
                     else:
                         result = gate.qualify(root, state)
+                        preparation.assert_called_once()
                         self.assertEqual(result["checks"], 61)
                         self.assertEqual(result["input_digests"]["model"], "e" * 64)
                         self.assertFalse(result["release_ready"])

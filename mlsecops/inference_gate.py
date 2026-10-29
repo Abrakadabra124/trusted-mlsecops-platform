@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from mlsecops.contracts import (
@@ -183,7 +184,7 @@ def _reconcile(result, source):
 def qualify(root, state, image="trusted-mlsecops:dev"):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
-    started = now()
+    preparation_started = now()
     output = safe_child(state, "evidence/inference-gate.json")
     write_json(output, {"status": "inconclusive", "release_ready": False})
     paths = [module.replace(".", "/") + ".py" for module in inference_contracts.MODULES]
@@ -197,8 +198,12 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "data.lock",
     ]
     materials = {path: digest(bounded_read(root / path)) for path in paths}
+    prepared = kube_serving_native.prepare(root, state, image)
+    started = now()
     controlled = contracts(root)
-    native = kube_serving_native.qualify(root, state, image, include_candidate=True)
+    native = kube_serving_native.qualify(
+        root, state, image, include_candidate=True, prepared=prepared
+    )
     source = {
         "source_revision": command(["git", "-C", str(root), "rev-parse", "HEAD"]),
         "source_fingerprint": source_fingerprint(root),
@@ -212,6 +217,9 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
     write_json(safe_child(state, "evidence/inference-native.json"), native)
     write_json(safe_child(state, "evidence/inference-contracts.json"), controlled)
     actual = native["actual_inference"]
+    issued = actual["proposal_issued_at"]
+    if type(issued) is not int or datetime.fromisoformat(started).timestamp() < issued:
+        raise Rejected("M12_descriptor_must_precede_checks")
     result = {
         "schema_version": 1,
         "scope": "M12-fresh-candidate-and-normal-CLI-inference",
@@ -219,6 +227,7 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "release_ready": False,
         "source_dirty": False,
         "started_at": started,
+        "preparation_started_at": preparation_started,
         "finished_at": now(),
         "source_revision": source["source_revision"],
         "cases": controlled["cases"] + cases,

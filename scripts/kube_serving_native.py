@@ -158,19 +158,42 @@ def invoke(state, profile, config, expected, *, coordinator=None, candidate_prob
         kube_promotion.cleanup(state, created, namespace=NAMESPACE)
 
 
-def qualify(root, state, image, *, include_candidate=False):
+def prepare(root, state, image):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
-    kube_storage.validate(state)
-    kube_trust.bootstrap(state)
     if command(["git", "-C", str(root), "status", "--porcelain"]):
         raise Rejected("kube_serving_dirty_source")
+    kube_storage.validate(state)
+    kube_trust.bootstrap(state)
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     fingerprint, started = source_fingerprint(root), now()
     print(canonical({"stage": "serving-api-bootstrap"}).decode(), flush=True)
     profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
     print(canonical({"stage": "actual-candidate-refusal"}).decode(), flush=True)
     actual_result = actual(root, state, image)
+    return {
+        "source_revision": revision,
+        "source_fingerprint": fingerprint,
+        "started_at": started,
+        "profile": profile,
+        "actual": actual_result,
+    }
+
+
+def qualify(root, state, image, *, include_candidate=False, prepared=None):
+    hosted()
+    root, state = Path(root).resolve(), Path(state).resolve()
+    prepared = prepare(root, state, image) if prepared is None else prepared
+    revision, fingerprint, started = (
+        prepared[name] for name in ("source_revision", "source_fingerprint", "started_at")
+    )
+    profile, actual_result = prepared["profile"], prepared["actual"]
+    if (
+        command(["git", "-C", str(root), "status", "--porcelain"])
+        or command(["git", "-C", str(root), "rev-parse", "HEAD"]) != revision
+        or source_fingerprint(root) != fingerprint
+    ):
+        raise Rejected("kube_serving_prepared_source_changed")
     fixtures.PromotionAdmissionContracts.setUpClass()
     fixture = fixtures.PromotionAdmissionContracts()
     try:

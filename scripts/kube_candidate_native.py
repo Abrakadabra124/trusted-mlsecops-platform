@@ -173,6 +173,7 @@ def qualify(root, state, image, *, prepared=None, qualification_key=None):
         "proposal_reference": refusal["proposal"],
         "model_sha256": refusal["model"],
         "subject_sha256": verified["subject_sha256"],
+        "proposal_issued_at": verified["manifest"]["issued_at"],
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,

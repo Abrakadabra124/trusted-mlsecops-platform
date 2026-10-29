@@ -28,6 +28,8 @@ Engine теперь проверяет тип `bytes` и SHA-256 до вызов
 
 Обычный CLI использует отдельно обозначенный controlled release. Настоящий кандидат остаётся без approval и выполняется только по qualification permit. Один ephemeral trust root сохраняется между этапами; новая подписанная policy меняет purpose-bound hash, а предыдущие revocations сохраняются. Это позволяет испытать candidate до окончательной M18 acceptance без фиктивного all-pass assurance и без подмены настоящей модели controlled fixture.
 
+Descriptor фиксируется до controlled/native checks. В report `started_at` отражает фактическое начало проверок после подготовки, а `preparation_started_at` отдельно сохраняет начало подготовки окружения. Gate сверяет время начала с `issued_at` проверенного descriptor и отвергает обратный порядок. Метки времени не переписываются задним числом; это сохраняет downstream контракт release verifier «descriptor -> reports -> assurance -> approval».
+
 Приватные итоги: `.runtime/evidence/M12.json`, `inference-gate.json`, `inference-native.json`, `inference-contracts.json`; исходные reference/request/config/probe сохраняются в `.runtime/candidate-inference/<campaign>/`, signing key остаётся приватным. Публично разрешены проверенные summary и hashes, не raw logs, credentials, полный config или keys.
 
 ## Runbook отказа
@@ -37,6 +39,8 @@ Engine теперь проверяет тип `bytes` и SHA-256 до вызов
 Повтор [40816013706](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40816013706), `2903922`: controlled suite прошла, native дошёл до обычного CLI после approval и получил readiness 503. Дополнительный read-only Reader подтвердил валидность release (`reader-verified`), но это не доказывает причину отказа процесса. Обе cleanup steps success. Связь с прежним startup failure `40809707714` не установлена; причина остаётся unknown.
 
 Для следующего эксперимента добавлен явный CLI-флаг `--startup-diagnostics`. Engine сохраняет фазу исходного отказа до очистки worker; Kubernetes backend уточняет create/observe/attach/load. Сериализуются только фиксированные phase/cause codes, не raw exception, token, request или model bytes. HTTP-ответы, проверки доверия, таймауты и запрет автоматической повторной активации не меняются. По умолчанию диагностика выключена, прежний zero-output контракт сохраняется. Это добавление наблюдения, не заявление об исправленной причине. Даже если следующий запуск пройдёт, старый отказ нельзя объявлять устранённым без причинного evidence.
+
+На `2d55673` [40817541054](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40817541054) функциональный M12 report дал pass: 117 controlled methods + 60 native cases, error 0.0, normal CLI 13/22/13 checks до approval/после approval/после revocation, source SQL и cluster cleanup success. Native artifact hash сверён с полным сохранённым JSON. Это не доказательство исправления прежнего startup failure. После этого code review выявил порядок времени report относительно descriptor; исправление подготовки перед проверками требует нового native подтверждения. Не использовать ранний report как готовое основание release assurance. Промежуточный `003245f`/`40817491943` остановился на форматировании до инфраструктурного прогона; этот отказ исправлен отдельным commit.
 
 Ответственный - оператор disposable lab. Сначала проверить terminal status и failed step в GitHub Actions, затем приватные stage/failed-case markers. Не перезапускать ещё работающий job. Отсутствие итогового report или status=inconclusive не означает успеха.
 
