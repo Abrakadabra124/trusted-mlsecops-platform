@@ -13,6 +13,142 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeContracts(unittest.TestCase):
+    def test_probe_error_codes_preserve_known_assertions_without_private_text(self):
+        import json
+
+        for message, expected in [
+            (
+                "kube_serving_probe:three-HTTP-predictions",
+                "kube_serving_probe:three-HTTP-predictions",
+            ),
+            ("PRIVATE-TOKEN", "unclassified"),
+            ("kube_serving_probe:three-HTTP-predictions PRIVATE-TOKEN", "unclassified"),
+        ]:
+            with (
+                patch.object(kube_serving_probe, "enforce", side_effect=Rejected(message)),
+                patch.object(kube_serving_probe.sys, "stdout", io.StringIO()) as output,
+            ):
+                self.assertEqual(kube_serving_probe.main(), 1)
+                report = json.loads(output.getvalue())
+            self.assertEqual(report["code"], expected)
+            self.assertNotIn("PRIVATE-TOKEN", str(report))
+
+    def test_approved_probe_obeys_actual_http_body_contract(self):
+        import asyncio
+        from unittest.mock import Mock
+
+        from starlette.requests import Request
+
+        from mlsecops.contracts import read_json
+        from mlsecops.controller_api import APIError
+
+        active = [False]
+        model, bundle = "a" * 64, "b" * 64
+        worker = {
+            "metadata": {
+                "uid": "pod-uid",
+                "labels": {"job-name": "serving-worker-owned"},
+                "ownerReferences": [{"uid": "job-uid"}],
+            }
+        }
+        api = Mock()
+
+        def api_request(resource, *args, **kwargs):
+            if kwargs.get("method") == "POST":
+                raise APIError(403, "Forbidden")
+            if kwargs.get("method") == "DELETE":
+                active[0] = False
+                return {}
+            return {"items": [worker] if active[0] else []}
+
+        api.request.side_effect = api_request
+        api.exchange.side_effect = APIError(403, "Forbidden")
+        process = Mock(returncode=0)
+        process.poll.return_value = None
+        connection, pending = Mock(), []
+
+        def http_request(method, path, *, body, headers):
+            if path == "/livez":
+                code, payload = 200, {"live": True}
+            elif not headers.get("Authorization"):
+                code, payload = 401, {"error": "unauthorized"}
+            elif not active[0]:
+                code, payload = 503, {"error": "not_ready"}
+            elif path == "/readyz":
+                code, payload = 200, {"ready": True}
+            else:
+
+                async def receive():
+                    return {"type": "http.request", "body": body, "more_body": False}
+
+                scope = {
+                    "type": "http",
+                    "method": method,
+                    "path": path,
+                    "query_string": b"",
+                    "headers": [
+                        (key.lower().encode(), value.encode()) for key, value in headers.items()
+                    ]
+                    + [(b"content-length", str(len(body)).encode())],
+                }
+                try:
+                    rows = asyncio.run(serving_http.read_body(Request(scope, receive)))
+                    code, payload = (
+                        200,
+                        {
+                            "model_sha256": model,
+                            "bundle_sha256": bundle,
+                            "predictions": [{"score": 0.75} for row in rows],
+                        },
+                    )
+                except serving_http.BodyLimit:
+                    code, payload = 413, {"error": "body_limit"}
+                except Rejected:
+                    code, payload = 422, {"error": "invalid_input"}
+            pending.append((code, payload))
+
+        connection.request.side_effect = http_request
+
+        def response():
+            code, payload = pending.pop(0)
+            return Mock(status=code, read=lambda n: canonical(payload))
+
+        connection.getresponse.side_effect = response
+        temporary = tempfile.TemporaryDirectory
+
+        def launch(args, **kwargs):
+            self.assertTrue(Path(read_json(Path(args[-1]))["audit_directory"]).is_dir())
+            active[0] = True
+            return process
+
+        def stop(process):
+            active[0] = False
+            process.poll.return_value = 0
+
+        with (
+            patch.object(kube_serving_probe, "Client", return_value=api),
+            patch.object(
+                kube_serving_probe.tempfile,
+                "TemporaryDirectory",
+                side_effect=lambda **kwargs: temporary(prefix="serving-probe-test-"),
+            ),
+            patch.object(kube_serving_probe.subprocess, "Popen", side_effect=launch),
+            patch.object(kube_serving_probe.http.client, "HTTPConnection", return_value=connection),
+            patch.object(kube_serving_probe, "stop", side_effect=stop),
+        ):
+            result = kube_serving_probe.qualify(
+                {"kubernetes_worker": PROFILE},
+                {
+                    "ready": True,
+                    "features": [[0.5] * 6],
+                    "scores": [0.75],
+                    "model": model,
+                    "bundle": bundle,
+                },
+            )
+        self.assertEqual(result["max_golden_error"], 0)
+        self.assertIn("stopped-worker-503", result["cases"])
+
     def test_refusal_probe_prepares_private_audit_before_ordinary_cli_start(self):
         from unittest.mock import Mock
 

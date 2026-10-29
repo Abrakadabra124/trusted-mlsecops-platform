@@ -41,6 +41,36 @@ CODES = {
 }
 
 
+CHECKS = {
+    "ONNX-golden-parity",
+    "RBAC-denies-secrets",
+    "RBAC-denies-serviceaccounts",
+    "admission-denies-command",
+    "admission-denies-credential",
+    "admission-denies-privilege",
+    "audit-journal-created",
+    "initial-worker-absence",
+    "malformed-422",
+    "one-persistent-worker",
+    "ordinary-CLI-ready-after-verified-load",
+    "ordinary-CLI-termination-confirmed",
+    "oversized-413",
+    "refused-before-worker-start",
+    "response-model-and-bundle-binding",
+    "same-worker-UID-across-requests",
+    "service-output-empty",
+    "service-process-alive",
+    "startup-deadline",
+    "stopped-worker-503",
+    "three-HTTP-predictions",
+    "unapproved-or-revoked-predict-503",
+    "unapproved-or-revoked-ready-503",
+    "unauthenticated-401",
+    "worker-cleanup-confirmed",
+}
+CODES |= {"kube_serving_probe:" + label for label in CHECKS}
+
+
 def stop(process):
     sent = process.poll() is None
     if sent:
@@ -123,7 +153,10 @@ def qualify(config, expected, progress=None):
                     "POST" if body is not None else "GET",
                     path,
                     body=body,
-                    headers={"Authorization": "Bearer " + token} if authorized else {},
+                    headers={
+                        "Content-Type": "application/json",
+                        **({"Authorization": "Bearer " + token} if authorized else {}),
+                    },
                 )
                 response = connection.getresponse()
                 return response.status, decode(response.read(65537), 65536)
