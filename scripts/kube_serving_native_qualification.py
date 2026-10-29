@@ -6,13 +6,28 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlsecops import controller_resources, serving_http
+from mlsecops import controller_resources, kube_serving_probe, serving_http
 from mlsecops.contracts import Rejected, canonical
 from scripts import kube_serving_native as native
 from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeContracts(unittest.TestCase):
+    def test_owned_sigterm_is_accepted_only_after_process_wait(self):
+        import signal
+        from unittest.mock import Mock
+
+        for code in [0, -signal.SIGTERM, 1, -9]:
+            process = Mock(returncode=code)
+            process.poll.return_value = None
+            if code in (0, -signal.SIGTERM):
+                kube_serving_probe.stop(process)
+            else:
+                with self.assertRaises(Rejected):
+                    kube_serving_probe.stop(process)
+            process.send_signal.assert_called_once_with(signal.SIGTERM)
+            process.wait.assert_called_once_with(timeout=20)
+
     def test_serving_permissions_are_scoped_and_legacy_roles_stay_separate(self):
         documents = controller_resources.resources("test", PROFILE["image"], serving=True)
         role = next(x for x in documents if x["kind"] == "Role")

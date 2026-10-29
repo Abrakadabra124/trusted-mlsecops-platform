@@ -20,6 +20,21 @@ from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce
 
 
+def stop(process):
+    sent = process.poll() is None
+    if sent:
+        process.send_signal(signal.SIGTERM)
+    try:
+        process.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=3)
+        raise Rejected("kube_serving_shutdown_deadline") from None
+    # Uvicorn restores and re-raises captured SIGTERM after lifespan teardown.
+    if process.returncode != 0 and not (sent and process.returncode == -signal.SIGTERM):
+        raise Rejected("kube_serving_service_exit")
+
+
 def qualify(config, expected):
     client = Client("serving")
     cases = []
@@ -152,15 +167,8 @@ def qualify(config, expected):
                 check("unapproved-or-revoked-predict-503", request("/v1/predict", body)[0] == 503)
                 check("refused-before-worker-start", not client.request("pods")["items"])
         finally:
-            if process.poll() is None:
-                process.send_signal(signal.SIGTERM)
-            try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=3)
-                raise Rejected("kube_serving_shutdown_deadline") from None
-        check("ordinary-CLI-clean-shutdown", process.returncode == 0)
+            stop(process)
+        check("ordinary-CLI-termination-confirmed", process.poll() is not None)
         check("worker-cleanup-confirmed", not client.request("pods")["items"])
         check("service-output-empty", bounded_read(output, 65536) == b"")
         check("audit-journal-created", (directory / "audit").is_dir())

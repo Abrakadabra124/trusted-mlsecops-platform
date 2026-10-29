@@ -76,6 +76,27 @@ def invoke(state, profile, config, expected):
             or len(statuses) != 1
             or statuses[0].get("state", {}).get("terminated", {}).get("exitCode") != 0
         ):
+            allowed = {
+                "startup-deadline",
+                "ordinary-CLI-ready-after-verified-load",
+                "ONNX-golden-parity",
+                "unapproved-or-revoked-ready-503",
+                "unapproved-or-revoked-predict-503",
+                "service-output-empty",
+                "refused-before-worker-start",
+                "service-process-alive",
+                "worker-cleanup-confirmed",
+                "stopped-worker-503",
+            }
+            reason = next(
+                (
+                    label
+                    for label in allowed
+                    if raw.strip() == ("kube_serving_probe:" + label).encode()
+                ),
+                "unclassified",
+            )
+            print(canonical({"probe_failure": reason, "release_ready": False}).decode(), flush=True)
             raise Rejected("kube_serving_probe_job_failed")
         report = decode(raw, 65536)
         if report.get("status") != "pass" or report.get("release_ready") is not False:
@@ -94,7 +115,9 @@ def qualify(root, state, image):
         raise Rejected("kube_serving_dirty_source")
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     fingerprint, started = source_fingerprint(root), now()
+    print(canonical({"stage": "serving-api-bootstrap"}).decode(), flush=True)
     profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
+    print(canonical({"stage": "actual-candidate-refusal"}).decode(), flush=True)
     actual_result = actual(root, state, image)
     fixtures.PromotionAdmissionContracts.setUpClass()
     fixture = fixtures.PromotionAdmissionContracts()
@@ -124,6 +147,7 @@ def qualify(root, state, image):
         )
         expected = {"ready": False, "features": features, "scores": scores}
         before = ledger(state)
+        print(canonical({"stage": "controlled-before-approval"}).decode(), flush=True)
         refused = invoke(state, profile, config, expected)
         if ledger(state) != before:
             raise Rejected("kube_serving_refusal_wrote_storage")
@@ -139,6 +163,7 @@ def qualify(root, state, image):
         model = digest(fixture.fixture.bundle.materials.fixture.model)
         expected.update(ready=True, model=model, bundle=accepted["receipt"]["subject_sha256"])
         after = ledger(state)
+        print(canonical({"stage": "controlled-after-approval"}).decode(), flush=True)
         admitted = invoke(state, profile, config, expected)
         trust_authority.update(
             state,
@@ -147,6 +172,7 @@ def qualify(root, state, image):
             revoked_artifacts=[model],
             backend=kube_trust.binding,
         )
+        print(canonical({"stage": "controlled-after-revocation"}).decode(), flush=True)
         revoked = invoke(state, profile, config, {**expected, "ready": False})
         if (
             ledger(state) != after
