@@ -1,6 +1,6 @@
 # M11: старый подписанный trust-документ на actual candidate
 
-Статус: реализация и локальные проверки готовы, native evidence ожидается. Полные M11/CP3/R1 остаются открыты. Это in-process signed-response replay qualification, не защита от rollback доверенного DB administrator и не разрешение production release.
+Статус: [native dba0f75 / 40922974146](evidence/candidate-trust-replay-2026-10-29.md) success. Версия 5 с действующей подписью и остатком срока 3361.69 s точно отказана после получения версии 7; HTTP 503, cache invalidation, no-late-ML и новый working Engine подтверждены. Полные M11/CP3/R1 остаются открыты. Это in-process signed-response replay qualification, не защита от rollback доверенного DB administrator и не разрешение production release.
 
 ## Сценарий
 
@@ -32,4 +32,4 @@ Replay использует существующий [denial harness](../mlsecop
 6. При expiry, другой подписи/policy/revocation set считать run fail/inconclusive. После исправления причины повторить весь source-bound run с новым явным qualification permit в его прежних пределах. Не восстанавливать доверие удалением revocations или публикацией старого документа.
 7. В finally возвращается исходный transport; owned Engines и workers закрываются. Для успеха необходимы worker absence после replay/recovery, source SQL stopped и cluster absence. При неподтверждённой очистке эскалировать владельцу run с finite phase/cause, без secrets/raw payload.
 
-Отрицательные локальные tests покрывают expired/corrupt/noncanonical/mutable capture, unsigned current response, одинаковую версию, искусственный floor, несовпадение payload/digest, другой policy/revocations и clock skew. Native result публикуется только после terminal CI и сверки первичных hashes, trace и cleanup.
+Отрицательные локальные tests покрывают expired/corrupt/noncanonical/mutable capture, unsigned current response, одинаковую версию, искусственный floor, несовпадение payload/digest, другой policy/revocations и clock skew. Локально 85 methods pass; в Linux CI 277 method executions без skipped. Replay verifier и общий denial harness: 118/118 statements и 24/24 branches. В actual policy-change Job 131 typed assertion, в общей actual группе 757 с повторами. Native [primary evidence](evidence/candidate-trust-replay-2026-10-29.md) проверено по source/report hashes, timestamped trace и cleanup.
