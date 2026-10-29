@@ -24,6 +24,7 @@ from mlsecops.private_cli import Arguments
 from mlsecops.storage_pki import workspace_id
 from scripts import promotion_qualification as fixtures
 from scripts import serving_native
+from scripts.kube_approval_fixture import renew, shorten
 from scripts.kube_promotion_native import actual, stage
 from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
@@ -226,6 +227,7 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
         refused = invoke(state, profile, config, expected)
         if ledger(state) != before:
             raise Rejected("kube_serving_refusal_wrote_storage")
+        expires = shorten(fixture)
         request = stage(
             state,
             arguments["package"],
@@ -240,6 +242,36 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
         after = ledger(state)
         print(canonical({"stage": "controlled-after-approval"}).decode(), flush=True)
         admitted = invoke(state, profile, config, expected)
+        print(canonical({"stage": "signed-approval-expiry"}).decode(), flush=True)
+        expiry = invoke(state, profile, config, {**expected, "expires_at": expires})
+        cold_expired = invoke(
+            state,
+            profile,
+            config,
+            {**expected, "ready": False, "reader_refusal": "release_expired_or_future_document"},
+        )
+        expired_retry = kube_promotion.invoke(root, state, promotion, request, image)
+        if expired_retry["status"] != "rejected" or ledger(state) != after:
+            raise Rejected("kube_serving_expired_retry_admitted_or_wrote")
+        old_subject = expected["bundle"]
+        renew(fixture, profile["image_id"])
+        renewed_request = stage(
+            state,
+            arguments["package"],
+            arguments["policy_envelope"],
+            arguments["assurance_envelope"],
+            arguments["approval_envelope"],
+            arguments["reports"],
+        )
+        renewed = kube_promotion.invoke(root, state, promotion, renewed_request, image)
+        receipt = renewed["receipt"]
+        if receipt is None or receipt["sequence"] != 2 or receipt["subject_sha256"] == old_subject:
+            raise Rejected("kube_serving_recovery_binding")
+        config["minimum_sequence"] = 2
+        expected["bundle"] = receipt["subject_sha256"]
+        after = ledger(state)
+        print(canonical({"stage": "explicit-release-renewal"}).decode(), flush=True)
+        recovery = invoke(state, profile, config, expected)
         lifecycle = {}
         for fault in ("outage", "blackhole", "policy-change", "revocation"):
             print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
@@ -289,6 +321,14 @@ def qualify(root, state, image, *, include_candidate=False, prepared=None):
             "before_approval": refused,
             "approved": admitted,
             "after_revocation": revoked,
+            "approval_expiry": {
+                "active": expiry,
+                "cold": cold_expired,
+                "retry": expired_retry,
+                "renewed_receipt": receipt,
+                "recovery": recovery,
+                "expired_retry_ledger_unchanged": True,
+            },
             "live_trust": lifecycle,
             **({"actual_inference": candidate_result} if include_candidate else {}),
             "limitations": [

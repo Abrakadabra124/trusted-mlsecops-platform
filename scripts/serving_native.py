@@ -50,6 +50,15 @@ def bind_real_runtime(fixture, image):
         candidate_reference=candidate.candidate_ref, evaluation_reference=candidate.evaluation_ref
     )
     bundle.capsule = bundle.materials.create()
+    bind_release(fixture, image)
+    return generated.features[:3], generated.trained["python_scores"][:3]
+
+
+def bind_release(fixture, image):
+    """Rebind controlled release proofs without regenerating its candidate."""
+    authorization = fixture.fixture
+    bundle = authorization.bundle
+    reference = digest(bundle.materials.fixture.model)
     bundle.arguments["expected_serving_image"] = image
     package = bundle.create()
     manifest = release_bundle.index(package["envelope"], bundle.materials.public)
@@ -76,7 +85,6 @@ def bind_real_runtime(fixture, image):
             authorization.approval, "release-approval", authorization.authorities.keys["approver"]
         ),
     )
-    return generated.features[:3], generated.trained["python_scores"][:3]
 
 
 @contextmanager

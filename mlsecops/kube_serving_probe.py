@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from mlsecops import (
+    kube_serving_expiry,
     kube_serving_lifecycle,
     kube_serving_runtime,
     release_reader,
@@ -78,6 +79,8 @@ CHECKS = {
     "worker-cleanup-confirmed",
 }
 CHECKS |= kube_serving_lifecycle.CHECKS
+CHECKS |= kube_serving_expiry.CHECKS
+CHECKS.add("expected-reader-refusal")
 READER_ERRORS = {
     "trust_service_unavailable",
     "trust_server_clock_skew",
@@ -286,7 +289,9 @@ def qualify(config, expected, progress=None):
                 check("unauthenticated-401", request("/v1/predict", body, False)[0] == 401)
                 check("malformed-422", request("/v1/predict", b"{}")[0] == 422)
                 check("oversized-413", request("/v1/predict", b"x" * 65537)[0] == 413)
-                if "fault" in expected:
+                if "expires_at" in expected:
+                    lifecycle = kube_serving_expiry.exercise(request, body, expected, check)
+                elif "fault" in expected:
                     lifecycle = kube_serving_lifecycle.exercise(
                         process, request, body, expected, check
                     )
@@ -301,6 +306,12 @@ def qualify(config, expected, progress=None):
                 check("unapproved-or-revoked-ready-503", ready[0] == 503)
                 check("unapproved-or-revoked-predict-503", request("/v1/predict", body)[0] == 503)
                 check("refused-before-worker-start", not client.request("pods")["items"])
+                if "reader_refusal" in expected:
+                    check(
+                        "expected-reader-refusal",
+                        expected["reader_refusal"] in READER_ERRORS
+                        and diagnose(config) == "reader-" + expected["reader_refusal"],
+                    )
         finally:
             previous = progress[0]
             progress[0] = "shutdown"

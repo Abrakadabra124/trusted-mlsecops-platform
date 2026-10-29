@@ -63,6 +63,12 @@ class NativeContracts(unittest.TestCase):
             self.assertNotIn("PRIVATE-TOKEN", str(report))
 
     def test_approved_probe_obeys_actual_http_body_contract(self):
+        self.approved_probe("ordinary")
+
+    def test_expiry_probe_uses_existing_http_process_without_stopping_worker(self):
+        self.approved_probe("expiry")
+
+    def approved_probe(self, mode):
         import asyncio
         from unittest.mock import Mock
 
@@ -164,6 +170,9 @@ class NativeContracts(unittest.TestCase):
             patch.object(kube_serving_probe.subprocess, "Popen", side_effect=launch),
             patch.object(kube_serving_probe.http.client, "HTTPConnection", return_value=connection),
             patch.object(kube_serving_probe, "stop", side_effect=stop),
+            patch.object(
+                kube_serving_probe.kube_serving_expiry, "exercise", return_value={"expiry": True}
+            ) as expiry,
         ):
             result = kube_serving_probe.qualify(
                 {"kubernetes_worker": PROFILE},
@@ -173,10 +182,17 @@ class NativeContracts(unittest.TestCase):
                     "scores": [0.75],
                     "model": model,
                     "bundle": bundle,
+                    **({"expires_at": 123} if mode == "expiry" else {}),
                 },
             )
         self.assertEqual(result["max_golden_error"], 0)
-        self.assertIn("stopped-worker-503", result["cases"])
+        if mode == "ordinary":
+            self.assertIn("stopped-worker-503", result["cases"])
+            expiry.assert_not_called()
+        else:
+            self.assertNotIn("stopped-worker-503", result["cases"])
+            self.assertEqual(result["lifecycle"], {"expiry": True})
+            expiry.assert_called_once()
 
     def test_refusal_probe_prepares_private_audit_before_ordinary_cli_start(self):
         from unittest.mock import Mock
