@@ -1,5 +1,7 @@
 # Файлы ключей и проверки SQL при оптимизации Python
 
+Последующее обновление: [U03 исправлен и проверен в Linux scope](../evidence/artifact-files-2026-10-29.md), `6c65a83` / run 40945576220 success, включая actual serving и cleanup. Ниже сохранены история U01/U02 и исходная карта U03. Актуальный файловый контракт и recovery описаны в [отдельном ранбуке](artifact-files.md); Windows ACL/reparse и полный аудит остаются открытыми.
+
 Статус: [Linux canary, optimized SQL contracts и native serving/tracking пройдены](../evidence/unsafe-api-fixes-2026-10-29.md), `9362c04`, runs `40940461445` / `40940542906`. Полный внешний аудит не закрыт. U03 для общих файловых helpers остаётся отдельной незавершённой работой. Эти проверки не заменяют независимые ML challenge cases M22.
 
 ## Что обнаружено и изменено

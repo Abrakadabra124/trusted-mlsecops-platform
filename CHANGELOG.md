@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 artifact filesystem boundary - 2026-10-29
+
+- U03 в Linux scope: regular-file, size/metadata validation и no-follow directory traversal; atomic replace/cleanup привязаны к открытому parent descriptor. Windows reparse/ACL остаются вне доказанного scope.
+- Добавлены 22 filesystem test methods и ранбук recovery, включая неоднозначный результат directory fsync после rename. `6c65a83` / 40945576220 success: 379 Linux methods, contracts 146 statements / 50 branches 100%, native serving и cleanup verified.
+- Обновлён только contracts.py pin в data.lock, generated output неизменен. [Очищенное evidence](docs/evidence/artifact-files-2026-10-29.md). Полный R1 и независимые M22 challenges не закрыты.
+
 ## R1 trust qualification и external audit fixes - 2026-10-29
 
 - [Проверены два необратимых отзыва](docs/evidence/independent-authorities-2026-10-29.md) на одном actual candidate/permit с независимыми CA/PVC/history и двумя final cold Jobs. Full M11/R1 открыт.

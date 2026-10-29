@@ -1,6 +1,6 @@
 # Файловые границы артефактов: U03
 
-Статус: реализация и Windows pure/controlled tests проверены; Linux descriptor/race tests и native serving ещё ожидают CI. Полный R1 не принят. Код: [contracts.py](../../mlsecops/contracts.py), тесты: [artifact_files_qualification.py](../../scripts/artifact_files_qualification.py).
+Статус: [Linux tests, native serving и cleanup прошли](../evidence/artifact-files-2026-10-29.md), `6c65a83` / run `40945576220`: 379 methods, 0 skips, contracts 146 statements / 50 branches 100%. Windows compatibility не закрывает ACL/reparse races. Полный R1 не принят. Код: [contracts.py](../../mlsecops/contracts.py), тесты: [artifact_files_qualification.py](../../scripts/artifact_files_qualification.py).
 
 ## Контракт и границы доверия
 
