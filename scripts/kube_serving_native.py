@@ -1,5 +1,6 @@
 """Hosted normal serving CLI with separate worker, real API, SQL and trust."""
 
+import copy
 import sys
 import uuid
 from contextlib import suppress
@@ -25,6 +26,7 @@ from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
 from scripts.kube_promotion_native import actual, stage
+from scripts.kube_promotion_replay import exercise as exercise_replay
 from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
@@ -203,6 +205,7 @@ def qualify(
         fixture.setUp()
         features, scores = serving_native.bind_real_runtime(fixture, profile["image_id"])
         arguments = fixture.arguments
+        previous = copy.deepcopy(arguments)
         promotion = configuration(
             "/client", "/trust-client", arguments, fixture.trust_fixture.public
         )
@@ -272,6 +275,8 @@ def qualify(
             raise Rejected("kube_serving_recovery_binding")
         config["minimum_sequence"] = 2
         expected["bundle"] = receipt["subject_sha256"]
+        print(canonical({"stage": "unexpired-previous-sequence"}).decode(), flush=True)
+        replay = exercise_replay(root, state, image, promotion, previous, renewed_request, receipt)
         after = ledger(state)
         print(canonical({"stage": "explicit-release-renewal"}).decode(), flush=True)
         recovery = invoke(state, profile, config, expected)
@@ -341,6 +346,7 @@ def qualify(
                 ],
             },
             "live_trust": lifecycle,
+            "unexpired_replay": replay,
             **({"actual_inference": candidate_result} if candidate_result is not None else {}),
             "limitations": [
                 "Controlled approvals are not acceptance of the actual candidate",

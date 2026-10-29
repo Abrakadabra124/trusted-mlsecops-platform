@@ -121,9 +121,18 @@ def outcome(terminal, pod, content, config, request):
         terminal["type"] == "Failed"
         and type(code) is int
         and code == 1
-        and content == b"promotion_rejected\n"
+        and content in (b"promotion_rejected\n", b"promotion_sequence_conflict\n")
     ):
-        return {"status": "rejected", "receipt": None, "release_ready": False}
+        return {
+            "status": "rejected",
+            "receipt": None,
+            "release_ready": False,
+            **(
+                {"reason": "promotion_sequence_conflict"}
+                if content == b"promotion_sequence_conflict\n"
+                else {}
+            ),
+        }
     if terminal["type"] != "Complete" or type(code) is not int or code != 0:
         raise Rejected("kube_promotion_job_failed")
     receipt = decode(content, MAX_REQUEST)

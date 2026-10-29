@@ -148,7 +148,12 @@ def main(arguments=None):
         print(canonical(result).decode())
         return 0
     except (Exception, KeyboardInterrupt) as error:
-        print("promotion_rejected", file=sys.stderr)
+        reason = (
+            "promotion_sequence_conflict"
+            if isinstance(error, Rejected) and str(error) == "promotion_commit_unconfirmed:P1004"
+            else "promotion_rejected"
+        )
+        print(reason, file=sys.stderr)
         return 130 if isinstance(error, KeyboardInterrupt) else 1
 
 

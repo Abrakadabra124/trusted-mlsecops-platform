@@ -231,6 +231,18 @@ class KubernetesPromotionContracts(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "missing_exit"):
             kube_promotion.outcome({"type": "Complete"}, {}, b"", self.config(), self.request())
 
+    def test_sequence_conflict_is_distinct_from_expiry_generic_refusal_and_crash(self):
+        self.cluster(terminal="Failed", code=1, content=b"promotion_sequence_conflict\n")
+        result = self.invoke()
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(result["reason"], "promotion_sequence_conflict")
+        self.assertIsNone(result["receipt"])
+        self.assertEqual(self.objects, {})
+        for content in (b"promotion_sequence_conflict extra\n", b"promotion_sequence_conflict"):
+            self.cluster(terminal="Failed", code=1, content=content)
+            with self.assertRaisesRegex(Rejected, "job_failed"):
+                self.invoke()
+
     def test_image_pod_and_source_changes_block_success_and_cleanup_still_runs(self):
         self.cluster()
         self.profile["image_id"] = "sha256:" + "e" * 64

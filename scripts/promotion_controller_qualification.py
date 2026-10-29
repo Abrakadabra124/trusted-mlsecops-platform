@@ -212,6 +212,24 @@ class SubmissionContracts(unittest.TestCase):
 
 
 class CliContracts(unittest.TestCase):
+    def test_sequence_conflict_has_exact_public_code_without_echoing_arbitrary_errors(self):
+        for failure, expected in (
+            (Rejected("promotion_commit_unconfirmed:P1004"), "promotion_sequence_conflict"),
+            (Rejected("promotion_commit_unconfirmed:P1003"), "promotion_rejected"),
+            (Rejected("promotion_commit_unconfirmed:P1004 private"), "promotion_rejected"),
+            (RuntimeError("promotion_commit_unconfirmed:P1004"), "promotion_rejected"),
+        ):
+            with (
+                self.subTest(error=type(failure).__name__, expected=expected),
+                patch.object(controller, "enforce_privacy"),
+                patch.object(controller, "configured", side_effect=failure),
+                contextlib.redirect_stdout(io.StringIO()) as out,
+                contextlib.redirect_stderr(io.StringIO()) as err,
+            ):
+                self.assertEqual(controller.main(["--config", "config", "--request", "request"]), 1)
+            self.assertEqual(out.getvalue(), "")
+            self.assertEqual(err.getvalue(), expected + "\n")
+
     def test_cli_success_and_module_entrypoint_have_bounded_constant_diagnostics(self):
         result = {"state": "recorded-not-activated", "release_ready": False}
         with (

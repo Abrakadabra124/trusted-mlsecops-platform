@@ -46,6 +46,10 @@ jobs:
           uv run --locked python -c "import json; t=json.load(open('.coverage-inference-gate.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --branch --data-file=.coverage-serving-startup --source=mlsecops.serving_startup -m unittest scripts.serving_startup_qualification
           uv run --locked coverage report --data-file=.coverage-serving-startup --fail-under=100
+          uv run --locked coverage run --branch --data-file=.coverage-promotion-replay --source=mlsecops.promotion_controller,mlsecops.kube_promotion,scripts.kube_promotion_replay -m unittest scripts.promotion_controller_qualification scripts.kube_promotion_qualification scripts.kube_promotion_replay_qualification
+          uv run --locked coverage report --data-file=.coverage-promotion-replay --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-promotion-replay -o .coverage-promotion-replay.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-promotion-replay.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap

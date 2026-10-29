@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Действующий предыдущий sequence: отказ откату и идемпотентный retry текущего](promotion-replay.md). Реализация и pure/mocked tests подготовлены; native проверка ещё требуется.
+
 - [Совместный snapshot CAS и promotion journal](promotion-snapshot.md). Native `b191555` / 40898945667: unchanged CAS + authorities/events/heads при expired retry и key revocation; owned cleanup подтверждён. Полный M11 открыт.
 
 - [Actual-candidate key revocation: положительный inference, live trace и точный cold Reader refusal](candidate-key-revocation.md). [Native evidence](evidence/candidate-key-revocation-2026-10-29.md): first 503 за 5.290494312 s, 70 cases pass; ключ не удаляется из revocation set. Полный M11 открыт.

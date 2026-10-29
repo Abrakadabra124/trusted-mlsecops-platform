@@ -24,6 +24,7 @@ class ApprovalFixtureContracts(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         image = fixture.arguments["expected_serving_image"]
         bind_real_runtime(fixture, image)
+        unexpired_original = copy.deepcopy(fixture.arguments)
         clock = fixture.clock
         with patch.object(approvals.time, "time", return_value=clock + 10):
             expires = approvals.shorten(fixture)
@@ -42,6 +43,10 @@ class ApprovalFixtureContracts(unittest.TestCase):
         self.assertNotEqual(second["subject_sha256"], first["subject_sha256"])
         self.assertGreater(second["expires_at"], first["expires_at"])
         self.assertFalse(second["release_ready"])
+        previous = release_authorization.verify(**unexpired_original, clock=expires + 1)
+        self.assertEqual(previous["sequence"], 1)
+        self.assertGreater(previous["expires_at"], expires + 1)
+        self.assertNotEqual(previous["subject_sha256"], second["subject_sha256"])
         with self.assertRaisesRegex(Rejected, "sequence"):
             approvals.renew(fixture, image)
         with patch.object(approvals.time, "time", return_value=clock + 1800):
