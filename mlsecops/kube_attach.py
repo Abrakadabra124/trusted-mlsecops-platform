@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from websockets.sync.client import connect
 
 from mlsecops import serving_protocol as protocol
+from mlsecops import serving_startup
 from mlsecops.contracts import Rejected, canonical
 from mlsecops.controller_api import HOST, Client, identifier
 from mlsecops.private_cli import Arguments
@@ -79,8 +80,13 @@ def exchange(connection, request):
         if remaining <= 0:
             raise Rejected("serving_attach_deadline")
         frame = connection.recv(timeout=remaining)
-        if not isinstance(frame, bytes) or not frame or frame[0] != 1:
-            raise Rejected("serving_attach_output")
+        if not isinstance(frame, bytes) or not frame:
+            raise Rejected("serving_attach_frame")
+        if frame[0] != 1:
+            raise Rejected(
+                "serving_attach_"
+                + {2: "stderr", 3: "status", 255: "closed"}.get(frame[0], "channel")
+            )
         result.extend(frame[1:])
         if len(result) > protocol.MAX_FRAME:
             raise Rejected("serving_attach_output_limit")
@@ -114,16 +120,26 @@ def serve(connection, source, destination):
 
 
 def main():
+    phase = "preflight"
     try:
         enforce()
         parser = Arguments(prog="kube-attach")
         parser.add_argument("--pod", required=True)
         options = parser.parse_args()
+        phase = "connect"
         with open_connection(options.pod) as connection:
+            phase = "exchange"
             serve(connection, sys.stdin.buffer, sys.stdout.buffer)
         return 0
-    except Exception:
-        sys.stderr.write("serving_attach_rejected\n")
+    except Exception as error:
+        code = str(error)
+        if code not in serving_startup.ATTACH_CODES and phase != "preflight":
+            status = getattr(getattr(error, "response", None), "status_code", None)
+            code = "serving_attach_http_" + str(status) if type(status) is int else ""
+            if code not in serving_startup.ATTACH_CODES:
+                code = "serving_attach_" + phase + "_failed"
+        suffix = ":" + code if code in serving_startup.ATTACH_CODES else ""
+        sys.stderr.write("serving_attach_rejected" + suffix + "\n")
         return 1
 
 

@@ -157,7 +157,7 @@ class Worker(StdioWorker):
                 [sys.executable, "-m", "mlsecops.kube_attach", "--pod", pod["metadata"]["name"]],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 start_new_session=os.name == "posix",
             )
             self.channel = Channel(process)
@@ -177,7 +177,18 @@ class Worker(StdioWorker):
         self.closed = True
         try:
             if self.channel is not None:
-                self.channel.close()
+                process = self.channel.process
+                try:
+                    self.channel.close()
+                finally:
+                    if process.stderr is not None:
+                        try:
+                            if self.startup_failure is not None and process.poll() is not None:
+                                code = serving_startup.bridge_code(process.stderr.read(513))
+                                if code != "unknown":
+                                    self.startup_failure = (self.startup_failure[0], code)
+                        finally:
+                            process.stderr.close()
                 self.channel = None
         finally:
             if self.attempted or self.job_uid is not None:

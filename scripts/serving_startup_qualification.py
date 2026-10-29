@@ -10,6 +10,18 @@ from mlsecops.contracts import Rejected, canonical
 
 
 class StartupDiagnosticsContracts(unittest.TestCase):
+    def test_bridge_codes_are_exact_and_never_export_payload(self):
+        for code in startup.ATTACH_CODES:
+            self.assertEqual(
+                startup.bridge_code(("serving_attach_rejected:" + code + "\n").encode()), code
+            )
+        for value in (
+            b"PRIVATE",
+            b"serving_attach_rejected:serving_attach_stderr\nPRIVATE",
+            b"x" * 513,
+        ):
+            self.assertEqual(startup.bridge_code(value), "unknown")
+
     def test_http_lifespan_diagnostics_require_explicit_opt_in(self):
         from mlsecops import serving_http
 

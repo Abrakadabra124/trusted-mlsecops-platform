@@ -200,6 +200,25 @@ class RuntimeContracts(unittest.TestCase):
             worker.close()
         self.assertIsNone(api.job)
 
+    def test_startup_diagnostic_pipe_is_bounded_closed_and_redacted(self):
+        for content, expected in (
+            (b"serving_attach_rejected:serving_attach_stderr\n", "serving_attach_stderr"),
+            (b"PRIVATE-TOKEN", "unknown"),
+        ):
+            worker, api = self.worker()
+            worker.startup_failure = ("load", "unknown")
+            channel = Mock()
+            channel.process.stderr.read.return_value = content
+            worker.channel = channel
+            worker.close()
+            channel.process.stderr.read.assert_called_once_with(513)
+            channel.process.stderr.close.assert_called_once()
+            self.assertEqual(worker.startup_failure, ("load", expected))
+        worker, api = self.worker()
+        worker.channel = Mock()
+        worker.channel.process.stderr = None
+        worker.close()
+
     def test_missing_failed_multiple_or_pending_pods_fail_with_cleanup(self):
         for situation in ["missing-job", "multiple-pods", "failed-pod", "no-pod", "pending-pod"]:
             worker, api = self.worker()

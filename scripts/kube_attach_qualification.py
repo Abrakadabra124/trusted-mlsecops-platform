@@ -10,6 +10,33 @@ from mlsecops.contracts import Rejected, canonical
 
 
 class AttachContracts(unittest.TestCase):
+    def test_cli_distinguishes_finite_transport_codes_without_exception_text(self):
+        from types import SimpleNamespace
+
+        for phase, error, suffix in (
+            ("preflight", RuntimeError("SECRET"), ""),
+            ("exchange", Rejected("serving_attach_stderr"), ":serving_attach_stderr"),
+            ("connect", RuntimeError("SECRET URL"), ":serving_attach_connect_failed"),
+            ("http", RuntimeError("SECRET TOKEN"), ":serving_attach_http_403"),
+        ):
+            if phase == "http":
+                error.response = SimpleNamespace(status_code=403)
+            with (
+                patch.object(sys, "argv", ["kube-attach", "--pod", "worker-123"]),
+                patch.object(
+                    attach, "enforce", side_effect=error if phase == "preflight" else None
+                ),
+                patch.object(attach, "open_connection") as opened,
+                patch.object(attach, "serve", side_effect=error if phase == "exchange" else None),
+                patch.object(sys, "stdin", Mock(buffer=io.BytesIO())),
+                patch.object(sys, "stdout", Mock(buffer=io.BytesIO())),
+                patch.object(sys, "stderr", io.StringIO()) as diagnostic,
+            ):
+                if phase in {"connect", "http"}:
+                    opened.return_value.__enter__.side_effect = error
+                self.assertEqual(attach.main(), 1)
+                self.assertEqual(diagnostic.getvalue(), "serving_attach_rejected" + suffix + "\n")
+
     def setUp(self):
         self.initial = protocol.load_request(b"model")
         self.request = protocol.request(self.initial, "ping")
@@ -182,7 +209,10 @@ class AttachContracts(unittest.TestCase):
                 opened.return_value.__enter__.return_value = connection
                 self.assertEqual(attach.main(), 1 if failure else 0)
                 enforce.assert_called_once()
-            self.assertEqual(diagnostic.getvalue(), "serving_attach_rejected\n" if failure else "")
+            self.assertEqual(
+                diagnostic.getvalue(),
+                "serving_attach_rejected:serving_attach_exchange_failed\n" if failure else "",
+            )
 
 
 if __name__ == "__main__":

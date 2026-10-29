@@ -17,6 +17,29 @@ PHASES = {
     "unknown",
 }
 WORKER_PHASES = {"none", "create", "observe", "attach", "load"}
+ATTACH_CODES = {
+    "serving_attach_connect_failed",
+    "serving_attach_exchange_failed",
+    "serving_worker_not_ready",
+    "serving_runtime_version",
+    "unexpected_fields",
+    "serving_attach_frame",
+    "serving_attach_stderr",
+    "serving_attach_status",
+    "serving_attach_closed",
+    "serving_attach_channel",
+    "serving_attach_protocol",
+    "serving_attach_deadline",
+    "serving_attach_output_limit",
+    "serving_attach_extra_output",
+    "serving_frame_noncanonical",
+    "serving_frame_limit",
+    "serving_reply_binding",
+}
+ATTACH_CODES |= {
+    "serving_attach_http_" + str(code)
+    for code in (400, 401, 403, 404, 409, 429, 500, 502, 503, 504)
+}
 CAUSES = {
     "unknown",
     "serving_model_changed_before_load",
@@ -37,6 +60,14 @@ CAUSES = {
     "serving_worker_start_deadline",
     "serving_worker_image_mismatch",
 }
+CAUSES |= ATTACH_CODES
+
+
+def bridge_code(content):
+    for code in ATTACH_CODES:
+        if content == ("serving_attach_rejected:" + code + "\n").encode():
+            return code
+    return "unknown"
 
 
 def record(phase, worker, error):
