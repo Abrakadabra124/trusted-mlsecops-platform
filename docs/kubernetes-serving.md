@@ -2,6 +2,8 @@
 
 Неделя 9, T15 «Inference API и loader», CP3. Реализован явный Kubernetes backend для обычного `mlsecops.serving_http --config`. До native run это локально проверенный код, не full M12 или завершённый R1.
 
+**Текущий native статус: failure, не принят.** Последний проверенный code `ef3ce2f`, [run 40804862684](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40804862684): 94 adjacent/harness + 24 transport/runtime tests pass; native подтвердил actual-candidate refusal, завершил `controlled-before-approval` и перешёл к `controlled-after-approval`. Последний probe отказал в фазе HTTP (`Rejected`, exit 1); точный failing assertion и причина отказа approved runtime пока не установлены. SQL stop и cluster deletion success. Следующий обязательный шаг - локализовать activation/HTTP refusal и повторить весь сценарий на новом frozen source. Полный M12 и R1 не пройдены.
+
 ## Решение и границы
 
 HTTP controller в `ml-serving` читает releases и текущую trust policy через раздельные SQL identities. `kubernetes_worker` в конфигурации содержит полный закреплённый image profile: `image`, `image_id`, `config_id`, `manifest_id`, `source_fingerprint`, `source_revision`. Его `image_id` должен совпадать с `expected_serving_image`. Поле явно выбирает backend; ошибка Kubernetes никогда не вызывает fallback к Docker.
