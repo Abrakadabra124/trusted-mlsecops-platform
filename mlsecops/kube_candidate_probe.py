@@ -17,6 +17,7 @@ import uvicorn
 
 from mlsecops import (
     kube_candidate_clock,
+    kube_candidate_replay,
     kube_candidate_trust,
     serving,
     serving_http,
@@ -205,6 +206,38 @@ def clock_matrix(config, expected, check, client, factory):
     return reports
 
 
+def replay_matrix(config, expected, body, saved, check, client, factory):
+    if saved is None:
+        return None
+    if expected.get("fault") != "policy-change":
+        raise Rejected("candidate_replay_fault")
+    check("pre-replay-worker-absence", len(client.request("pods")["items"]), 0)
+    engine = serving.Engine(candidate(config), worker_factory=factory)
+    with site(engine) as request:
+        report = kube_candidate_clock.exercise(
+            engine,
+            request,
+            body,
+            expected,
+            check,
+            fault="version-replay",
+            reader_factory=lambda: candidate(config),
+            replayed=saved,
+        )
+    check("version-replay-worker-cleanup", len(client.request("pods")["items"]), 0)
+    # An explicit new Engine is necessary: the old generation must stay fenced.
+    recovered = serving.Engine(candidate(config), worker_factory=factory)
+    with site(recovered) as request:
+        _, error = matrix(
+            request,
+            recovered,
+            expected,
+            lambda label, actual, wanted: check("replay-recovery-" + label, actual, wanted),
+        )
+    check("replay-recovery-worker-cleanup", len(client.request("pods")["items"]), 0)
+    return {**report, "recovery_max_golden_error": error}
+
+
 def qualify(config, expected):
     cases = []
 
@@ -285,7 +318,7 @@ def qualify(config, expected):
     clocks = clock_matrix(config, expected, check, client, factory)
     # The subsequent fresh Engine also verifies same-candidate inference recovery.
     engine = serving.Engine(candidate(config), worker_factory=factory)
-    lifecycle = None
+    lifecycle = saved = None
     with site(engine) as request:
         body, error = matrix(request, engine, expected, check)
         workers = client.request("pods")["items"]
@@ -293,6 +326,9 @@ def qualify(config, expected):
         check("actual-candidate-not-release", engine.loaded.release_ready, False)
         check("qualification-audit-context", engine.audit_context.kind, "candidate-qualification")
         if "fault" in expected:
+            if expected["fault"] == "policy-change":
+                with engine.exclusive():
+                    saved = kube_candidate_replay.capture(engine.reader.trust)
             lifecycle = kube_candidate_trust.exercise(
                 lambda: candidate(config), request, body, expected, check, pause=engine.exclusive
             )
@@ -305,6 +341,7 @@ def qualify(config, expected):
                 time.sleep(0.1)
             check("stopped-worker-503", request("/v1/predict", body)[0], 503)
             check("stopped-worker-not-ready", request("/readyz")[0], 503)
+    replay = replay_matrix(config, expected, body, saved, check, client, factory)
     check("final-worker-absence", len(client.request("pods")["items"]), 0)
     return {
         "status": "pass",
@@ -314,6 +351,7 @@ def qualify(config, expected):
         "model_sha256": expected["model"],
         "subject_sha256": expected["bundle"],
         **({"clock_cache": clocks} if clocks else {}),
+        **({"version_replay": replay} if replay is not None else {}),
         **({"lifecycle": lifecycle} if lifecycle is not None else {}),
     }
 

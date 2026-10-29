@@ -17,6 +17,41 @@ from scripts import kube_candidate_native as native
 
 
 class CandidateInferenceContracts(unittest.TestCase):
+    def test_replay_matrix_uses_separate_denied_and_recovered_engines(self):
+        engines = [Mock(), Mock()]
+        client = Mock()
+        client.request.return_value = {"items": []}
+        check = Mock()
+        with (
+            patch.object(probe, "candidate"),
+            patch.object(probe.serving, "Engine", side_effect=engines),
+            patch.object(probe, "site", side_effect=lambda engine: nullcontext(Mock())),
+            patch.object(
+                probe.kube_candidate_clock,
+                "exercise",
+                return_value={"cause": "trust_version_replay"},
+            ) as exercise,
+            patch.object(probe, "matrix", return_value=({}, 0.0)) as matrix,
+        ):
+            result = probe.replay_matrix(
+                {}, {"fault": "policy-change"}, {}, b"saved", check, client, Mock()
+            )
+            self.assertEqual(result["recovery_max_golden_error"], 0.0)
+            self.assertIs(exercise.call_args.args[0], engines[0])
+            self.assertEqual(exercise.call_args.kwargs["replayed"], b"saved")
+            exercise.call_args.kwargs["reader_factory"]()
+            self.assertIs(matrix.call_args.args[1], engines[1])
+            matrix.call_args.args[-1]("golden-status", 200, 200)
+            check.assert_any_call("replay-recovery-golden-status", 200, 200)
+            self.assertEqual(client.request.call_count, 3)
+
+    def test_replay_matrix_does_not_run_without_capture_or_for_another_fault(self):
+        with patch.object(probe.serving, "Engine") as construct:
+            self.assertIsNone(probe.replay_matrix({}, {}, {}, None, Mock(), Mock(), Mock()))
+            with self.assertRaisesRegex(Rejected, "candidate_replay_fault"):
+                probe.replay_matrix({}, {"fault": "outage"}, {}, b"saved", Mock(), Mock(), Mock())
+            construct.assert_not_called()
+
     def test_clock_matrix_uses_new_engine_per_fault_and_checks_cleanup(self):
         expected = {"clock_cache": True, "features": [[0.5] * len(probe.FEATURES)]}
         client = Mock()

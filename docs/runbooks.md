@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Actual candidate: повтор старого подписанного trust-документа](candidate-trust-replay.md). Локальные проверки готовы, native evidence ожидается; полный M11 открыт.
+
 - [Actual candidate: clock rollback/skew и недействительная подпись trust response](candidate-clock-cache.md). Native 2b11bf5 / 40916783930 success: 5 faults, exact causes, cache invalidation, no-late-ML, fresh recovery и cleanup; полный M11 открыт.
 
 - [Actual candidate: outage, blackhole, policy change и восстановление](candidate-trust-lifecycle.md). Native 0485996 / 40911041271 success: exact cold denial/recovery, неизменный journal, key revoke последним и cleanup; полный M11 открыт.

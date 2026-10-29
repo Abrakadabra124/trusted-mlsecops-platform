@@ -4,7 +4,7 @@ import copy
 import math
 import time
 
-from mlsecops import signing
+from mlsecops import kube_candidate_replay, signing
 from mlsecops.contracts import Rejected
 
 FAULTS = {
@@ -16,10 +16,11 @@ FAULTS = {
 }
 
 
-def exercise(engine, request, body, expected, check, *, fault, reader_factory):
-    if fault not in FAULTS:
+def exercise(engine, request, body, expected, check, *, fault, reader_factory, replayed=None):
+    causes = {**FAULTS, "version-replay": "trust_version_replay"}
+    if fault not in causes or (fault == "version-replay") != (replayed is not None):
         raise Rejected("candidate_clock_fault")
-    cause = FAULTS[fault]
+    cause = causes[fault]
 
     def require(label, actual, wanted):
         check(fault + "-" + label, actual, wanted)
@@ -37,7 +38,7 @@ def exercise(engine, request, body, expected, check, *, fault, reader_factory):
     lease = reader.trust
     wall, monotonic, source = lease.wall_clock, lease.monotonic_clock, lease.reader
     reader_check, predict = reader.check, worker.predict
-    observed, predictions, trace = [], [], []
+    observed, predictions, trace, replay_proofs = [], [], [], []
 
     def checked(loaded):
         try:
@@ -52,6 +53,12 @@ def exercise(engine, request, body, expected, check, *, fault, reader_factory):
 
     def changed_source():
         envelope, server_clock = source()
+        if fault == "version-replay":
+            envelope, proof = kube_candidate_replay.response(
+                lease, replayed, envelope, server_clock
+            )
+            replay_proofs.append(proof)
+            return envelope, server_clock
         if fault == "server-skew":
             return envelope, server_clock - 10
         envelope = copy.deepcopy(envelope)
@@ -114,10 +121,13 @@ def exercise(engine, request, body, expected, check, *, fault, reader_factory):
     require("fresh-reader-model", recovered.model_sha256, expected["model"])
     require("fresh-reader-bundle", recovered.subject_sha256, expected["bundle"])
     require("fresh-reader-not-release", recovered.release_ready, False)
+    if fault == "version-replay":
+        require("one-replay-response", len(replay_proofs), 1)
     return {
         "fault": fault,
         "cause": observed[0],
         "scope": "injected-reader-dependencies",
         "max_golden_error": error,
         "trace": trace,
+        **({"replay": replay_proofs[0]} if fault == "version-replay" else {}),
     }
