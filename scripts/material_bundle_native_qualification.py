@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from mlsecops import key_files
 from mlsecops.contracts import Rejected, read_json, write_json
 from scripts import material_bundle_native as native
 from scripts import material_bundle_qualification as fixtures
@@ -41,7 +42,8 @@ class NativeBundleContracts(unittest.TestCase):
             },
         )
         (self.state / "keys").mkdir()
-        (self.state / "keys/approver.pem").write_bytes(self.fixture.key.read_bytes())
+        with key_files.opened(self.state / "keys/approver.pem", create=True) as output:
+            output.write(key_files.read(self.fixture.key))
         self.published = {}
         self.denial = "storage_read_rejected:42501"
 

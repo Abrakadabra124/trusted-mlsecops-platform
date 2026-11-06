@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from mlsecops import key_files
 from mlsecops.contracts import Rejected, digest, read_json, write_json
 from mlsecops.signing import create_key
 from scripts import release_bundle_qualification as fixtures
@@ -49,7 +50,8 @@ class NativeReleaseContracts(unittest.TestCase):
             ("approver", self.fixture.materials.key),
             ("evaluator", self.fixture.materials.fixture.directory / "evaluator.pem"),
         ):
-            (self.state / f"keys/{role}.pem").write_bytes(original.read_bytes())
+            with key_files.opened(self.state / f"keys/{role}.pem", create=True) as output:
+                output.write(key_files.read(original))
         self.published = {}
         self.serving_can_write = False
 

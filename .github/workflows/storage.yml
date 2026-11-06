@@ -121,7 +121,7 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-bundle-native --fail-under=100
       - name: Promotion admission and ledger request contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-promotion --source=mlsecops.promotion,mlsecops.promotion_state -m unittest scripts.promotion_qualification scripts.promotion_state_qualification scripts.promotion_policy_history_qualification
+          uv run --locked coverage run --data-file=.coverage-promotion --source=mlsecops.promotion,mlsecops.promotion_state -m unittest scripts.promotion_qualification scripts.promotion_state_qualification scripts.promotion_policy_history_qualification scripts.rollback_admission_qualification
           uv run --locked coverage report --data-file=.coverage-promotion --fail-under=100
           uv run --locked python -m scripts.promotion_native_qualification
       - name: M03 integrity, actual SQL roles and training/evaluation
@@ -164,14 +164,14 @@ jobs:
         run: uv run --locked python -m scripts.promotion_recovery_native --state .runtime --confirm-disposable
       - name: Current trust, lease and authority command contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-trust --source=mlsecops.trust,mlsecops.trust_authority -m unittest scripts.trust_qualification scripts.trust_authority_qualification
+          uv run --locked coverage run --data-file=.coverage-trust --source=mlsecops.trust,mlsecops.trust_authority -m unittest scripts.trust_qualification scripts.trust_authority_qualification scripts.trust_root_store_qualification scripts.kube_trust_qualification
           uv run --locked coverage report --data-file=.coverage-trust --fail-under=100
           uv run --locked python -m scripts.trust_native_qualification
       - name: Separate TLS trust authority, revocations and real sixty-second outage
         run: uv run --locked python -m scripts.trust_native --state .runtime --confirm-disposable
       - name: Current release reader and immutable handoff contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-release-reader --source=mlsecops.release_reader -m unittest scripts.release_reader_qualification
+          uv run --locked coverage run --data-file=.coverage-release-reader --source=mlsecops.release_reader -m unittest scripts.release_reader_qualification scripts.rollback_admission_qualification
           uv run --locked coverage report --data-file=.coverage-release-reader --fail-under=100
           uv run --locked python -m unittest scripts.release_reader_native_qualification
       - name: Disposable TLS SQL reader with controlled signed fixtures, not ML acceptance
