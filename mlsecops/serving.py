@@ -31,9 +31,10 @@ class ServingResult:
 
 
 class Engine:
-    def __init__(self, reader, *, worker_factory=None):
+    def __init__(self, reader, *, worker_factory=None, close_reader=None):
         self.reader = reader
         self.worker_factory = worker_factory
+        self.close_reader = close_reader
         self.loaded = None
         self.audit_context = None
         self.worker = None
@@ -286,8 +287,12 @@ class Engine:
     def close(self):
         self.stopped.set()
         self.generation.set()
-        self.drain()
-        with self.lock:
-            self.clear()
-        if self.heartbeat is not None and self.heartbeat is not threading.current_thread():
-            self.heartbeat.join(timeout=2)
+        try:
+            self.drain()
+            with self.lock:
+                self.clear()
+            if self.heartbeat is not None and self.heartbeat is not threading.current_thread():
+                self.heartbeat.join(timeout=2)
+        finally:
+            if self.close_reader is not None:
+                self.close_reader()

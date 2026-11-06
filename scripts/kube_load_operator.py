@@ -348,7 +348,7 @@ class Coordinator:
         for name, values in self.samples.items():
             try:
                 resources[name] = load_resources.summarize(values, **window)
-            except load_resources.SequenceRejected as failure:
+            except (load_resources.SequenceRejected, load_resources.SamplingGap) as failure:
                 print(
                     canonical(
                         {
@@ -356,7 +356,9 @@ class Coordinator:
                             "status": "fail",
                             "release_ready": False,
                             "container": name,
-                            "samples": failure.samples,
+                            "detail": failure.detail
+                            if isinstance(failure, load_resources.SamplingGap)
+                            else {"samples": failure.samples},
                             "measurement": summary,
                             "diagnostics": payload["diagnostics"],
                         }

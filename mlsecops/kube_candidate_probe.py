@@ -38,13 +38,19 @@ from mlsecops.process_privacy import enforce
 from mlsecops.trust_targets import Target, select
 
 
-def candidate(config):
+def candidate(config, *, connection_factory=None):
     target = select(config.get("trust_target", Target.PRIMARY.value))
     environment = config["context"]["policy"]["environment"]
     public = config.get("trust_root", config["permit_public"])
     lease = trust.Lease(
         lambda: trust_authority.read(
-            "/trust-client", environment, public, expected_host=target.host
+            "/trust-client",
+            environment,
+            public,
+            expected_host=target.host,
+            **(
+                {"connection_factory": connection_factory} if connection_factory is not None else {}
+            ),
         ),
         trusted_root=public,
         environment=environment,

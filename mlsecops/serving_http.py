@@ -26,6 +26,7 @@ from mlsecops import (
     serving_startup,
     trust,
     trust_authority,
+    trust_session,
 )
 from mlsecops.contracts import Rejected, bounded_read, decode, require_fields
 from mlsecops.datasets import FEATURES
@@ -436,9 +437,13 @@ def configured(path, *, startup_diagnostics=False):
         if os.name == "posix" and metric_path.stat().st_mode & 0o077:
             raise Rejected("http_token_permissions")
         metrics_token = bounded_read(metric_path, 65).decode("ascii").strip()
+    session = trust_session.Session()
     lease = trust.Lease(
         lambda: trust_authority.read(
-            config["trust_client"], config["context"]["policy"]["environment"], config["trust_root"]
+            config["trust_client"],
+            config["context"]["policy"]["environment"],
+            config["trust_root"],
+            connection_factory=session.connection,
         ),
         trusted_root=config["trust_root"],
         environment=config["context"]["policy"]["environment"],
@@ -459,7 +464,7 @@ def configured(path, *, startup_diagnostics=False):
         trust_lease=lease,
     )
     return create_app(
-        serving.Engine(reader, worker_factory=worker_factory),
+        serving.Engine(reader, worker_factory=worker_factory, close_reader=session.close),
         clients=clients,
         audit_path=config["audit_directory"],
         metrics_token=metrics_token,

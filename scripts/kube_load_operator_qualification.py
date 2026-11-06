@@ -249,7 +249,7 @@ class OperatorContracts(unittest.TestCase):
         diagnostic = decode(output.getvalue().encode())
         self.assertEqual(diagnostic["scope"], "load-resource-rejection-diagnostic")
         self.assertEqual(diagnostic["container"], "worker")
-        self.assertEqual(diagnostic["samples"], pair[5:7])
+        self.assertEqual(diagnostic["detail"], {"samples": pair[5:7]})
         self.assertEqual(diagnostic["diagnostics"], self.request["payload"]["diagnostics"])
         self.assertEqual(diagnostic["measurement"], self.request["payload"]["summary"])
         self.assertFalse(diagnostic["release_ready"])
@@ -257,6 +257,24 @@ class OperatorContracts(unittest.TestCase):
         self.assertEqual(self.acks[-1]["status"], "fail")
         self.assertIsNone(self.op.receipt)
         self.assertIn("resources.json", self.op.hashes)
+
+    def test_sampling_gap_still_refuses_and_exposes_only_fixed_metric_diagnostic(self):
+        self.begin()
+        for i in range(20, 141, 20):
+            self.seconds = i
+            self.op.sample()
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            self.assertRaises(operator.load_resources.SamplingGap),
+        ):
+            self.op.end(self.finish_payload())
+        diagnostic = decode(output.getvalue().encode())
+        self.assertEqual(
+            diagnostic["detail"], {"field": "cpu_at_ns", "gap_upper_bound_ns": 21_000_000_000}
+        )
+        self.assertFalse(diagnostic["release_ready"])
+        self.assertIsNone(self.op.receipt)
 
     def test_failed_phase_is_acknowledged_as_failure_not_pass(self):
         self.request = {

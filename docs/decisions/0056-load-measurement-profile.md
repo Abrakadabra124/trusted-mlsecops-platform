@@ -104,6 +104,19 @@ Closed-loop нагрузка не моделирует независимый п
 Перед оптимизацией сохраняется исходный benchmark; изменения сравниваются
 на том же профиле с проверками trust, audit, quotas и cleanup.
 
+Первое измеренное узкое место в диагностике `2806a12` - trust reads:
+108.860 s из 129.966 s удержания engine lock во всех фазах. Для проверки
+гипотезы о стоимости handshake добавлена [сессия](../../mlsecops/trust_session.py)
+из одного соединения на Engine с пределом повторного использования 5 s,
+повторной проверкой credential files и явным cleanup. Каждый вызов по-прежнему
+читает свежий trust document. Новые зависимости и общий глобальный пул не нужны.
+[Psycopg connection lifecycle](https://www.psycopg.org/psycopg3/docs/api/connections.html)
+и [autocommit](https://www.psycopg.org/psycopg3/docs/basic/transactions.html)
+определяют закрытие и отсутствие idle transaction. В нагрузочном candidate и
+production configured HTTP entrypoint применяется один механизм; старые
+одноразовые диагностические reader paths сохраняют соединение на каждый read.
+Проверки M11/M13 на новой реализации и полный acceptance остаются обязательными.
+
 ## Проверка
 
 Controlled tests проверяют потерю запросов, таймауты, malformed/truncated HTTP,

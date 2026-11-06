@@ -10,7 +10,7 @@ from mlsecops.storage_bootstrap import admin, validate
 from mlsecops.storage_schema import TABLES
 
 
-def read(client, environment, public, *, expected_host=None):
+def read(client, environment, public, *, expected_host=None, connection_factory=None):
     name(environment)
     options = {} if expected_host is None else {"expected_host": expected_host}
     if storage.connection_parameters(client, **options)["user"] not in (
@@ -19,7 +19,7 @@ def read(client, environment, public, *, expected_host=None):
     ):
         raise Rejected("trust_client_identity")
     try:
-        with storage.connect(client, **options) as connection:
+        with (connection_factory or storage.connect)(client, **options) as connection:
             row = connection.execute(
                 "SELECT settings.root_public, document.version, document.sha256, document.envelope, "
                 "floor(extract(epoch FROM clock_timestamp()))::bigint "
@@ -28,22 +28,26 @@ def read(client, environment, public, *, expected_host=None):
                 "WHERE settings.environment = %s",
                 (environment,),
             ).fetchone()
+            if row is None or row[0] != public:
+                raise Rejected("trust_authority_missing_or_foreign")
+            content = bytes(row[3])
+            if not 0 < len(content) <= MAX_DOCUMENT or digest(content) != row[2]:
+                raise Rejected("trust_document_integrity")
+            envelope = decode(content, MAX_DOCUMENT)
+            payload = trust.validate(envelope, public, environment, row[4])
+            if (
+                content != canonical(envelope)
+                or type(row[1]) is not int
+                or row[1] != payload["version"]
+            ):
+                raise Rejected("trust_document_version_mismatch")
+            return envelope, row[4]
     except Rejected as error:
         if str(error) != "storage_connection_rejected":
             raise
         raise trust.Unavailable("trust_service_unavailable") from None
     except psycopg.Error:
         raise trust.Unavailable("trust_service_unavailable") from None
-    if row is None or row[0] != public:
-        raise Rejected("trust_authority_missing_or_foreign")
-    content = bytes(row[3])
-    if not 0 < len(content) <= MAX_DOCUMENT or digest(content) != row[2]:
-        raise Rejected("trust_document_integrity")
-    envelope = decode(content, MAX_DOCUMENT)
-    payload = trust.validate(envelope, public, environment, row[4])
-    if content != canonical(envelope) or type(row[1]) is not int or row[1] != payload["version"]:
-        raise Rejected("trust_document_version_mismatch")
-    return envelope, row[4]
 
 
 def migration_sql():

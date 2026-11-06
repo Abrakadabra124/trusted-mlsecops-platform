@@ -10,7 +10,7 @@ from pathlib import Path
 
 import uvicorn
 
-from mlsecops import load_diagnostics, load_measurement, serving, serving_http
+from mlsecops import load_diagnostics, load_measurement, serving, serving_http, trust_session
 from mlsecops.contracts import Rejected, canonical, digest, read_json
 from mlsecops.controller_api import Client
 from mlsecops.kube_candidate_probe import candidate
@@ -132,9 +132,11 @@ def qualify(config, expected):
         raise Rejected("load_initial_worker_present")
     clients = credentials()
     tokens = [row["token"] for row in clients["clients"]]
+    session = trust_session.Session()
     engine = serving.Engine(
-        candidate(config),
+        candidate(config, connection_factory=session.connection),
         worker_factory=lambda model, image: Worker(model, image, config["kubernetes_worker"]),
+        close_reader=session.close,
     )
     try:
         PHASE = "activate"

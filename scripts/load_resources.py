@@ -30,6 +30,12 @@ class SequenceRejected(Rejected):
         self.samples = [{key: row[key] for key in FIELDS} for row in (previous, current)]
 
 
+class SamplingGap(Rejected):
+    def __init__(self, field, gap):
+        super().__init__("load_resource_sampling_gap")
+        self.detail = {"field": field, "gap_upper_bound_ns": gap}
+
+
 def timestamp(value):
     match = (
         re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z", value)
@@ -140,7 +146,7 @@ def summarize(samples, *, start_ns, end_ns, uncertainty_ns=0):
         times = sorted({row[field] for row in selected})
         gap = max(b - a for a, b in zip(times, times[1:])) + RESOLUTION_NS
         if gap > 20 * NS:
-            raise Rejected("load_resource_sampling_gap")
+            raise SamplingGap(field, gap)
         return selected, gap
 
     cpu, cpu_gap = window("cpu_at_ns")
