@@ -4,6 +4,7 @@ import re
 import sys
 from pathlib import Path
 
+from mlsecops import kube_storage, promotion_state
 from mlsecops.contracts import Rejected, canonical, digest, safe_child, write_json
 from mlsecops.inventory import command
 from mlsecops.private_cli import Arguments
@@ -110,6 +111,10 @@ def qualify(root, state, image):
     hosted()
     before = materials(root)
     prepared = kube_serving_native.prepare(root, state, image)
+    # The focused runner does not perform a controlled release first. Create
+    # only the empty versioned journal before candidate snapshot comparisons;
+    # this operator migration grants no authority, approval or release.
+    promotion_state.install(state, backend=kube_storage.binding)
     report = kube_candidate_native.qualify(
         root,
         state,

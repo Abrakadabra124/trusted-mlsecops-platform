@@ -100,6 +100,7 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
             for changed in (False, True):
                 with (
                     patch.object(native, "hosted"),
+                    patch.object(native.promotion_state, "install") as install,
                     patch.object(
                         native, "materials", side_effect=[{}, {"changed": "yes"} if changed else {}]
                     ),
@@ -118,6 +119,7 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
                         self.assertTrue(
                             (root / "evidence/kubernetes-privacy-private.json").is_file()
                         )
+                    install.assert_called_once_with(root, backend=native.kube_storage.binding)
 
     def test_cli_replaces_stale_success_and_redacts_private_failure(self):
         with tempfile.TemporaryDirectory() as directory:
