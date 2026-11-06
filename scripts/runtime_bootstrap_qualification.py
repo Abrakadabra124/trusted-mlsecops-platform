@@ -210,7 +210,15 @@ class BootstrapBoundaryTests(unittest.TestCase):
 
     def test_privacy_and_timeout_precede_runtime_import_and_model_read(self):
         events = []
+        source, output, diagnostic = (
+            Mock(buffer=io.BytesIO()),
+            Mock(buffer=io.BytesIO()),
+            io.StringIO(),
+        )
         with (
+            patch.object(serving_worker.sys, "stdin", source),
+            patch.object(serving_worker.sys, "stdout", output),
+            patch.object(serving_worker.sys, "stderr", diagnostic),
             patch.object(
                 serving_worker, "enforce_privacy", side_effect=lambda: events.append("privacy")
             ),
@@ -228,7 +236,8 @@ class BootstrapBoundaryTests(unittest.TestCase):
             ),
             patch.object(
                 serving_worker, "serve", side_effect=lambda *args: events.append("read") or 0
-            ),
+            ) as serve,
         ):
             self.assertEqual(serving_worker.main(), 0)
         self.assertEqual(events, ["privacy", 120, "import", "read"])
+        self.assertEqual(serve.call_args.args[:3], (source.buffer, output.buffer, diagnostic))
