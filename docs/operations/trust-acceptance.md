@@ -1,6 +1,6 @@
 # M11: сквозная проверка trust lifecycle
 
-Статус: runner реализован, общий native запуск ещё не принят. Исторические [root](../evidence/candidate-root-rotation-2026-11-06.md) и [signer](../evidence/release-signer-live-2026-11-06.md) проверки подтверждают компоненты; они не объединяются автоматически в новый M11 report.
+Статус: [свежая M11 campaign](../evidence/m11-trust-acceptance-2026-11-06.md) pass на `21317fd`, CI 42202109996 success: 141 cases, 656 Linux method executions, primary hashes и cleanup verified. Общий M18/R1 остаётся открытым. Исторические component reports не подменяют этот новый запуск.
 
 ## Назначение и границы
 

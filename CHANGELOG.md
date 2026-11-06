@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 fresh M11 trust acceptance - 2026-11-06
+
+- Новый runner связывает свежую proposal, source/image, controlled contracts, actual trust lifecycle и live signer transitions; строгая сверка traces, типов, timestamps и первичных hashes. Failure/inconclusive не разрешают release.
+- `21317fd` / 42202109996 success: 141 M11 cases, 656 Linux method executions / 0 skips, новая logic 346 statements / 74 branches 100%. Outage actual candidate 59.871216281 s при пороге 60 s, cleanup verified; clean Windows checkout 26 methods pass.
+- [Evidence и воспроизведение](docs/evidence/m11-trust-acceptance-2026-11-06.md), [диагностика и восстановление](docs/operations/trust-acceptance.md). M11 mechanism pass не закрывает M18/R1: independent M22, image findings, M13 и остальные обязательные gates остаются открытыми.
+
 ## R1 live release signer transitions - 2026-11-06
 
 - [94f56a3 / 42198344418](docs/evidence/release-signer-live-2026-11-06.md) success: 68 native cases на настоящих SQL trust, HTTP и ONNX worker, три последовательных смены ключа, сохранённые revocations/history, missing-M22 refusal/no-write и explicit reactivation.

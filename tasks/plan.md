@@ -93,6 +93,8 @@ flowchart LR
 
 ## Неделя 8: Bundle, approval и отзыв доверия
 
+T14 2026-11-06: [свежий M11](../docs/evidence/m11-trust-acceptance-2026-11-06.md) pass, `21317fd` / 42202109996 success: 141 cases, 656 Linux executions, 100% новой M11 logic, current source/primary hashes/cleanup и clean checkout подтверждены. Root/key/model, expiry/replay/rollback/clock/cache и три signer roles объединены в одном запуске. Положительные approval controls не подменяют actual assurance. Далее обязательный T16/M13; T13/M10, M22 и весь R1 остаются открытыми.
+
 T14 2026-11-06: [release signer history и restore](../docs/evidence/release-signer-history-2026-11-06.md), `a501ac5` / 42194888914 success. Signed single-role transition, fresh trust/old-key revoke, атомарный policy pin без изменения head, additive migration 2 и полная история в backup. 37 rotation + 36 recovery cases, 46 Linux methods, 152 statements / 48 branches 100%; golden 1 000 rows/error 0.0, 6.047658 s, cleanup verified. Следующий шаг - live смена signer с новым capsule/release/assurance/approval и explicit serving recovery. SQL fixture использует подписанный in-process trust и не закрывает M11/M17/R1.
 
 Audit follow-up 2026-10-29: [U03 Linux scope verified](../docs/evidence/artifact-files-2026-10-29.md), `6c65a83` / 40945576220 success. Общие файловые операции используют POSIX descriptors; 379 Linux methods, contracts 146/50 полностью покрыты, actual serving/source/cleanup сверены. Windows ACL/reparse не закрыты. Этап не заменяет rotation/authorized rollback, M22 и полную M18-приёмку.
