@@ -16,6 +16,24 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeLoadContracts(unittest.TestCase):
+    def test_fresh_storage_installs_promotion_schema_before_candidate_snapshot(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(native, "hosted"),
+            patch("mlsecops.promotion_state.install") as install,
+        ):
+            state = Path(temporary)
+
+            def qualify(*args, **kwargs):
+                from mlsecops import kube_storage
+
+                install.assert_called_once_with(state, backend=kube_storage.binding)
+                raise Rejected("qualification_reached")
+
+            with patch.object(native, "qualify", side_effect=qualify):
+                with self.assertRaisesRegex(Rejected, "qualification_reached"):
+                    native.run(state, state)
+
     def test_failure_site_contains_only_owned_public_source_location(self):
         self.assertEqual(native.failure_site(Rejected("PRIVATE")), {"module": "unknown", "line": 0})
         with patch.object(candidate, "hosted"):
@@ -197,6 +215,7 @@ class NativeLoadContracts(unittest.TestCase):
             tempfile.TemporaryDirectory() as temporary,
             patch.object(native, "hosted"),
             patch.object(native, "qualify", return_value=result) as qualify,
+            patch("mlsecops.promotion_state.install"),
         ):
             state = Path(temporary)
             public = native.run(state, state)

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from mlsecops import kube_storage, promotion_state
 from mlsecops.contracts import Rejected, canonical, write_json
 from scripts.kube_candidate_native import qualify
 from scripts.kube_trust_native import hosted
@@ -66,6 +67,9 @@ def run(root, state):
         state / "evidence/kubernetes-load-public.json",
         {"status": "inconclusive", "release_ready": False},
     )
+    # The read-only before/after snapshot requires the empty promotion ledger.
+    # Install the existing migration, without selecting or approving a release.
+    promotion_state.install(state, backend=kube_storage.binding)
     # The existing controller bootstrap resolves and verifies this locally built
     # tag against the current source/image descriptor before issuing the permit.
     result = qualify(root, state, "trusted-mlsecops:dev", load=True)

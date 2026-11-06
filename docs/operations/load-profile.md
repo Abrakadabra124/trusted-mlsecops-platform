@@ -51,6 +51,14 @@ Native интеграция выполняется только в разреш�
   исходный диагностический фильтр оставил только `load_native_rejected`.
   Добавлена публичная source location (module/line) без exception text/locals;
   повторный запуск нужен для локализации, а не для признания performance pass.
+- Повтор `42263863491`, source `e8a936d`, локализовал отказ в строгом SQL command
+  runner (`storage_snapshot.py:192`). Проверка сборки сценария обнаружила,
+  что before/after snapshot требует `ml_promotion.migrations`, а новый standalone
+  runner не устанавливал promotion schema. Добавлен существующий идемпотентный
+  `promotion_state.install` с Kubernetes backend, как в privacy runner. Он
+  создаёт журнал, но не выбирает release и не создаёт approval. Regression test
+  сначала подтвердил отсутствие вызова, затем проверил порядок установки.
+  Исправление требует подтверждения следующим hosted запуском.
 - Первый controlled тест границы прогрева ошибочно создавал две перекрывающиеся
   операции одного клиента. Валидатор отверг данные; fixture исправлен с сохранением
   запрета перекрытия. Это ошибка теста, не отказ production.
