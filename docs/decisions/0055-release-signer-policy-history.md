@@ -1,6 +1,6 @@
 # ADR 0055: ротация release signer с историей политик
 
-Дата: 2026-11-06. Статус: реализация в проверке; native SQL/restore ещё не подтверждены.
+Дата: 2026-11-06. Статус: [native SQL/history/restore проверены](../evidence/release-signer-history-2026-11-06.md); live release-signer serving и полный M11 остаются открытыми.
 
 ## Требование
 
@@ -24,10 +24,12 @@ T14/M11 требует смены и отзыва ключей без разре
 
 Подпись старого signer не требуется: право сменить делегированный ключ принадлежит policy root, в том числе если старый ключ уже недоступен или отозван. Новым ключом потребуется подписать следующий проверяемый материал. Смена самого policy root не реализуется этим протоколом.
 
+Плановый переход требует действующих старой и новой политик. Emergency recovery после expiry прежней policy или компрометации policy root не реализован этой операцией. Поле `reused` отражает наличие exact receipt при начальном чтении: конкурентные одинаковые callers могут оба увидеть `false`, хотя запись в БД будет одна; поле не является счётчиком записей конкретного caller.
+
 SQL history verifier проверяет структурную связность и bytes, а не заменяет криптографическую проверку operator authorization. Подмена администратором самого verifier или policy root остаётся за trust boundary. Online service, storage и операторские pins должны управляться независимо в production-профиле.
 
 ## Проверка
 
-Real-signature и mocked-transport тесты: [protocol](../../scripts/release_key_rotation_qualification.py), [store](../../scripts/release_key_store_qualification.py), [history/recovery](../../scripts/promotion_policy_history_qualification.py). [Native scenario](../../scripts/release_key_native.py) проверяет три роли, конкуренцию, SQL отказы, права и повреждённую историю в disposable PostgreSQL; следующий CI step выполняет существующий полный backup/restore с golden predictions. Фактический native результат публикуется отдельно после terminal outcome и проверки cleanup. Эти component checks не закрывают M11/M17/M18/R1.
+Real-signature и mocked-transport тесты: [protocol](../../scripts/release_key_rotation_qualification.py), [store](../../scripts/release_key_store_qualification.py), [history/recovery](../../scripts/promotion_policy_history_qualification.py). [Native scenario](../../scripts/release_key_native.py) проверил три роли, конкуренцию, SQL отказы, права и повреждённую историю в disposable PostgreSQL; следующий CI step выполнил полный backup/restore с golden predictions. [42194888914 success](../evidence/release-signer-history-2026-11-06.md): 37 rotation + 36 recovery cases, 1 000 golden rows/error 0.0, cleanup verified. Эти component checks не закрывают M11/M17/M18/R1.
 
 Эксплуатационный порядок: [runbook](../operations/release-signer-rotation.md).

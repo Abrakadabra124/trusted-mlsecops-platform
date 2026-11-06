@@ -1,6 +1,6 @@
 # Release signer rotation: диагностика и восстановление
 
-Статус 2026-11-06: код и локальные contract checks реализованы, native проверка готовится. Процедура не разрешена для текущих локальных Docker/WSL/Kubernetes/SQL. Исполняемый стенд ограничен disposable hosted CI; это ещё не production runbook с подтверждённым end-to-end результатом.
+Статус 2026-11-06: [native SQL/history/restore проверены](../evidence/release-signer-history-2026-11-06.md), `a501ac5` / 42194888914 success, 37 rotation + 36 recovery cases. Процедура не разрешена для текущих локальных Docker/WSL/Kubernetes/SQL. Исполняемый стенд ограничен disposable hosted CI; live release-signer serving и полный M11 остаются открытыми.
 
 ## Назначение и ответственность
 
@@ -46,7 +46,7 @@ API реализован в [release_key_store.py](../../mlsecops/release_key_st
 
 ## Воспроизводимая hosted-проверка
 
-[Workflow](../../.github/workflows/kubernetes-serving.yml) закрепляет инструменты/образ и сначала проверяет код. После existing serving regression запускает:
+[Полный workflow](../../.github/workflows/kubernetes-serving.yml) закрепляет инструменты/образ и сначала проверяет код. После existing serving regression запускает:
 
 ```bash
 uv run --locked python -m scripts.release_key_native --state .runtime --confirm-disposable
@@ -54,3 +54,7 @@ uv run --locked python -m scripts.promotion_recovery_native --state .runtime --c
 ```
 
 Первый сценарий использует настоящие signatures и SQL, но online lease берёт signed in-process fixture, а selections являются controlled материалами без ML approval. Второй делает backup всего ledger, восстанавливает отдельный target при выключенном source и проверяет golden predictions существующего candidate. Требуются terminal success обоих шагов, точные source/report hashes и подтверждённая очистка. Ни один шаг сам по себе не закрывает общий M11/M17/R1.
+
+Для отдельной проверки этих компонентов в [storage workflow](../../.github/workflows/storage.yml) есть явный dispatch `release_key_only=true`; полный storage job остаётся default. Такой запуск не заявляет повторение полного serving workflow. На `52a0a88` полный job failed после успешного serving: native script использовал ISO `contracts.now()` вместо epoch seconds и упал до SQL. Ошибка воспроизведена test case, clocks исправлены, focused run на `a501ac5` success. Сообщение о generic failure не является диагнозом: сначала сверять failed step, исходный commit и regression test, затем повторять исправленный сценарий.
+
+Результат `reused` означает, что exact receipt существовал при первом чтении. При конкуренции два callers могут получить `false` при одной записи: проверять конечный журнал, а не суммировать этот флаг. Если прежняя policy уже expired, плановая ротация откажет; emergency recovery требует отдельного решения владельца, а не продления подписанного payload вручную.
