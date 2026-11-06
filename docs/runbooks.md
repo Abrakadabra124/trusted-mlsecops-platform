@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+В разработке: [M13 Kubernetes private logs](operations/kubernetes-privacy.md), ownership/stream/cleanup diagnosis. Collector проверен pure/mocked tests; native и полный gate ещё не приняты.
+
 - [M11: свежая общая проверка trust lifecycle](operations/trust-acceptance.md). Привязка candidate/source, primary traces, независимые отзывы, expiry/replay/rollback/signers, fail-closed итог и scoped cleanup. Runner реализован; общий native запуск ещё не принят.
 
 - [Ротация release signer и история политик](operations/release-signer-rotation.md). Signed transition для одной роли, явная migration 2, свежий online trust, отказ при конфликте/expiry, полный backup/restore истории и ambiguous commit. [SQL/history evidence](evidence/release-signer-history-2026-11-06.md) и [live SQL/HTTP/ONNX evidence](evidence/release-signer-live-2026-11-06.md): `94f56a3` / 42198344418 success, 37 rotation + 36 recovery + 68 live cases, cleanup verified. Controlled assurance не закрывает полный M11. [Решение и границы](decisions/0055-release-signer-policy-history.md).
