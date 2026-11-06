@@ -28,13 +28,13 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.kube_privacy_bundle_qualification
-          mkdir -p .runtime/evidence
-          uv run --locked python -m coverage run --branch --data-file=.runtime/evidence/.coverage-cli --source=scripts.kube_cli_privacy_probe,scripts.kube_cli_privacy_native,mlsecops.kube_serving_probe -m unittest scripts.kube_cli_privacy_qualification scripts.kube_serving_native_qualification
-          uv run --locked python -m coverage json --data-file=.runtime/evidence/.coverage-cli -o .runtime/evidence/cli-coverage.json
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/mlsecops-cli.coverage" --source=scripts.kube_cli_privacy_probe,scripts.kube_cli_privacy_native,mlsecops.kube_serving_probe -m unittest scripts.kube_cli_privacy_qualification scripts.kube_serving_native_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/mlsecops-cli.coverage" -o "$RUNNER_TEMP/mlsecops-cli-coverage.json"
           uv run --locked python - <<'PY'
           import json
+          import os
           from pathlib import Path
-          files = json.loads(Path('.runtime/evidence/cli-coverage.json').read_text())['files']
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'mlsecops-cli-coverage.json').read_text())['files']
           required = {'scripts/kube_cli_privacy_probe.py', 'scripts/kube_cli_privacy_native.py', 'mlsecops/kube_serving_probe.py'}
           if set(files) != required:
               raise SystemExit('cli_coverage_modules_mismatch')

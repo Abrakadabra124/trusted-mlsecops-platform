@@ -85,3 +85,5 @@ uv run --locked python -m unittest scripts.kube_privacy_logs_qualification scrip
 До полного M13 остаются все обязательные output channels/normal CLI lifecycle, композиция actual/controlled subjects и общая source-bound acceptance. Положительный component report всегда содержит `full_M13=inconclusive` и `release_ready=false`.
 
 CLI lifecycle contracts дополнены отказами startup/readiness, oversized HTTP, transient connection, ограниченным ожиданием cleanup и завершением только собственного process group. Workflow требует не менее 95% statements и branches отдельно для ordinary CLI probe, privacy hook и native orchestration. Повторный native run для этого обязательного coverage gate ещё не подтверждён.
+
+Run `42224962681` на `6b90fc0` прошёл 222 Linux tests и coverage gate, но bootstrap отказал с `refusing_nonempty_unowned_workspace`: coverage преждевременно создал `.runtime/evidence`. Cluster/source SQL ещё не создавались. Исправление сохраняет bootstrap ownership guard и пишет coverage только в `RUNNER_TEMP`; нельзя обходить отказ принятием существующего произвольного каталога. Новый native run обязателен.
