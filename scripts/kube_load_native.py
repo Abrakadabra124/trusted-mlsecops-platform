@@ -5,6 +5,7 @@ from pathlib import Path
 from mlsecops import kube_storage, promotion_state
 from mlsecops.contracts import Rejected, canonical, write_json
 from scripts.kube_candidate_native import qualify
+from scripts.kube_serving_native import prepare
 from scripts.kube_trust_native import hosted
 
 CODES = frozenset(
@@ -74,7 +75,14 @@ def run(root, state):
     promotion_state.install(state, backend=kube_storage.binding)
     # The existing controller bootstrap resolves and verifies this locally built
     # tag against the current source/image descriptor before issuing the permit.
-    result = qualify(root, state, "trusted-mlsecops:dev", load=True)
+    prepared = prepare(root, state, "trusted-mlsecops:dev")
+    result = qualify(
+        root,
+        state,
+        "trusted-mlsecops:dev",
+        load=True,
+        prepared=(prepared["profile"], prepared["actual"]),
+    )
     write_json(state / "evidence/kubernetes-load-private.json", result)
     public = {
         key: result[key]

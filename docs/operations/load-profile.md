@@ -429,3 +429,18 @@ Controlled test через штатный `create_app` воспроизвёл п
 Observer размещён внутри этой privacy boundary; внешняя обёртка сохранена и
 по-прежнему скрывает arbitrary exception text от framework logs.
 Это исправление диагностики, не устранение первичного shutdown failure.
+
+На `249735e` / [42295176636](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42295176636)
+baseline прошёл: 7788/7788 correct, 64.9 RPS, p95=192.421370 ms,
+p99=204.907327 ms, 0 wrong/429/5xx/timeouts/transport errors.
+Shutdown в этом опыте завершился, но M14 aggregation отказал. Ранее
+наблюдавшийся shutdown failure не объявляется устранённым по одному pass.
+
+В runner найдено несоответствие порядка: без `prepared` общий candidate
+harness создавал подписанный proposal после своего `started_at`, тогда как
+M14 требует proposal до начала candidate checks. Controlled test подтвердил
+отсутствие отдельной preparation. Load runner теперь использует существующий
+`kube_serving_native.prepare`, затем передаёт полученные profile/refusal в
+candidate harness - тот же порядок применяется M12/M13. Временной predicate,
+source/image pins, fresh experiment и все latency/cleanup limits сохранены.
+Новый полный M14 обязателен; прежний baseline не импортируется для pass.

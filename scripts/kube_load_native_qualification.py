@@ -21,6 +21,7 @@ class NativeLoadContracts(unittest.TestCase):
             tempfile.TemporaryDirectory() as temporary,
             patch.object(native, "hosted"),
             patch("mlsecops.promotion_state.install") as install,
+            patch.object(native, "prepare", return_value={"profile": {}, "actual": {}}) as prepare,
         ):
             state = Path(temporary)
 
@@ -28,11 +29,19 @@ class NativeLoadContracts(unittest.TestCase):
                 from mlsecops import kube_storage
 
                 install.assert_called_once_with(state, backend=kube_storage.binding)
+                prepare.assert_called_once_with(state, state, "trusted-mlsecops:dev")
                 raise Rejected("qualification_reached")
 
             with patch.object(native, "qualify", side_effect=qualify):
                 with self.assertRaisesRegex(Rejected, "qualification_reached"):
                     native.run(state, state)
+            with (
+                patch.object(native, "prepare", side_effect=Rejected("preparation_failed")),
+                patch.object(native, "qualify") as observe,
+                self.assertRaisesRegex(Rejected, "preparation_failed"),
+            ):
+                native.run(state, state)
+            observe.assert_not_called()
 
     def test_failure_site_contains_only_owned_public_source_location(self):
         self.assertEqual(native.failure_site(Rejected("PRIVATE")), {"module": "unknown", "line": 0})
@@ -236,10 +245,22 @@ class NativeLoadContracts(unittest.TestCase):
             native={"profile_met": False},
             private_key="PRIVATE",
         )
+        prepared = {"profile": {"image_id": "image"}, "actual": {"proposal": "signed"}}
+        order = []
+
+        def prepare(*args):
+            order.append("prepare")
+            return prepared
+
+        def observe(*args, **kwargs):
+            order.append("qualify")
+            return result
+
         with (
             tempfile.TemporaryDirectory() as temporary,
             patch.object(native, "hosted"),
-            patch.object(native, "qualify", return_value=result) as qualify,
+            patch.object(native, "prepare", side_effect=prepare) as preparation,
+            patch.object(native, "qualify", side_effect=observe) as qualify,
             patch("mlsecops.promotion_state.install"),
         ):
             state = Path(temporary)
@@ -248,7 +269,15 @@ class NativeLoadContracts(unittest.TestCase):
             self.assertNotIn("PRIVATE", str(public))
             self.assertEqual(read_json(state / "evidence/kubernetes-load-private.json"), result)
             self.assertEqual(read_json(state / "evidence/kubernetes-load-public.json"), public)
-            qualify.assert_called_once_with(state, state, "trusted-mlsecops:dev", load=True)
+            self.assertEqual(order, ["prepare", "qualify"])
+            preparation.assert_called_once_with(state, state, "trusted-mlsecops:dev")
+            qualify.assert_called_once_with(
+                state,
+                state,
+                "trusted-mlsecops:dev",
+                load=True,
+                prepared=(prepared["profile"], prepared["actual"]),
+            )
 
     def test_exit_code_and_sanitized_failure_diagnostics(self):
         for result, wanted in (
