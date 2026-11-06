@@ -1,6 +1,6 @@
 # История исследовательского проекта
 
-CP3/T16 2026-11-06: [retained audit после cleanup](docs/evidence/kubernetes-audit-retention-2026-11-06.md) **pass**, `bc8948c` / 42218670322 success. 28 cases, 203 Linux tests / 0 skips, clean Windows checkout 161 tests. Однократное private packet storage и повторная проверка bytes и signed primary после child/owned probe cleanup подтверждены; SQL/cluster cleanup success. Retention ограничен campaign/VM по ADR 0049. Полный M13 остаётся inconclusive: normal CLI/all channels, subject composition и общая acceptance; M22 independent 0/2, image findings и M18/R1 открыты.
+CP3/T16 2026-11-06: [ordinary CLI privacy](docs/evidence/kubernetes-cli-privacy-2026-11-06.md) **component pass**, `36cd71d` / 42225259346 success. 22 CLI checks + 28 actual-candidate checks, 222 Linux executions / 0 skips, 175 clean Windows tests. Три CLI modules проходят 95% statements/branches отдельно; closed audit, parent recheck и owned cleanup подтверждены. Full M13 остаётся inconclusive: service-output inventory/closed windows, controlled/actual composition и общий gate. M22 independent 0/2, image findings и M18/R1 открыты.
 
 ## R1 Kubernetes privacy component - 2026-11-06
 

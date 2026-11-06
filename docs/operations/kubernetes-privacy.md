@@ -1,6 +1,8 @@
 # M13: диагностика приватного сбора Kubernetes logs
 
-Текущий retained-packet increment: [bc8948c / 42218670322](../evidence/kubernetes-audit-retention-2026-11-06.md), 28 cases / 203 Linux tests, post-exit и post-cleanup primary recheck pass. Ниже сохранена история первого native component.
+Текущий [CLI privacy increment](../evidence/kubernetes-cli-privacy-2026-11-06.md): `36cd71d` / 42225259346 success, 22 CLI + 28 actual checks, 222 Linux tests, coverage gate и cleanup подтверждены. Полный M13 остаётся inconclusive.
+
+Предыдущий retained-packet increment: [bc8948c / 42218670322](../evidence/kubernetes-audit-retention-2026-11-06.md), 28 cases / 203 Linux tests, post-exit и post-cleanup primary recheck pass. Ниже сохранена история первого native component.
 
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [Native component 90385fa / 42215561469](../evidence/kubernetes-privacy-2026-11-06.md) pass: 26 checks, первичный audit повторно проверен на runner, terminal worker stream точный, два service log windows и cleanup подтверждены. Полная M13 acceptance ещё не завершена.
 
@@ -65,7 +67,7 @@ Read-only diagnosis предшествует любым действиям. Пр
 
 ## Локальная проверка без инфраструктуры
 
-### Проверка обычного CLI: реализация ожидает native evidence
+### Проверка обычного CLI: native evidence подтверждено
 
 [CLI privacy probe](../../scripts/kube_cli_privacy_probe.py) использует существующий `kube_serving_probe`: тот запускает отдельный `python -m mlsecops.serving_http`, а сервис самостоятельно создаёт и закрывает Journal через `configured`/`audit_path`. Внутри сервиса нет monkeypatch, подмены Journal или дополнительной serving-роли. Внешний клиент выполняет прежнюю матрицу 12 canary requests, шесть quota/refill requests, две проверки 503 после остановки собственного worker и scrape 69 approved metric series. Полный вывод CLI проверяется после подтверждённого завершения процесса.
 
@@ -82,8 +84,8 @@ uv run --locked python -m unittest scripts.kube_privacy_logs_qualification scrip
 
 На проверенном `90385fa`: Linux 155 test method executions / 0 skips; clean Windows checkout 155 tests / 0 skips. Пять component modules bundle/exchange/logs/operator/worker покрыты на 295/296 statements и 103/104 branches, каждый проходит 95% по обоим показателям. Это не coverage всей оркестрации. Проверены ownership, overflow, canary, неполный stream, failure/interruption cleanup, private packet re-verification, handoff order и bounded CRI-exit grace. [Evidence](../evidence/kubernetes-privacy-2026-11-06.md) сохраняет результаты и неуспешные попытки.
 
-До полного M13 остаются все обязательные output channels/normal CLI lifecycle, композиция actual/controlled subjects и общая source-bound acceptance. Положительный component report всегда содержит `full_M13=inconclusive` и `release_ready=false`.
+Обычный CLI lifecycle подтверждён в указанном controlled scope. До полного M13 остаются полный service-output inventory с bounded closed windows и controls, композиция actual/controlled subjects и общая source-bound acceptance. Положительный component report всегда содержит `full_M13=inconclusive` и `release_ready=false`.
 
-CLI lifecycle contracts дополнены отказами startup/readiness, oversized HTTP, transient connection, ограниченным ожиданием cleanup и завершением только собственного process group. Workflow требует не менее 95% statements и branches отдельно для ordinary CLI probe, privacy hook и native orchestration. Повторный native run для этого обязательного coverage gate ещё не подтверждён.
+CLI lifecycle contracts дополнены отказами startup/readiness, oversized HTTP, transient connection, ограниченным ожиданием cleanup и завершением только собственного process group. Workflow требует не менее 95% statements и branches отдельно для ordinary CLI probe, privacy hook и native orchestration. Coverage gate подтверждён в успешном native run 42225259346 на 36cd71d.
 
-Run `42224962681` на `6b90fc0` прошёл 222 Linux tests и coverage gate, но bootstrap отказал с `refusing_nonempty_unowned_workspace`: coverage преждевременно создал `.runtime/evidence`. Cluster/source SQL ещё не создавались. Исправление сохраняет bootstrap ownership guard и пишет coverage только в `RUNNER_TEMP`; нельзя обходить отказ принятием существующего произвольного каталога. Новый native run обязателен.
+Run `42224962681` на `6b90fc0` прошёл 222 Linux tests и coverage gate, но bootstrap отказал с `refusing_nonempty_unowned_workspace`: coverage преждевременно создал `.runtime/evidence`. Cluster/source SQL ещё не создавались. Исправление сохраняет bootstrap ownership guard и пишет coverage только в `RUNNER_TEMP`; нельзя обходить отказ принятием существующего произвольного каталога. Повторный native run 42225259346 на 36cd71d прошёл, включая оба cleanup steps.
