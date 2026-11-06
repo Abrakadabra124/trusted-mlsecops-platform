@@ -12,6 +12,22 @@ from scripts.kube_serving_runtime_qualification import PROFILE, MemoryAPI
 
 
 class OperatorHandoffContracts(unittest.TestCase):
+    def test_exec_diagnostic_exports_only_fixed_category_and_code_location(self):
+        value = operator.exec_failure(
+            b'File "/app/mlsecops/contracts.py", line 107\nRejected: artifact_changed private-token'
+        )
+        self.assertEqual(value["category"], "artifact_changed")
+        self.assertEqual(value["location"]["source_line"], 107)
+        self.assertNotIn("private-token", canonical(value).decode())
+        for raw in (
+            b"private-token",
+            b'File "/private-token", line 1',
+            b'File "/app/scripts/absent_private.py", line 1',
+        ):
+            result = operator.exec_failure(raw)
+            self.assertEqual(result["category"], "unknown")
+            self.assertNotIn("location", result)
+
     def test_worker_capture_uses_verified_initial_snapshot_and_terminal_exact_output(self):
         api = MemoryAPI()
         document = operator.kube_serving_runtime.document(PROFILE, "a" * 32)

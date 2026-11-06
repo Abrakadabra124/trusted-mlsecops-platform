@@ -16,6 +16,7 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.kube_worker import verify_running_image
+from scripts.kube_privacy_diagnostic import validated
 from scripts.kube_privacy_exchange import DIRECTORY, MAX_REQUEST, PHASES
 from scripts.kube_privacy_logs import MAX_BYTES, capture
 
@@ -27,6 +28,43 @@ def decoded(value, maximum):
     if not 1 <= len(content) <= maximum or signing.encode64(content) != value:
         raise Rejected("privacy_operator_encoding")
     return content
+
+
+def exec_failure(stderr):
+    content = stderr[:8192]
+    category = next(
+        (
+            name
+            for marker, name in (
+                (b"ModuleNotFoundError", "module_missing"),
+                (b"PermissionError", "permission"),
+                (b"artifact_unavailable", "artifact_unavailable"),
+                (b"artifact_changed", "artifact_changed"),
+                (b"artifact_too_large", "artifact_too_large"),
+                (b"completed pod", "container_completed"),
+                (b"container not found", "container_missing"),
+                (b"timed out", "timeout"),
+            )
+            if marker in content
+        ),
+        "unknown",
+    )
+    result = {
+        "status": "fail",
+        "scope": "privacy-operator",
+        "stage": "request",
+        "category": category,
+    }
+    frames = re.findall(
+        rb'File "/app/((?:mlsecops|scripts)/[a-z_][a-z_0-9]*\.py)", line ([0-9]+)', content
+    )
+    for filename, line in frames:
+        detail = validated(
+            {"exception": "other", "source_file": filename.decode(), "source_line": int(line)}
+        )
+        if detail is not None:
+            result["location"] = detail
+    return result
 
 
 class Coordinator:
@@ -64,6 +102,8 @@ class Coordinator:
                 # The process can exit between wait_job's Running snapshot and
                 # exec. Let the terminal path inspect its complete output.
                 return
+            atomic_write(self.destination / "exec-private.stderr", response.stderr)
+            print(canonical(exec_failure(response.stderr)).decode(), flush=True)
             raise Rejected("privacy_operator_exec_failed")
         request = decode(response.stdout, MAX_REQUEST)
         if request is None:
