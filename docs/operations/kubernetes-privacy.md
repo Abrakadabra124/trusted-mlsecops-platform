@@ -89,3 +89,7 @@ uv run --locked python -m unittest scripts.kube_privacy_logs_qualification scrip
 CLI lifecycle contracts дополнены отказами startup/readiness, oversized HTTP, transient connection, ограниченным ожиданием cleanup и завершением только собственного process group. Workflow требует не менее 95% statements и branches отдельно для ordinary CLI probe, privacy hook и native orchestration. Coverage gate подтверждён в успешном native run 42225259346 на 36cd71d.
 
 Run `42224962681` на `6b90fc0` прошёл 222 Linux tests и coverage gate, но bootstrap отказал с `refusing_nonempty_unowned_workspace`: coverage преждевременно создал `.runtime/evidence`. Cluster/source SQL ещё не создавались. Исправление сохраняет bootstrap ownership guard и пишет coverage только в `RUNNER_TEMP`; нельзя обходить отказ принятием существующего произвольного каталога. Повторный native run 42225259346 на 36cd71d прошёл, включая оба cleanup steps.
+
+### Общий CI после публикации
+
+Storage run `42226136313` на `d28f501` отказал до создания SQL: legacy output suite не проверял новый guard `canary_count`, поэтому `serving_output_probe` получил 97% при обязательных 100%. В `serving_output_qualification` добавлены отказ до вызова operation для неверных типов/границ и допустимые границы 1/9/16. Локально 35 methods прошли, observer 47 statements / 14 branches 100%, parent 193/194 statements и 51/52 branches. Порог workflow сохранён; новый hosted storage run ещё требуется. Успех отдельного Kubernetes privacy component не означает успех всей CI-матрицы.

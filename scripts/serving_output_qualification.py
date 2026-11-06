@@ -68,6 +68,24 @@ def operation(observe):
 
 
 class OutputObservationContracts(unittest.TestCase):
+    def test_canary_inventory_bound_is_checked_before_operation_starts(self):
+        for value in (True, False, None, "6", 1.0, 0, -1, 17):
+            with self.subTest(count=value), patch(__name__ + ".operation") as run:
+                with self.assertRaisesRegex(Rejected, "serving_output_observer_invalid"):
+                    probe.produce(run, canary_count=value)
+                run.assert_not_called()
+        for count in (1, 9, 16):
+            needles = tuple(f"controlled-input-{i}".encode() for i in range(count))
+
+            def execute(observe):
+                observe(needles)
+                return report()
+
+            with self.subTest(count=count):
+                result = probe.produce(execute, canary_count=count)
+                self.assertEqual(result["observation"]["canary_count"], count)
+                self.assertFalse(result["observation"]["release_ready"])
+
     def test_http_fixture_import_does_not_load_native_inference_runtime(self):
         source = """
 import sys
