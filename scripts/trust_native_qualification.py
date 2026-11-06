@@ -5,6 +5,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from mlsecops import promotion_state, storage_backup
 from mlsecops.contracts import Rejected, read_json
 from scripts import trust_native
 
@@ -53,6 +54,43 @@ class TrustRunnerContracts(unittest.TestCase):
             self.assertNotIn("private", output.getvalue())
             self.assertEqual(
                 read_json(state / "evidence/trust-qualification.json")["status"], "fail"
+            )
+
+
+class BackupAuthorityBoundaryContracts(unittest.TestCase):
+    def test_authority_refusal_precedes_model_and_promotion_migration_or_export(self):
+        for extended in (False, True):
+            for reply in ("t", "", "unexpected"):
+                with (
+                    self.subTest(extended=extended, reply=reply),
+                    patch.object(storage_backup, "validate", return_value={"name": "owned"}),
+                    patch.object(storage_backup, "admin", return_value=reply),
+                    patch.object(storage_backup, "verify_configuration"),
+                    patch.object(promotion_state, "require_legacy_backup_scope") as legacy,
+                    patch.object(storage_backup, "snapshot") as export,
+                    self.assertRaisesRegex(Rejected, "^trust_authority_backup_forbidden$"),
+                ):
+                    storage_backup.create(Path("root"), Path("owned"), include_promotion=extended)
+                legacy.assert_not_called()
+                export.assert_not_called()
+
+    def test_confirmed_model_storage_continues_to_existing_configuration_checks(self):
+        for extended in (False, True):
+            with (
+                self.subTest(extended=extended),
+                patch.object(storage_backup, "validate", return_value={"name": "owned"}),
+                patch.object(storage_backup, "admin", return_value="f") as query,
+                patch.object(promotion_state, "require_legacy_backup_scope"),
+                patch.object(
+                    storage_backup,
+                    "verify_configuration",
+                    side_effect=RuntimeError("configuration-check"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "^configuration-check$"),
+            ):
+                storage_backup.create(Path("root"), Path("owned"), include_promotion=extended)
+            query.assert_called_once_with(
+                "owned", "SELECT to_regnamespace('ml_trust') IS NOT NULL;"
             )
 
 

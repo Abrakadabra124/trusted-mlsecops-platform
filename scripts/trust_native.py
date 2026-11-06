@@ -113,7 +113,7 @@ def qualify(root, state):
             rejected(
                 f"model-backup-excludes-authority-{extended}",
                 lambda: storage_backup.create(root, destination, include_promotion=extended),
-                "backup_snapshot_unavailable",
+                "trust_authority_backup_forbidden",
             )
         trust_authority.update(destination, "a" * 64, key, revoked_artifacts=["b" * 64])
         lease.refresh()

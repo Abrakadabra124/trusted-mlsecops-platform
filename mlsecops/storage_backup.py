@@ -120,6 +120,10 @@ def create(root, state, *, include_promotion=False):
 
     root, state = Path(root), Path(state)
     marker = validate(state)
+    # An authority has no model promotion schema. Reject that scope before any
+    # model migration lookup; the snapshot transaction retains its own guard.
+    if admin(marker["name"], "SELECT to_regnamespace('ml_trust') IS NOT NULL;") != "f":
+        raise Rejected("trust_authority_backup_forbidden")
     if not include_promotion:
         require_legacy_backup_scope(marker["name"])
     verify_configuration(state, marker["name"])
