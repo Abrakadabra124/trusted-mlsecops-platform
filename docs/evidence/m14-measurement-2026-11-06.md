@@ -50,3 +50,27 @@ resource parser, native coordinator или будущую оптимизацию
 подтверждение ресурсов/ownership, controlled overload, cleanup и M14 envelope
 должны пройти отдельную native проверку. [Метод](../decisions/0056-load-measurement-profile.md)
 и [ранбук](../operations/load-profile.md) сохраняют исходные требования.
+
+## Следующий проверенный компонент: resource parser
+
+Source `1706fc36cb5fe87b8c99bfe3544861517b6c5c9c`,
+[workflow 42256745055](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42256745055),
+job `128025828394`: success. Первичный job log проверен через GitHub connector
+после TLS handshake timeout при первой попытке загрузки через CLI.
+
+29 tests, 0 skips, 1.146 s на Linux: прежние 21 и 8 новых resource contracts.
+`scripts/load_resources.py`: 66/66 statements и 26/26 branches; показатели
+двух предыдущих модулей сохранились. Проверены exact PodRef/container,
+missing/stale/future data, reset/change, cached readings, двустороннее покрытие
+120-секундного окна и максимальные интервалы между наблюдениями.
+
+Тот же свежий clone переведён на exact `1706fc3`; dependency descriptors
+(`pyproject.toml`, `uv.lock`, `.python-version`) совпали с `41127b1`.
+Повторный locked sync в созданном ранее чистом окружении и 29 Windows tests
+прошли: 0 skips, 1.434 s. Import path указывал на reproduction checkout,
+`git status --porcelain` остался пустым. Это не второе заново созданное окружение.
+
+Для воспроизведения ресурсного компонента использовать `1706fc3` и добавить
+`scripts.load_resources_qualification` в unittest command выше. Источник
+resource fixtures искусственный: живой Kubelet в этих тестах не опрашивался.
+Native workload, coordinator, overload recovery и полный M14 остаются открытыми.
