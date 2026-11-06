@@ -1,6 +1,6 @@
 # M13: карта каналов вывода и границ доказательств
 
-Kubernetes M13 component 2026-11-06: [native 90385fa / 42215561469](evidence/kubernetes-privacy-2026-11-06.md) pass. Проверены terminal worker exact stream, parent/child output, 9 canaries, audit packet re-verification и два service windows; full M13 inconclusive. [Ранбук](operations/kubernetes-privacy.md). Normal CLI/all channels и приватное сохранение primary evidence остаются открытыми.
+CP3/T16 2026-11-06: [retained audit после cleanup](evidence/kubernetes-audit-retention-2026-11-06.md) **pass**, `bc8948c` / 42218670322 success. 28 cases, 203 Linux tests / 0 skips, clean Windows checkout 161 tests. Однократное private packet storage и повторная проверка bytes и signed primary после child/owned probe cleanup подтверждены; SQL/cluster cleanup success. Retention ограничен campaign/VM по ADR 0049. Полный M13 остаётся inconclusive: normal CLI/all channels, subject composition и общая acceptance; M22 independent 0/2, image findings и M18/R1 открыты.
 
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [Критерий M13](acceptance.md#m13), [ADR 0047](decisions/0047-serving-output-observation.md). Это карта полноты, не pass-report M13.
 

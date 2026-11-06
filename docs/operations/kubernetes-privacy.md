@@ -1,5 +1,7 @@
 # M13: диагностика приватного сбора Kubernetes logs
 
+Текущий retained-packet increment: [bc8948c / 42218670322](../evidence/kubernetes-audit-retention-2026-11-06.md), 28 cases / 203 Linux tests, post-exit и post-cleanup primary recheck pass. Ниже сохранена история первого native component.
+
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [Native component 90385fa / 42215561469](../evidence/kubernetes-privacy-2026-11-06.md) pass: 26 checks, первичный audit повторно проверен на runner, terminal worker stream точный, два service log windows и cleanup подтверждены. Полная M13 acceptance ещё не завершена.
 
 ## Назначение и права
@@ -31,7 +33,7 @@ CRI (Container Runtime Interface) связывает Kubernetes с container run
 
 Весь Pod output должен быть ровно каноническим отчётом с одним переводом строки. Ошибки печатают только fixed phase/code. Private packets сохраняются в `.runtime/evidence/privacy/<campaign>` только на runner; workflow не экспортирует их из ephemeral host. По [ADR 0049](../decisions/0049-private-audit-evidence.md) срок хранения этого increment ограничен campaign и жизнью VM. Долговременное forensic хранилище требует отдельной спецификации и не является условием этой компонентной проверки.
 
-Новый путь сохранения реализован, native-проверка ещё ожидается: `audit-evidence/packet.json` создаётся один раз существующим `audit_snapshot.store_packet`. Он проверяет owner/mode, запрещает symlink/hardlink и overwrite, выполняет fsync файла, каталога и его родителя. После terminal Pod оператор перечитывает пакет и сверяет первичные bytes с receipt. После удаления probe Job/ConfigMaps основной runner повторно загружает подписанную proposal из CAS, permit/public key из собственного campaign directory и тот же пакет. Проверяются signatures, campaign/source/image/subject, окно permit, HTTP outcomes и точная public projection. Два новых cases добавляются только после этих проверок; `release_ready` остаётся false.
+[Новый путь сохранения проверен на bc8948c / 42218670322](../evidence/kubernetes-audit-retention-2026-11-06.md): `audit-evidence/packet.json` создаётся один раз существующим `audit_snapshot.store_packet`. Он проверяет owner/mode, запрещает symlink/hardlink и overwrite, выполняет fsync файла, каталога и его родителя. После terminal Pod оператор перечитывает пакет и сверяет первичные bytes с receipt. После удаления probe Job/ConfigMaps основной runner повторно загружает подписанную proposal из CAS, permit/public key из собственного campaign directory и тот же пакет. Проверяются signatures, campaign/source/image/subject, окно permit, HTTP outcomes и точная public projection. Два новых cases добавляются только после этих проверок; `release_ready` остаётся false.
 
 При `audit_packet_unavailable`, `privacy_operator_retained_packet_changed` или `serving_output_packet_binding` не удалять существующий пакет и не перезаписывать receipt. Проверить fixed stage, завершение child и cleanup, а в приватном runner - наличие собственного campaign directory и соответствие source revision. Для повторения использовать новую campaign. Отсутствующий/повреждённый пакет означает отказ проверки; согласованные summary counters его не восстанавливают. Не запускать эту диагностику на локальных SQL/Kubernetes данной системы.
 
@@ -70,4 +72,4 @@ uv run --locked python -m unittest scripts.kube_privacy_logs_qualification scrip
 
 На проверенном `90385fa`: Linux 155 test method executions / 0 skips; clean Windows checkout 155 tests / 0 skips. Пять component modules bundle/exchange/logs/operator/worker покрыты на 295/296 statements и 103/104 branches, каждый проходит 95% по обоим показателям. Это не coverage всей оркестрации. Проверены ownership, overflow, canary, неполный stream, failure/interruption cleanup, private packet re-verification, handoff order и bounded CRI-exit grace. [Evidence](../evidence/kubernetes-privacy-2026-11-06.md) сохраняет результаты и неуспешные попытки.
 
-До полного M13 остаются все обязательные output channels/normal CLI lifecycle, независимо воспроизводимое сохранение primary evidence и общая source-bound acceptance. Положительный component report всегда содержит `full_M13=inconclusive` и `release_ready=false`.
+До полного M13 остаются все обязательные output channels/normal CLI lifecycle, композиция actual/controlled subjects и общая source-bound acceptance. Положительный component report всегда содержит `full_M13=inconclusive` и `release_ready=false`.

@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+CP3/T16 2026-11-06: [retained audit после cleanup](evidence/kubernetes-audit-retention-2026-11-06.md) **pass**, `bc8948c` / 42218670322 success. 28 cases, 203 Linux tests / 0 skips, clean Windows checkout 161 tests. Однократное private packet storage и повторная проверка bytes и signed primary после child/owned probe cleanup подтверждены; SQL/cluster cleanup success. Retention ограничен campaign/VM по ADR 0049. Полный M13 остаётся inconclusive: normal CLI/all channels, subject composition и общая acceptance; M22 independent 0/2, image findings и M18/R1 открыты.
+
 [M13 Kubernetes private logs](operations/kubernetes-privacy.md): ownership/stream/cleanup, immutable probe bundle, missing migration и CRI terminal race. [Native component verified](evidence/kubernetes-privacy-2026-11-06.md); полный M13 остаётся открытым.
 
 - [M11: свежая общая проверка trust lifecycle](operations/trust-acceptance.md). Привязка candidate/source, primary traces, независимые отзывы, expiry/replay/rollback/signers, fail-closed итог и scoped cleanup. Runner реализован; общий native запуск ещё не принят.

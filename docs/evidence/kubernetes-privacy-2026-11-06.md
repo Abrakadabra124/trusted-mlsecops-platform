@@ -77,6 +77,6 @@ gh workflow run kubernetes-privacy.yml --repo Abrakadabra124/trusted-mlsecops-pl
 
 - Полный M13 должен связать normal serving CLI lifecycle и все обязательные output channels; текущий probe использует настоящий Engine/HTTP внутри qualification harness.
 - Service logs здесь являются двумя окнами наблюдения. Это не полные lifecycles служб и не проверка всех init containers.
-- Primary packet повторно проверен и перечитан на runner. Он не экспортировался из ephemeral host, поэтому после завершения CI доступна публичная сводка, а не пакет для внешней повторной верификации. Для полной acceptance остаётся решить ограниченное приватное хранение.
+- Исторический `90385fa` проверял packet на runner, но post-exit retained-copy и post-cleanup signed-primary verification ещё не завершал. [Следующий bc8948c](kubernetes-audit-retention-2026-11-06.md) закрыл этот компонент. По ADR 0049 retention ограничен campaign/VM; внешний долговременный storage не является требованием increment. После уничтожения VM доступна публичная сводка, не приватный packet.
 - Общая candidate-bound M13 acceptance и полное coverage orchestration ещё не завершены. M22 independent review 0/2, image findings, CP4/CP5 и M18/R1 остаются открытыми.
 - Проверка синтетических canaries не доказывает отсутствие membership inference и не является differential privacy или сертификацией production.

@@ -1,6 +1,6 @@
 # Trusted MLSecOps Platform
 
-CP3/T16 2026-11-06: [Kubernetes privacy component](docs/evidence/kubernetes-privacy-2026-11-06.md) **pass**, `90385fa` / 42215561469 success. Actual candidate: 26 checks, 25 HTTP responses, 68 audit events / 8 correlated requests, 9 input canaries, 12 privacy requests / 36 durable events, 69 metric series, zero native stderr. Exact terminal worker stream, два service log windows и cleanup проверены. Linux 155 method executions; clean Windows checkout 155 tests. Полный M13 остаётся inconclusive: normal CLI/all channels, private primary retention и общая acceptance ещё требуются. M22 independent 0/2, image findings, CP4/CP5 и M18/R1 открыты.
+CP3/T16 2026-11-06: [retained audit после cleanup](docs/evidence/kubernetes-audit-retention-2026-11-06.md) **pass**, `bc8948c` / 42218670322 success. 28 cases, 203 Linux tests / 0 skips, clean Windows checkout 161 tests. Однократное private packet storage и повторная проверка bytes и signed primary после child/owned probe cleanup подтверждены; SQL/cluster cleanup success. Retention ограничен campaign/VM по ADR 0049. Полный M13 остаётся inconclusive: normal CLI/all channels, subject composition и общая acceptance; M22 independent 0/2, image findings и M18/R1 открыты.
 
 Исследование и реализация воспроизводимого жизненного цикла машинного обучения с контролями безопасности.
 
