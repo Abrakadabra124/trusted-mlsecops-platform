@@ -12,6 +12,18 @@ from scripts.kube_privacy_diagnostic import validated
 
 
 def report():
+    services = {
+        name: {
+            "status": "pass",
+            "release_ready": False,
+            "closed_window": True,
+            "leak_control_detected": True,
+            "retained_reverified": True,
+            "bytes": 10,
+            "sha256": "f" * 64,
+        }
+        for name in ("ml-storage", "ml-trust")
+    }
     value = {
         "status": "pass",
         "release_ready": False,
@@ -34,6 +46,9 @@ def report():
             },
             "operator_observation": {
                 "service_windows": 2,
+                "service_observations": copy.deepcopy(services),
+                "service_bytes": 20,
+                "service_packets_post_cleanup_reverified": True,
                 "worker_terminal": True,
                 "retained_packet_reverified": True,
             },
@@ -54,6 +69,7 @@ def report():
         },
         "private_url": "https://private-canary.invalid",
         "controlled_cli": {
+            "service_windows": copy.deepcopy(services),
             "status": "pass",
             "release_ready": False,
             "full_M13": "inconclusive",
@@ -91,6 +107,48 @@ def report():
 
 
 class NativePrivacyProjectionContracts(unittest.TestCase):
+    def test_missing_or_fabricated_closed_window_controls_and_primary_receipts_refuse(self):
+        for location in ("actual", "cli"):
+            for fault in (
+                "missing",
+                "extra",
+                "control",
+                "retained",
+                "open",
+                "bytes",
+                "digest",
+                "fake-true",
+            ):
+                value = report()
+                rows = (
+                    value["controlled_cli"]["service_windows"]
+                    if location == "cli"
+                    else value["native"]["operator_observation"]["service_observations"]
+                )
+                row = rows["ml-storage"]
+                if fault == "missing":
+                    rows.pop("ml-trust")
+                elif fault == "extra":
+                    row["raw"] = "private-canary"
+                elif fault == "control":
+                    row["leak_control_detected"] = False
+                elif fault == "retained":
+                    row["retained_reverified"] = False
+                elif fault == "open":
+                    row["closed_window"] = False
+                elif fault == "bytes":
+                    row["bytes"] = True
+                elif fault == "digest":
+                    row["sha256"] = "private-canary"
+                else:
+                    row["closed_window"] = 1
+                with self.subTest(location=location, fault=fault), self.assertRaises(Rejected):
+                    native.projection(value)
+        value = report()
+        value["native"]["operator_observation"]["service_bytes"] = 1
+        with self.assertRaises(Rejected):
+            native.projection(value)
+
     def test_projection_contains_finite_counts_not_private_graph_or_hashes(self):
         projected = native.projection(report())
         self.assertNotIn("private-canary", canonical(projected).decode())
@@ -106,6 +164,9 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
             lambda v: v["native"].update(model_sha256="foreign"),
             lambda v: v["native"]["output_observation"].update(native_stderr_bytes=1),
             lambda v: v["native"]["operator_observation"].update(service_windows=1),
+            lambda v: v["native"]["operator_observation"].update(
+                service_packets_post_cleanup_reverified=1
+            ),
             lambda v: v["native"]["operator_observation"].update(retained_packet_reverified=1),
             lambda v: v["native"].update(primary_reverification={}),
             lambda v: v["native"]["audit"].update(observed_responses="private-canary"),

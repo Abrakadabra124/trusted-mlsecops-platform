@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from mlsecops.contracts import Rejected, canonical
 from scripts import audit_evidence_qualification as audit_fixture
@@ -113,77 +113,42 @@ class OperatorHandoffContracts(unittest.TestCase):
             control = operator.Coordinator(Path(directory), {}, binding, context)
             control.needles = (b"1" * 32,) + tuple(f"canary-{i}".encode() for i in range(8))
             with (
-                patch.object(operator.kube_storage, "validate") as storage,
+                patch.object(operator.audit_snapshot, "store_packet") as store,
                 self.assertRaisesRegex(Rejected, "privacy_audit_canary"),
             ):
                 control.audit({"packet": operator.signing.encode64(content)})
-            storage.assert_not_called()
+            store.assert_not_called()
             control.needles = tuple(f"canary-{i}".encode() for i in range(9))
-            docs = [
-                {
-                    "kind": "StatefulSet",
-                    "metadata": {"namespace": ns, "name": "postgres"},
-                    "spec": {
-                        "template": {
-                            "spec": {
-                                "containers": [
-                                    {"name": "postgres", "image": "postgres@sha256:" + "d" * 64}
-                                ]
-                            }
-                        }
-                    },
-                }
-                for ns in ("ml-storage", "ml-trust")
-            ]
-            captures = []
-
-            def capture(state, pod, **kwargs):
-                captures.append(kwargs)
-                return {"bytes": 0, "terminal": False}, b""
-
-            with (
-                patch.object(operator.audit_snapshot, "store_packet") as store,
-                patch.object(
-                    operator.kube_storage,
-                    "validate",
-                    return_value={
-                        "resources": {operator.kube_storage.reference(docs[0]): "storage-owner"}
-                    },
-                ),
-                patch.object(operator.kube_storage, "desired", return_value=[docs[0]]),
-                patch.object(
-                    operator.kube_trust,
-                    "validate",
-                    return_value={
-                        "resources": {operator.kube_storage.reference(docs[1]): "trust-owner"}
-                    },
-                ),
-                patch.object(operator.kube_trust, "desired", return_value=[docs[1]]),
-                patch.object(
-                    operator,
-                    "kubectl",
-                    return_value=SimpleNamespace(
-                        returncode=0,
-                        stdout=canonical({"spec": docs[0]["spec"]["template"]["spec"]}),
-                    ),
-                ) as api,
-                patch.object(operator, "verify_running_image") as image,
-                patch.object(operator, "capture", side_effect=capture),
-            ):
+            control.windows = Mock()
+            with patch.object(operator.audit_snapshot, "store_packet") as store:
                 result = control.audit({"packet": operator.signing.encode64(content)})
-                store.assert_called_once_with(control.destination / "audit-evidence", content)
-                self.assertEqual(
-                    [c.args[1] for c in image.call_args_list], ["sha256:" + "d" * 64] * 2
-                )
-                api.return_value.stdout = canonical({"spec": {}})
-                with self.assertRaisesRegex(Rejected, "privacy_service_spec"):
-                    control.audit({"packet": operator.signing.encode64(content)})
+            store.assert_called_once_with(control.destination / "audit-evidence", content)
             self.assertEqual(result["status"], "pass")
-            self.assertEqual(set(control.services), {"ml-storage", "ml-trust"})
-            self.assertEqual([v["owner_uid"] for v in captures], ["storage-owner", "trust-owner"])
-            self.assertTrue(
-                all("terminal" not in v and "expected_output" not in v for v in captures)
-            )
+            self.assertEqual(control.services, {})
+            control.windows.close.assert_not_called()
+
+    def test_service_window_starts_once_before_any_probe_exchange(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = operator.Coordinator(Path(directory), {}, {"campaign_id": "a" * 32}, {})
+            with patch.object(operator, "Windows") as windows:
+                control.start()
+                with self.assertRaisesRegex(Rejected, "privacy_operator_already_started"):
+                    control.start()
+            windows.assert_called_once_with(control.state, control.destination / "services")
+
+    def test_post_cleanup_service_readback_requires_started_window_and_exact_confirmation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = operator.Coordinator(Path(directory), {}, {"campaign_id": "a" * 32}, {})
+            with self.assertRaises(Rejected):
+                control.reverify_services()
+            control.windows = Mock()
+            for value in (False, 1, None):
+                control.windows.reverify.return_value = value
+                with self.subTest(value=value), self.assertRaises(Rejected):
+                    control.reverify_services()
+            control.windows.reverify.return_value = True
+            self.assertTrue(control.reverify_services())
+            control.windows.reverify.assert_called_with(control.needles, control.services)
 
     def test_ordered_requests_are_idempotent_and_acknowledged_without_raw_output(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -271,7 +236,11 @@ class OperatorHandoffContracts(unittest.TestCase):
             control = operator.Coordinator(Path(directory), {}, {"campaign_id": "a" * 32}, {})
             control.phases = list(operator.PHASES)
             control.worker_receipt, control.audit_receipt = {"worker": True}, {"audit": True}
-            control.services = {"ml-storage": {"bytes": 10}, "ml-trust": {"bytes": 20}}
+            control.windows = Mock()
+            control.windows.close.return_value = {
+                "ml-storage": {"bytes": 10},
+                "ml-trust": {"bytes": 20},
+            }
             control.needles = (b"private-canary",)
             report = {"worker_observation": control.worker_receipt, "audit": control.audit_receipt}
             raw = canonical(report) + b"\n"
@@ -286,6 +255,11 @@ class OperatorHandoffContracts(unittest.TestCase):
             self.assertEqual(result["operator_observation"]["service_bytes"], 30)
             self.assertTrue(result["operator_observation"]["retained_packet_reverified"])
             self.assertFalse(result["operator_observation"]["release_ready"])
+            with (
+                patch.object(control.windows.close, "return_value", {}),
+                self.assertRaises(Rejected),
+            ):
+                control.finish(report, raw)
             for content in (raw[:-1], b"prefix\n" + raw, raw + b"extra\n"):
                 with self.subTest(content=content), self.assertRaises(Rejected):
                     control.finish(report, content)
@@ -294,7 +268,7 @@ class OperatorHandoffContracts(unittest.TestCase):
                 ("phases", ["worker"]),
                 ("worker_receipt", {}),
                 ("audit_receipt", {}),
-                ("services", {}),
+                ("windows", None),
                 ("needles", (b"audit",)),
             ):
                 with (
@@ -315,7 +289,11 @@ class OperatorHandoffContracts(unittest.TestCase):
             )
             control.worker_receipt = {"worker": True}
             control.phases = list(operator.PHASES)
-            control.services = {"ml-storage": {"bytes": 0}, "ml-trust": {"bytes": 0}}
+            control.windows = Mock()
+            control.windows.close.return_value = {
+                "ml-storage": {"bytes": 0},
+                "ml-trust": {"bytes": 0},
+            }
             control.needles = (b"private-canary",)
             report = {"worker_observation": control.worker_receipt, "audit": control.audit_receipt}
             for failure in (Rejected("missing"), b"changed", content):

@@ -79,6 +79,25 @@ uv run --locked python scripts/check_docs.py
 
 ## Ограничения
 
+### Повторение основной ветки на одном source
+
+После публикации `b461ab9ad8e87bc0102878569313cec6fc48480b` все десять workflows завершены: **9 success / 1 failure**. Это проверка указанного commit, не новая полная R1 acceptance.
+
+| Workflow | Run | Проверенный итог |
+| --- | --- | --- |
+| Documentation | [42235957483](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957483) | success |
+| Intake contracts | [42235957602](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957602) | success |
+| Developer runtime | [42235957253](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957253) | success |
+| M08 | [42235957311](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957311) | primary pass, 69 cases |
+| M09 | [42235957362](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957362) | primary pass, 44 cases |
+| Paired robustness | [42235957446](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957446) | success, component |
+| Storage | [42235957615](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957615) | success; fresh primary M03 431 / M07 97 |
+| Tracking | [42235957655](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957655) | success; fresh primary M06 18 |
+| Kubernetes isolation | [42235957296](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957296) | success; owned cluster cleanup success, 14:58:07 UTC |
+| Image audit | [42235957515](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42235957515) | fail; summary 25 vulnerabilities |
+
+M03/M06/M07/M08/M09 primary envelopes сверены с точным `b461ab9`, pass/exit0 и всеми cases pass; кроме M03, каждый содержит `source_dirty=false`. M03 отдельного поля не содержит. Image report также связан с этим source, `release_ready=false`: component counts 25/2/25/25/2 не суммируются как уникальные CVE. Результат всё ещё не охватывает все controller/system images и не закрывает image gate.
+
 Проверки на разных commits не складываются в единый M18 acceptance envelope. Native M06 относится к `0334ecf`, CLI privacy - к `36cd71d`; полный R1 требует все обязательные gates на одном candidate/source/policy. M22 independent challenges остаются 0/2. Findings image audit не игнорируются и не устраняются одним обновлением Python dependency.
 
 До полного M13 остаются service-output inventory/runtime readback/closed windows с leak controls, явная композиция controlled/actual subjects и общий строгий gate. Локальные Docker/WSL/Kubernetes/SQL не запускались. Raw CI logs, snapshots и private credentials не публикуются. Подробная диагностика и история попыток - [операционный ранбук](../operations/kubernetes-privacy.md#общий-ci-после-публикации).

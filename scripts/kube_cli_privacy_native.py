@@ -14,6 +14,7 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, decode, digest, safe_child, write_json
 from scripts import audit_correlation_probe, promotion_qualification, serving_native
 from scripts.kube_cli_privacy_probe import verify_snapshot
+from scripts.kube_privacy_services import Windows
 from scripts.kube_promotion_native import stage
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_native import invoke
@@ -125,7 +126,11 @@ def controlled(root, state, image, profile):
             "audit_context": context,
         }
         before = snapshot(state)
+        destination = safe_child(state, "evidence/cli-privacy/" + uuid.uuid4().hex)
+        write_json(destination / "context.json", context)
+        services = Windows(state, destination / "services")
         result = invoke(state, profile, config, expected, cli_privacy=True)
+        service_windows = services.close(result.pop("_privacy_needles", None))
         # invoke has terminated the CLI/probe and cleaned its owned Kubernetes resources.
         if primary(state, arguments, receipt) != context or snapshot(state) != before:
             raise Rejected("cli_privacy_primary_changed")
@@ -133,8 +138,6 @@ def controlled(root, state, image, profile):
         checked = verify_snapshot(privacy["snapshot"], context, privacy["http"])
         if canonical(checked) != canonical(privacy["audit"]):
             raise Rejected("cli_privacy_receipt_changed")
-        destination = safe_child(state, "evidence/cli-privacy/" + uuid.uuid4().hex)
-        write_json(destination / "context.json", context)
         packet = canonical(privacy)
         audit_snapshot.store_packet(destination / "closed-window", packet)
         retained = audit_snapshot.load_packet(destination / "closed-window")
@@ -154,6 +157,7 @@ def controlled(root, state, image, profile):
             "post_cleanup_primary_reverified": True,
             "retained_snapshot_reverified": True,
             "independent_admission_observed": False,
+            "service_windows": service_windows,
         }
         write_json(destination / "report.json", report)
         yield report, fixture.trust_fixture.key

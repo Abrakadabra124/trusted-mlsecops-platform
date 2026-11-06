@@ -28,6 +28,8 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.kube_privacy_bundle_qualification
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/mlsecops-services.coverage" --source=scripts.kube_privacy_services,scripts.kube_cli_privacy_exchange -m unittest scripts.kube_privacy_services_qualification scripts.kube_cli_privacy_exchange_qualification
+          uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/mlsecops-services.coverage" --fail-under=100
           uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/mlsecops-cli.coverage" --source=scripts.kube_cli_privacy_probe,scripts.kube_cli_privacy_native,mlsecops.kube_serving_probe -m unittest scripts.kube_cli_privacy_qualification scripts.kube_serving_native_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/mlsecops-cli.coverage" -o "$RUNNER_TEMP/mlsecops-cli-coverage.json"
           uv run --locked python - <<'PY'

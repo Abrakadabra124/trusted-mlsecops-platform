@@ -25,6 +25,7 @@ from mlsecops.contracts import (
 from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce
 from scripts import audit_correlation_probe, serving_metrics_probe, serving_privacy_probe
+from scripts import kube_cli_privacy_exchange as cli_exchange
 from scripts.kube_privacy_diagnostic import location
 from scripts.kube_privacy_operator import decoded
 
@@ -231,6 +232,7 @@ class Privacy:
         checked = verify_snapshot(snapshot, expected["audit_context"], self.http)
         if len(canonical(snapshot)) > MAX_BYTES:
             raise Rejected("cli_privacy_snapshot_limit")
+        cli_exchange.provide(self.needles)
         return {
             "schema_version": 1,
             "status": "pass",

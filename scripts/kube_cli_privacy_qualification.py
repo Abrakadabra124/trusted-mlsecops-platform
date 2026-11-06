@@ -311,6 +311,7 @@ class CLIPrivacyContracts(unittest.TestCase):
             with (
                 self.subTest(fault=fault),
                 patch.object(probe.serving_privacy_probe, "scan_owned_audit"),
+                patch.object(probe.cli_exchange, "provide"),
                 patch.object(
                     probe.audit_snapshot, "capture_closed", return_value=(manifest, chunks)
                 ),
@@ -409,13 +410,22 @@ class CLIPrivacyContracts(unittest.TestCase):
             ) as promotion,
             patch.object(native, "primary", return_value=context) as primary,
             patch.object(native, "snapshot", return_value={"immutable": True}) as ledger,
-            patch.object(native, "invoke", return_value={"privacy": privacy}) as invoke,
+            patch.object(native, "Windows") as windows,
+            patch.object(
+                native,
+                "invoke",
+                return_value={
+                    "privacy": privacy,
+                    "_privacy_needles": tuple(f"private-{i}".encode() for i in range(9)),
+                },
+            ) as invoke,
             patch.object(native.audit_snapshot, "store_packet") as store,
             patch.object(
                 native.audit_snapshot, "load_packet", return_value=canonical(privacy)
             ) as load,
             patch.object(native, "verify_snapshot", wraps=probe.verify_snapshot) as verify,
         ):
+            windows.return_value.close.return_value = {"ml-storage": {}, "ml-trust": {}}
             if fault == "promotion":
                 promotion.return_value = {"status": "rejected", "receipt": None}
             if fault == "primary":
@@ -437,6 +447,8 @@ class CLIPrivacyContracts(unittest.TestCase):
                     self.assertEqual(key, Path("authority-key"))
                 self.assertEqual(primary.call_count, 2)
                 self.assertTrue(invoke.call_args.kwargs["cli_privacy"])
+                windows.return_value.close.assert_called_once()
+                self.assertNotIn("_privacy_needles", result["native"])
                 store.assert_called_once()
             else:
                 with (

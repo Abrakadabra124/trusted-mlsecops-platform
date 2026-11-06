@@ -8,7 +8,6 @@ from mlsecops import (
     audit_snapshot,
     kube_serving_runtime,
     kube_storage,
-    kube_trust,
     signing,
 )
 from mlsecops.cluster import kubectl
@@ -22,10 +21,10 @@ from mlsecops.contracts import (
     safe_child,
     write_json,
 )
-from mlsecops.kube_worker import verify_running_image
 from scripts.kube_privacy_diagnostic import validated
 from scripts.kube_privacy_exchange import DIRECTORY, MAX_REQUEST, PHASES
 from scripts.kube_privacy_logs import MAX_BYTES, capture
+from scripts.kube_privacy_services import Windows
 
 
 def decoded(value, maximum):
@@ -84,6 +83,17 @@ class Coordinator:
         self.exec_exit_deadline = None
         self.needles = self.worker_receipt = self.audit_receipt = None
         self.services = {}
+        self.windows = None
+
+    def start(self):
+        if self.windows is not None:
+            raise Rejected("privacy_operator_already_started")
+        self.windows = Windows(self.state, self.destination / "services")
+
+    def reverify_services(self):
+        if self.windows is None or self.windows.reverify(self.needles, self.services) is not True:
+            raise Rejected("privacy_service_retained_unconfirmed")
+        return True
 
     def observe(self, pod):
         # invoke() has verified this probe's UID/spec/image immediately before calling.
@@ -248,29 +258,6 @@ class Coordinator:
         if any(needle in content for content in channels for needle in self.needles):
             raise Rejected("privacy_audit_canary")
         audit_snapshot.store_packet(self.destination / "audit-evidence", packet)
-        self.step = "service-logs"
-        for module in (kube_storage, kube_trust):
-            marker = module.validate(self.state)
-            document = next(v for v in module.desired(self.state) if v["kind"] == "StatefulSet")
-            namespace = document["metadata"]["namespace"]
-            owner = marker["resources"][kube_storage.reference(document)]
-            pod = decode(
-                kubectl(
-                    self.state, ["get", "pod", "postgres-0", "-n", namespace, "-o", "json"]
-                ).stdout
-            )
-            if not kube_storage.matches(document["spec"]["template"]["spec"], pod["spec"]):
-                raise Rejected("privacy_service_spec")
-            image = document["spec"]["template"]["spec"]["containers"][0]["image"]
-            if type(image) is not str or re.fullmatch(r"[^@]+@sha256:[a-f0-9]{64}", image) is None:
-                raise Rejected("privacy_service_image")
-            verify_running_image(pod, image.rsplit("@", 1)[1])
-            receipt, raw = capture(
-                self.state, pod, owner_uid=owner, container="postgres", needles=self.needles
-            )
-            atomic_write(self.destination / (namespace + "-private.log"), raw)
-            write_json(self.destination / (namespace + "-receipt.json"), receipt)
-            self.services[namespace] = receipt
         self.audit_receipt = result
         return result
 
@@ -281,9 +268,12 @@ class Coordinator:
             or raw != canonical(report) + b"\n"
             or report.get("worker_observation") != self.worker_receipt
             or report.get("audit") != self.audit_receipt
-            or set(self.services) != {"ml-storage", "ml-trust"}
+            or self.windows is None
             or any(needle in raw for needle in self.needles)
         ):
+            raise Rejected("privacy_operator_incomplete")
+        self.services = self.windows.close(self.needles)
+        if set(self.services) != {"ml-storage", "ml-trust"}:
             raise Rejected("privacy_operator_incomplete")
         # finish runs only after the exact probe Pod has terminated successfully.
         # Re-read the stored bytes; agreement between two in-memory receipts is not proof.
@@ -302,6 +292,7 @@ class Coordinator:
                 "worker_terminal": True,
                 "retained_packet_reverified": True,
                 "service_windows": len(self.services),
+                "service_observations": self.services,
                 "service_bytes": sum(v["bytes"] for v in self.services.values()),
             },
         }

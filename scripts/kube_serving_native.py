@@ -23,6 +23,7 @@ from mlsecops.kube_worker import job_document, verify_running_image, wait_job
 from mlsecops.private_cli import Arguments
 from mlsecops.storage_pki import workspace_id
 from mlsecops.trust_targets import Target, select
+from scripts import kube_cli_privacy_exchange as cli_exchange
 from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
@@ -121,6 +122,7 @@ def invoke(
     created = []
     phases = []
     output_limit = 2 * 1024 * 1024 if cli_privacy else 65536
+    cli_receiver = cli_exchange.Receiver(state) if cli_privacy else None
 
     def observe(pod):
         verify_running_image(pod, profile["image_id"])
@@ -131,6 +133,9 @@ def invoke(
             raise Rejected("kube_serving_probe_pod_changed")
         if privacy_operator is not None:
             privacy_operator.observe(pod)
+            return
+        if cli_receiver is not None:
+            cli_receiver.observe(pod)
             return
         raw = kubectl(
             state,
@@ -154,6 +159,8 @@ def invoke(
             phases.append(phase)
 
     try:
+        if privacy_operator is not None:
+            privacy_operator.start()
         for document in [*maps, job]:
             observed = decode(kubectl(state, ["create", "-f", "-", "-o", "json"], document).stdout)
             uid = observed["metadata"]["uid"]
@@ -166,7 +173,9 @@ def invoke(
             240,
             **(
                 {"observe": observe}
-                if coordinator is not None or privacy_operator is not None
+                if coordinator is not None
+                or privacy_operator is not None
+                or cli_receiver is not None
                 else {}
             ),
         )
@@ -252,6 +261,8 @@ def invoke(
             raise Rejected("kube_serving_probe_report")
         if privacy_operator is not None:
             report = privacy_operator.finish(report, raw)
+        if cli_receiver is not None:
+            report["_privacy_needles"] = cli_receiver.finish(raw)
         return {**report, "elapsed_seconds": elapsed}
     finally:
         kube_promotion.cleanup(state, created, namespace=NAMESPACE)

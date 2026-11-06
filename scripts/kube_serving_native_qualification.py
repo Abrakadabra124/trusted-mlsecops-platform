@@ -453,13 +453,15 @@ class NativeContracts(unittest.TestCase):
     def test_harness_uses_real_cli_profile_and_private_failure_logs_with_cleanup(self):
         from unittest.mock import Mock
 
-        for success, coordinated, foreign, privacy in [
-            (True, False, False, False),
-            (False, False, False, False),
-            (True, True, False, False),
-            (True, True, True, False),
-            (True, False, False, True),
-            (True, False, True, True),
+        for success, coordinated, foreign, privacy, cli in [
+            (True, False, False, False, False),
+            (False, False, False, False, False),
+            (True, True, False, False, False),
+            (True, True, True, False, False),
+            (True, False, False, True, False),
+            (True, False, True, True, False),
+            (True, False, False, False, True),
+            (True, False, True, False, True),
         ]:
             with tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
@@ -467,6 +469,7 @@ class NativeContracts(unittest.TestCase):
                 created = []
                 coordinator, acknowledgements = Mock(), Mock()
                 privacy_operator = Mock()
+                privacy_operator.start.side_effect = lambda: self.assertEqual(created, [])
                 privacy_operator.finish.side_effect = lambda report, raw: report
                 markers = []
 
@@ -500,7 +503,9 @@ class NativeContracts(unittest.TestCase):
                         if success
                         else b"PRIVATE-DIAGNOSTIC"
                     )
-                    return SimpleNamespace(stdout=b"\n".join([*markers, result]))
+                    return SimpleNamespace(
+                        stdout=b"\n".join([*markers, result]) + (b"\n" if cli else b"")
+                    )
 
                 def wait(*args, **kwargs):
                     pod = {
@@ -515,7 +520,7 @@ class NativeContracts(unittest.TestCase):
                             ]
                         },
                     }
-                    if privacy:
+                    if privacy or cli:
                         kwargs["observe"](pod)
                     elif coordinated:
                         for phase in ["ready", "denied"]:
@@ -540,17 +545,20 @@ class NativeContracts(unittest.TestCase):
                     patch.object(native.kube_storage, "verify_resource"),
                     patch.object(native.kube_promotion, "cleanup") as cleanup,
                     patch.object(native, "acknowledge", acknowledgements),
+                    patch.object(native.cli_exchange, "Receiver") as receiver,
                 ):
+                    receiver.return_value.finish.return_value = (b"private",)
                     if foreign:
                         with self.assertRaisesRegex(Rejected, "pod_changed"):
                             native.invoke(
                                 state,
                                 PROFILE,
                                 {},
-                                {"fault": "outage"},
+                                {"ready": True} if cli else {"fault": "outage"},
                                 coordinator=coordinator if coordinated else None,
                                 candidate_probe=privacy,
                                 privacy_operator=privacy_operator if privacy else None,
+                                cli_privacy=cli,
                             )
                         coordinator.assert_not_called()
                         acknowledgements.assert_not_called()
@@ -561,10 +569,15 @@ class NativeContracts(unittest.TestCase):
                                 state,
                                 PROFILE,
                                 {},
-                                {"fault": "outage"} if coordinated else {},
+                                {"ready": True}
+                                if cli
+                                else {"fault": "outage"}
+                                if coordinated
+                                else {},
                                 coordinator=coordinator if coordinated else None,
                                 candidate_probe=privacy,
                                 privacy_operator=privacy_operator if privacy else None,
+                                cli_privacy=cli,
                             )["status"],
                             "pass",
                         )
@@ -576,6 +589,10 @@ class NativeContracts(unittest.TestCase):
                         if privacy:
                             privacy_operator.observe.assert_called_once()
                             privacy_operator.finish.assert_called_once()
+                            privacy_operator.start.assert_called_once()
+                        if cli:
+                            receiver.return_value.observe.assert_called_once()
+                            receiver.return_value.finish.assert_called_once()
                     else:
                         with self.assertRaisesRegex(Rejected, "job_failed"):
                             native.invoke(state, PROFILE, {}, {})
@@ -584,7 +601,11 @@ class NativeContracts(unittest.TestCase):
                 self.assertEqual(pod["serviceAccountName"], "serving")
                 self.assertEqual(
                     pod["containers"][0]["command"][2],
-                    "scripts.kube_privacy_probe" if privacy else "mlsecops.kube_serving_probe",
+                    "scripts.kube_cli_privacy_probe"
+                    if cli
+                    else "scripts.kube_privacy_probe"
+                    if privacy
+                    else "mlsecops.kube_serving_probe",
                 )
                 self.assertEqual(
                     len(list((state / "evidence").glob("*-private.log"))), 0 if foreign else 1

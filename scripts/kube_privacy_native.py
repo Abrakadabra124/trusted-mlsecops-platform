@@ -47,9 +47,40 @@ CASES = {
 }
 
 
+def checked_services(rows):
+    if type(rows) is not dict or set(rows) != {"ml-storage", "ml-trust"}:
+        raise Rejected("privacy_service_evidence")
+    fixed = {
+        "status": "pass",
+        "release_ready": False,
+        "closed_window": True,
+        "leak_control_detected": True,
+        "retained_reverified": True,
+    }
+    for value in rows.values():
+        if (
+            type(value) is not dict
+            or set(value) != {*fixed, "bytes", "sha256"}
+            or canonical({k: value[k] for k in fixed}) != canonical(fixed)
+            or type(value["bytes"]) is not int
+            or not 1 <= value["bytes"] <= 1024 * 1024
+            or type(value["sha256"]) is not str
+            or re.fullmatch("[a-f0-9]{64}", value["sha256"]) is None
+        ):
+            raise Rejected("privacy_service_evidence")
+    return sum(v["bytes"] for v in rows.values())
+
+
 def projection(report):
     native = report["native"]
     cli = report["controlled_cli"]
+    checked_services(cli.get("service_windows"))
+    operator = native["operator_observation"]
+    if (
+        checked_services(operator.get("service_observations")) != operator.get("service_bytes")
+        or operator.get("service_packets_post_cleanup_reverified") is not True
+    ):
+        raise Rejected("privacy_service_evidence")
     observed = cli["native"]["privacy"]
     cli_native = cli["native"]
     cli_fixed = {
@@ -138,6 +169,10 @@ def projection(report):
         "audit_events": native["audit"]["correlation"]["events"],
         "worker_terminal_stream": True,
         "service_log_windows": 2,
+        "controlled_cli_service_log_windows": 2,
+        "closed_service_windows": 4,
+        "detected_service_leak_controls": 4,
+        "retained_service_packets_reverified": 4,
         "native_stderr_bytes": 0,
         "worker_cleanup": True,
         "retained_packet_reverified": True,

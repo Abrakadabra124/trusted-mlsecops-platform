@@ -229,6 +229,9 @@ def qualify(
     if privacy:
         from scripts.serving_output_native import verify_packet
 
+        result["operator_observation"]["service_packets_post_cleanup_reverified"] = options[
+            "privacy_operator"
+        ].reverify_services()
         # invoke has completed child exit and owned Job/ConfigMap cleanup. Reload
         # current signed CAS materials and the retained host packet independently.
         audit = result["audit"]
