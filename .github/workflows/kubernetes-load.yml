@@ -45,6 +45,11 @@ jobs:
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
           PY
           uv run --locked python -m unittest scripts.kube_serving_native_qualification scripts.kube_candidate_qualification scripts.kube_serving_runtime_qualification scripts.serving_access_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.serving_http_audit_qualification scripts.trust_authority_qualification
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load-audit.coverage" --source=mlsecops.serving_audit,mlsecops.audit_retention,mlsecops.audit_snapshot -m unittest scripts.serving_audit_qualification scripts.audit_retention_qualification scripts.audit_admission_qualification scripts.audit_event_qualification scripts.audit_correlation_qualification scripts.audit_snapshot_qualification scripts.audit_evidence_qualification
+          uv run --locked python -m scripts.audit_branch_coverage "$RUNNER_TEMP/load-audit.coverage"
+          uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-audit.coverage" --include='mlsecops/serving_audit.py' --fail-under=95
+          uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-audit.coverage" --include='mlsecops/audit_retention.py' --fail-under=95
+          uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-audit.coverage" --include='mlsecops/audit_snapshot.py' --fail-under=95
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap

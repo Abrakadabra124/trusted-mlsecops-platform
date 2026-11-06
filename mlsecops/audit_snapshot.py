@@ -170,6 +170,8 @@ def capture_closed(path):
         with _leased(Path(path)) as directory:
             source, identity = _read(directory, "manifest.json", audit_retention.MAX_MANIFEST)
             saved = manifest(source)
+            if sum(segment["size"] for segment in saved["segments"]) > audit_retention.MAX_BYTES:
+                raise Rejected("audit_snapshot_capacity")
             expected = {".lease", "manifest.json", *(item["name"] for item in saved["segments"])}
             if _names(directory) != expected:
                 raise Rejected("audit_snapshot_inventory")

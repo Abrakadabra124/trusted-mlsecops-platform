@@ -238,7 +238,48 @@ PID проверяется до построения пути; содержим�
 Это явное изменение среды измерения; прежние CPU/RAM показатели не выдаются
 за повторение в идентичной конфигурации. Native проверка следует отдельным run.
 
+В run [42277704992](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42277704992)
+на `a34516c` CLI readback прошёл, но worker CPU gap всё ещё достиг 28 s.
+Настройка 5 s сама по себе проблему не закрыла. Старый audit spool снова
+остановился после 15505 durable events; worker большую часть остатка окна не
+обрабатывал predictions. Это возможная связь, пока не доказанная причина gap.
+После изменения storage sizing требуется новый полный замер. Linux 77+130 tests
+без skips; SQL stop 19:19:24 UTC, cluster absence 19:19:28 UTC.
+
 ### Timings и причины отказа
+
+Run [42276686599](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42276686599),
+source `941e315`, подтвердил исчерпание старого audit spool: 15506 accepted,
+15505 durable, 1 unconfirmed, reserved 16765848 bytes при budget 16777216.
+Writer завершился с failure. Это объясняет серию защищённых 503; normal
+measurement также достиг max_attempts и не прошёл полное окно. Его successful
+p95=160.825 ms не является успешной приёмкой. Resource gap worker 24 s отдельно
+нарушил порог 20 s. Linux 76+130 tests прошли без skips; source SQL остановлен
+в 19:12:10 UTC, отсутствие owned cluster проверено в 19:12:14 UTC.
+
+HTTP runtime теперь явно использует retained budget 512 MiB, segment 16 MiB,
+не более 40 segments, прежние rotate=60 s и minimum retention=300 s.
+Расчёт для нормального профиля: `(10*20*300 + 10*40)*4*2048 = 494796800 bytes`.
+Это 200 requests/s, aggregate burst 400, четыре события не более 2048 bytes.
+Один граничный segment и 64 queue records добавляют 16908288 bytes; сумма
+511705088 ниже hard budget 536870912. Это расчёт ёмкости, не обещание throughput.
+Другие клиентские quotas требуют отдельного sizing; saturated/full storage
+по-прежнему вызывает отказ, не удаление молодых событий.
+
+Legacy single-file budget/default policy и предел payload export остаются
+16 MiB. Большой closed spool отклоняется snapshot/export до чтения segments;
+постраничный архив большого журнала пока не реализован. Clean reopen требует
+точного прежнего policy/budget. Нельзя редактировать manifest, удалять lease
+или менять path для обхода старого отказа. Проверочный профиль создаётся только
+в новом owned disposable окружении.
+
+Controller `/tmp` имеет bounded memory emptyDir 640 MiB под 512 MiB аудита и
+128 MiB прочих temporary files. Container limit остаётся 1 GiB RAM / 2 CPU;
+worker limits не изменены. Tmpfs учитывается в памяти контейнера, sampled RSS
+не равен полному memory usage. Это ephemeral lab storage: fsync не доказывает
+сохранность после удаления Pod/узла. Реальную нагрузку, закрытие writer, CPU/RAM
+и cleanup необходимо подтвердить новым native run. Audit admission, queue=64,
+durable acknowledgement и fail-closed поведение сохранены.
 
 После baseline `3861d8a` probe собирает фиксированные агрегаты completed calls:
 count/failures/total/max nanoseconds для reader check, trust read, worker ping,

@@ -9,6 +9,7 @@ from pathlib import Path
 from mlsecops.contracts import Rejected, canonical, decode, require_fields
 
 MAX_BYTES = 16 * 1024 * 1024
+MAX_RETAINED_BYTES = 512 * 1024 * 1024
 MAX_RECORD = 2048
 MAX_MANIFEST = 65536
 
@@ -22,7 +23,7 @@ class Policy:
 
     def validate(self, budget):
         bounds = (
-            (budget, MAX_RECORD, MAX_BYTES),
+            (budget, MAX_RECORD, MAX_RETAINED_BYTES),
             (self.segment_bytes, MAX_RECORD, budget),
             (self.max_segments, 1, 64),
             (self.rotate_seconds, 1, 3600),

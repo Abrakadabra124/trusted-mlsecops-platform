@@ -4,6 +4,14 @@
 
 ## Контракт
 
+Уточнение 2026-11-06 для managed HTTP: [измеренный отказ и sizing](../operations/load-profile.md#timings-и-причины-отказа)
+заменяют прежний 16 MiB ceiling retained mode новым явным пределом 512 MiB.
+Default Policy и single-file contract ниже остаются прежними; HTTP явно выбирает
+16 MiB segments / 40 files / 60 s rotation / 300 s minimum retention. Byte/file
+caps, отказ при capacity, проверка exact persisted policy и отсутствие eviction
+молодых записей сохраняются. Исторические результаты до изменения не доказывают
+приёмку нового профиля.
+
 Вместо неограниченного создания новых journal sessions использовать один явно выделенный private spool directory. POSIX/Linux профиль: owner-only directory, операции относительно одного проверенного directory FD, конечное число segments и общий byte budget, включающий retained и pending bytes. Legacy single-file Journal сохраняет прежний контракт; retained mode включается явно. Windows native retained mode отклоняется до изменения файлов: Windows ACL enforcement пока не реализован. Рабочий стенд пользователя не меняется.
 
 Один writer владеет spool через exclusive `.lease` file. Порядок startup: проверенный directory FD -> exclusive создание lease -> чтение manifest/inventory -> проверка -> восстановление counters -> admission. Снимки, прочитанные до ownership, не используются. Unknown files, symlinks, hardlinks, изменённые identity/size/hash или несовместимая policy не дают права на очистку. На clean close записывается bounded canonical manifest: exact policy и byte budget, Linux boot ID, clock anchor, global sequence и closed segment identities/sizes/hashes/timestamps. Atomic replace/fsync manifest предшествует удалению lease. Clean restart на том же boot проверяет весь bounded inventory, не обнуляет retained budget/sequence/age. Existing lease означает concurrent writer или interruption: сохранить файлы и отказать, не угадывать по PID и не делать blind unlink. Автоматический recovery после crash/reboot отдельно не заявляется.

@@ -109,7 +109,13 @@ def create_app(
         managed = None
         try:
             if audit_path is not None:
-                managed = serving_audit.Journal(audit_path, retention=audit_retention.Policy())
+                managed = serving_audit.Journal(
+                    audit_path,
+                    max_bytes=audit_retention.MAX_RETAINED_BYTES,
+                    retention=audit_retention.Policy(
+                        segment_bytes=16 * 1024 * 1024, max_segments=40
+                    ),
+                )
                 managed.start()
                 app.state.audit = managed
             try:

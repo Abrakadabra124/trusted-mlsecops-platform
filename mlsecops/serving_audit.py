@@ -70,11 +70,12 @@ def checked(value):
 
 class Journal:
     def __init__(self, path, *, capacity=64, max_bytes=MAX_BYTES, retention=None):
+        ceiling = MAX_BYTES if retention is None else audit_retention.MAX_RETAINED_BYTES
         if (
             type(capacity) is not int
             or not 1 <= capacity <= 64
             or type(max_bytes) is not int
-            or not MAX_RECORD <= max_bytes <= MAX_BYTES
+            or not MAX_RECORD <= max_bytes <= ceiling
         ):
             raise Rejected("audit_limits_invalid")
         self.lock = threading.Lock()

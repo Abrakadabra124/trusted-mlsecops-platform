@@ -18,6 +18,26 @@ from scripts.serving_audit_qualification import event
 
 
 class PolicyContracts(unittest.TestCase):
+    def test_larger_retained_budget_is_explicit_and_does_not_change_single_file_limit(self):
+        budget = 512 * 1024 * 1024
+        policy = audit_retention.Policy(segment_bytes=16 * 1024 * 1024, max_segments=40)
+        self.assertIs(policy.validate(budget), policy)
+        with self.assertRaisesRegex(Rejected, "audit_retention_policy"):
+            policy.validate(budget + 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary)
+            with self.assertRaisesRegex(Rejected, "audit_limits_invalid"):
+                serving_audit.Journal(path / "single", max_bytes=16 * 1024 * 1024 + 1)
+            with patch.object(audit_retention, "Spool") as factory:
+                factory.return_value.retained_bytes = 0
+                factory.return_value.sequence = 0
+                journal = serving_audit.Journal(path, max_bytes=budget, retention=policy)
+                factory.assert_called_once_with(path, policy, budget)
+                journal.close()
+                with self.assertRaisesRegex(Rejected, "audit_limits_invalid"):
+                    serving_audit.Journal(path, max_bytes=budget + 1, retention=policy)
+            self.assertEqual(list(path.iterdir()), [])
+
     def test_wrong_policy_type_and_unsupported_platform_never_create_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

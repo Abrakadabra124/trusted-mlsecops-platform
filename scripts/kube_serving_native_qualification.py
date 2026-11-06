@@ -482,7 +482,9 @@ class NativeContracts(unittest.TestCase):
 
                 spec = {
                     "serviceAccountName": "promoter",
-                    "volumes": [],
+                    "volumes": [
+                        {"name": "scratch", "emptyDir": {"medium": "Memory", "sizeLimit": "64Mi"}}
+                    ],
                     "containers": [
                         {
                             "command": ["python", "-m", "mlsecops.promotion_controller"],

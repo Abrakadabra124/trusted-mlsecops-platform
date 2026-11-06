@@ -612,6 +612,19 @@ class OwnedAuditLifecycleContracts(unittest.IsolatedAsyncioTestCase):
                         async with context:
                             self.assertIs(app.state.audit, journal)
                     factory.assert_called_once()
+                    options = factory.call_args.kwargs
+                    policy = options["retention"]
+                    # Ten authenticated clients, existing token-bucket limits,
+                    # four worst-case events, plus one retention boundary segment.
+                    retained = (10 * 20 * 300 + 10 * 40) * 4 * 2048
+                    self.assertLess(
+                        retained + policy.segment_bytes + 64 * 2048, options["max_bytes"]
+                    )
+                    self.assertEqual(options["max_bytes"], 512 * 1024 * 1024)
+                    self.assertEqual(policy.retain_seconds, 300)
+                    self.assertEqual(policy.rotate_seconds, 60)
+                    self.assertEqual(policy.segment_bytes, 16 * 1024 * 1024)
+                    self.assertEqual(policy.max_segments, 40)
                     journal.start.assert_called_once()
                     journal.close.assert_called_once()
                     engine.close.assert_called_once()

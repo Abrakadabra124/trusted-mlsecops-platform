@@ -153,7 +153,12 @@ class NativeLoadContracts(unittest.TestCase):
                                 "volumeMounts": [],
                             }
                         ],
-                        "volumes": [],
+                        "volumes": [
+                            {
+                                "name": "scratch",
+                                "emptyDir": {"medium": "Memory", "sizeLimit": "64Mi"},
+                            }
+                        ],
                     },
                 ),
                 patch.object(sys, "stdout", io.StringIO()) as output,
@@ -185,6 +190,12 @@ class NativeLoadContracts(unittest.TestCase):
                 observer.observe.assert_called_once()
                 cleanup.assert_called_once()
                 self.assertEqual(created[-1]["spec"]["activeDeadlineSeconds"], 360)
+                pod = created[-1]["spec"]["template"]["spec"]
+                self.assertEqual(pod["containers"][0]["resources"]["limits"]["memory"], "1Gi")
+                self.assertEqual(
+                    pod["volumes"][0],
+                    {"name": "scratch", "emptyDir": {"medium": "Memory", "sizeLimit": "640Mi"}},
+                )
                 self.assertEqual(
                     created[-1]["spec"]["template"]["spec"]["containers"][0]["command"][2],
                     "mlsecops.load_probe",

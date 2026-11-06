@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +40,21 @@ def metadata():
 
 
 class SnapshotManifestContracts(unittest.TestCase):
+    def test_large_retained_spool_is_not_loaded_into_the_small_export_packet(self):
+        saved = metadata()
+        saved["budget"] = 512 * 1024 * 1024
+        saved["policy"]["segment_bytes"] = 32 * 1024 * 1024
+        saved["segments"][0]["size"] = 16 * 1024 * 1024 + 1
+        with (
+            patch.object(audit_snapshot, "_leased", return_value=nullcontext(7)),
+            patch.object(audit_snapshot, "_read", return_value=(canonical(saved), [1, 2])) as read,
+            patch.object(audit_snapshot, "_names") as names,
+        ):
+            with self.assertRaisesRegex(Rejected, "audit_snapshot_unavailable"):
+                audit_snapshot.capture_closed(Path.cwd())
+            read.assert_called_once_with(7, "manifest.json", audit_retention.MAX_MANIFEST)
+            names.assert_not_called()
+
     def test_zero_manifest_clock_and_segment_times_are_not_valid_writer_history(self):
         for field in ("wall", "mono", "first", "last"):
             saved = metadata()

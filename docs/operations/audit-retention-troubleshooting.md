@@ -38,6 +38,16 @@ uv run --locked coverage report --data-file=.coverage-serving-audit
 
 ## Восстановление и rollback
 
+При нагрузочном отказе сначала сопоставить accepted/durable/unconfirmed,
+reserved bytes и текущий policy. Для managed HTTP теперь предусмотрен
+[отдельно рассчитанный bounded профиль](load-profile.md#timings-и-причины-отказа):
+512 MiB retained budget и 40 segments по 16 MiB. Это изменение версии runtime,
+не разрешение оператору произвольно увеличивать caps в существующем manifest.
+Сначала остановить и проверить владельца прежнего spool, сохранить evidence;
+несовместимый или failed spool не очищать ради перезапуска. Disposable проверка
+нового профиля использует собственный новый каталог. Недостаточный volume,
+потеря sink и неподтверждённые записи по-прежнему означают отказ.
+
 Поддержанный restart: подтверждённый clean close, тот же host boot, тот же private directory и exact policy/budget, immutable manifest/inventory. Новый writer захватывает собственный exclusive guard до чтения manifest. Сохранённые файлы продолжают расходовать общий budget; нумерация и возраст не обнуляются.
 
 Crash/reboot recovery пока не автоматизирован. При оставшемся guard или boot mismatch не обходить защиту. Сначала остановить/подтвердить завершение всех owned writers, сохранить приватную копию evidence по решению владельца и выполнить отдельный reviewed reconciliation. Этот runbook не даёт команд удаления единственной копии audit или очистки каталога. Неподтверждённые записи нельзя автоматически replay-ить как отсутствующие.

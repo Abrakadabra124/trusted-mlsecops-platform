@@ -111,6 +111,8 @@ def invoke(
     )
     spec["containers"][0]["resources"]["limits"]["memory"] = "1Gi"
     spec["containers"][0]["resources"]["requests"]["memory"] = "256Mi"
+    scratch = next(volume for volume in spec["volumes"] if volume["name"] == "scratch")
+    scratch["emptyDir"]["sizeLimit"] = "640Mi"
     if privacy_operator is not None or cli_privacy:
         code = privacy_bundle(
             Path(__file__).resolve().parents[1],

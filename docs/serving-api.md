@@ -114,6 +114,15 @@ Engine cold-start rejection оставляет API живым, но `/readyz` и
 
 `audit_directory` - absolute path к owned private Linux retained storage. Writer открывается только при запуске lifespan и закрывается после Engine cleanup; конфигурация сама не создаёт файлов. Для программного API допустим отдельный уже запущенный injected `Journal`, который закрывает его владелец, не приложение. Отсутствие journal в `create_app` даёт protected 503 до body/executor, а не silent fallback. Windows single-file tests не квалифицируют production retention.
 
+Managed HTTP journal использует фиксированный budget 512 MiB, segments по 16 MiB,
+не более 40 файлов, rotation 60 s и minimum retention 300 s. Queue остаётся
+64 события. [Расчёт профиля](operations/load-profile.md#timings-и-причины-отказа)
+учитывает десять клиентов по 20 requests/s; наличие места не гарантирует такую
+скорость. Более высокие quotas не получают автоматического обещания ёмкости.
+Legacy single-file и defaults программного Journal не изменены. Existing spool
+с прежним policy/budget не мигрируется автоматически: mismatch вызывает отказ.
+Snapshot/export ограничен 16 MiB payload и не является архивом большого spool.
+
 Перед отправкой 200 записывается собственный intent с проверенным private context; приложение ждёт его fsync в пределах прежнего budget и повторно проверяет deadline/generation. Actual start/completed фиксируются после ASGI send, cancel не превращается в completed. Успешный send не доказывает получение клиентом. После network send отказ sink даёт evidence gap и запрет следующих admissions, не возможность отозвать уже отправленный ответ.
 
 Уже выданные global/client slots сохраняются до завершения BOTH HTTP и executor, в том числе при зависшей отправке audit-denied 503. `/livez`, anonymous auth и отказы до global admission не создают audit entries. При десяти admitted audit waiters проверяется headroom health с Uvicorn limit 16; произвольный connection flood этим не исключается. [ADR 0040](decisions/0040-serving-http-audit.md), [RB-59/PB-33](operations/serving-http-audit-troubleshooting.md), [evidence](evidence/serving-http-audit-2026-10-18.md). All-output canaries, export/cardinality и полный M13 остаются незавершёнными.
