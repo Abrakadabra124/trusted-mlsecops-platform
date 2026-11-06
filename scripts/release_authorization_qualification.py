@@ -113,6 +113,23 @@ class ReleaseAuthorizationContracts(unittest.TestCase):
         self.assertEqual(result["state"], "authorized-not-activated")
         self.assertEqual(result, self.check())
 
+    def test_missing_approval_is_rejected_after_valid_assurance(self):
+        with self.assertRaisesRegex(Rejected, "release_approval_required"):
+            self.check(approval_envelope=None)
+
+    def test_signed_approval_rejects_unknown_or_mistyped_schema_version(self):
+        for version in (None, True, "1", 1.0, 0, 3):
+            envelope = sign(
+                {**self.approval, "schema_version": version},
+                "release-approval",
+                self.authorities.keys["approver"],
+            )
+            with (
+                self.subTest(version=version),
+                self.assertRaisesRegex(Rejected, "release_approval_schema"),
+            ):
+                self.check(approval_envelope=envelope)
+
     def test_failed_signed_model_quality_cannot_be_overridden_by_all_pass_reports(self):
         fixture = self.bundle.materials.fixture
         rows, _ = examples()
