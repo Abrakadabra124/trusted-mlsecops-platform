@@ -74,6 +74,7 @@ class Coordinator:
         self.requests, self.phases = {}, []
         self.failed = False
         self.step = "request"
+        self.exec_exit_deadline = None
         self.needles = self.worker_receipt = self.audit_receipt = None
         self.services = {}
 
@@ -91,20 +92,33 @@ class Coordinator:
             check=False,
         )
         if response.returncode:
+            diagnostic = exec_failure(response.stderr)
             current = decode(
                 kubectl(self.state, ["get", "pod", name, "-n", "ml-serving", "-o", "json"]).stdout
             )
-            if (
-                current["metadata"]["uid"] == pod["metadata"]["uid"]
-                and canonical(current["spec"]) == canonical(pod["spec"])
-                and current["status"]["phase"] in {"Succeeded", "Failed"}
-            ):
+            same = current["metadata"]["uid"] == pod["metadata"]["uid"] and canonical(
+                current["spec"]
+            ) == canonical(pod["spec"])
+            if same and current["status"]["phase"] in {"Succeeded", "Failed"}:
                 # The process can exit between wait_job's Running snapshot and
                 # exec. Let the terminal path inspect its complete output.
                 return
+            if (
+                same
+                and current["status"]["phase"] == "Running"
+                and diagnostic["category"] in {"container_missing", "container_completed"}
+            ):
+                observed_at = time.monotonic()
+                if self.exec_exit_deadline is None:
+                    self.exec_exit_deadline = observed_at + 5
+                if observed_at < self.exec_exit_deadline:
+                    # CRI can remove an exited process before kubelet publishes
+                    # the terminal Pod status. No request is acknowledged here.
+                    return
             atomic_write(self.destination / "exec-private.stderr", response.stderr)
-            print(canonical(exec_failure(response.stderr)).decode(), flush=True)
+            print(canonical(diagnostic).decode(), flush=True)
             raise Rejected("privacy_operator_exec_failed")
+        self.exec_exit_deadline = None
         request = decode(response.stdout, MAX_REQUEST)
         if request is None:
             return

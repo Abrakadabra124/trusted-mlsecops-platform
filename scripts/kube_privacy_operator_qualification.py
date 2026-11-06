@@ -334,6 +334,32 @@ class OperatorHandoffContracts(unittest.TestCase):
                         with self.assertRaisesRegex(Rejected, "privacy_operator_exec_failed"):
                             control.observe(initial)
 
+    def test_cri_exit_with_stale_running_status_has_bounded_grace_without_ack(self):
+        pod = {
+            "metadata": {"name": "probe", "uid": "owned"},
+            "spec": {},
+            "status": {"phase": "Running"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            control = operator.Coordinator(Path(directory), {}, {"campaign_id": "a" * 32}, {})
+
+            def api(state, args, **kwargs):
+                if args[0] == "exec":
+                    return SimpleNamespace(returncode=1, stdout=b"", stderr=b"container not found")
+                return SimpleNamespace(returncode=0, stdout=canonical(pod))
+
+            with (
+                patch.object(operator, "kubectl", side_effect=api),
+                patch.object(operator.time, "monotonic", side_effect=[0, 1, 5]),
+                patch("builtins.print"),
+            ):
+                control.observe(pod)
+                control.observe(pod)
+                self.assertEqual(control.phases, [])
+                self.assertEqual(control.requests, {})
+                with self.assertRaisesRegex(Rejected, "privacy_operator_exec_failed"):
+                    control.observe(pod)
+
 
 if __name__ == "__main__":
     unittest.main()
