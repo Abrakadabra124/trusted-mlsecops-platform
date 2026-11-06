@@ -1,12 +1,14 @@
 # M13: карта каналов вывода и границ доказательств
 
+CP3/T16 2026-11-06: **[M13 synthetic serving acceptance](evidence/m13-privacy-acceptance-2026-11-06.md) pass**, `b03a5d9` / 42248499786 success. 438 cases (430 contracts + 8 aggregate criteria), 1116 Linux method executions с повторами / 0 skips; новая gate logic 144 statements / 22 branches 100%. Primary source/policy/methods и cleanup сверены; clean Windows subset85/0. T16 принят в этом профиле. Далее неделя10/T17/M14; M10/M19, independent M22 0/2, image findings, CP4/CP5 и весь R1 остаются открытыми. Более ранние записи ниже описывают состояние на соответствующих commits.
+
 CP3/T16 2026-11-06: [закрытые service-log windows](evidence/kubernetes-service-privacy-2026-11-06.md) **component pass**, `0d5ad83` / 42240476139 success. Четыре окна storage/trust для actual и controlled CLI, четыре positive leak controls, private packets перечитаны после cleanup; 244 Linux methods / 0 skips, новые modules 100%. Чистый Windows checkout с новой venv: 244 methods / 18 POSIX skips. Source SQL/cluster cleanup verified. Далее fresh M13 composition/acceptance; полный M13/R1, independent M22 0/2 и image findings остаются открытыми.
 
 CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-11-06.md) **component pass**, `36cd71d` / 42225259346 success. 22 CLI checks + 28 actual-candidate checks, 222 Linux executions / 0 skips, 175 clean Windows tests. Три CLI modules проходят 95% statements/branches отдельно; closed audit, parent recheck и owned cleanup подтверждены. Full M13 остаётся inconclusive: service-output inventory/closed windows, controlled/actual composition и общий gate. M22 independent 0/2, image findings и M18/R1 открыты.
 
-Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [Критерий M13](acceptance.md#m13), [ADR 0047](decisions/0047-serving-output-observation.md). Это карта полноты, не pass-report M13.
+Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». [Критерий M13](acceptance.md#m13), [ADR 0047](decisions/0047-serving-output-observation.md). Это карта полноты; actual pass-report и точный scope находятся в [M13 evidence](evidence/m13-privacy-acceptance-2026-11-06.md).
 
-Обновление [ADR 0048](decisions/0048-privacy-acceptance.md), [native b0df48e](evidence/privacy-evidence-b0df48e-native.md): parent проверяет signed primary и fresh private receipt; нового наблюдаемого канала этот checker не добавляет. Design review требует retained exact snapshots/HTTP linkage, production lifecycle/429/503, service-log coverage, subject composition и отдельную public projection. Эти пробелы не закрыты согласованными summaries.
+Обновление [ADR 0048](decisions/0048-privacy-acceptance.md), [native b0df48e](evidence/privacy-evidence-b0df48e-native.md): parent проверяет signed primary и fresh private receipt; нового наблюдаемого канала этот checker не добавляет. Design review требует retained exact snapshots/HTTP linkage, production lifecycle/429/503, service-log coverage, subject composition и отдельную public projection. Одних согласованных summaries недостаточно; закрытие этих пробелов fresh campaign подтверждено текущим M13 evidence выше.
 
 ## Поток данных и статус наблюдения
 
@@ -31,7 +33,7 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 
 Нужен отдельный executable gate, который связывает один current source/candidate с наблюдавшимися controls: auth/quotas, approved metric cardinality, input canaries во всех релевантных serving outputs, private source-to-request chain, public export и retention policy. Он должен явно перечислять наблюдаемые каналы и исключённые потоки, отличать отсутствие канала по архитектуре от непроведённого теста и отвергать stale/missing/failed/inconclusive evidence.
 
-Не суммировать зелёные исторические reports разных commits как новую приёмку. Qualification permit и controlled approval не принимают failed actual release. M13 runner пока отсутствует в acceptance dispatch и остаётся inconclusive; source-dependent image/ML failures сохраняются.
+Не суммировать зелёные исторические reports разных commits как новую приёмку. Qualification permit и controlled approval не принимают failed actual release. Fresh M13 runner подключён в acceptance dispatch и проверен на b03a5d9/42248499786. Source-dependent image/ML failures сохраняются и не обходятся M13 pass.
 
 Raw training datasets хранятся по назначению в quarantine/approved storage. Требование не сохранять raw features относится к serving request journal/telemetry по умолчанию, а не к запрету иметь управляемый training dataset. Private IPC, necessary authorized API response и public logs - разные границы; успешное удаление одного вывода не доказывает отсутствие данных во всех остальных.
 

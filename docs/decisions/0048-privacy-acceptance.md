@@ -1,6 +1,6 @@
 # ADR 0048: fresh M13 privacy acceptance
 
-Дата: 2026-10-20. Статус: полный gate proposed; первый private receipt increment принят в scoped native CI [b0df48e](../evidence/privacy-evidence-b0df48e-native.md), не полный M13.
+Дата проекта: 2026-10-20. Статус: принят для synthetic serving на [b03a5d9 / 42248499786](../evidence/m13-privacy-acceptance-2026-11-06.md), 2026-11-06. Первый private receipt increment [b0df48e](../evidence/privacy-evidence-b0df48e-native.md) остаётся историческим компонентным доказательством.
 Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit».
 [M13](../acceptance.md#m13), [карта каналов](../privacy-output-map.md), [предыдущий native increment](../evidence/serving-output-2a70ffc-native.md).
 
@@ -83,7 +83,7 @@ Design review выявил пять actionable пробелов полного g
 
 ## Исполняемая композиция 2026-11-06
 
-Новый [M13 runner](../../mlsecops/privacy_gate.py) реализован, но его собственная hosted acceptance ещё не проверена. Он использует уже проверенные [закрытые service windows](../evidence/kubernetes-service-privacy-2026-11-06.md) и не принимает исторический report как вход. Сначала сбрасываются текущие public gate/private observation в inconclusive, фиксируются clean source, exact image и hashes методов. Затем запускается фиксированный [набор contracts](../../scripts/privacy_contracts.py) и заново выполняются controlled CLI + actual candidate campaigns. Missing/extra/duplicate/skipped/expected-failing методы, stdout diagnostics вне canonical summary и stderr не принимаются.
+Новый [M13 runner](../../mlsecops/privacy_gate.py) проверен в hosted acceptance b03a5d9/42248499786: 438 cases, source/primary/cleanup verified. Он использует уже проверенные [закрытые service windows](../evidence/kubernetes-service-privacy-2026-11-06.md) и не принимает исторический report как вход. Сначала сбрасываются текущие public gate/private observation в inconclusive, фиксируются clean source, exact image и hashes методов. Затем запускается фиксированный [набор contracts](../../scripts/privacy_contracts.py) и заново выполняются controlled CLI + actual candidate campaigns. Missing/extra/duplicate/skipped/expected-failing методы, stdout diagnostics вне canonical summary и stderr не принимаются.
 
 Композиция имеет две разные роли, не одну вымышленную approved модель:
 
