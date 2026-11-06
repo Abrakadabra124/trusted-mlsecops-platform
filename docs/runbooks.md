@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Live root rotation на actual candidate и прерванные проверки](operations/authority-root-rotation.md#live-qualification-на-том-же-candidate). Native `45c6bf8` / 42183215170 verified: HTTP отказ за 4.358405479 s, явный новый Engine с прежними permit/model, сохранённые histories/revocations и cleanup. [Evidence и fresh checkout](evidence/candidate-root-rotation-2026-11-06.md); полный M11 остаётся открыт.
+
 - [Плановая ротация ключа trust authority](operations/authority-root-rotation.md). Native `d18c361` / 40959762631 verified: две подписи, переход 2 -> 3, additive migration, сохранённые revocations/history, четыре точных отказа, retry без записи и явная смена serving config. 502 Linux method executions; полный M11 не закрыт.
 
 - [Откат целого bundle с новым approval](operations/bundle-rollback.md). Native `f2f102c` / 40952320387 verified: sequence 1 -> 2 -> 3, разные модели A -> B -> A, три history refusals, unchanged journal при отказах/retry, revoked target denied и cleanup. 459 Linux method executions; полный M16 не закрыт.

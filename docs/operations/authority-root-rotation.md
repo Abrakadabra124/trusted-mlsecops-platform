@@ -38,9 +38,23 @@ python -m mlsecops.trust_root_store rotate --state .runtime --backend kubernetes
 
 ## Отказы и восстановление
 
+### Остановка и возобновление hosted проверки
+
+Пауза владельца 2026-10-30 прервала run `40965767047` после части native сценариев. Его статус `cancelled` и завершённая очистка не доказывают успешную приёмку. При возобновлении 2026-11-06 запущен отдельный run `42183215170` на прежнем commit `45c6bf8`; старый результат сохраняется как отменённый.
+
+Перед повтором оператор проверяет terminal state прежнего run, точный commit ветки и отсутствие уже выполняющегося повтора. Для чтения состояния:
+
+```powershell
+gh run view 42183215170 --repo Abrakadabra124/trusted-mlsecops-platform --json status,conclusion,headSha,jobs
+```
+
+`TLS handshake timeout` при этом запросе означает отсутствие нового наблюдения, а не остановку workflow. Повторить чтение того же run; не отключать TLS verification и не создавать новый workflow из-за таймаута клиента. Если Actions подтверждает `in_progress`, продолжать наблюдение. В этом workflow `cancel-in-progress: true`: push в ту же ветку может отменить действующий run, поэтому публикация следующего commit выполняется после terminal state.
+
+По явному распоряжению владельца допускается отменить только принадлежащий задаче run через `gh run cancel RUN_ID --repo Abrakadabra124/trusted-mlsecops-platform`. Затем проверить terminal `cancelled`, итог шагов `Stop verified owned source SQL` и `Remove verified owned disposable cluster`, а также отсутствие оставшегося kind cluster в заключительной проверке runner. Если cleanup не подтверждён, зафиксировать это отдельно; сам успешный запрос отмены не является доказательством очистки. Новые проверки запускать после возобновления работы, с неизменными критериями и новым полным native report.
+
 ### Live qualification на том же candidate
 
-[ADR 0054](../decisions/0054-candidate-trust-root-separation.md) разделяет permit signer и online root. Локальные contracts прошли; native live trace пока ожидается. В существующем `kubernetes-serving.yml` host coordinator применяет primary rotation только после подтверждённого успешного HTTP prediction. Старый Engine должен дать точный root refusal и остаться fenced. Новый процесс получает explicit root/version, прежний permit и модель; golden и HTTP checks обязательны.
+[ADR 0054](../decisions/0054-candidate-trust-root-separation.md) разделяет permit signer и online root. [Native 45c6bf8 / 42183215170 проверен](../evidence/candidate-root-rotation-2026-11-06.md): первый полный HTTP 503 за 4.358405479 s, recovery прежнего model/permit, golden error 0.0. В существующем `kubernetes-serving.yml` host coordinator применяет primary rotation только после подтверждённого успешного HTTP prediction. Старый Engine даёт точный root refusal и остаётся fenced. Новый процесс получает explicit root/version, прежний permit и модель; golden и HTTP checks обязательны.
 
 После успешной primary recovery peer ротируется отдельной транзакцией. Если этот шаг не завершён, histories могут иметь разные roots. Сохранить оба состояния и receipts, не копировать settings между БД. Повтор допускается только для exact действующего package при подтверждённом current head. При истечении package trust owner формирует новый переход из фактического состояния; не сбрасывать version и не отзывать отзыв старого ключа. Для peer использовать его подтверждённый version floor, не primary floor.
 

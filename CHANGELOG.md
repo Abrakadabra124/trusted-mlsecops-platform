@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 live candidate root rotation - 2026-11-06
+
+- Qualification permit и online trust policy подписываются разными ключами. Смена root останавливает прежний Engine; новый explicit config восстанавливает тот же candidate без перевыпуска permit и продления сроков.
+- `45c6bf8` / 42183215170 success: HTTP 503 за 4.358405479 s, golden error 0.0 до/после, primary 7 -> 8 и peer 1 -> 2, сохранённые history/revocations/model storage. 586 Linux method executions / 0 skips, live-root 197 statements / 70 branches 100%, 977 actual assertions с повторами; source/reports/cleanup сверены.
+- [Evidence и fresh-checkout инструкция](docs/evidence/candidate-root-rotation-2026-11-06.md), [ADR 0054](docs/decisions/0054-candidate-trust-root-separation.md), [ранбук восстановления и прерванных проверок](docs/operations/authority-root-rotation.md). Fresh Windows clone/new venv: 64 packages, 77 tests pass. Предыдущая отмена по лимиту сохранена как отмена. Release-signing key rotation и полные M11/M18/R1 остаются открытыми.
+
 ## R1 planned authority-root rotation - 2026-10-30 МСК
 
 - Добавлена явная смена ключа online trust-policy с подтверждением старым и новым ключами. Migration 2, одна SQL transaction и readback сохраняют историю, отозванные assets и исходную migration 1. Потребители принимают новый public pin только через операторскую конфигурацию.

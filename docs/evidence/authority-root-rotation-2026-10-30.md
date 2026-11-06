@@ -98,7 +98,7 @@ uv run --locked python -m unittest scripts.trust_rotation_qualification scripts.
 
 - Это плановая смена online trust-policy root при наличии действительного старого ключа. Emergency root recovery и release-signing key rotation этим протоколом не закрываются.
 - В lab обе подписи формируются тестовым оператором. Это не доказательство независимости людей, защищённости production KMS или совместимости с TUF.
-- Отдельный live root-change HTTP trace и native concurrent-writer сценарий ещё не проверены. Cold refusal и новый serving процесс не заменяют измерение остановки уже работающего процесса.
+- На дату этого run отдельный live root-change HTTP trace и native concurrent-writer сценарий не проверены. Cold refusal и новый serving процесс не заменяют измерение остановки уже работающего процесса. Последующий [run 42183215170 от 2026-11-06](candidate-root-rotation-2026-11-06.md) отдельно подтвердил live trace и recovery actual candidate; concurrent-writer сценарий этим не подтверждается.
 - `rotated-not-activated` не является release approval. Actual production release по-прежнему должен отказать без обязательной assurance.
 - Полные T14/M11/M16/M18/R1 не приняты. M22 independent challenges остаются 0/2; системные image findings и остальные обязательные gates сохраняются.
 - Основной внешний `security-review.ru.md` отсутствует в полученном supplemental package. Исправленные U01-U03 и этот trust increment не заменяют независимые ML challenge cases.

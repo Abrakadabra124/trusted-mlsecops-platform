@@ -1,6 +1,6 @@
 # ADR 0054: отдельные permit signer и online trust root
 
-Дата: 2026-10-30. Статус: implemented, local contracts passed; native verification pending. T14/CP3/R1-B04. Продолжает [плановую ротацию](0053-authority-root-rotation.md); полного M11/R1 не объявляет.
+Дата: 2026-10-30. Проверено: 2026-11-06. Статус: implemented, local contracts и native live qualification passed, `45c6bf8` / [42183215170](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42183215170). T14/CP3/R1-B04. Продолжает [плановую ротацию](0053-authority-root-rotation.md); полного M11/R1 не объявляет.
 
 ## Причина
 
@@ -26,6 +26,6 @@ Qualification Reader использовал один public key для подп�
 
 ## Проверка и границы
 
-Новые RED tests подтвердили отсутствие явного root binding, root fault и recovery path. Локальная группа из 77 methods прошла без infrastructure startup. Проверены подписи с отдельным root, сохранённый отказ revoked permit signer, неверный root/floor, точная причина cold refusal, новый Engine, ошибочный/неполный trace, late ML, нечисловые timestamps, изменённые snapshots, неизвестный commit и ошибочный retry. Native runner ещё должен подтвердить реальные timings, источник образа и cleanup.
+Новые RED tests подтвердили отсутствие явного root binding, root fault и recovery path. Локальная группа из 77 methods прошла без infrastructure startup. Проверены подписи с отдельным root, сохранённый отказ revoked permit signer, неверный root/floor, точная причина cold refusal, новый Engine, ошибочный/неполный trace, late ML, нечисловые timestamps, изменённые snapshots, неизвестный commit и ошибочный retry. [Native evidence](../evidence/candidate-root-rotation-2026-11-06.md): первый полный HTTP 503 за 4.358405479 s, recovery того же model/permit, golden error 0.0, обе histories и полный model/promotion snapshot сохранены. 586 Linux method executions / 0 skips, 977 actual assertions с повторами; source/image/reports/cleanup verified. Новый Windows checkout с отдельным venv воспроизвёл 77 tests.
 
 Изменяемые части: [Reader](../../mlsecops/candidate_serving_reader.py), [HTTP probe](../../mlsecops/kube_candidate_probe.py), [host coordinator](../../scripts/kube_candidate_root.py), [native pipeline](../../scripts/kube_candidate_native.py). [Ранбук](../operations/authority-root-rotation.md). Для полной приёмки сохраняются release-signing key rotation, M22 independent challenges, image findings и остальные обязательные gates.
