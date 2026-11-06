@@ -13,13 +13,19 @@ from mlsecops.storage_schema import TABLES
 def read(client, environment, public, *, expected_host=None, connection_factory=None):
     name(environment)
     options = {} if expected_host is None else {"expected_host": expected_host}
-    if storage.connection_parameters(client, **options)["user"] not in (
-        "ml_serving",
-        "ml_promoter",
-    ):
-        raise Rejected("trust_client_identity")
+    if connection_factory is None:
+        if storage.connection_parameters(client, **options)["user"] not in (
+            "ml_serving",
+            "ml_promoter",
+        ):
+            raise Rejected("trust_client_identity")
+        connection_factory = storage.connect
+    # A factory is a trusted code dependency, never a request field. The only
+    # runtime implementation is Session.connection: it validates fresh TLS
+    # materials, pinned host and serving/promoter role inside the ownership
+    # boundary on EVERY use, and drops the transport if validation fails.
     try:
-        with (connection_factory or storage.connect)(client, **options) as connection:
+        with connection_factory(client, **options) as connection:
             row = connection.execute(
                 "SELECT settings.root_public, document.version, document.sha256, document.envelope, "
                 "floor(extract(epoch FROM clock_timestamp()))::bigint "

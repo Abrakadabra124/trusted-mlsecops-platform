@@ -275,6 +275,19 @@ PID проверяется до построения пути; содержим�
 
 ### Timings и причины отказа
 
+[FIFO опыт 506a762](../evidence/m14-fifo-2026-11-06.md) завершил полный профиль
+без normal errors, но p95=253.427 ms превышает 200 ms. Повторять старый benchmark
+с меньшим числом клиентов или новым latency threshold нельзя. Диагностика
+подтвердила повторное чтение TLS-настроек перед Session и внутри неё.
+В исправленном пути валидация остаётся внутри Session на каждом read; её отказ
+закрывает старое соединение до SQL. Проверять role, точный host, certificate hash,
+отсутствующий key и запрещённый password file, затем новый native профиль.
+Если файлы/пины неверны, восстановить разрешённую конфигурацию и явно reload
+после подтверждённого cleanup; не отключать TLS/role check и не reuse старый transport.
+При regression откатить целый проверенный commit с его evidence; незавершённый
+M14 не превращается в pass при откате. Native M11/M13 после Session изменений
+обязательны до финальной приёмки.
+
 Run [42276686599](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42276686599),
 source `941e315`, подтвердил исчерпание старого audit spool: 15506 accepted,
 15505 durable, 1 unconfirmed, reserved 16765848 bytes при budget 16777216.

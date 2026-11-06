@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import psycopg
 
 from mlsecops import serving, trust, trust_authority, trust_session
-from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from mlsecops.signing import create_key, sign
 
 
@@ -119,6 +119,36 @@ class TrustSessionContracts(unittest.TestCase):
         self.connect.assert_called_once_with(self.root, expected_host="pinned-host")
         self.parameters.assert_called_with(self.root, expected_host="pinned-host")
 
+    def test_authority_read_rejects_changed_role_and_invalid_tls_before_query(self):
+        # The connection owner must see validation failures, so a previously
+        # opened transport cannot survive failed validation on the next read.
+        for reason in ("role", "certificate", "host"):
+            with self.subTest(reason=reason):
+                self.parameters.side_effect = None
+                self.options["user"] = "ml_serving"
+                connection = self.use()
+                before = self.connect.call_count
+                if reason == "role":
+                    self.options["user"] = "ml_trainer"
+                    code = "trust_client_identity"
+                else:
+                    code = (
+                        "storage_client_certificate_changed"
+                        if reason == "certificate"
+                        else "storage_client_config_invalid"
+                    )
+                    self.parameters.side_effect = Rejected(code)
+                with self.assertRaisesRegex(Rejected, code):
+                    trust_authority.read(
+                        self.root, "lab", "unused", connection_factory=self.session.connection
+                    )
+                connection.execute.assert_not_called()
+                self.assertTrue(connection.closed)
+                self.assertIsNone(self.session.current)
+                self.assertEqual(self.connect.call_count, before)
+                self.parameters.side_effect = None
+                self.options["user"] = "ml_serving"
+
     def test_engine_cleanup_closes_reader_even_if_worker_drain_fails(self):
         engine = serving.Engine(Mock(), close_reader=self.session.close)
         first = self.use()
@@ -187,6 +217,61 @@ class TrustSessionContracts(unittest.TestCase):
                 self.root, "lab", public, connection_factory=self.session.connection
             )
         self.assertTrue(connection.closed)
+
+
+class SessionFileContracts(unittest.TestCase):
+    def test_real_client_file_validation_precedes_query_on_reused_session(self):
+        from mlsecops import storage
+        from mlsecops.trust_targets import Target
+        from scripts.trust_targets_qualification import TrustTargetContracts
+
+        fixture = TrustTargetContracts()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        client = fixture.provision_files(Target.MODEL_REVOCATION) / "storage-clients/serving"
+        original = {
+            name: (client / name).read_bytes()
+            for name in ("connection.json", "ca.crt", "client.key")
+        }
+        for change in ("role", "host", "certificate", "missing-key", "password-file"):
+            with self.subTest(change=change):
+                for name, content in original.items():
+                    (client / name).write_bytes(content)
+                (client / ".no-passwords").unlink(missing_ok=True)
+                session = trust_session.Session()
+                self.addCleanup(session.close)
+                connection = Mock(closed=False)
+                connection.close.side_effect = lambda c=connection: setattr(c, "closed", True)
+                with patch.object(storage.psycopg, "connect", return_value=connection) as connect:
+                    with session.connection(client, expected_host=Target.MODEL_REVOCATION.host):
+                        pass
+                    self.assertEqual(connect.call_args.kwargs["sslmode"], "verify-full")
+                    self.assertEqual(
+                        connect.call_args.kwargs["ssl_min_protocol_version"], "TLSv1.3"
+                    )
+                    if change in {"role", "host"}:
+                        settings = read_json(client / "connection.json")
+                        settings[change] = "trainer" if change == "role" else Target.PRIMARY.host
+                        write_json(client / "connection.json", settings)
+                    elif change == "certificate":
+                        (client / "ca.crt").write_bytes(b"changed")
+                    elif change == "missing-key":
+                        (client / "client.key").unlink()
+                    else:
+                        (client / ".no-passwords").write_bytes(b"forbidden")
+                    for _ in range(2):
+                        with self.assertRaises((Rejected, OSError)):
+                            trust_authority.read(
+                                client,
+                                "lab",
+                                "unused",
+                                expected_host=Target.MODEL_REVOCATION.host,
+                                connection_factory=session.connection,
+                            )
+                    connection.execute.assert_not_called()
+                    self.assertTrue(connection.closed)
+                    self.assertIsNone(session.current)
+                    connect.assert_called_once()
 
 
 if __name__ == "__main__":

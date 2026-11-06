@@ -149,6 +149,17 @@ Controlled checks подтверждают порядок, timeout без execut
 сохранение ownership и доступность следующего запроса после отказа.
 Ускорение и полный M14 подтверждаются только новым native запуском.
 
+После [измерения 506a762](../evidence/m14-fifo-2026-11-06.md) устранена повторная
+проверка TLS-файлов перед входом в managed Session. `trust_authority.read`
+передаёт ответственность доверенному factory `Session.connection`; это внутренняя
+зависимость кода, не поле HTTP/CLI. Session на КАЖДОМ использовании выполняет
+полный `connection_parameters`, проверку serving/promoter role, host pin и
+fingerprint четырёх файлов. Ошибка теперь попадает внутрь ownership boundary
+и закрывает прежнее соединение до SQL. Для обычного fresh-connect пути внешний
+role preflight сохранён. Новые внешние factories обязаны соблюдать тот же контракт.
+Документы доверия, подписи, версии и отзыв по-прежнему читаются и проверяются
+для каждого запроса; response cache не появился. Ускорение требует нового native run.
+
 Controlled tests проверяют потерю запросов, таймауты, malformed/truncated HTTP,
 границу прогрева, tail, cap, cancellation, неправильные digest/score/schema,
 точные latency/error thresholds и отказ при неполном окне.
