@@ -7,6 +7,9 @@ from datetime import datetime
 from mlsecops.contracts import Rejected, canonical, digest, require_fields
 
 NS = 1_000_000_000
+# Kubernetes metav1.Time JSON truncates subsecond digits. Equal timestamps
+# identify a one-second bucket, not an immutable cached observation.
+RESOLUTION_NS = NS
 FIELDS = (
     "identity_sha256",
     "started_ns",
@@ -117,31 +120,25 @@ def summarize(samples, *, start_ns, end_ns, uncertainty_ns=0):
     for row in samples:
         checked(row)
         if previous is not None:
-            if (
-                any(row[key] != previous[key] for key in ("identity_sha256", "started_ns"))
-                or any(
-                    row[key] < previous[key]
-                    for key in ("observed_ns", "cpu_at_ns", "cpu_core_ns", "memory_at_ns")
-                )
-                or row["cpu_at_ns"] == previous["cpu_at_ns"]
-                and row["cpu_core_ns"] != previous["cpu_core_ns"]
-                or row["memory_at_ns"] == previous["memory_at_ns"]
-                and any(
-                    row[key] != previous[key]
-                    for key in ("usage_bytes", "working_set_bytes", "rss_bytes")
-                )
+            if any(row[key] != previous[key] for key in ("identity_sha256", "started_ns")) or any(
+                row[key] < previous[key]
+                for key in ("observed_ns", "cpu_at_ns", "cpu_core_ns", "memory_at_ns")
             ):
                 raise SequenceRejected(previous, row)
         previous = row
 
     def window(field):
-        before = [i for i, row in enumerate(samples) if row[field] <= start_ns - uncertainty_ns]
+        before = [
+            i
+            for i, row in enumerate(samples)
+            if row[field] + RESOLUTION_NS <= start_ns - uncertainty_ns
+        ]
         after = [i for i, row in enumerate(samples) if row[field] >= end_ns + uncertainty_ns]
         if not before or not after:
             raise Rejected("load_resource_window_uncovered")
         selected = samples[before[-1] : after[0] + 1]
         times = sorted({row[field] for row in selected})
-        gap = max(b - a for a, b in zip(times, times[1:]))
+        gap = max(b - a for a, b in zip(times, times[1:])) + RESOLUTION_NS
         if gap > 20 * NS:
             raise Rejected("load_resource_sampling_gap")
         return selected, gap
@@ -155,9 +152,18 @@ def summarize(samples, *, start_ns, end_ns, uncertainty_ns=0):
         "samples": len(samples),
         "requested_window_seconds": (end_ns - start_ns) / NS,
         "clock_uncertainty_ns": uncertainty_ns,
+        "timestamp_resolution_seconds": RESOLUTION_NS / NS,
         "cpu_observed_seconds": cpu_window / NS,
+        "cpu_observed_seconds_bounds": [
+            (cpu_window - RESOLUTION_NS) / NS,
+            (cpu_window + RESOLUTION_NS) / NS,
+        ],
         "cpu_core_seconds": cpu_ns / NS,
         "average_cpu_cores": cpu_ns / cpu_window,
+        "average_cpu_cores_bounds": [
+            cpu_ns / (cpu_window + RESOLUTION_NS),
+            cpu_ns / (cpu_window - RESOLUTION_NS),
+        ],
         "max_sample_gap_seconds": max(cpu_gap, memory_gap) / NS,
         "max_sampled_usage_bytes": max(row["usage_bytes"] for row in memory),
         "max_sampled_working_set_bytes": max(row["working_set_bytes"] for row in memory),

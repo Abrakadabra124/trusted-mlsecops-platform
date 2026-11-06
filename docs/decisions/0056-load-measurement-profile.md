@@ -73,13 +73,24 @@ containers. Источник - операторское чтение
 [Kubelet Summary API](https://kubernetes.io/docs/reference/kubelet-api/stats.v1alpha1/)
 через [API server proxy](https://kubernetes.io/docs/reference/instrumentation/node-metrics/).
 [Чистый parser](../../scripts/load_resources.py) уже проверяет exact node/PodRef/container,
-наличие CPU/memory полей, timestamps без потери наносекунд, возраст sample <=30 s,
-неизменный startTime/identity, монотонность CPU counters и согласованность cached
-samples. Окно ровно 120 s должно быть охвачено с обеих сторон; промежуток между
-samples <=20 s, максимум 256 наблюдений. При missing/reset/gap он отказывает,
+наличие CPU/memory полей, возраст sample <=30 s, неизменный startTime/identity
+и монотонность CPU counters. Окно ровно 120 s должно быть охвачено с обеих сторон;
+промежуток между samples <=20 s, максимум 256 наблюдений. При missing/reset/gap он отказывает,
 не заменяет значения нулём. CPU core-seconds и average cores считаются между
 реально наблюдавшимися границами, их длительность указана отдельно от 120 s.
 Memory выводится как максимум наблюдавшихся usage/working-set/RSS bytes.
+
+Уточнение формата: [CPUStats/MemoryStats Kubernetes 1.36.4](https://github.com/kubernetes/kubernetes/blob/v1.36.4/staging/src/k8s.io/kubelet/pkg/apis/stats/v1alpha1/types.go)
+используют `metav1.Time`, чей [JSON encoder](https://github.com/kubernetes/apimachinery/blob/v0.36.4/pkg/apis/meta/v1/time.go)
+отбрасывает дробную часть секунды. Поэтому одинаковая метка допускает разные
+снимки внутри секунды; отрицательная дельта CPU всё равно запрещена. Parser
+сохраняет входные цифры, но не приписывает источнику наносекундную точность.
+Ранний sample принимается только если вся его секундная корзина предшествует
+началу окна с учётом clock uncertainty. К максимальному gap прибавляется 1 s;
+порог 20 s остаётся прежним. CPU duration и average cores имеют отдельные
+консервативные нижнюю и верхнюю границы, номинальная оценка явно приблизительна.
+Исторический baseline `3861d8a` использовал прежнюю точечную интерпретацию;
+его CPU duration и gap не подтверждают скорректированную ресурсную проверку.
 
 Native оператор теперь связывает parser с проверками UID/image/restart перед
 каждым чтением и private start/end handshake. Этот путь проверен

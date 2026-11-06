@@ -233,7 +233,7 @@ class OperatorContracts(unittest.TestCase):
             self.seconds = i
             self.op.sample()
         pair = self.op.samples["worker"]
-        conflict = {**pair[5], "cpu_core_ns": pair[5]["cpu_core_ns"] + 1}
+        conflict = {**pair[5], "cpu_core_ns": pair[5]["cpu_core_ns"] - 1}
         pair.insert(6, conflict)
         self.request = {
             "phase": "finish",

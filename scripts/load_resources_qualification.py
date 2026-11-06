@@ -119,16 +119,16 @@ class ResourceContracts(unittest.TestCase):
             with self.assertRaises(Rejected):
                 resources.timestamp(stamp)
 
-    def test_cached_timestamp_cannot_carry_new_counters_or_memory(self):
+    def test_second_precision_timestamp_can_carry_distinct_samples(self):
         for field, changed in (("cpu_core_ns", 1), ("usage_bytes", 101)):
             original = [sample(i) for i in range(0, 141, 10)]
             repeated = dict(original[5])
             repeated[field] += changed
             original.insert(6, repeated)
-            with self.assertRaises(Rejected):
-                resources.summarize(
-                    original, start_ns=ORIGIN + 10_000_000_000, end_ns=ORIGIN + 130_000_000_000
-                )
+            result = resources.summarize(
+                original, start_ns=ORIGIN + 10_000_000_000, end_ns=ORIGIN + 130_000_000_000
+            )
+            self.assertEqual(result["samples"], 16)
         for field, changed in (("identity_sha256", "foreign"), ("observed_ns", True)):
             value = sample(10)
             value[field] = changed
@@ -144,8 +144,30 @@ class ResourceContracts(unittest.TestCase):
         self.assertEqual(result["cpu_core_seconds"], 13)
         self.assertEqual(result["average_cpu_cores"], 0.1)
         self.assertEqual(result["max_sampled_working_set_bytes"], 230)
-        self.assertEqual(result["max_sample_gap_seconds"], 10)
+        self.assertEqual(result["max_sample_gap_seconds"], 11)
+        self.assertEqual(result["timestamp_resolution_seconds"], 1)
+        self.assertEqual(result["cpu_observed_seconds_bounds"], [129, 131])
+        self.assertEqual(result["average_cpu_cores_bounds"], [13 / 131, 13 / 129])
         self.assertFalse(result["true_peak_memory_measured"])
+
+    def test_timestamp_bucket_must_finish_before_window_and_gap_includes_resolution(self):
+        values = [sample(i) for i in range(10, 141, 10)]
+        with self.assertRaisesRegex(Rejected, "window_uncovered"):
+            resources.summarize(
+                values, start_ns=ORIGIN + 10_500_000_000, end_ns=ORIGIN + 130_500_000_000
+            )
+        values = [sample(i) for i in range(0, 141, 20)]
+        with self.assertRaisesRegex(Rejected, "sampling_gap"):
+            resources.summarize(
+                values, start_ns=ORIGIN + 10_000_000_000, end_ns=ORIGIN + 130_000_000_000
+            )
+        values = [sample(i) for i in range(0, 141, 10)]
+        repeat = {**values[5], "cpu_core_ns": values[5]["cpu_core_ns"] - 1}
+        values.insert(6, repeat)
+        with self.assertRaisesRegex(Rejected, "reset_or_change"):
+            resources.summarize(
+                values, start_ns=ORIGIN + 10_000_000_000, end_ns=ORIGIN + 130_000_000_000
+            )
 
     def test_counter_reset_changed_start_time_and_reordered_samples_fail(self):
         original = [sample(i) for i in range(0, 141, 10)]
