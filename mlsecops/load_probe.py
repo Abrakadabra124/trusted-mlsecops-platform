@@ -131,7 +131,10 @@ def qualify(config, expected):
     try:
         PHASE = "activate"
         app = serving_http.create_app(
-            engine, clients=Access(clients), audit_path=DIRECTORY / "audit"
+            engine,
+            clients=Access(clients),
+            audit_path=DIRECTORY / "audit",
+            startup_diagnostics=True,
         )
         with listen(app) as port:
             identity = engine.check()

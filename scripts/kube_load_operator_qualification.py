@@ -50,6 +50,7 @@ class OperatorContracts(unittest.TestCase):
         self.op.probe = copy.deepcopy(self.probe)
         self.seconds, self.deleted, self.failure = 0, False, False
         self.request = None
+        self.stderr = b""
         self.acks = []
         self.addCleanup(patch.stopall)
         patch.object(operator, "kubectl", side_effect=self.kubectl).start()
@@ -62,7 +63,9 @@ class OperatorContracts(unittest.TestCase):
     def kubectl(self, state, args, value=None, **kwargs):
         if args[0] == "exec":
             if args[-1] == "read":
-                return SimpleNamespace(stdout=canonical(self.request), returncode=int(self.failure))
+                return SimpleNamespace(
+                    stdout=canonical(self.request), returncode=int(self.failure), stderr=self.stderr
+                )
             self.acks.append(copy.deepcopy(value))
             return SimpleNamespace(stdout=b"", returncode=0)
         if "--raw" in args:
@@ -229,6 +232,24 @@ class OperatorContracts(unittest.TestCase):
                 self.op.observe(self.probe)
         self.assertEqual(self.op.phases, [])
         self.assertEqual(self.acks[-1]["status"], "fail")
+
+    def test_exit_status_race_is_bounded_and_cannot_acknowledge_a_request(self):
+        self.failure = True
+        self.stderr = b'error: container not found ("worker")'
+        with patch.object(operator.time, "monotonic", side_effect=[0, 4, 5]):
+            self.op.observe(self.probe)
+            self.op.observe(self.probe)
+            with self.assertRaisesRegex(Rejected, "load_exchange_read_failed"):
+                self.op.observe(self.probe)
+        self.assertEqual(self.acks, [])
+        self.assertEqual(self.op.phases, [])
+        self.failure = False
+        self.op.observe(self.probe)
+        self.assertIsNone(self.op.exec_exit_deadline)
+        self.failure = True
+        self.probe["spec"]["nodeName"] = "foreign"
+        with self.assertRaisesRegex(Rejected, "load_exchange_read_failed"):
+            self.op.observe(self.probe)
 
     def test_changed_uid_job_spec_image_restart_and_node_fail_closed(self):
         self.begin()

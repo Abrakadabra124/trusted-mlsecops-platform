@@ -20,6 +20,7 @@ from mlsecops.kube_worker import verify_running_image
 from mlsecops.load_exchange import MAX_PACKET, PHASES
 from mlsecops.load_golden import Golden
 from scripts import load_resources
+from scripts.kube_privacy_operator import exec_failure
 from scripts.kube_trust_native import hosted
 
 
@@ -61,6 +62,7 @@ class Coordinator:
         self.samples = {"controller": [], "worker": []}
         self.probe = self.worker = self.receipt = None
         self.last_sample = 0
+        self.exec_exit_deadline = None
 
     def start(self):
         hosted()
@@ -94,12 +96,25 @@ class Coordinator:
             check=False,
         )
         if result.returncode:
+            diagnostic = {**exec_failure(result.stderr), "scope": "load-operator"}
             current = self.get("pod", name, "ml-serving")
-            if current["metadata"]["uid"] == self.probe["metadata"]["uid"] and current.get(
-                "status", {}
-            ).get("phase") in {"Succeeded", "Failed"}:
+            same = (
+                current["metadata"]["uid"] == self.probe["metadata"]["uid"]
+                and current["spec"] == self.probe["spec"]
+            )
+            if same and current.get("status", {}).get("phase") in {"Succeeded", "Failed"}:
                 return
+            if same and diagnostic["category"] in {"container_missing", "container_completed"}:
+                observed = time.monotonic()
+                if self.exec_exit_deadline is None:
+                    self.exec_exit_deadline = observed + 5
+                if observed < self.exec_exit_deadline:
+                    # CRI exit can precede terminal Pod status. A bounded wait
+                    # permits the terminal path to read the actual probe error.
+                    return
+            print(canonical(diagnostic).decode(), flush=True)
             raise Rejected("load_exchange_read_failed")
+        self.exec_exit_deadline = None
         request = decode(result.stdout, MAX_PACKET)
         if request is None:
             return
