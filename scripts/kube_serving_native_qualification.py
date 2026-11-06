@@ -301,17 +301,21 @@ class NativeContracts(unittest.TestCase):
     def test_harness_uses_real_cli_profile_and_private_failure_logs_with_cleanup(self):
         from unittest.mock import Mock
 
-        for success, coordinated, foreign in [
-            (True, False, False),
-            (False, False, False),
-            (True, True, False),
-            (True, True, True),
+        for success, coordinated, foreign, privacy in [
+            (True, False, False, False),
+            (False, False, False, False),
+            (True, True, False, False),
+            (True, True, True, False),
+            (True, False, False, True),
+            (True, False, True, True),
         ]:
             with tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
                 (state / "evidence").mkdir()
                 created = []
                 coordinator, acknowledgements = Mock(), Mock()
+                privacy_operator = Mock()
+                privacy_operator.finish.side_effect = lambda report, raw: report
                 markers = []
 
                 def mapping(state, name, field, value):
@@ -357,7 +361,9 @@ class NativeContracts(unittest.TestCase):
                             ]
                         },
                     }
-                    if coordinated:
+                    if privacy:
+                        kwargs["observe"](pod)
+                    elif coordinated:
                         for phase in ["ready", "denied"]:
                             markers.append(
                                 canonical(
@@ -384,10 +390,17 @@ class NativeContracts(unittest.TestCase):
                     if foreign:
                         with self.assertRaisesRegex(Rejected, "pod_changed"):
                             native.invoke(
-                                state, PROFILE, {}, {"fault": "outage"}, coordinator=coordinator
+                                state,
+                                PROFILE,
+                                {},
+                                {"fault": "outage"},
+                                coordinator=coordinator if coordinated else None,
+                                candidate_probe=privacy,
+                                privacy_operator=privacy_operator if privacy else None,
                             )
                         coordinator.assert_not_called()
                         acknowledgements.assert_not_called()
+                        privacy_operator.observe.assert_not_called()
                     elif success:
                         self.assertEqual(
                             native.invoke(
@@ -396,6 +409,8 @@ class NativeContracts(unittest.TestCase):
                                 {},
                                 {"fault": "outage"} if coordinated else {},
                                 coordinator=coordinator if coordinated else None,
+                                candidate_probe=privacy,
+                                privacy_operator=privacy_operator if privacy else None,
                             )["status"],
                             "pass",
                         )
@@ -404,16 +419,34 @@ class NativeContracts(unittest.TestCase):
                                 [c.args[0] for c in coordinator.call_args_list], ["ready", "denied"]
                             )
                             self.assertEqual(acknowledgements.call_count, 2)
+                        if privacy:
+                            privacy_operator.observe.assert_called_once()
+                            privacy_operator.finish.assert_called_once()
                     else:
                         with self.assertRaisesRegex(Rejected, "job_failed"):
                             native.invoke(state, PROFILE, {}, {})
                     self.assertEqual(cleanup.call_args.kwargs, {"namespace": "ml-serving"})
                 pod = created[-1]["spec"]["template"]["spec"]
                 self.assertEqual(pod["serviceAccountName"], "serving")
-                self.assertEqual(pod["containers"][0]["command"][2], "mlsecops.kube_serving_probe")
+                self.assertEqual(
+                    pod["containers"][0]["command"][2],
+                    "scripts.kube_privacy_probe" if privacy else "mlsecops.kube_serving_probe",
+                )
                 self.assertEqual(
                     len(list((state / "evidence").glob("*-private.log"))), 0 if foreign else 1
                 )
+
+    def test_privacy_mode_conflicts_refuse_before_resource_creation(self):
+        from unittest.mock import Mock
+
+        for options in (
+            {},
+            {"candidate_probe": True, "coordinator": Mock()},
+            {"candidate_probe": True, "trust_target": native.Target.MODEL_REVOCATION},
+        ):
+            with patch.object(native, "kubectl") as api, self.assertRaises(Rejected):
+                native.invoke(Path("unused"), PROFILE, {}, {}, privacy_operator=Mock(), **options)
+            api.assert_not_called()
 
     def test_normal_config_selects_kubernetes_only_with_valid_matching_profile(self):
         with tempfile.TemporaryDirectory() as temporary:

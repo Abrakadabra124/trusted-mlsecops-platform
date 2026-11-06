@@ -55,8 +55,11 @@ def qualify(
     qualification_key=None,
     include_key_revocation=False,
     include_trust_lifecycle=False,
+    privacy=False,
 ):
     hosted()
+    if type(privacy) is not bool or privacy and (include_key_revocation or include_trust_lifecycle):
+        raise Rejected("candidate_privacy_mode_conflict")
     root, state = Path(root).resolve(), Path(state).resolve()
     if command(["git", "-C", str(root), "status", "--porcelain"]):
         raise Rejected("candidate_inference_dirty_source")
@@ -206,7 +209,20 @@ def qualify(
         write_json(destination / "root-rotation.json", root_rotation)
         write_json(destination / "config.json", config)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
-    result = invoke(state, profile, config, expected, candidate_probe=True)
+    options = {}
+    if privacy:
+        from scripts import audit_correlation_probe
+        from scripts.kube_privacy_operator import Coordinator
+
+        options["privacy_operator"] = Coordinator(
+            state,
+            profile,
+            {"campaign_id": campaign, "source": source},
+            audit_correlation_probe.candidate(
+                package, context, envelope, qualification_public, public
+            ),
+        )
+    result = invoke(state, profile, config, expected, candidate_probe=True, **options)
     if snapshot(state) != base_snapshot:
         raise Rejected("candidate_inference_promotion_state_changed")
     revoked_key = digest(signing.decode64(public))
@@ -276,6 +292,7 @@ def qualify(
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
+        **({"full_M13": "inconclusive"} if privacy else {}),
         "base_snapshot_sha256": digest(canonical(base_snapshot)),
         **({"root_rotation": root_rotation} if root_rotation is not None else {}),
         "trust_lifecycle": {

@@ -48,8 +48,13 @@ def invoke(
     coordinator=None,
     candidate_probe=False,
     trust_target=Target.PRIMARY,
+    privacy_operator=None,
 ):
     trust_target = select(trust_target)
+    if privacy_operator is not None and (
+        not candidate_probe or coordinator is not None or trust_target is not Target.PRIMARY
+    ):
+        raise Rejected("privacy_probe_mode_conflict")
     if (trust_target is not Target.PRIMARY and not candidate_probe) or select(
         config.get("trust_target", Target.PRIMARY.value)
     ) is not trust_target:
@@ -66,7 +71,11 @@ def invoke(
     )
     spec["serviceAccountName"] = "serving"
     spec["containers"][0]["command"][2] = (
-        "mlsecops.kube_candidate_probe" if candidate_probe else "mlsecops.kube_serving_probe"
+        "scripts.kube_privacy_probe"
+        if privacy_operator is not None
+        else "mlsecops.kube_candidate_probe"
+        if candidate_probe
+        else "mlsecops.kube_serving_probe"
     )
     spec["containers"][0]["resources"]["limits"]["memory"] = "1Gi"
     spec["containers"][0]["resources"]["requests"]["memory"] = "256Mi"
@@ -83,6 +92,9 @@ def invoke(
             or pod["metadata"]["ownerReferences"][0]["uid"] != created[-1][1]
         ):
             raise Rejected("kube_serving_probe_pod_changed")
+        if privacy_operator is not None:
+            privacy_operator.observe(pod)
+            return
         raw = kubectl(
             state,
             [
@@ -111,7 +123,15 @@ def invoke(
             created.append((document, uid))
             kube_storage.verify_resource(document, observed, uid)
         terminal, pod, elapsed = wait_job(
-            state, NAMESPACE, name, 240, **({"observe": observe} if coordinator is not None else {})
+            state,
+            NAMESPACE,
+            name,
+            240,
+            **(
+                {"observe": observe}
+                if coordinator is not None or privacy_operator is not None
+                else {}
+            ),
         )
         verify_running_image(pod, profile["image_id"])
         if (
@@ -148,6 +168,19 @@ def invoke(
             with suppress(Rejected):
                 document = decode(raw.splitlines()[-1] if raw else raw, 65536)
                 if (
+                    privacy_operator is not None
+                    and isinstance(document, dict)
+                    and set(document) == {"status", "release_ready", "phase", "code"}
+                    and document["status"] == "fail"
+                    and document["release_ready"] is False
+                    and document["phase"]
+                    in {"startup", "bind", "http", "worker", "audit", "capture"}
+                    and document["code"] == "kubernetes_privacy_rejected"
+                ):
+                    failure.update(
+                        probe_failure="privacy", phase=document["phase"], code=document["code"]
+                    )
+                if (
                     isinstance(document, dict)
                     and set(document) == {"status", "phase", "error", "code"}
                     and document["status"] == "fail"
@@ -174,6 +207,8 @@ def invoke(
             raise Rejected("kube_serving_fault_not_exercised")
         if report.get("status") != "pass" or report.get("release_ready") is not False:
             raise Rejected("kube_serving_probe_report")
+        if privacy_operator is not None:
+            report = privacy_operator.finish(report, raw)
         return {**report, "elapsed_seconds": elapsed}
     finally:
         kube_promotion.cleanup(state, created, namespace=NAMESPACE)

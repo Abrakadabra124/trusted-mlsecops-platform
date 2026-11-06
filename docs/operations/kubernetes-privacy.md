@@ -1,6 +1,6 @@
 # M13: диагностика приватного сбора Kubernetes logs
 
-Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Статус: collector и worker observer проверены pure/mocked tests; native handoff и общая M13 campaign ещё не реализованы. Это эксплуатационная инструкция разрабатываемого компонента, не подтверждение полного M13.
+Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Статус: collector, worker observer и private operator handoff соединены с actual-candidate HTTP/audit probe. Локальные pure/mocked tests пройдены; первый native запуск ожидается. Общая M13 acceptance ещё не завершена.
 
 ## Назначение и права
 
@@ -16,10 +16,22 @@ CRI (Container Runtime Interface) связывает Kubernetes с container run
 2. Для worker сохранить в памяти точный поток фактически полученных ответов. Не конструировать ожидаемый лог из желаемых scores и не добавлять request features.
 3. Закрыть attach bridge и проверить завершение процесса. Любой stderr делает наблюдение неуспешным; raw stderr не выводить в диагностику.
 4. Оператор проверяет terminal worker и читает не более 1 MiB плюс один контрольный байт. Restart count должен быть строго целым нулём. Совпадение только хвоста, неполный stream, дополнительные строки и canary запрещают pass.
-5. Подтвердить неизменность идентичности после чтения. Сохранить raw capture и приватную receipt только в owned private evidence; публичная projection ещё должна быть подключена отдельным runner.
+5. Подтвердить неизменность идентичности после чтения. Сохранить raw capture и приватную receipt только в owned private evidence; [runner](../../scripts/kube_privacy_native.py) публикует ограниченные числовые counters и source revision, без raw logs и private identifiers.
 6. Выполнить обычный scoped cleanup, проверить отсутствие собственного Job/Pod. Даже успешное чтение logs без подтверждённой очистки не завершает campaign.
 
 Для PostgreSQL/trust collector допускает снимок работающего контейнера. Такая receipt явно отмечена как window, а не полный lifecycle: она не доказывает отсутствие более поздних записей, проверку всех контейнеров или всего M13.
+
+## Сквозной hosted playbook
+
+[Workflow](../../.github/workflows/kubernetes-privacy.yml) устанавливает locked dependencies, строит pinned image и создаёт отдельный disposable cluster. Обычный preparation формирует новую actual proposal и проверяет production refusal без assurance. Candidate permit разрешает только qualification inference и не подменяет release approval.
+
+[Probe](../../scripts/kube_privacy_probe.py) запускает настоящий HTTP app и отдельный Kubernetes ONNX worker. Он проверяет golden prediction, auth, независимые client quotas, input canaries, metrics, HTTP 429 под давлением и HTTP 503 после fencing. Parent-процесс наблюдает stdout/stderr child до полного завершения; native stderr запрещён.
+
+[Operator](../../scripts/kube_privacy_operator.py) обрабатывает два подтверждаемых шага: terminal worker и закрытый audit packet. [Private exchange](../../scripts/kube_privacy_exchange.py) связывает запрос с campaign и ответ с digest запроса, ограничивает размер и время. Operator повторно проверяет первичный audit packet и соответствие HTTP ledger, затем читает owned PostgreSQL/trust windows. Ошибка даёт отрицательное подтверждение, после которого worker обязан пройти обычный cleanup. Serving RBAC не расширяется.
+
+Весь Pod output должен быть ровно каноническим отчётом с одним переводом строки. Ошибки печатают только fixed phase/code. Private packets сохраняются в `.runtime/evidence/privacy/<campaign>` только на runner; текущий workflow не экспортирует их из ephemeral host. Это ограничение последующей независимой проверки и остающаяся задача полной M13 acceptance.
+
+Запускать через Actions `Kubernetes private output and audit integration` на опубликованной ветке `codex/cp3-m13-privacy`. Проверить exact commit, все test/native steps и оба cleanup steps. Не обновлять ветку во время run: concurrency отменяет предыдущую campaign. При отказе читать только fixed stage в публичном журнале, исправлять подтверждённую причину и повторять affected campaign. Нельзя превращать failed/inconclusive в pass переносом старой receipt.
 
 ## Отказы и действия оператора
 
@@ -44,4 +56,6 @@ $env:PYTHONUTF8='1'
 uv run --locked python -m unittest scripts.kube_privacy_logs_qualification scripts.kube_privacy_worker_qualification scripts.kube_serving_runtime_qualification
 ```
 
-На 2026-11-06: 28 methods pass; collector/observer 79 statements / 22 branches, 100% покрытия. Проверены подмены до/после чтения, overflow, отсутствующие/лишние bytes, canary, restart, неправильный terminal state, исключение и KeyboardInterrupt при observation с сохранением owned cleanup. Это pure/mocked evidence, без настоящего Kubernetes запуска. До M13 остаются actual-candidate HTTP/audit integration, operator handoff, service windows, normal CLI/FD lifecycle, source binding, retained primary packet и публичная projection.
+На 2026-11-06: 71 methods основной regression group и 73 methods HTTP/privacy/audit pass на Windows. Collector, worker observer и exchange вместе: 116 statements / 34 branches, 100% покрытия. Новая оркестрация пока покрыта частично; вся группа из шести новых модулей: 409 statements / 98 branches, combined coverage 74%. Это pure/mocked evidence, без настоящего Kubernetes запуска. Проверены подмены до/после чтения, overflow, неполный stream, canary, restart, terminal state, исключение и KeyboardInterrupt с owned cleanup, private packet re-verification, порядок handoff, отрицательный ack, запрет mode conflicts до создания ресурсов.
+
+До полного M13 остаются native validation, все обязательные output channels/normal CLI lifecycle, независимо воспроизводимое сохранение primary evidence и общая source-bound acceptance. Положительный component report всегда содержит `full_M13=inconclusive` и `release_ready=false`.

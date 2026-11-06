@@ -31,14 +31,16 @@ REPORT_FIELDS = (
 )
 
 
-def produce(operation):
+def produce(operation, *, canary_count=6):
+    if type(canary_count) is not int or not 1 <= canary_count <= 16:
+        raise Rejected("serving_output_observer_invalid")
     needles = []
 
     def observe(values):
         if (
             needles
             or type(values) is not tuple
-            or len(values) != 6
+            or len(values) != canary_count
             or any(type(value) is not bytes or not 1 <= len(value) <= 4096 for value in values)
         ):
             raise Rejected("serving_output_observer_invalid")

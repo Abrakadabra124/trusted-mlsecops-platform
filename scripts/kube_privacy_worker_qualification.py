@@ -134,6 +134,11 @@ class WorkerObservationContracts(unittest.TestCase):
     def test_start_wraps_channel_only_inside_owned_worker_start(self):
         delegate = Mock()
         worker = self.worker()
+        worker.client = Mock(request=Mock(return_value={"items": [{"metadata": {"uid": "pod"}}]}))
+        worker.pod_uid = "pod"
+        worker.name = "worker"
+        worker.document = {"spec": {"template": {"spec": {}}}}
+        worker.profile = {}
         original = observed.runtime.Channel
 
         def start():
@@ -143,7 +148,10 @@ class WorkerObservationContracts(unittest.TestCase):
             self.assertIs(wrapped.delegate, delegate)
             return worker
 
-        with patch.object(observed.runtime, "Channel", return_value=delegate) as factory:
+        with (
+            patch.object(observed.runtime, "verify_pod"),
+            patch.object(observed.runtime, "Channel", return_value=delegate) as factory,
+        ):
             with patch.object(observed.runtime.Worker, "start", side_effect=start):
                 self.assertIs(worker.start(), worker)
             factory.assert_called_once_with("owned-process")
@@ -158,6 +166,30 @@ class WorkerObservationContracts(unittest.TestCase):
         worker.observer.assert_not_called()
         cleanup.assert_called_once_with()
         self.assertIsNone(worker.observation)
+
+    def test_start_snapshot_failure_cleans_owned_job_and_restores_real_channel(self):
+        for pods, failure in (
+            ([], None),
+            ([{"metadata": {"uid": "foreign"}}], None),
+            ([{"metadata": {"uid": "pod"}}], KeyboardInterrupt()),
+        ):
+            worker = self.worker()
+            worker.client = Mock(request=Mock(return_value={"items": pods}))
+            worker.name, worker.pod_uid = "worker", "pod"
+            worker.document = {"spec": {"template": {"spec": {}}}}
+            worker.profile = {}
+            worker.pod_snapshot = None
+            original = observed.runtime.Channel
+            with (
+                patch.object(observed.runtime.Worker, "start", return_value=worker),
+                patch.object(observed.runtime.Worker, "close") as cleanup,
+                patch.object(observed.runtime, "verify_pod", side_effect=failure),
+                self.assertRaises(KeyboardInterrupt if failure else Rejected),
+            ):
+                worker.start()
+            cleanup.assert_called_once_with()
+            self.assertIsNone(worker.pod_snapshot)
+            self.assertIs(observed.runtime.Channel, original)
 
 
 if __name__ == "__main__":

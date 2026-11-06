@@ -36,6 +36,7 @@ class Worker(runtime.Worker):
         self.observer = observer
         self.observation = None
         self.observation_attempted = False
+        self.pod_snapshot = None
         super().__init__(model, image, profile)
 
     def start(self):
@@ -45,7 +46,19 @@ class Worker(runtime.Worker):
         with patch.object(
             runtime, "Channel", lambda process: Channel(original(process), self.records)
         ):
-            return super().start()
+            result = super().start()
+        try:
+            pods = self.client.request("pods", job=self.name)["items"]
+            if len(pods) != 1 or pods[0]["metadata"]["uid"] != self.pod_uid:
+                raise Rejected("privacy_worker_start_identity")
+            runtime.verify_pod(
+                pods[0], self.document["spec"]["template"]["spec"], self.job_uid, self.profile
+            )
+            self.pod_snapshot = pods[0]
+            return result
+        except BaseException:
+            super().close()
+            raise
 
     def close(self):
         try:
