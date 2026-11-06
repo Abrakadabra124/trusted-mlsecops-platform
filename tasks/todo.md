@@ -191,6 +191,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T17
 - [ ] Нагрузочный профиль. Зависимость: T16. Gate: M14.
+- [Baseline 3861d8a](../docs/evidence/m14-load-baseline-2026-11-06.md), run42266248228: полный замер и cleanup выполнены; 2676 корректных ответов, 112383 ответа429, successful p95=442.319ms. Normal-load contract fail, overload/recovery pass; T17 остаётся открыт. Далее локализация внутренних задержек и limiter split, затем измеримое исправление без ослабления критериев.
 - Результат: benchmark runner, client-side distribution, resource measurements и overload decision.
 - Проверка: воспроизводимый payload/compute profile, отдельные intentional negatives, отсутствие скрытого исключения timeouts.
 

@@ -2,6 +2,11 @@
 
 Дата: 2026-11-06. Статус: принято для метода измерения; native M14 ещё не принят.
 
+Первый [полный baseline 3861d8a](../evidence/m14-load-baseline-2026-11-06.md)
+завершил измерение и cleanup, но не прошёл normal-load contract. Описанная ниже
+исходная гипотеза о 429 теперь дополнена измерениями; конкретные внутренние
+bottlenecks ещё требуют локализации.
+
 ## Требование
 
 [M14](../acceptance.md#m14) сохраняет 10 секунд прогрева, 120 секунд измерения,
@@ -29,8 +34,9 @@ HTTP SDK, redirects, chunked/compressed responses или произвольны�
 
 Для десяти identities используется существующий Access, без изменения его
 границ. Общий лимит HTTP-приложения в восемь slots сохраняется до первого
-измерения. Из наличия этого лимита следует риск 429 при десяти клиентах;
-точное влияние пока не измерено. Нельзя выдавать такую гипотезу за результат benchmark.
+измерения. Baseline подтвердил массовые 429 при десяти клиентах, но ещё не
+разделяет общий overload и per-client quota. Конкретный вклад каждого limiter
+нельзя выводить из общего status count.
 
 [Golden contract](../../mlsecops/load_golden.py) фиксирует первую строку независимого
 reference inference и её score до нагрузки. Каждый 200-ответ обязан иметь
@@ -55,15 +61,15 @@ benchmark, не смягчение исходных порогов M14. Intentio
 ## Границы и следующий шаг
 
 Реализованы primitives, controlled tests и native baseline runner; первый
-нагрузочный запуск на actual candidate пока не проверен.
+полный нагрузочный запуск на actual candidate проверен в указанном evidence.
 `profile_met` означает только выполнение клиентских проверок на переданных
 наблюдениях. Отчёт явно имеет `scope=client-measurement-only` и
 `release_ready=false`; это не M14 acceptance и не разрешение promotion.
 
-Native интеграция должна связать actual candidate/permit/source/image с этим
-измерением, сохранить исходные записи, повторно вычислить report и проверить
-cleanup. CPU/RAM должны включать раздельные controller/probe и ONNX-worker
-containers. Выбранный источник для следующего шага - операторское чтение
+Native интеграция связала actual candidate/permit/source/image с измерением,
+сохранила исходные записи на CI runner, повторно вычислила report и проверила
+cleanup. CPU/RAM включают раздельные controller/probe и ONNX-worker
+containers. Источник - операторское чтение
 [Kubelet Summary API](https://kubernetes.io/docs/reference/kubelet-api/stats.v1alpha1/)
 через [API server proxy](https://kubernetes.io/docs/reference/instrumentation/node-metrics/).
 [Чистый parser](../../scripts/load_resources.py) уже проверяет exact node/PodRef/container,
@@ -76,8 +82,8 @@ samples <=20 s, максимум 256 наблюдений. При missing/reset/
 Memory выводится как максимум наблюдавшихся usage/working-set/RSS bytes.
 
 Native оператор теперь связывает parser с проверками UID/image/restart перед
-каждым чтением и private start/end handshake. Этот путь реализован и проверен
-на controlled API fixtures; живой результат будет опубликован отдельно.
+каждым чтением и private start/end handshake. Этот путь проверен
+на controlled API fixtures и в опубликованном hosted baseline.
 Максимум sampled RAM нельзя называть истинным peak RSS. Дополнительные права
 для model worker не требуются.
 
