@@ -68,6 +68,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 ## M13
 **Privacy и audit.** Искусственные PII/secret canaries из input не встречаются в logs/metrics/traces и публичном evidence; raw features по умолчанию не сохраняются. Проверены auth, per-client quotas и ограниченная cardinality. Audit связывает source/run/report/approval/release/request без raw payload. Public export не содержит private storage URLs, identifiers и легко перебираемых hashes чувствительных значений. Membership inference не объявляется устранённым; masking не называется DP. Реальный пилот требует purpose/retention/privacy specification, а DP при выборе - отдельного review privacy unit, adjacency, epsilon/delta, composition и реализации. T16.
 
+Компонентный результат 2026-11-06: [закрытые service windows 0d5ad83](evidence/kubernetes-service-privacy-2026-11-06.md), run42240476139 success: 4 windows/4 detected leak controls/4 retained packets, 244 Linux methods без skips и cleanup verified. Далее fresh source/candidate composition и общий gate; полный M13 inconclusive.
+
 Компонентный результат 2026-11-06: [ordinary CLI privacy 36cd71d](evidence/kubernetes-cli-privacy-2026-11-06.md), 22 CLI + 28 actual checks, 222 Linux tests и per-module 95% coverage gate pass. Проверены `configured()/audit_path`, canaries, quotas/503/shutdown и retained snapshot. CLI admission не наблюдается независимо; actual packet сохраняет ADR 0049 contract. Полный M13 остаётся inconclusive: полный service-output inventory/closed windows, subject composition и общая acceptance ещё не завершены. Исходные критерии выше не изменены.
 
 ## M14

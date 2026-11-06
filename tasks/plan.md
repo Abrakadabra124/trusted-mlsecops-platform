@@ -1,5 +1,7 @@
 # План перехода DevSecOps -> MLSecOps
 
+CP3/T16 2026-11-06: [закрытые service-log windows](../docs/evidence/kubernetes-service-privacy-2026-11-06.md) **component pass**, `0d5ad83` / 42240476139 success. Четыре окна storage/trust для actual и controlled CLI, четыре positive leak controls, private packets перечитаны после cleanup; 244 Linux methods / 0 skips, новые modules 100%. Чистый Windows checkout с новой venv: 244 methods / 18 POSIX skips. Source SQL/cluster cleanup verified. Далее fresh M13 composition/acceptance; полный M13/R1, independent M22 0/2 и image findings остаются открытыми.
+
 CP3/T16 2026-11-06: [ordinary CLI privacy](../docs/evidence/kubernetes-cli-privacy-2026-11-06.md) **component pass**, `36cd71d` / 42225259346 success. 22 CLI checks + 28 actual-candidate checks, 222 Linux executions / 0 skips, 175 clean Windows tests. Три CLI modules проходят 95% statements/branches отдельно; closed audit, parent recheck и owned cleanup подтверждены. Full M13 остаётся inconclusive: service-output inventory/closed windows, controlled/actual composition и общий gate. M22 independent 0/2, image findings и M18/R1 открыты.
 
 CP3/T14 2026-11-06: [live смена трёх release signers](../docs/evidence/release-signer-live-2026-11-06.md) проверена на `94f56a3` / 42198344418. 68 native cases, реальные SQL/HTTP/ONNX, отказ старого экземпляра и явная новая activation. Это controlled component; далее общая candidate-bound M11/M18 приёмка. Все обязательные gates, независимый M22 и ограничения сохраняются.
