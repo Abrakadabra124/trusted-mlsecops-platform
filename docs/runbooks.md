@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [M11: свежая общая проверка trust lifecycle](operations/trust-acceptance.md). Привязка candidate/source, primary traces, независимые отзывы, expiry/replay/rollback/signers, fail-closed итог и scoped cleanup. Runner реализован; общий native запуск ещё не принят.
+
 - [Ротация release signer и история политик](operations/release-signer-rotation.md). Signed transition для одной роли, явная migration 2, свежий online trust, отказ при конфликте/expiry, полный backup/restore истории и ambiguous commit. [SQL/history evidence](evidence/release-signer-history-2026-11-06.md) и [live SQL/HTTP/ONNX evidence](evidence/release-signer-live-2026-11-06.md): `94f56a3` / 42198344418 success, 37 rotation + 36 recovery + 68 live cases, cleanup verified. Controlled assurance не закрывает полный M11. [Решение и границы](decisions/0055-release-signer-policy-history.md).
 
 - [Live root rotation на actual candidate и прерванные проверки](operations/authority-root-rotation.md#live-qualification-на-том-же-candidate). Native `45c6bf8` / 42183215170 verified: HTTP отказ за 4.358405479 s, явный новый Engine с прежними permit/model, сохранённые histories/revocations и cleanup. [Evidence и fresh checkout](evidence/candidate-root-rotation-2026-11-06.md); полный M11 остаётся открыт.

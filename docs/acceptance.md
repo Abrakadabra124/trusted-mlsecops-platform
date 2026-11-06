@@ -58,6 +58,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 **Комплект и promotion policy.** Все обязательные digests связаны, signature/identity/issuer policy проверяются до promotion; approval связан с environment и policy. Negative: чужой signer, отсутствующий report, mismatched subject, alias swap, self-approval trainer, неизвестная schema и повтор в другом environment отклоняются. Повтор разрешённого promotion идемпотентен. Evidence: positive/negative matrix и state transitions. T13.
 
 ## M11
+Исполняемый [runner и runbook](operations/trust-acceptance.md) объединяет свежие candidate-bound runtime observations и явно выделенные controlled release tests. Реализован, общий hosted результат ещё ожидается; прежние component successes не являются текущим M11 pass.
+
 **Отзыв доверия и replay protection.** Отозванные key/model, истёкший approval, старая policy и неразрешённый rollback отклоняются. При недоступном trust service serving прекращает ML-ответы не позднее 60 s после последней успешной проверки актуальной policy; дополнительные 60 s после истечения lease не добавляются. Точные clock/lease semantics зафиксированы, negative clock skew тоже проверяется. Необработанная revocation не маскируется cached alias. Evidence: timestamped trace и причина отказа. T14.
 
 ## M12

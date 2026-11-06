@@ -352,14 +352,17 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate == "M12":
+    elif gate in {"M11", "M12"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
         if not all((state / name).is_file() for name in required):
             result["residual_risks"] = [
-                "M12 requires the owned hosted cluster, source storage and actual evaluated candidate"
+                f"{gate} requires the owned hosted cluster, source storage and actual evaluated candidate"
             ]
             return result
-        from mlsecops.inference_gate import qualify
+        if gate == "M11":
+            from mlsecops.trust_acceptance import qualify
+        else:
+            from mlsecops.inference_gate import qualify
 
         try:
             evidence = qualify(root, state)
@@ -374,7 +377,14 @@ def report(gate, profile, root, state=None):
                 artifact_hashes=evidence["artifact_hashes"],
             )
             result["input_digests"].update(evidence["input_digests"])
-        except (Rejected, OSError, subprocess.TimeoutExpired) as error:
+        except (
+            Rejected,
+            OSError,
+            subprocess.TimeoutExpired,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as error:
             unavailable = (
                 isinstance(error, (OSError, subprocess.TimeoutExpired))
                 or str(error) == "trust_hosted_runner_required"
@@ -383,9 +393,9 @@ def report(gate, profile, root, state=None):
                 status="inconclusive" if unavailable else "fail",
                 exit_code=2 if unavailable else 1,
                 residual_risks=[
-                    "M12 prerequisites unavailable"
+                    f"{gate} prerequisites unavailable"
                     if unavailable
-                    else "M12 inference verification rejected"
+                    else f"{gate} runtime verification rejected"
                 ],
             )
         result["finished_at"] = now()
