@@ -115,7 +115,7 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-bundle-native --fail-under=100
       - name: Promotion admission and ledger request contracts
         run: |
-          uv run --locked coverage run --data-file=.coverage-promotion --source=mlsecops.promotion,mlsecops.promotion_state -m unittest scripts.promotion_qualification scripts.promotion_state_qualification
+          uv run --locked coverage run --data-file=.coverage-promotion --source=mlsecops.promotion,mlsecops.promotion_state -m unittest scripts.promotion_qualification scripts.promotion_state_qualification scripts.promotion_policy_history_qualification
           uv run --locked coverage report --data-file=.coverage-promotion --fail-under=100
           uv run --locked python -m scripts.promotion_native_qualification
       - name: M03 integrity, actual SQL roles and training/evaluation
@@ -124,7 +124,7 @@ jobs:
           uv run --locked python -m mlsecops.acceptance --gate M03 --output .runtime/evidence/M03.json
       - name: Promotion recovery contracts and CLI boundaries
         run: |
-          uv run --locked coverage run --data-file=.coverage-promotion-recovery --source=mlsecops.promotion_recovery -m scripts.promotion_recovery_qualification
+          uv run --locked coverage run --data-file=.coverage-promotion-recovery --source=mlsecops.promotion_recovery -m unittest scripts.promotion_recovery_qualification scripts.promotion_policy_history_qualification
           uv run --locked coverage report --data-file=.coverage-promotion-recovery --fail-under=100
           uv run --locked python -m scripts.promotion_recovery_native_qualification
           uv run --locked coverage run --data-file=.coverage-recovery-lock --source=mlsecops.recovery_lock -m scripts.recovery_lock_qualification

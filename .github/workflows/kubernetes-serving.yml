@@ -28,6 +28,9 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.data_source_lock_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-release-key --source=mlsecops.release_key_rotation,mlsecops.release_key_store,mlsecops.promotion_recovery -m unittest scripts.release_key_rotation_qualification scripts.release_key_store_qualification scripts.promotion_policy_history_qualification scripts.promotion_recovery_qualification scripts.kube_promotion_snapshot_qualification scripts.release_key_native_qualification scripts.promotion_recovery_native_qualification
+          uv run --locked coverage report --data-file=.coverage-release-key --fail-under=100
+          uv run --locked coverage json --data-file=.coverage-release-key -o .coverage-release-key.json
           uv run --locked coverage run --branch --data-file=.coverage-live-root --source=scripts.kube_candidate_root,mlsecops.kube_candidate_trust,mlsecops.kube_serving_lifecycle -m unittest scripts.kube_candidate_root_qualification scripts.candidate_serving_reader_qualification scripts.kube_candidate_qualification scripts.kube_candidate_trust_qualification scripts.kube_serving_lifecycle_qualification scripts.kube_serving_faults_qualification scripts.kube_authority_pair_qualification scripts.kube_root_rotation_qualification
           uv run --locked coverage report --data-file=.coverage-live-root --fail-under=95
           uv run --locked coverage json --data-file=.coverage-live-root -o .coverage-live-root.json
@@ -96,6 +99,21 @@ jobs:
           uv run --locked python -m mlsecops.storage_pipeline
       - name: Actual refusal, configured serving and live authority faults
         run: uv run --locked python -m scripts.kube_serving_native --state .runtime
+      - name: Release signer history in disposable source SQL
+        run: uv run --locked python -m scripts.release_key_native --state .runtime --confirm-disposable
+      - name: Complete rotated policy history backup and independent recovery
+        run: uv run --locked python -m scripts.promotion_recovery_native --state .runtime --confirm-disposable
+      - name: Sanitized rotation and recovery outcomes
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          for name in ('release-key-native', 'promotion-recovery'):
+              path = Path('.runtime/evidence') / (name + '.json')
+              report = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False}
+              print(canonical({'component':name,'report':report}).decode())
+          PY
       - name: Sanitized serving outcome
         if: always()
         run: |

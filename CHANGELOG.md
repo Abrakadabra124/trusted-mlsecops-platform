@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 release signer policy history - 2026-11-06, проверка в работе
+
+- Signed authorization меняет одну роль и связывает переход с текущим head. Storage commit проверяет online отзыв старого ключа, сохраняет events и не выдаёт ready; повтор идемпотентен.
+- Additive migration 2 и backup/restore сохраняют историю policy pins. Прежняя migration 1 неизменна. 162 локальные regression methods pass; отдельно 45 methods и 152 statements / 48 branches трёх модулей покрыты полностью. Native SQL, live signer serving и полный M11/R1 пока не подтверждены.
+- [ADR 0055](docs/decisions/0055-release-signer-policy-history.md), [runbook и границы восстановления](docs/operations/release-signer-rotation.md). Hosted workflow дополнен проверкой трёх ролей и полным recovery после ротаций.
+
 ## R1 live candidate root rotation - 2026-11-06
 
 - Qualification permit и online trust policy подписываются разными ключами. Смена root останавливает прежний Engine; новый explicit config восстанавливает тот же candidate без перевыпуска permit и продления сроков.
