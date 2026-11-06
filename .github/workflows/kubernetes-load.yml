@@ -1,7 +1,7 @@
 name: Actual candidate M14 load baseline
 on:
   push:
-    branches: [codex/cp4-m14-load-20261106]
+    branches: [codex/cp4-m14-load-20261106, codex/cp4-m14-acceptance-20261106]
   workflow_dispatch:
 permissions:
   contents: read
@@ -54,6 +54,11 @@ jobs:
         run: |
           uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load-gate.coverage" --source=mlsecops.load_gate,scripts.load_contracts -m unittest scripts.load_gate_qualification
           uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-gate.coverage" --fail-under=100
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.load_gate import contracts
+          print('Fresh M14 pure preflight passed:', contracts(Path.cwd())['checks'])
+          PY
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap

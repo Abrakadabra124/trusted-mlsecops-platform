@@ -19,6 +19,7 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.load_exchange import MAX_PACKET
+from mlsecops.privacy_gate import contract_diagnostic
 from mlsecops.storage import object_id
 from mlsecops.trust_acceptance import materials
 from scripts import kube_load_native, load_contracts, load_resources
@@ -43,11 +44,13 @@ def contracts(root):
         timeout=300,
         check=False,
     )
-    require(process.returncode == 0 and not process.stderr)
+    names = load_contracts.case_ids()
+    if process.returncode or process.stderr:
+        contract_diagnostic(process, names, scope="M14-contract-diagnostic")
+        raise Rejected("M14_controlled_contracts_failed")
     value = decode(process.stdout, 2 * 1024**2)
     expected = [
-        {"id": name, "status": "pass", "expected": True, "actual": True}
-        for name in sorted(load_contracts.case_ids())
+        {"id": name, "status": "pass", "expected": True, "actual": True} for name in sorted(names)
     ]
     require_fields(value, ("scope", "status", "checks", "cases"))
     require(bool(expected) and value["scope"] == load_contracts.SCOPE and value["status"] == "pass")

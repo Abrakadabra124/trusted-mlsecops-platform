@@ -62,7 +62,7 @@ def contracts(root):
     return value
 
 
-def contract_diagnostic(process, expected):
+def contract_diagnostic(process, expected, *, scope="M13-contract-diagnostic"):
     # Only identifiers from the current source's fixed inventory may be public.
     # Never publish child exception text, values or a caller-provided identifier.
     try:
@@ -84,7 +84,7 @@ def contract_diagnostic(process, expected):
     print(
         canonical(
             {
-                "scope": "M13-contract-diagnostic",
+                "scope": scope,
                 "status": "fail",
                 "release_ready": False,
                 "missing_methods": missing[:16],

@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import sys
 import unittest
 
 from mlsecops.contracts import canonical
@@ -55,6 +56,10 @@ def qualify():
 
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        from mlsecops.runtime_bootstrap import initialize
+
+        initialize()
     report = qualify()
     print(canonical(report).decode())
     raise SystemExit(0 if report["status"] == "pass" else 1)

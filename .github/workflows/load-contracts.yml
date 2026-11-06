@@ -1,7 +1,7 @@
 name: M14 measurement contracts
 on:
   push:
-    branches: [main, codex/cp4-m14-load-20261106]
+    branches: [main, codex/cp4-m14-load-20261106, codex/cp4-m14-acceptance-20261106]
   pull_request:
   workflow_dispatch:
 permissions:

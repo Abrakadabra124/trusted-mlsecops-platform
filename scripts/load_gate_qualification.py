@@ -374,17 +374,29 @@ class LoadContractRunner(unittest.TestCase):
             self.assertEqual(value["status"], "pass" if names == ("test_ok",) else "fail")
             self.assertNotIn("PRIVATE", str(value))
         self.assertTrue(load_contracts.case_ids())
-        for failure in (False, True):
-            suite = unittest.TestSuite([Sample("test_failure" if failure else "test_ok")])
-            with (
-                patch.dict(sys.modules),
-                patch.object(unittest.defaultTestLoader, "loadTestsFromNames", return_value=suite),
-                redirect_stdout(io.StringIO()),
-                self.assertRaises(SystemExit) as exit,
-            ):
-                sys.modules.pop("scripts.load_contracts", None)
-                runpy.run_module("scripts.load_contracts", run_name="__main__")
-            self.assertEqual(exit.exception.code, int(failure))
+        for platform in ("win32", "linux"):
+            for failure in (False, True):
+                suite = unittest.TestSuite([Sample("test_failure" if failure else "test_ok")])
+                with (
+                    patch.object(sys, "platform", platform),
+                    patch("mlsecops.runtime_bootstrap.initialize") as initialize,
+                    patch.object(
+                        unittest.defaultTestLoader, "loadTestsFromNames", return_value=suite
+                    ),
+                    redirect_stdout(io.StringIO()),
+                    self.assertRaises(SystemExit) as exit,
+                ):
+                    runpy.run_path(load_contracts.__file__, run_name="__main__")
+                self.assertEqual(exit.exception.code, int(failure))
+                self.assertEqual(initialize.call_count, int(platform == "linux"))
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch("mlsecops.runtime_bootstrap.initialize", side_effect=Rejected("controlled-stop")),
+            patch.object(unittest.defaultTestLoader, "loadTestsFromNames") as loader,
+            self.assertRaisesRegex(Rejected, "controlled-stop"),
+        ):
+            runpy.run_path(load_contracts.__file__, run_name="__main__")
+        loader.assert_not_called()
 
 
 if __name__ == "__main__":
