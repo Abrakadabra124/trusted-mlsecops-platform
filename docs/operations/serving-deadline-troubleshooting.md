@@ -1,5 +1,39 @@
 # RB-53 / PB-27: зависшее чтение доверия и HTTP deadline
 
+## Regression 2026-11-06: открытый TCP transport при blackhole
+
+[M11 run 42284704218](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42284704218),
+source `5f6fb84`, завершился отказом `kube_serving_shutdown_deadline` в phase
+`shutdown` после stage `live-trust-blackhole`. Ordinary serving не завершился
+за прежние 20 s; harness остановил свой process group, не принял опыт и выполнил
+cleanup. Source SQL stop 20:16:01 UTC, owned cluster absence 20:16:06 UTC.
+Успешные нагрузка/M13 на этом source не закрывают эту регрессию M11.
+
+Source inspection: reusable Session может ждать ответ в уже установленном TCP
+соединении. `connect_timeout=5` ограничивает установление соединения, а server
+`statement_timeout=5000` не прерывает клиентское ожидание потерянного сетевого
+ответа. Отсутствие transport timeout согласуется с симптомом; причинность и
+исправление ещё нужно подтвердить новым тем же native blackhole опытом.
+
+В `storage.connection_parameters` добавлены фиксированные client libpq options:
+`tcp_user_timeout=5000` ms, `keepalives=1`, idle=5 s, interval=1 s, count=3.
+По [официальному libpq contract](https://www.postgresql.org/docs/18/libpq-connect.html#LIBPQ-PARAMKEYWORDS)
+TCP_USER_TIMEOUT ограничивает время неподтверждённых переданных данных, а
+keepalive обнаруживает потерю idle connection. Поддержка зависит от ОС;
+локальные unit tests доказывают передачу параметров, не фактический TCP timeout.
+Эта настройка проверяется в Linux hosted CI. Значения connection/query/HTTP
+deadlines, SIGTERM grace, TLS verify-full, host/role pins и cleanup policy сохранены.
+
+Порядок проверки: выполнить trust-session/authority tests, запустить тот же M11
+workflow на чистом source, проверить bounded denial, отсутствие позднего ML,
+shutdown без принудительного kill и terminal cleanup. Затем повторить M14,
+поскольку transport profile изменился. Не повышать 20 s shutdown threshold,
+не считать SIGKILL штатным завершением и не закрывать gate по одному unit pass.
+При повторном отказе сохранить конечные phase/code и вернуть stage в fail;
+не запускать новые экземпляры поверх незавершённых owned процессов.
+
+## Предыдущая проверка и общий порядок
+
 Ответственный: platform operator; при подозрении на подмену authority также security reviewer. Только disposable lab с подтверждённым ownership. Рабочие Docker/WSL/SQL не изменять. [ADR 0034](../decisions/0034-serving-response-deadline.md), [evidence](../evidence/serving-deadline-2026-10-15.md).
 
 Проверка процедуры: clean-checkout CI `ed87e97`, 52 actual-candidate cases pass, включая pause/denial/unpause/cleanup/explicit recovery. Локально 7 controlled harness methods pass, в том числе late-connect после finally и запрет pass при idle query. Это доказательства disposable профиля, не проверка восстановления промышленной инфраструктуры.

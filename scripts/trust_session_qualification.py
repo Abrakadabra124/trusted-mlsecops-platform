@@ -249,6 +249,14 @@ class SessionFileContracts(unittest.TestCase):
                     self.assertEqual(
                         connect.call_args.kwargs["ssl_min_protocol_version"], "TLSv1.3"
                     )
+                    for key, expected in {
+                        "keepalives": 1,
+                        "keepalives_idle": 5,
+                        "keepalives_interval": 1,
+                        "keepalives_count": 3,
+                        "tcp_user_timeout": 5000,
+                    }.items():
+                        self.assertEqual(connect.call_args.kwargs[key], expected)
                     if change in {"role", "host"}:
                         settings = read_json(client / "connection.json")
                         settings[change] = "trainer" if change == "role" else Target.PRIMARY.host

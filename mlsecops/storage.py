@@ -55,6 +55,14 @@ def connection_parameters(directory, *, expected_host=None):
         "ssl_max_protocol_version": "TLSv1.3",
         "gssencmode": "disable",
         "connect_timeout": 5,
+        # connect_timeout only covers opening a connection. Bound failure of
+        # an established TCP transport too; server statement_timeout cannot
+        # interrupt a client waiting for packets lost in a network blackhole.
+        "keepalives": 1,
+        "keepalives_idle": 5,
+        "keepalives_interval": 1,
+        "keepalives_count": 3,
+        "tcp_user_timeout": 5000,
         "password": "",
         "passfile": str(passfile),
         "application_name": f"trusted-mlsecops-{settings['role']}",
