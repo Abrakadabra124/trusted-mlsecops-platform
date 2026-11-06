@@ -12,6 +12,7 @@ from mlsecops.contracts import Rejected, canonical, decode, read_json
 from scripts import kube_load_operator as operator
 from scripts.kube_serving_runtime_qualification import PROFILE
 from scripts.load_clock_qualification import anchors
+from scripts.load_diagnostics_qualification import audit_fixture
 from scripts.load_golden_qualification import expected
 from scripts.load_measurement_qualification import rows
 from scripts.load_resources_qualification import ORIGIN, snapshot
@@ -142,7 +143,9 @@ class OperatorContracts(unittest.TestCase):
             "observation": observation,
             "summary": summary,
             "golden": self.op.golden,
-            "diagnostics": load_diagnostics.result(load_diagnostics.Timings(), limited),
+            "diagnostics": load_diagnostics.result(
+                load_diagnostics.Timings(), limited, audit_fixture()
+            ),
             "overload": {
                 "attempts": 40,
                 "correct": 8,

@@ -177,7 +177,9 @@ def qualify(config, expected):
             timings = load_diagnostics.Timings()
             with timings.instrument(engine):
                 observation, overload, limited = asyncio.run(exercise(port, tokens, golden))
-            diagnostics = load_diagnostics.result(timings, limited)
+            diagnostics = load_diagnostics.result(
+                timings, limited, load_diagnostics.audit_status(app.state.audit)
+            )
             summary = load_measurement.summarize(
                 **{key: observation[key] for key in ("records", "elapsed_ns", "exhausted")}
             )

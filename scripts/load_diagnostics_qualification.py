@@ -9,6 +9,15 @@ from mlsecops import load_diagnostics as diagnostic
 from mlsecops.contracts import Rejected
 
 
+def audit_fixture():
+    return {
+        **dict.fromkeys(diagnostic.AUDIT_COUNTS, 0),
+        "healthy": True,
+        "closed": False,
+        "failed": False,
+    }
+
+
 def fixture():
     @contextmanager
     def exclusive():
@@ -95,7 +104,7 @@ class DiagnosticContracts(unittest.TestCase):
             self.assertEqual(diagnostic.reason(body), code)
         for body in ({}, {"error": {"code": "PRIVATE"}}, None):
             self.assertEqual(diagnostic.reason(body), "unrecognized")
-        value = diagnostic.result(diagnostic.Timings(), diagnostic.reasons())
+        value = diagnostic.result(diagnostic.Timings(), diagnostic.reasons(), audit_fixture())
         summary = {"warmup": {"outcomes": {"limited": 0}}, "measured": {"outcomes": {"limited": 0}}}
         overload = {"limited": 0}
         self.assertIs(diagnostic.checked(value, summary, overload), value)
@@ -110,6 +119,17 @@ class DiagnosticContracts(unittest.TestCase):
                 diagnostic.checked(altered, summary, overload)
         with self.assertRaises(Rejected):
             diagnostic.checked({**value, "scope": "PRIVATE"}, summary, overload)
+
+    def test_audit_projection_does_not_expose_failure_text_or_unbounded_fields(self):
+        state = {**audit_fixture(), "failure": "PRIVATE", "token": "PRIVATE"}
+        journal = SimpleNamespace(status=lambda: state, _capacity=64, _max_bytes=16777216)
+        result = diagnostic.audit_status(journal)
+        self.assertNotIn("PRIVATE", str(result))
+        self.assertTrue(result["failed"])
+        self.assertEqual(result["budget_bytes"], 16777216)
+        for key, bad in (("healthy", 1), ("reserved_bytes", True), ("pending", -1)):
+            with self.assertRaises(Rejected):
+                diagnostic.checked_audit({**result, key: bad})
 
 
 if __name__ == "__main__":

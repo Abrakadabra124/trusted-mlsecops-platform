@@ -19,6 +19,40 @@ NAMES = (
 CODES = ("overloaded", "client_limited", "unrecognized")
 SCOPE = "probe-internal-diagnostics-not-independent"
 WINDOW = "warmup-measurement-overload-recovery"
+AUDIT_COUNTS = (
+    "accepted",
+    "durable",
+    "pending",
+    "unconfirmed",
+    "durable_bytes",
+    "reserved_bytes",
+    "held_bytes",
+    "held_slots",
+    "reservations",
+    "budget_bytes",
+    "capacity",
+)
+AUDIT_FLAGS = ("healthy", "closed", "failed")
+
+
+def audit_status(journal):
+    status = journal.status()
+    value = {name: status[name] for name in AUDIT_COUNTS[:-2] + AUDIT_FLAGS[:2]}
+    value.update(
+        failed=status["failure"] is not None,
+        budget_bytes=journal._max_bytes,
+        capacity=journal._capacity,
+    )
+    return checked_audit(value)
+
+
+def checked_audit(value):
+    require_fields(value, (*AUDIT_COUNTS, *AUDIT_FLAGS))
+    if any(type(value[name]) is not bool for name in AUDIT_FLAGS) or any(
+        type(value[name]) is not int or not 0 <= value[name] < 2**63 for name in AUDIT_COUNTS
+    ):
+        raise Rejected("load_diagnostic_audit")
+    return value
 
 
 def targets(engine):
@@ -115,12 +149,19 @@ def reason(body):
     return "unrecognized"
 
 
-def result(timings, limited):
-    return {"scope": SCOPE, "window": WINDOW, "timings": timings.snapshot(), "limited": limited}
+def result(timings, limited, audit):
+    return {
+        "scope": SCOPE,
+        "window": WINDOW,
+        "timings": timings.snapshot(),
+        "limited": limited,
+        "audit": checked_audit(audit),
+    }
 
 
 def checked(value, summary, overload):
-    require_fields(value, ("scope", "window", "timings", "limited"))
+    require_fields(value, ("scope", "window", "timings", "limited", "audit"))
+    checked_audit(value["audit"])
     require_fields(value["timings"], NAMES)
     require_fields(value["limited"], ("normal", "overload", "recovery"))
     if value["scope"] != SCOPE or value["window"] != WINDOW:

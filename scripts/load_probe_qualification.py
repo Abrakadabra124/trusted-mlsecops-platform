@@ -12,6 +12,7 @@ from mlsecops import load_probe as probe
 from mlsecops.contracts import Rejected, canonical, digest, write_json
 from mlsecops.load_golden import Golden
 from mlsecops.serving_access import Access
+from scripts.load_diagnostics_qualification import audit_fixture
 from scripts.load_golden_qualification import expected, response
 from scripts.load_measurement_qualification import rows
 
@@ -100,7 +101,11 @@ class ProbeContracts(unittest.TestCase):
         receipt = {"summary_sha256": "wrong" if fault == "receipt" else digest(canonical(summary))}
         limited = probe.load_diagnostics.reasons()
         receipt["diagnostics_sha256"] = digest(
-            canonical(probe.load_diagnostics.result(probe.load_diagnostics.Timings(), limited))
+            canonical(
+                probe.load_diagnostics.result(
+                    probe.load_diagnostics.Timings(), limited, audit_fixture()
+                )
+            )
         )
 
         def listen(app):
@@ -113,6 +118,7 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe, "DIRECTORY", Path(temporary) / "load"),
             patch.object(probe, "Client") as client,
             patch.object(probe, "candidate"),
+            patch.object(probe.load_diagnostics, "audit_status", return_value=audit_fixture()),
             patch.object(probe, "Worker") as worker,
             patch.object(probe.serving, "Engine", return_value=engine) as construct,
             patch.object(probe, "listen", side_effect=listen),
