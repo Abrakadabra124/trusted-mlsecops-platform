@@ -125,6 +125,30 @@ production configured HTTP entrypoint применяется один механ
 
 ## Проверка
 
+Эксперимент порядка выполнения после `df7ff2f`: 6929/6929 корректных measured
+ответов, ноль 429/5xx/timeout/mismatch, но p95=313.890 ms. Среднее удержание
+Engine lock 17.141 ms во всех фазах; суммарное ожидание 910.812 s, максимум
+589.690 ms. Это основание проверить влияние очереди, а не доказательство
+единственной причины latency. Credential parameters тоже стоят 43.109 s,
+но их проверки в этом эксперименте не меняются.
+
+HTTP execution теперь ожидает штатный `asyncio.Lock` до запуска `to_thread`.
+[Python 3.12 гарантирует порядок ожидающих asyncio tasks](https://docs.python.org/3.12/library/asyncio-sync.html#asyncio.Lock),
+а [порядок ожидающих threading.Lock не определён](https://docs.python.org/3.12/library/threading.html#lock-objects).
+Queue wait ограничен меньшим из 1 s и remaining response budget; по timeout
+применяется прежний `serving_busy` / HTTP 429. Внешние десять admission slots
+ограничивают одновременно исполняющиеся и ожидающие requests. Engine lock,
+trust reads до/после inference, worker protocol и audit остаются прежними.
+
+Owned task сохраняется в pending до завершения, поэтому client cancellation
+не освобождает slot у ещё работающего backend. После получения очереди budget
+и generation проверяются ещё раз до executor. Lock освобождается в finally.
+При измерении `engine_wait` теперь отражает только внутренний mutex; время
+новой HTTP очереди полностью входит в независимую client-side latency.
+Controlled checks подтверждают порядок, timeout без executor, expired generation,
+сохранение ownership и доступность следующего запроса после отказа.
+Ускорение и полный M14 подтверждаются только новым native запуском.
+
 Controlled tests проверяют потерю запросов, таймауты, malformed/truncated HTTP,
 границу прогрева, tail, cap, cancellation, неправильные digest/score/schema,
 точные latency/error thresholds и отказ при неполном окне.

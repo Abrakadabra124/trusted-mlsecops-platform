@@ -150,6 +150,7 @@ def create_app(
     app.state.metrics = metrics
     app.state.audit = audit
     app.state.slots = asyncio.Semaphore(MAX_IN_FLIGHT)
+    app.state.execution = asyncio.Lock()
     app.state.pending = set()
 
     def remaining(budget):
@@ -178,9 +179,20 @@ def create_app(
 
     async def execute(operation, deferred, budget, delivery, *arguments):
         remaining(budget)
-        task = asyncio.create_task(
-            asyncio.to_thread(operation, *arguments, generation=budget.generation)
-        )
+
+        async def owned():
+            timeout = min(1, remaining(budget))
+            try:
+                await asyncio.wait_for(app.state.execution.acquire(), timeout=timeout)
+            except TimeoutError:
+                raise Rejected("serving_busy") from None
+            try:
+                remaining(budget)
+                return await asyncio.to_thread(operation, *arguments, generation=budget.generation)
+            finally:
+                app.state.execution.release()
+
+        task = asyncio.create_task(owned())
         app.state.pending.add(task)
         delivery.worker_pending = True
         deferred[0] = True

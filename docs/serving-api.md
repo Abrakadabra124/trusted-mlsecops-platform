@@ -123,6 +123,12 @@ Legacy single-file и defaults программного Journal не измен�
 с прежним policy/budget не мигрируется автоматически: mismatch вызывает отказ.
 Snapshot/export ограничен 16 MiB payload и не является архивом большого spool.
 
+Допущенные HTTP operations ожидают выполнения в порядке входа в `asyncio.Lock`;
+это ожидание до executor ограничено 1 s и remaining response budget.
+По исчерпанию ожидания возвращается прежний bounded 429. Очередь входит в десять
+общих admission slots, отдельных неограниченных заданий нет. Cancellation,
+generation checks и удержание ресурсов до фактического завершения сохраняются.
+
 Перед отправкой 200 записывается собственный intent с проверенным private context; приложение ждёт его fsync в пределах прежнего budget и повторно проверяет deadline/generation. Actual start/completed фиксируются после ASGI send, cancel не превращается в completed. Успешный send не доказывает получение клиентом. После network send отказ sink даёт evidence gap и запрет следующих admissions, не возможность отозвать уже отправленный ответ.
 
 Уже выданные global/client slots сохраняются до завершения BOTH HTTP и executor, в том числе при зависшей отправке audit-denied 503. `/livez`, anonymous auth и отказы до global admission не создают audit entries. При десяти admitted audit waiters проверяется headroom health с Uvicorn limit 16; произвольный connection flood этим не исключается. [ADR 0040](decisions/0040-serving-http-audit.md), [RB-59/PB-33](operations/serving-http-audit-troubleshooting.md), [evidence](evidence/serving-http-audit-2026-10-18.md). All-output canaries, export/cardinality и полный M13 остаются незавершёнными.

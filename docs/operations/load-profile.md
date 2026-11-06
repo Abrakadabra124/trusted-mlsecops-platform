@@ -163,6 +163,17 @@ Native интеграция выполняется только в разреш�
 
 ## Восстановление и публикация
 
+Если normal requests корректны, а p95 превышен, отдельно учитывать ожидание
+в очереди и время обработки. В `df7ff2f` 6929/6929 measured predictions были
+корректны, p95=313.890 ms, p99=352.678 ms; worker/controller resource gap 11 s.
+Новый shutdown check прошёл. SQL stopped 19:39:02 UTC, cluster absence 19:39:04 UTC.
+Из 128.849 s Engine hold проверка SQL parameters заняла 43.109 s; эта стоимость
+частично входит в 31.085 s session_credentials и 72.292 s trust_read.
+Не складывать вложенные timings. Первое следующее изменение - порядок HTTP
+execution перед executor, без ослабления credential или trust validation.
+При queue timeout ожидается ограниченный 429; queued expired generation не
+должна войти в executor. Полный повтор обязан сохранить прежние profile/limits.
+
 Отдельная обнаруженная ошибка runner: завершение Uvicorn thread само по себе
 не доказывало успешный lifespan shutdown. В закреплённой установленной версии
 `uvicorn/lifespan/on.py` исключение teardown сохраняется в `error_occurred`

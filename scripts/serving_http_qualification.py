@@ -17,6 +17,77 @@ from scripts.serving_access_qualification import credentials
 
 
 class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_admitted_work_enters_executor_in_wait_order_without_competing_threads(self):
+        release = threading.Event()
+        calls, requests = [], []
+
+        def predict(features, *, generation):
+            calls.append(features[0][0])
+            if features[0][0] == 0.1:
+                release.wait(3)
+            return self.engine.predict.return_value
+
+        self.engine.predict.side_effect = predict
+        try:
+            for index, value in enumerate((0.1, 0.2, 0.3), 1):
+                body = {"schema_version": 1, "instances": [{name: value for name in FEATURES}]}
+                requests.append(asyncio.create_task(self.invoke(body=body)))
+                for _ in range(100):
+                    if len(self.app.state.pending) == index or len(calls) >= index:
+                        break
+                    await asyncio.sleep(0.005)
+            await asyncio.sleep(0.03)
+            self.assertEqual(calls, [0.1])
+            self.assertEqual(len(self.app.state.pending), 3)
+        finally:
+            release.set()
+            replies = await asyncio.gather(*requests, return_exceptions=True)
+        self.assertEqual([reply[0] for reply in replies], [200, 200, 200])
+        self.assertEqual(calls, [0.1, 0.2, 0.3])
+        self.assertFalse(self.app.state.pending)
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
+
+    async def test_execution_queue_timeout_does_not_run_or_leak_admitted_work(self):
+        await self.app.state.execution.acquire()
+        try:
+            started = time.monotonic()
+            status, _, _ = await self.invoke()
+            self.assertEqual(status, 429)
+            self.assertLess(time.monotonic() - started, 1.5)
+            self.engine.predict.assert_not_called()
+            self.assertTrue(all(task.done() for task in self.app.state.pending))
+            await asyncio.sleep(0)  # run the registered owned-task completion callback
+            self.assertFalse(self.app.state.pending)
+            self.assertTrue(self.app.state.execution.locked())
+        finally:
+            self.app.state.execution.release()
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
+        self.assertEqual((await self.invoke())[0], 200)
+
+    async def test_generation_expired_while_queued_never_enters_executor(self):
+        await self.app.state.execution.acquire()
+        generation = threading.Event()
+        self.engine.response_budget.side_effect = None
+        self.engine.response_budget.return_value = serving.ResponseBudget(
+            generation, time.monotonic() + 10
+        )
+        request = asyncio.create_task(self.invoke())
+        try:
+            for _ in range(100):
+                if self.app.state.pending:
+                    break
+                await asyncio.sleep(0.005)
+            self.assertTrue(self.app.state.pending)
+            generation.set()
+        finally:
+            self.app.state.execution.release()
+            response = await request
+        self.assertEqual(response[0], 503)
+        self.engine.predict.assert_not_called()
+        self.assertFalse(self.app.state.pending)
+        self.assertFalse(self.app.state.execution.locked())
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
+
     async def test_private_context_is_not_serialized_or_taken_from_headers(self):
         snapshots = []
         render = serving_http.JSONResponse.render
