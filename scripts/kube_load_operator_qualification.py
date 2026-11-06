@@ -56,6 +56,7 @@ class OperatorContracts(unittest.TestCase):
         self.stderr = b""
         self.acks = []
         self.addCleanup(patch.stopall)
+        patch.object(operator, "housekeeping", return_value=5).start()
         patch.object(operator, "kubectl", side_effect=self.kubectl).start()
         patch.object(kube_worker, "image_config", side_effect=lambda identity: identity).start()
         patch.object(
@@ -442,6 +443,30 @@ class OperatorContracts(unittest.TestCase):
         ):
             with self.assertRaises(Rejected):
                 operator.overload({**correct, field: value})
+
+
+class HousekeepingContracts(unittest.TestCase):
+    def test_owned_live_kubelet_flag_is_read_back_and_mismatches_fail(self):
+        with (
+            patch.object(operator, "hosted") as hosted,
+            patch.object(operator.cluster, "validate_cluster") as validate,
+        ):
+            for pid, flags, accepted in (
+                ("123", "kubelet\0--housekeeping-interval=5s\0", True),
+                ("123", "kubelet\0--housekeeping-interval=10s\0", False),
+                ("123", "kubelet\0--housekeeping-interval=5s\0--housekeeping-interval=5s\0", False),
+                ("0", "", False),
+                ("../private", "", False),
+            ):
+                with patch.object(operator.cluster, "command", side_effect=[pid, flags]) as command:
+                    if accepted:
+                        self.assertEqual(operator.housekeeping("state"), 5)
+                        self.assertEqual(command.call_args.args[0][-1], "/proc/123/cmdline")
+                    else:
+                        with self.assertRaises(Rejected):
+                            operator.housekeeping("state")
+            self.assertEqual(hosted.call_count, 5)
+            self.assertEqual(validate.call_count, 5)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,30 @@ from scripts.kube_privacy_operator import exec_failure
 from scripts.kube_trust_native import hosted
 
 
+def housekeeping(state):
+    hosted()
+    cluster.validate_cluster(state)
+    pid = cluster.command(
+        [
+            "docker",
+            "exec",
+            cluster.NODE,
+            "systemctl",
+            "show",
+            "kubelet",
+            "--property=MainPID",
+            "--value",
+        ]
+    )
+    if re.fullmatch("[1-9][0-9]{0,8}", pid) is None:
+        raise Rejected("load_kubelet_identity")
+    raw = cluster.command(["docker", "exec", cluster.NODE, "cat", "/proc/" + pid + "/cmdline"])
+    flags = [part for part in raw.split("\0") if part.startswith("--housekeeping-interval")]
+    if flags != ["--housekeeping-interval=5s"]:
+        raise Rejected("load_kubelet_cadence")
+    return 5
+
+
 def overload(value):
     require_fields(
         value,
@@ -218,6 +242,7 @@ class Coordinator:
             kubectl(self.state, ["get", "node", cluster.NODE, "-o", "json"], timeout=10).stdout
         )
         self.compute = {
+            "kubelet_housekeeping_interval_seconds": housekeeping(self.state),
             "node_capacity": {key: node["status"]["capacity"][key] for key in ("cpu", "memory")},
             "node_info": {
                 key: node["status"]["nodeInfo"][key]

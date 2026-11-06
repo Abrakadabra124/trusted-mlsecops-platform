@@ -216,6 +216,30 @@ Controller CPU/RAM включает loopback load generator и короткие 
 
 ## Диагностика внутренних задержек
 
+### Частота ресурсного наблюдения
+
+Runs `42273530278` и `42275122970` отклонены: верхняя граница одного
+CPU sample gap составила 21 s при допустимых 20 s. Summary API отдаёт
+кешированные данные; более частый запрос оператора сам по себе не обновляет
+источник. В disposable KIND конфигурации теперь задан поддерживаемый
+Kubelet CLI flag `housekeeping-interval=5s`. JSON6902 append сохраняет штатные
+`node-ip`, `provider-id` и `node-labels` в списке kubeadm v1beta4.
+
+Перед start handshake оператор проверяет owned cluster, читает PID Kubelet
+через systemd и требует ровно один соответствующий аргумент в `/proc/PID/cmdline`.
+PID проверяется до построения пути; содержимое cmdline не публикуется.
+Значение 5 s попадает в compute evidence. Конфигурация не доказывает фактическую
+частоту: исходные samples всё равно обязаны пройти прежний консервативный
+порог 20 s, покрытие окна и проверки freshness/reset/identity.
+
+Основание: [Kubelet 1.36.4 CLI flags](https://github.com/kubernetes/kubernetes/blob/v1.36.4/cmd/kubelet/app/options/globalflags_linux.go),
+[KIND 0.33.0 patch schema](https://github.com/kubernetes-sigs/kind/blob/v0.33.0/pkg/apis/config/v1alpha4/types.go)
+и [генератор kubeadm config](https://github.com/kubernetes-sigs/kind/blob/v0.33.0/pkg/cluster/internal/kubeadm/config.go).
+Это явное изменение среды измерения; прежние CPU/RAM показатели не выдаются
+за повторение в идентичной конфигурации. Native проверка следует отдельным run.
+
+### Timings и причины отказа
+
 После baseline `3861d8a` probe собирает фиксированные агрегаты completed calls:
 count/failures/total/max nanoseconds для reader check, trust read, worker ping,
 worker predict, полного engine predict, ожидания и удержания engine lock.

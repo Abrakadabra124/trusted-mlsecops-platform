@@ -21,6 +21,8 @@ CODES = frozenset(
         "load_resource_sampling_gap",
         "load_resource_reset_or_change",
         "load_resource_samples_limit",
+        "load_kubelet_identity",
+        "load_kubelet_cadence",
         "load_probe_report_changed",
         "load_exchange_read_failed",
         "load_exchange_binding",

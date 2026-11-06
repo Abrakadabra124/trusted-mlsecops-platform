@@ -14,3 +14,13 @@ nodes:
         podPidsLimit: 64
         containerLogMaxSize: "20Mi"
         containerLogMaxFiles: 2
+    kubeadmConfigPatchesJSON6902:
+      - group: kubeadm.k8s.io
+        version: v1beta4
+        kind: InitConfiguration
+        patch: |
+          - op: add
+            path: /nodeRegistration/kubeletExtraArgs/-
+            value:
+              name: housekeeping-interval
+              value: "5s"
