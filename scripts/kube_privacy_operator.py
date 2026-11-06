@@ -186,9 +186,10 @@ class Coordinator:
             )
             if not kube_storage.matches(document["spec"]["template"]["spec"], pod["spec"]):
                 raise Rejected("privacy_service_spec")
-            verify_running_image(
-                pod, document["spec"]["template"]["spec"]["containers"][0]["image"]
-            )
+            image = document["spec"]["template"]["spec"]["containers"][0]["image"]
+            if type(image) is not str or re.fullmatch(r"[^@]+@sha256:[a-f0-9]{64}", image) is None:
+                raise Rejected("privacy_service_image")
+            verify_running_image(pod, image.rsplit("@", 1)[1])
             receipt, raw = capture(
                 self.state, pod, owner_uid=owner, container="postgres", needles=self.needles
             )

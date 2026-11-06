@@ -1,10 +1,11 @@
 import copy
+import io
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops.contracts import Rejected, canonical
+from mlsecops.contracts import Rejected, canonical, decode, read_json, write_json
 from scripts import kube_privacy_native as native
 
 
@@ -117,6 +118,65 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
                         self.assertTrue(
                             (root / "evidence/kubernetes-privacy-private.json").is_file()
                         )
+
+    def test_cli_replaces_stale_success_and_redacts_private_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            path = state / "evidence/kubernetes-privacy-public.json"
+            write_json(path, {"status": "pass", "private": "old-report"})
+            for failure in (False, True):
+                with (
+                    patch.object(native, "hosted"),
+                    patch.object(
+                        native,
+                        "qualify",
+                        return_value=native.projection(report()),
+                        side_effect=Rejected("private-error-token") if failure else None,
+                    ),
+                    patch.object(native.sys, "stdout", io.StringIO()) as output,
+                    patch.object(native.sys, "stderr", io.StringIO()) as diagnostic,
+                ):
+                    self.assertEqual(native.main(["--state", str(state)]), int(failure))
+                result = read_json(path)
+                self.assertEqual(result["status"], "fail" if failure else "pass")
+                self.assertFalse(result["release_ready"])
+                self.assertNotIn("private", output.getvalue() + diagnostic.getvalue())
+                self.assertNotIn("old-report", canonical(result).decode())
+
+    def test_cli_guard_refuses_before_state_path_or_preparation(self):
+        with (
+            patch.object(native, "hosted", side_effect=Rejected("private")),
+            patch.object(native, "write_json") as write,
+            patch.object(native, "qualify") as qualify,
+            patch.object(native.sys, "stderr", io.StringIO()) as diagnostic,
+        ):
+            self.assertEqual(native.main(["--state", "unused"]), 1)
+        write.assert_not_called()
+        qualify.assert_not_called()
+        lines = diagnostic.getvalue().splitlines()
+        self.assertEqual(lines[-1], "kubernetes_privacy_rejected")
+        location = decode(lines[0].encode())
+        self.assertEqual(location["scope"], "privacy-native-failure")
+        self.assertEqual(location["exception"], "Rejected")
+        self.assertEqual(location["source_file"], "scripts/kube_privacy_native.py")
+        self.assertGreater(location["source_line"], 0)
+
+    def test_diagnostic_never_exports_exception_text_or_untrusted_filename(self):
+        try:
+            raise Rejected("private-token")
+        except Rejected as error:
+            value = native.location(error)
+        self.assertNotIn("private-token", canonical(value).decode())
+        self.assertEqual(value["source_file"], "scripts/kube_privacy_native_qualification.py")
+        self.assertEqual(
+            native.location(RuntimeError("private-token")),
+            {"exception": "other", "source_file": "unknown", "source_line": 0},
+        )
+        try:
+            exec(compile("raise ValueError('private-token')", "private-token", "exec"))
+        except ValueError as error:
+            value = native.location(error)
+        self.assertNotIn("private-token", canonical(value).decode())
 
 
 if __name__ == "__main__":

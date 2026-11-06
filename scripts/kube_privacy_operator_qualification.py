@@ -39,12 +39,14 @@ class OperatorHandoffContracts(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as directory:
 
-            def execute(value, current=terminal):
+            def execute(value, current=terminal, clocks=(0, 21)):
                 control = operator.Coordinator(
                     Path(directory), PROFILE, {"campaign_id": "c" * 32}, {}
                 )
-                calls = iter([job, current])
+                calls = iter([job, *(current if type(current) is list else [current])])
                 with (
+                    patch.object(operator.time, "monotonic", side_effect=clocks),
+                    patch.object(operator.time, "sleep"),
                     patch.object(
                         operator,
                         "kubectl",
@@ -77,6 +79,14 @@ class OperatorHandoffContracts(unittest.TestCase):
             changed["metadata"]["uid"] = "foreign"
             with self.assertRaisesRegex(Rejected, "privacy_worker_pod_changed"):
                 execute(payload, changed)
+            changed = copy.deepcopy(terminal)
+            changed["spec"]["containers"][0]["image"] = "foreign"
+            with self.assertRaisesRegex(Rejected, "privacy_worker_pod_changed"):
+                execute(payload, changed)
+            with self.assertRaisesRegex(Rejected, "privacy_worker_terminal_deadline"):
+                execute(payload, initial)
+            result, _ = execute(payload, [initial, terminal], clocks=(0, 1))
+            self.assertEqual(result, receipt)
 
     def test_audit_packet_reverified_and_canaries_scanned_after_base64_decode(self):
         content = audit_fixture.packet()
@@ -97,7 +107,11 @@ class OperatorHandoffContracts(unittest.TestCase):
                     "metadata": {"namespace": ns, "name": "postgres"},
                     "spec": {
                         "template": {
-                            "spec": {"containers": [{"name": "postgres", "image": "image"}]}
+                            "spec": {
+                                "containers": [
+                                    {"name": "postgres", "image": "postgres@sha256:" + "d" * 64}
+                                ]
+                            }
                         }
                     },
                 }
@@ -132,11 +146,17 @@ class OperatorHandoffContracts(unittest.TestCase):
                     return_value=SimpleNamespace(
                         stdout=canonical({"spec": docs[0]["spec"]["template"]["spec"]})
                     ),
-                ),
-                patch.object(operator, "verify_running_image"),
+                ) as api,
+                patch.object(operator, "verify_running_image") as image,
                 patch.object(operator, "capture", side_effect=capture),
             ):
                 result = control.audit({"packet": operator.signing.encode64(content)})
+                self.assertEqual(
+                    [c.args[1] for c in image.call_args_list], ["sha256:" + "d" * 64] * 2
+                )
+                api.return_value.stdout = canonical({"spec": {}})
+                with self.assertRaisesRegex(Rejected, "privacy_service_spec"):
+                    control.audit({"packet": operator.signing.encode64(content)})
             self.assertEqual(result["status"], "pass")
             self.assertEqual(set(control.services), {"ml-storage", "ml-trust"})
             self.assertEqual([v["owner_uid"] for v in captures], ["storage-owner", "trust-owner"])
@@ -164,6 +184,10 @@ class OperatorHandoffContracts(unittest.TestCase):
             ):
                 control.observe({"metadata": {"name": "probe"}})
                 control.observe({"metadata": {"name": "probe"}})
+                current[0]["payload"] = {"changed": True}
+                with self.assertRaisesRegex(Rejected, "privacy_operator_request_changed"):
+                    control.observe({"metadata": {"name": "probe"}})
+                current[0]["payload"] = {}
                 current[0]["phase"] = "audit"
                 control.observe({"metadata": {"name": "probe"}})
             self.assertEqual(control.phases, ["worker", "audit"])

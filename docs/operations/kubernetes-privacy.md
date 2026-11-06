@@ -1,6 +1,6 @@
 # M13: диагностика приватного сбора Kubernetes logs
 
-Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Статус: collector, worker observer и private operator handoff соединены с actual-candidate HTTP/audit probe. Локальные pure/mocked tests пройдены; первый native запуск ожидается. Общая M13 acceptance ещё не завершена.
+Неделя 9 «Serving и privacy», T16 «Privacy, quotas и audit». Статус: collector, worker observer и private operator handoff соединены с actual-candidate HTTP/audit probe. Первый [native run 42210974974](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42210974974) отказан до HTTP stage; обе Linux regression groups и cleanup прошли. Общая M13 acceptance ещё не завершена.
 
 ## Назначение и права
 
@@ -32,6 +32,8 @@ CRI (Container Runtime Interface) связывает Kubernetes с container run
 Весь Pod output должен быть ровно каноническим отчётом с одним переводом строки. Ошибки печатают только fixed phase/code. Private packets сохраняются в `.runtime/evidence/privacy/<campaign>` только на runner; текущий workflow не экспортирует их из ephemeral host. Это ограничение последующей независимой проверки и остающаяся задача полной M13 acceptance.
 
 Запускать через Actions `Kubernetes private output and audit integration` на опубликованной ветке `codex/cp3-m13-privacy`. Проверить exact commit, все test/native steps и оба cleanup steps. Не обновлять ветку во время run: concurrency отменяет предыдущую campaign. При отказе читать только fixed stage в публичном журнале, исправлять подтверждённую причину и повторять affected campaign. Нельзя превращать failed/inconclusive в pass переносом старой receipt.
+
+Первый run обнаружил недостаток диагностики: после `actual-candidate-bind-proposal` был только общий отказ. Добавлена [диагностика расположения кода](../../scripts/kube_privacy_diagnostic.py): фиксированный тип исключения, существующий source file и номер строки без текста исключения, локальных переменных и абсолютных путей. Причина первого отказа пока не установлена. Отдельно при проверке кода исправлена передача PostgreSQL image в runtime verifier: ему нужен digest descriptor, а не полная строка `repository@digest`. Это подтверждённая несовместимость интерфейсов, но она не объявляется причиной отказа, который случился раньше.
 
 ## Отказы и действия оператора
 

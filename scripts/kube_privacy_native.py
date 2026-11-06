@@ -9,6 +9,7 @@ from mlsecops.inventory import command
 from mlsecops.private_cli import Arguments
 from mlsecops.trust_acceptance import materials
 from scripts import kube_candidate_native, kube_serving_native
+from scripts.kube_privacy_diagnostic import location
 from scripts.kube_trust_native import hosted
 
 CASES = {
@@ -150,9 +151,15 @@ def main(arguments=None):
         write_json(path, result)
         print(canonical(result).decode())
         return 0
-    except Exception:
+    except Exception as error:
         if path is not None:
             write_json(path, {"status": "fail", "release_ready": False})
+        print(
+            canonical(
+                {"scope": "privacy-native-failure", "status": "fail", **location(error)}
+            ).decode(),
+            file=sys.stderr,
+        )
         print("kubernetes_privacy_rejected", file=sys.stderr)
         return 1
 
