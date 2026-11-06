@@ -171,7 +171,7 @@ def qualify(policy):
         rejected(
             "manifest-symlink",
             lambda: verify_dataset(state, identifier, policy),
-            "symlink_rejected",
+            "artifact_unavailable",
         )
         manifest_link.unlink()
         atomic_write(manifest_link, originals["manifest.json"])
