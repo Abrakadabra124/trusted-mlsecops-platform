@@ -352,7 +352,7 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate in {"M11", "M12", "M13"}:
+    elif gate in {"M11", "M12", "M13", "M14"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
         if not all((state / name).is_file() for name in required):
             result["residual_risks"] = [
@@ -363,6 +363,8 @@ def report(gate, profile, root, state=None):
             from mlsecops.trust_acceptance import qualify
         elif gate == "M13":
             from mlsecops.privacy_gate import qualify
+        elif gate == "M14":
+            from mlsecops.load_gate import qualify
         else:
             from mlsecops.inference_gate import qualify
 

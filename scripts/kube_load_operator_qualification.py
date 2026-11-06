@@ -197,6 +197,15 @@ class OperatorContracts(unittest.TestCase):
             {"controller", "worker"},
         )
         self.assertFalse(report["operator"]["resources"]["worker"]["true_peak_memory_measured"])
+        from mlsecops.contracts import bounded_read, digest
+
+        self.assertEqual(
+            report["operator"]["retained_sha256"],
+            {
+                name: digest(bounded_read(self.op.destination / name))
+                for name in ("start-request.json", "finish-request.json", "resources.json")
+            },
+        )
 
     def test_phase_binding_duplicates_replay_and_exec_failure(self):
         self.op.observe(self.probe)  # no pending packet

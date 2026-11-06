@@ -50,6 +50,10 @@ jobs:
           uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-audit.coverage" --include='mlsecops/serving_audit.py' --fail-under=95
           uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-audit.coverage" --include='mlsecops/audit_retention.py' --fail-under=95
           uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-audit.coverage" --include='mlsecops/audit_snapshot.py' --fail-under=95
+      - name: Fresh acceptance composition and negative contracts
+        run: |
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load-gate.coverage" --source=mlsecops.load_gate,scripts.load_contracts -m unittest scripts.load_gate_qualification
+          uv run --locked python -m coverage report --data-file="$RUNNER_TEMP/load-gate.coverage" --fail-under=100
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -64,8 +68,8 @@ jobs:
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
-      - name: Actual candidate baseline and independent resource observation
-        run: uv run --locked python -m scripts.kube_load_native
+      - name: Fresh M14 acceptance and independent resource observation
+        run: uv run --locked python -m mlsecops.acceptance --gate M14 --profile local-cpu --state .runtime --output .runtime/evidence/M14.json
       - name: Finite baseline projection only
         if: always()
         run: |
@@ -74,6 +78,9 @@ jobs:
           from mlsecops.contracts import canonical, read_json
           path = Path('.runtime/evidence/kubernetes-load-public.json')
           result = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False,'full_M14':'inconclusive'}
+          print(canonical(result).decode())
+          path = Path('.runtime/evidence/M14.json')
+          result = read_json(path) if path.is_file() else {'gate':'M14','status':'inconclusive','release_ready':False}
           print(canonical(result).decode())
           PY
       - name: Stop verified owned source SQL

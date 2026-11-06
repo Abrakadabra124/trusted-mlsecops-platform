@@ -1,9 +1,38 @@
 # Диагностика нагрузочного профиля M14
 
-Статус 2026-11-06: [первый полный hosted baseline](../evidence/m14-load-baseline-2026-11-06.md)
-получен на `3861d8a`. Измеритель завершился, нагрузочный профиль не пройден:
-97.6742% ответов 429, p95 успешных ответов 442.319 ms. M14 acceptance открыт.
+Статус 2026-11-06: [baseline 5f6fb84](../evidence/m14-load-pass-5f6fb84.md)
+прошёл неизменный профиль: 8330 корректных ответов, 0 ошибок, p95=167.744 ms.
+Fresh M14 composition реализована, но новый native acceptance ещё не проверен.
+Первый [baseline 3861d8a](../evidence/m14-load-baseline-2026-11-06.md) и отказы
+ниже сохраняются как история диагностики; они не являются текущим pass.
 Ответственный: platform operator. Метод: [ADR 0056](../decisions/0056-load-measurement-profile.md).
+
+## Общая приёмка M14
+
+После штатной подготовки owned disposable CI окружения workflow выполняет:
+
+```sh
+uv run --locked python -m mlsecops.acceptance --gate M14 --profile local-cpu --state .runtime --output .runtime/evidence/M14.json
+```
+
+Команда требует существующих owned cluster/source storage/candidate markers и
+hosted guard. Она сначала выполняет текущие controlled contracts без skips,
+затем новый опыт. Старый public baseline не является входом для получения pass.
+До и после опыта сверяются source/image и хеши всех Python methods/dependency
+descriptors. После worker/controller cleanup перечитываются три operator packets
+и четыре candidate artifacts. Из client records повторно вычисляются полный
+профиль и latency, из samples - CPU/RAM; clock window должен находиться внутри
+свежего опыта. Пакеты связаны с primary через SHA-256, сырые записи не публикуются.
+
+Отсутствующие prerequisites дают inconclusive; несовпадение, неуспешный профиль,
+пропуск метода или изменившийся packet блокируют pass. Сохранять private packets
+и конечный отказ, проверить source/campaign и не редактировать hashes вручную.
+Новый опыт разрешён после подтверждённой очистки предыдущего. Для публикации
+приёмки нужны также terminal workflow success и два readback шага SQL/cluster
+cleanup. `M14: pass` не закрывает M18/R1 и не выдаёт production approval.
+
+Ни эту команду, ни подготовку инфраструктуры не запускать локально в текущей
+Windows. В этой работе инфраструктурная проверка разрешена только в hosted CI.
 Исходные частичные проекции и сравнение изменений:
 [диагностика latency и отказов](../evidence/m14-latency-experiments-2026-11-06.md).
 

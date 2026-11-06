@@ -392,6 +392,7 @@ class Coordinator:
                 )
                 raise
         self.receipt = {
+            "retained_sha256": dict(self.hashes),
             "summary_sha256": digest(canonical(summary)),
             "diagnostics_sha256": digest(canonical(payload["diagnostics"])),
             "resources": resources,

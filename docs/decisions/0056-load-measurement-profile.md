@@ -168,3 +168,16 @@ branches отдельно для каждого нового модуля. Фа�
 native нагрузки публикуются отдельно после проверки, не выводятся из наличия YAML.
 
 Первый компонентный результат: [measurement/golden contracts 41127b1](../evidence/m14-measurement-2026-11-06.md).
+Первый профиль, выполнивший все client/resource/overload predicates:
+[5f6fb84](../evidence/m14-load-pass-5f6fb84.md). Он не заменяет общую композицию.
+
+## Fresh acceptance
+
+`load_gate` соединяет текущий inventory controlled methods с новым actual-candidate
+опытом. Ни skips, ни старый baseline не разрешают pass. Operator receipt включает
+SHA-256 исходных start/finish/resource packets; после owned cleanup gate проверяет
+их байты и повторяет summary/resource расчёт, а также проверяет хеши четырёх
+candidate artifacts. Source/image, method materials и primary не меняются между
+началом и завершением. Отчёт использует существующий `acceptance --gate M14`
+с теми же fail/inconclusive правилами, что M11-M13. Native acceptance этого
+нового пути ещё требуется; M18 остаётся последним и проверяет общий release.
