@@ -2,6 +2,7 @@ import copy
 import io
 import tempfile
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -71,7 +72,20 @@ class NativeContracts(unittest.TestCase):
     def test_expiry_probe_uses_existing_http_process_without_stopping_worker(self):
         self.approved_probe("expiry")
 
-    def approved_probe(self, mode):
+    def test_live_fault_probe_preserves_cli_process_boundary(self):
+        self.approved_probe("fault")
+
+    def test_failed_startup_readiness_and_oversized_response_still_stop_owned_process(self):
+        for fault in ("exit", "deadline", "readiness", "overflow"):
+            with self.subTest(fault=fault), self.assertRaises(Rejected):
+                self.approved_probe("ordinary", fault=fault)
+
+    def test_startup_retry_and_delayed_owned_pod_disappearance_are_bounded(self):
+        self.approved_probe("ordinary", fault="retry")
+        self.approved_probe("ordinary", fault="retry-status")
+        self.approved_probe("ordinary", fault="lingering")
+
+    def approved_probe(self, mode, *, fault=None):
         import asyncio
         from unittest.mock import Mock
 
@@ -81,6 +95,8 @@ class NativeContracts(unittest.TestCase):
         from mlsecops.controller_api import APIError
 
         active = [False]
+        attempts = [0]
+        linger = [fault == "lingering"]
         model, bundle = "a" * 64, "b" * 64
         worker = {
             "metadata": {
@@ -97,6 +113,9 @@ class NativeContracts(unittest.TestCase):
             if kwargs.get("method") == "DELETE":
                 active[0] = False
                 return {}
+            if not active[0] and linger[0] and attempts[0] > 0:
+                linger[0] = False
+                return {"items": [worker]}
             return {"items": [worker] if active[0] else []}
 
         api.request.side_effect = api_request
@@ -118,13 +137,22 @@ class NativeContracts(unittest.TestCase):
 
         def http_request(method, path, *, body, headers):
             if path == "/livez":
+                attempts[0] += 1
+                if fault == "retry" and attempts[0] == 1:
+                    raise OSError("controlled transient connection")
                 code, payload = 200, {"live": True}
+                if fault == "retry-status" and attempts[0] == 1:
+                    code = 503
             elif not headers.get("Authorization"):
                 code, payload = 401, {"error": "unauthorized"}
             elif not active[0]:
                 code, payload = 503, {"error": "not_ready"}
             elif path == "/readyz":
-                code, payload = 200, {"ready": True}
+                code, payload = (
+                    (503, {"error": "not_ready"})
+                    if fault == "readiness"
+                    else (200, {"ready": True})
+                )
             else:
 
                 async def receive():
@@ -160,7 +188,10 @@ class NativeContracts(unittest.TestCase):
 
         def response():
             code, payload = pending.pop(0)
-            return Mock(status=code, read=lambda n: canonical(payload))
+            return Mock(
+                status=code,
+                read=lambda n: b"x" * 65537 if fault == "overflow" else canonical(payload),
+            )
 
         connection.getresponse.side_effect = response
         temporary = tempfile.TemporaryDirectory
@@ -169,6 +200,8 @@ class NativeContracts(unittest.TestCase):
             self.assertEqual(args[1:4], ["-m", "mlsecops.serving_http", "--startup-diagnostics"])
             self.assertTrue(Path(read_json(Path(args[-1]))["audit_directory"]).is_dir())
             active[0] = True
+            if fault == "exit":
+                process.poll.return_value = 1
             return process
 
         def stop(process):
@@ -184,7 +217,14 @@ class NativeContracts(unittest.TestCase):
             ),
             patch.object(kube_serving_probe.subprocess, "Popen", side_effect=launch),
             patch.object(kube_serving_probe.http.client, "HTTPConnection", return_value=connection),
-            patch.object(kube_serving_probe, "stop", side_effect=stop),
+            patch.object(kube_serving_probe, "stop", side_effect=stop) as stopped,
+            patch.object(kube_serving_probe.time, "sleep"),
+            patch.object(kube_serving_probe.time, "monotonic", side_effect=[0, 101])
+            if fault == "deadline"
+            else nullcontext(),
+            patch.object(
+                kube_serving_probe.kube_serving_lifecycle, "exercise", return_value={"fault": True}
+            ) as lifecycle,
             patch.object(
                 kube_serving_probe.kube_serving_expiry, "exercise", return_value={"expiry": True}
             ) as expiry,
@@ -198,11 +238,13 @@ class NativeContracts(unittest.TestCase):
                     "model": model,
                     "bundle": bundle,
                     **({"expires_at": 123} if mode == "expiry" else {}),
+                    **({"fault": "outage"} if mode == "fault" else {}),
                 },
                 **({"privacy": privacy} if privacy is not None else {}),
             )
         self.assertEqual(result["max_golden_error"], 0)
-        if mode != "expiry":
+        stopped.assert_called_once()
+        if mode not in {"expiry", "fault"}:
             self.assertIn("stopped-worker-503", result["cases"])
             expiry.assert_not_called()
             if privacy is not None:
@@ -215,10 +257,78 @@ class NativeContracts(unittest.TestCase):
                     callback.assert_called_once()
                 self.assertGreater(privacy.observe.call_count, 0)
                 self.assertEqual(result["privacy"], {"controlled_privacy": True})
-        else:
+        elif mode == "expiry":
             self.assertNotIn("stopped-worker-503", result["cases"])
             self.assertEqual(result["lifecycle"], {"expiry": True})
             expiry.assert_called_once()
+        else:
+            self.assertEqual(result["lifecycle"], {"fault": True})
+            lifecycle.assert_called_once()
+
+    def test_privacy_modes_and_unexpected_admission_or_RBAC_never_start_the_cli(self):
+        from unittest.mock import Mock
+
+        from mlsecops.controller_api import APIError
+
+        for expected in (
+            {"ready": False},
+            {"ready": True, "fault": "outage"},
+            {"ready": True, "expires_at": 1},
+        ):
+            with patch.object(kube_serving_probe, "Client") as client, self.assertRaises(Rejected):
+                kube_serving_probe.qualify({}, expected, privacy=Mock())
+            client.assert_not_called()
+        for fault in ("admission", "RBAC"):
+            api = Mock()
+
+            def request(resource, *args, **kwargs):
+                if kwargs.get("method") == "POST":
+                    if fault == "admission":
+                        return {"metadata": {"uid": "owned"}}
+                    raise APIError(403, "Forbidden")
+                return {"items": []}
+
+            api.request.side_effect = request
+            with (
+                patch.object(kube_serving_probe, "Client", return_value=api),
+                patch.object(kube_serving_probe, "remove") as remove,
+                patch.object(kube_serving_probe.subprocess, "Popen") as launch,
+            ):
+                with self.assertRaises(Rejected):
+                    kube_serving_probe.qualify({"kubernetes_worker": PROFILE}, {"ready": True})
+                launch.assert_not_called()
+                if fault == "admission":
+                    self.assertEqual(remove.call_args.args[-1], "owned")
+
+    def test_shutdown_timeout_kills_only_the_owned_process_group_and_reports_failure(self):
+        from unittest.mock import Mock
+
+        process = Mock(pid=12345)
+        process.poll.return_value = None
+        process.wait.side_effect = [kube_serving_probe.subprocess.TimeoutExpired("owned", 20), 0]
+        with (
+            patch.object(kube_serving_probe.os, "killpg", create=True) as kill,
+            patch.object(kube_serving_probe.signal, "SIGKILL", 9, create=True),
+            self.assertRaisesRegex(Rejected, "shutdown_deadline"),
+        ):
+            kube_serving_probe.stop(process)
+        kill.assert_called_once_with(12345, 9)
+        self.assertEqual(process.wait.call_count, 2)
+
+    def test_probe_cli_entrypoint_reads_explicit_paths_and_prints_checked_result(self):
+        with (
+            patch.object(kube_serving_probe, "enforce"),
+            patch.object(kube_serving_probe, "Arguments") as parser,
+            patch.object(kube_serving_probe, "read_json", return_value={}),
+            patch.object(kube_serving_probe, "qualify", return_value={"status": "pass"}) as qualify,
+            patch.object(kube_serving_probe.sys, "stdout", io.StringIO()) as output,
+        ):
+            parser.return_value.parse_args.return_value = SimpleNamespace(
+                config=Path("config"), request=Path("request")
+            )
+            self.assertEqual(kube_serving_probe.main(), 0)
+            qualify.assert_called_once()
+            self.assertEqual(output.getvalue(), '{"status":"pass"}\n')
 
     def test_refusal_probe_prepares_private_audit_before_ordinary_cli_start(self):
         from unittest.mock import Mock
@@ -270,12 +380,19 @@ class NativeContracts(unittest.TestCase):
             patch.object(kube_serving_probe.subprocess, "Popen", side_effect=launch),
             patch.object(kube_serving_probe.http.client, "HTTPConnection", return_value=connection),
             patch.object(kube_serving_probe, "stop", side_effect=stop),
+            patch.object(
+                kube_serving_probe, "diagnose", return_value="reader-trust_policy_changed"
+            ),
         ):
-            result = kube_serving_probe.qualify(
-                {"kubernetes_worker": PROFILE}, {"ready": False, "features": [[0.5] * 6]}
-            )
-        self.assertEqual(result["status"], "pass")
-        self.assertIn("refused-before-worker-start", result["cases"])
+            for reader_refusal in ({}, {"reader_refusal": "trust_policy_changed"}):
+                process.poll.return_value = None
+                result = kube_serving_probe.qualify(
+                    {"kubernetes_worker": PROFILE},
+                    {"ready": False, "features": [[0.5] * 6], **reader_refusal},
+                )
+                self.assertEqual(result["status"], "pass")
+                self.assertIn("refused-before-worker-start", result["cases"])
+                self.assertEqual("expected-reader-refusal" in result["cases"], bool(reader_refusal))
 
     def test_owned_sigterm_is_accepted_only_after_process_wait(self):
         import signal
@@ -291,6 +408,15 @@ class NativeContracts(unittest.TestCase):
                     kube_serving_probe.stop(process)
             process.send_signal.assert_called_once_with(signal.SIGTERM)
             process.wait.assert_called_once_with(timeout=20)
+
+    def test_already_terminated_cli_is_waited_without_signalling_a_stale_pid(self):
+        from unittest.mock import Mock
+
+        process = Mock(returncode=0)
+        process.poll.return_value = 0
+        kube_serving_probe.stop(process)
+        process.send_signal.assert_not_called()
+        process.wait.assert_called_once_with(timeout=20)
 
     def test_serving_permissions_are_scoped_and_legacy_roles_stay_separate(self):
         documents = controller_resources.resources("test", PROFILE["image"], serving=True)
