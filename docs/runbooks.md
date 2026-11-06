@@ -1,5 +1,10 @@
 # Эксплуатационные процедуры
 
+- [M14: фиксированный нагрузочный профиль](operations/load-profile.md). Client/golden contracts,
+  учёт ошибок и таймаутов, диагностика 429 и неполного окна. Native интеграция и M14 открыты.
+- [M13 accepted synthetic profile](evidence/m13-privacy-acceptance-2026-11-06.md),
+  `b03a5d9` / 42248499786. Более ранние component-status записи ниже исторические.
+
 CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-11-06.md) **component pass**, `36cd71d` / 42225259346 success. 22 CLI checks + 28 actual-candidate checks, 222 Linux executions / 0 skips, 175 clean Windows tests. Три CLI modules проходят 95% statements/branches отдельно; closed audit, parent recheck и owned cleanup подтверждены. Full M13 остаётся inconclusive: service-output inventory/closed windows, controlled/actual composition и общий gate. M22 independent 0/2, image findings и M18/R1 открыты.
 
 [M13 Kubernetes private logs](operations/kubernetes-privacy.md): ownership/stream/cleanup, immutable probe bundle, missing migration и CRI terminal race. [Native component verified](evidence/kubernetes-privacy-2026-11-06.md); полный M13 остаётся открытым.
