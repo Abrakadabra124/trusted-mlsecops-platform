@@ -1,4 +1,6 @@
+import contextlib
 import copy
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops import kube_worker, load_diagnostics, load_measurement
-from mlsecops.contracts import Rejected, canonical, read_json
+from mlsecops.contracts import Rejected, canonical, decode, read_json
 from scripts import kube_load_operator as operator
 from scripts.kube_serving_runtime_qualification import PROFILE
 from scripts.load_clock_qualification import anchors
@@ -224,6 +226,37 @@ class OperatorContracts(unittest.TestCase):
         replaced["metadata"]["uid"] = "foreign"
         with self.assertRaisesRegex(Rejected, "load_probe_replaced"):
             self.op.observe(replaced)
+
+    def test_conflicting_resource_pair_is_diagnosed_but_never_acknowledged_as_pass(self):
+        self.begin()
+        for i in range(10, 141, 10):
+            self.seconds = i
+            self.op.sample()
+        pair = self.op.samples["worker"]
+        conflict = {**pair[5], "cpu_core_ns": pair[5]["cpu_core_ns"] + 1}
+        pair.insert(6, conflict)
+        self.request = {
+            "phase": "finish",
+            "campaign": self.op.campaign,
+            "payload": self.finish_payload(),
+        }
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            self.assertRaisesRegex(Rejected, "reset_or_change"),
+        ):
+            self.op.observe(self.probe)
+        diagnostic = decode(output.getvalue().encode())
+        self.assertEqual(diagnostic["scope"], "load-resource-rejection-diagnostic")
+        self.assertEqual(diagnostic["container"], "worker")
+        self.assertEqual(diagnostic["samples"], pair[5:7])
+        self.assertEqual(diagnostic["diagnostics"], self.request["payload"]["diagnostics"])
+        self.assertEqual(diagnostic["measurement"], self.request["payload"]["summary"])
+        self.assertFalse(diagnostic["release_ready"])
+        self.assertEqual(self.op.phases, ["start"])
+        self.assertEqual(self.acks[-1]["status"], "fail")
+        self.assertIsNone(self.op.receipt)
+        self.assertIn("resources.json", self.op.hashes)
 
     def test_failed_phase_is_acknowledged_as_failure_not_pass(self):
         self.request = {

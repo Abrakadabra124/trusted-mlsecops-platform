@@ -341,13 +341,29 @@ class Coordinator:
             if time.monotonic() >= deadline:
                 raise Rejected("load_resource_tail_missing")
             time.sleep(2)
-        resources = {
-            name: load_resources.summarize(values, **window)
-            for name, values in self.samples.items()
-        }
         self.retain(
             "resources.json", {"samples": self.samples, "window": window, "compute": self.compute}
         )
+        resources = {}
+        for name, values in self.samples.items():
+            try:
+                resources[name] = load_resources.summarize(values, **window)
+            except load_resources.SequenceRejected as failure:
+                print(
+                    canonical(
+                        {
+                            "scope": "load-resource-rejection-diagnostic",
+                            "status": "fail",
+                            "release_ready": False,
+                            "container": name,
+                            "samples": failure.samples,
+                            "measurement": summary,
+                            "diagnostics": payload["diagnostics"],
+                        }
+                    ).decode(),
+                    flush=True,
+                )
+                raise
         self.receipt = {
             "summary_sha256": digest(canonical(summary)),
             "diagnostics_sha256": digest(canonical(payload["diagnostics"])),

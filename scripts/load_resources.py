@@ -20,6 +20,13 @@ FIELDS = (
 )
 
 
+class SequenceRejected(Rejected):
+    def __init__(self, previous, current):
+        super().__init__("load_resource_reset_or_change")
+        # Both rows passed checked(); only fixed aggregate fields can escape.
+        self.samples = [{key: row[key] for key in FIELDS} for row in (previous, current)]
+
+
 def timestamp(value):
     match = (
         re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z", value)
@@ -124,7 +131,7 @@ def summarize(samples, *, start_ns, end_ns, uncertainty_ns=0):
                     for key in ("usage_bytes", "working_set_bytes", "rss_bytes")
                 )
             ):
-                raise Rejected("load_resource_reset_or_change")
+                raise SequenceRejected(previous, row)
         previous = row
 
     def window(field):
