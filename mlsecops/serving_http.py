@@ -34,6 +34,7 @@ from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce as enforce_privacy
 
 MAX_BODY = 65536
+MAX_IN_FLIGHT = 10
 
 
 class BodyLimit(Rejected):
@@ -142,7 +143,7 @@ def create_app(
     metrics = serving_metrics.Metrics()
     app.state.metrics = metrics
     app.state.audit = audit
-    app.state.slots = asyncio.Semaphore(8)
+    app.state.slots = asyncio.Semaphore(MAX_IN_FLIGHT)
     app.state.pending = set()
 
     def remaining(budget):

@@ -44,7 +44,7 @@ jobs:
                       raise SystemExit('load_coverage_below_95:' + name + ':' + total)
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
           PY
-          uv run --locked python -m unittest scripts.kube_serving_native_qualification scripts.kube_candidate_qualification scripts.kube_serving_runtime_qualification scripts.serving_access_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.trust_authority_qualification
+          uv run --locked python -m unittest scripts.kube_serving_native_qualification scripts.kube_candidate_qualification scripts.kube_serving_runtime_qualification scripts.serving_access_qualification scripts.serving_core_qualification scripts.serving_http_qualification scripts.serving_http_audit_qualification scripts.trust_authority_qualification
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap

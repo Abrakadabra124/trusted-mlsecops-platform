@@ -62,7 +62,9 @@ class HttpAuditContracts(unittest.IsolatedAsyncioTestCase):
                             )
                             try:
                                 await asyncio.wait_for(entered.wait(), 1)
-                                self.assertEqual(self.app.state.slots._value, 7)
+                                self.assertEqual(
+                                    self.app.state.slots._value, serving_http.MAX_IN_FLIGHT - 1
+                                )
                                 self.assertEqual(clients.buckets["a" * 32].inflight, 1)
                                 for _index in range(3):
                                     self.assertEqual((await self.request(path=path))[0], 429)
@@ -74,7 +76,7 @@ class HttpAuditContracts(unittest.IsolatedAsyncioTestCase):
                                 resume.set()
                                 with suppress(asyncio.CancelledError):
                                     await task
-                        self.assertEqual(self.app.state.slots._value, 8)
+                        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
                         self.assertEqual(clients.buckets["a" * 32].inflight, 0)
                         self.engine.check.assert_not_called()
                         self.engine.predict.assert_not_called()
@@ -154,7 +156,7 @@ class HttpAuditContracts(unittest.IsolatedAsyncioTestCase):
             try:
                 self.assertTrue(await asyncio.to_thread(entered.wait, 1))
                 self.assertFalse(self.app.state.pending)
-                self.assertEqual(self.app.state.slots._value, 7)
+                self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT - 1)
                 self.assertFalse(task.done())
             finally:
                 task.cancel()
@@ -162,7 +164,7 @@ class HttpAuditContracts(unittest.IsolatedAsyncioTestCase):
                 with suppress(asyncio.CancelledError):
                     await task
             await self.events()
-        self.assertEqual(self.app.state.slots._value, 8)
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
         self.assertEqual(self.journal.status()["reservations"], 0)
 
     async def test_previous_durable_request_cannot_acknowledge_next_intent(self):
@@ -255,7 +257,7 @@ class HttpAuditContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (state["reservations"], state["held_slots"], state["held_bytes"]), (0, 0, 0)
         )
-        self.assertEqual(self.app.state.slots._value, 8)
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
 
     async def test_failed_intent_write_denies_success_and_next_admission(self):
         self.audited()
@@ -502,7 +504,7 @@ class HttpAuditServerContracts(unittest.TestCase):
                     "burst": 100,
                     "max_in_flight": 4,
                 }
-                for marker in ("a", "b", "c")
+                for marker in ("a", "b", "c", "d")
             ],
         }
         with journal_fixture(retention=audit_retention.Policy() if retained else None) as (
@@ -529,11 +531,10 @@ class HttpAuditServerContracts(unittest.TestCase):
                 site(engine, clients=clients, audit=journal) as request,
                 patch.object(journal, "_write", stalled),
             ):
-                with ThreadPoolExecutor(max_workers=8) as pool:
+                with ThreadPoolExecutor(max_workers=10) as pool:
                     pending = [
                         pool.submit(request, "/readyz", credential=marker * 64)
-                        for marker in ("a", "b")
-                        for _index in range(4)
+                        for marker in ["a"] * 4 + ["b"] * 4 + ["c"] * 2
                     ]
                     try:
                         observed = entered.wait(5)
@@ -548,33 +549,33 @@ class HttpAuditServerContracts(unittest.TestCase):
                             {"journal": journal.status(), "writes": writes, "writer_stack": stack},
                         )
                         deadline = time.monotonic() + 5
-                        while journal.status()["accepted"] < 16 and time.monotonic() < deadline:
+                        while journal.status()["accepted"] < 20 and time.monotonic() < deadline:
                             time.sleep(0.005)
-                        self.assertEqual(journal.status()["reservations"], 8)
-                        self.assertEqual(journal.status()["accepted"], 16)
+                        self.assertEqual(journal.status()["reservations"], 10)
+                        self.assertEqual(journal.status()["accepted"], 20)
                         moments["all_intents"] = time.monotonic() - started
                         self.assertTrue(all(not future.done() for future in pending))
-                        self.assertEqual(request("/readyz", credential="c" * 64)[0], 503)
+                        self.assertEqual(request("/readyz", credential="d" * 64)[0], 503)
                         moments["overload"] = time.monotonic() - started
                         self.assertEqual(request("/livez", authorized=False)[0], 200)
                         moments["health"] = time.monotonic() - started
                         self.assertFalse(resume.is_set())
                         self.assertTrue(journal.status()["healthy"])
                         self.assertTrue(all(not future.done() for future in pending))
-                        self.assertEqual(journal.status()["accepted"], 16)
+                        self.assertEqual(journal.status()["accepted"], 20)
                     finally:
                         moments["resume"] = time.monotonic() - started
                         resume.set()
                     statuses = [future.result(timeout=3)[0] for future in pending]
                     self.assertEqual(
                         statuses,
-                        [200] * 8,
+                        [200] * 10,
                         {"moments": moments, "journal": journal.status(), "writes": writes},
                     )
                 deadline = time.monotonic() + 2
                 while journal.status()["pending"] and time.monotonic() < deadline:
                     time.sleep(0.005)
-                self.assertEqual(journal.status()["durable"], 32)
+                self.assertEqual(journal.status()["durable"], 40)
                 self.assertEqual(journal.status()["reservations"], 0)
             self.assertTrue(journal.status()["healthy"])
 

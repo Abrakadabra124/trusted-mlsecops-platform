@@ -53,7 +53,7 @@ Error response содержит только schema version, server request ID �
 
 ## Deadline и незавершённые операции
 
-После auth фиксируется общий response budget <=10 s, дополнительно ограниченный trust lease и approval expiry с запасом 250 ms. Текущий более короткий lease учитывается во время ожидания и после serialization; прежний budget не продлевается. Expired/fenced generation даёт 503 до body/overload. HTTP timeout не отменяет синхронный SQL thread: pending task и один из 8 slots сохраняются до его завершения, поздний результат не возвращает поколение в ready. Требуется explicit verified reload после восстановления и cleanup. Это не real-time delivery SLA и не bounded shutdown guarantee. [ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53](operations/serving-deadline-troubleshooting.md).
+После auth фиксируется общий response budget <=10 s, дополнительно ограниченный trust lease и approval expiry с запасом 250 ms. Текущий более короткий lease учитывается во время ожидания и после serialization; прежний budget не продлевается. Expired/fenced generation даёт 503 до body/overload. HTTP timeout не отменяет синхронный SQL thread: pending task и один из 10 slots сохраняются до его завершения, поздний результат не возвращает поколение в ready. Требуется explicit verified reload после восстановления и cleanup. Ёмкость 10 уточнена в [ADR 0056](decisions/0056-load-measurement-profile.md). Это не real-time delivery SLA и не bounded shutdown guarantee. [ADR 0034](decisions/0034-serving-response-deadline.md), [RB-53](operations/serving-deadline-troubleshooting.md).
 
 ## Конфигурация
 
@@ -116,7 +116,7 @@ Engine cold-start rejection оставляет API живым, но `/readyz` и
 
 Перед отправкой 200 записывается собственный intent с проверенным private context; приложение ждёт его fsync в пределах прежнего budget и повторно проверяет deadline/generation. Actual start/completed фиксируются после ASGI send, cancel не превращается в completed. Успешный send не доказывает получение клиентом. После network send отказ sink даёт evidence gap и запрет следующих admissions, не возможность отозвать уже отправленный ответ.
 
-Уже выданные global/client slots сохраняются до завершения BOTH HTTP и executor, в том числе при зависшей отправке audit-denied 503. `/livez`, anonymous auth и отказы до global admission не создают audit entries. При восьми admitted audit waiters проверяется headroom health с Uvicorn limit 16; произвольный connection flood этим не исключается. [ADR 0040](decisions/0040-serving-http-audit.md), [RB-59/PB-33](operations/serving-http-audit-troubleshooting.md), [evidence](evidence/serving-http-audit-2026-10-18.md). All-output canaries, export/cardinality и полный M13 остаются незавершёнными.
+Уже выданные global/client slots сохраняются до завершения BOTH HTTP и executor, в том числе при зависшей отправке audit-denied 503. `/livez`, anonymous auth и отказы до global admission не создают audit entries. При десяти admitted audit waiters проверяется headroom health с Uvicorn limit 16; произвольный connection flood этим не исключается. [ADR 0040](decisions/0040-serving-http-audit.md), [RB-59/PB-33](operations/serving-http-audit-troubleshooting.md), [evidence](evidence/serving-http-audit-2026-10-18.md). All-output canaries, export/cardinality и полный M13 остаются незавершёнными.
 
 ## Воспроизведение
 

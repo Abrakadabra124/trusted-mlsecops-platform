@@ -99,14 +99,14 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         access = serving_access.Access(config, clock=lambda: 1000)
         self.app = serving_http.create_app(self.engine, clients=access, audit=self.journal)
         headers = [(b"authorization", ("Bearer " + "a" * 64).encode())]
-        for _ in range(8):
+        for _ in range(serving_http.MAX_IN_FLIGHT):
             await self.app.state.slots.acquire()
         try:
             self.assertEqual(
                 (await self.invoke(path="/readyz", method="GET", headers=headers))[0], 503
             )
         finally:
-            for _ in range(8):
+            for _ in range(serving_http.MAX_IN_FLIGHT):
                 self.app.state.slots.release()
         self.assertEqual(access.buckets["a" * 32].inflight, 0)
         self.assertEqual((await self.invoke(path="/readyz", method="GET", headers=headers))[0], 429)
@@ -226,7 +226,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         self.engine.response_budget.return_value = serving.ResponseBudget(
             generation, time.monotonic() + 10
         )
-        for _ in range(8):
+        for _ in range(serving_http.MAX_IN_FLIGHT):
             await self.app.state.slots.acquire()
         status, _, received = await self.invoke()
         self.assertEqual((status, received), (503, 0))
@@ -251,7 +251,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         self.assertLess(time.monotonic() - started, 0.5)
         self.assertTrue(generation.is_set())
         self.engine.predict.assert_not_called()
-        self.assertEqual(self.app.state.slots._value, 8)
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
 
     async def test_generation_is_checked_after_response_serialization(self):
         generation = threading.Event()
@@ -315,7 +315,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(request.done(), "shorter lease ignored during wait")
             self.assertEqual((await request)[0], 503)
             self.assertEqual(len(self.app.state.pending), 1)
-            self.assertEqual(self.app.state.slots._value, 7)
+            self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT - 1)
         finally:
             release.set()
             await asyncio.gather(request, return_exceptions=True)
@@ -353,7 +353,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("PRIVATE-CANARY", canonical(content).decode())
             self.assertTrue(generation.is_set())
             self.assertEqual(len(self.app.state.pending), 1)
-            self.assertEqual(self.app.state.slots._value, 7)
+            self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT - 1)
         finally:
             release.set()
             await asyncio.gather(request, return_exceptions=True)
@@ -362,7 +362,7 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
                 break
             await asyncio.sleep(0.005)
         self.assertFalse(self.app.state.pending)
-        self.assertEqual(self.app.state.slots._value, 8)
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
 
     async def asyncSetUp(self):
         self.engine = Mock()
@@ -521,11 +521,11 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("PRIVATE-CANARY", str(result))
 
     async def test_global_inflight_limit_rejects_before_body(self):
-        for _ in range(8):
+        for _ in range(serving_http.MAX_IN_FLIGHT):
             await self.app.state.slots.acquire()
         status, _, received = await self.invoke()
         self.assertEqual((status, received), (429, 0))
-        for _ in range(8):
+        for _ in range(serving_http.MAX_IN_FLIGHT):
             self.app.state.slots.release()
 
     async def test_liveness_is_not_readiness_and_no_documentation_routes(self):
@@ -548,11 +548,11 @@ class ServingHttpContracts(unittest.IsolatedAsyncioTestCase):
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await task
-            self.assertEqual(self.app.state.slots._value, 7)
+            self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT - 1)
         finally:
             release.set()
             await asyncio.sleep(0.05)
-        self.assertEqual(self.app.state.slots._value, 8)
+        self.assertEqual(self.app.state.slots._value, serving_http.MAX_IN_FLIGHT)
 
 
 class ServingConfigurationContracts(unittest.TestCase):
