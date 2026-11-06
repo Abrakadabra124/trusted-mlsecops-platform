@@ -36,6 +36,7 @@ def window(ref, sequence=1, *, observations=1000, shifted=()):
     return {
         "schema_version": 1,
         "reference_sha256": digest(canonical(ref)),
+        "prediction_ledger_sha256": "f" * 64,
         "sequence": sequence,
         "started_at_ms": 1000 + (sequence - 1) * 1000,
         "ended_at_ms": 1000 + sequence * 1000,
@@ -176,6 +177,7 @@ class MonitoringContracts(unittest.TestCase):
         mutations = (
             ("schema_version", True),
             ("reference_sha256", "0" * 64),
+            ("prediction_ledger_sha256", True),
             ("sequence", True),
             ("sequence", 0),
             ("observations", -1),

@@ -123,7 +123,18 @@ class Evaluator:
         self._last = None
 
     def evaluate(self, document):
-        schema(document, ("reference_sha256", "sequence", "started_at_ms", "ended_at_ms", *COUNTS))
+        schema(
+            document,
+            (
+                "reference_sha256",
+                "prediction_ledger_sha256",
+                "sequence",
+                "started_at_ms",
+                "ended_at_ms",
+                *COUNTS,
+            ),
+        )
+        sha256(document["prediction_ledger_sha256"])
         if sha256(document["reference_sha256"]) != self._reference_sha256:
             raise Rejected("monitor_window_binding")
         sequence = integer(document["sequence"], 1, 2**53 - 1)

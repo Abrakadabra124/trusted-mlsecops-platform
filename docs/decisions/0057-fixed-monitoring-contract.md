@@ -1,7 +1,7 @@
 # ADR 0057: фиксированный контракт ML monitoring
 
 Дата: 2026-11-07. Scope: T18/M15, synthetic local CPU. Решение принято для
-статистического ядра; HTTP collector, authenticated delivery, dashboard и полный
+статистического ядра, in-process accumulator и signed label join; HTTP collector, authenticated delivery, dashboard и полный
 M15 ещё не приняты. Исходные критерии [M15](../acceptance.md#m15) сохраняются.
 
 ## Требование и граница доверия
@@ -49,7 +49,8 @@ evaluation, а не разрешение считать train labels экспл�
 ## Порядок, повторы и неполные данные
 
 Evaluator обслуживает один reference и один последовательно вызываемый поток.
-Окно имеет digest, sequence, начало и конец. Повтор последнего неизменного окна
+Окно имеет digest, sequence, начало, конец и digest private prediction ledger.
+Повтор последнего неизменного окна
 идемпотентен; старое окно, конфликт того же sequence, overlap и observation до
 freeze отклоняются. Sequence/time gap виден как `telemetry_gap` и сбрасывает
 предыдущие streaks. Недостаточное окно имеет `insufficient`, а не `clean`.
@@ -78,10 +79,29 @@ acceptance predicates. Новые сервисы и зависимости дл�
 
 ## Обязательное продолжение до M15
 
+Реализован `Accumulator`: принимает immutable ReleaseTrace/QualificationTrace,
+сверяет пять bindings reference, проверяет весь batch до изменения состояния,
+сохраняет только histogram counts и пары `observation_id -> positive`. ID равен
+SHA-256 canonical `[request_id, row_index]`; положительное решение соответствует
+score>=0.5, abstention даёт false. Один request ID не считается дважды внутри
+окна; максимум20000 наблюдений, закрытое окно неизменно. Счётчики доступны
+следующему scheduler, но этот компонент ещё не подключён к HTTP completion.
+
+`Labels` проверяет окно, digest ledger и соответствие числа positive decisions
+prediction histogram. DSSE/Ed25519 envelope вида `monitor-labels` проверяется
+отдельным pinned public key; ключ не извлекается из сообщения. Окно/reference
+совпадают точно, issued time не раньше закрытия окна, срок <=24h и действителен
+при приёме. Максимум1000 labels/batch; unknown IDs, нецелочисленные labels,
+duplicates внутри batch и конфликт с уже принятым label отклоняют весь batch.
+Идентичный retry не увеличивает denominator. Подпись подтверждает источник,
+но не истинность предоставленного ground truth. Данные feedback не получают
+полномочий label authority. Persistence, retention и actual end-to-end путь
+этой authority ещё требуют реализации и проверки.
+
 1. Собрать агрегаты только из завершённых actual HTTP predictions, привязанных к
    immutable serving context; сохранить M13 privacy и M14 performance.
-2. Подтверждать delayed labels отдельной trusted identity и связывать с
-   наблюдавшимися prediction IDs/window/model; feedback направлять в quarantine.
+2. Подключить проверенный signed label join к сохранённым actual prediction
+   IDs/window/model; feedback направлять в quarantine.
 3. Реализовать bounded scheduler и authenticated alert sink с receipt. Измерять
    время от admission достаточного окна до фактического acknowledgement <=120s.
 4. Показать dashboard/report, telemetry outage, retries и идемпотентную доставку;

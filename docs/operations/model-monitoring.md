@@ -2,7 +2,8 @@
 
 Ответственные: platform-owner за сбор/доставку, model-owner за reference/quality,
 data-owner за проверенные labels. Scope: [ADR 0057](../decisions/0057-fixed-monitoring-contract.md).
-Сейчас реализовано статистическое ядро. Actual collector, scheduled alert
+Сейчас реализованы статистическое ядро, bounded accumulator и signed label join.
+Actual HTTP collector, scheduled alert
 delivery, dashboard и full M15 пока не приняты. Команды ниже не запускают
 Docker, WSL, Kubernetes или SQL.
 
@@ -27,8 +28,8 @@ Docker, WSL, Kubernetes или SQL.
 В отдельном checkout с pinned Python3.12.15 и установленным locked окружением:
 
 ```powershell
-uv run --locked python -m unittest scripts.monitoring_qualification
-uv run --locked coverage run --branch --data-file=.runtime/evidence/.coverage-monitoring --source=mlsecops.monitoring -m unittest scripts.monitoring_qualification
+uv run --locked python -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification
+uv run --locked coverage run --branch --data-file=.runtime/evidence/.coverage-monitoring --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification
 uv run --locked coverage report --data-file=.runtime/evidence/.coverage-monitoring --fail-under=95
 ```
 
@@ -48,8 +49,14 @@ In-memory evaluator ещё не содержит durable checkpoint: его rest
 inconclusive, а не подтверждать promotion.
 
 Delayed labels не принимать из произвольного HTTP payload или feedback как
-доверенные. До реализации и проверки authenticated label join численная
-`quality()` является только comparator проверенных агрегатов. Ни comparator,
+доверенные. `monitoring_labels.Labels` проверяет отдельную подпись, window/reference,
+срок документа, совпадение observation ID с private prediction ledger и отсутствие
+конфликтов. При `monitor_label_unmatched` проверить нужное окно и исходный request
+ID/row index в private workflow; не добавлять отсутствующее предсказание вручную.
+При конфликте сохранить оба envelope приватно и передать data-owner. Public key
+не заменять ключом из отвергнутого запроса. Actual label delivery, persistence и
+retention ещё не реализованы. Численная `quality()` сама по себе не проверяет
+происхождение агрегатов. Ни comparator,
 ни drift alert не разрешают retrain, promotion или rollback автоматически.
 
 В incident record указать reference/window digest, sequence, sample sizes,
