@@ -216,6 +216,11 @@ def qualify(root, state, image):
             privacy=True,
         )
         report["controlled_cli"] = cli
+        report["controlled_cli"]["runtime_source"] = {
+            "source_revision": prepared["source_revision"],
+            "source_fingerprint": prepared["source_fingerprint"],
+            "image_id": prepared["profile"]["image_id"],
+        }
     if (
         materials(root) != before
         or command(["git", "-C", str(root), "status", "--porcelain"])

@@ -158,6 +158,7 @@ def controlled(root, state, image, profile):
             "retained_snapshot_reverified": True,
             "independent_admission_observed": False,
             "service_windows": service_windows,
+            "privacy_campaign_id": destination.name,
         }
         write_json(destination / "report.json", report)
         yield report, fixture.trust_fixture.key

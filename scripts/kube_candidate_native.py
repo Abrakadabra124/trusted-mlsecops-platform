@@ -334,7 +334,15 @@ def qualify(
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
-        **({"full_M13": "inconclusive"} if privacy else {}),
+        **(
+            {
+                "full_M13": "inconclusive",
+                "privacy_campaign_id": campaign,
+                "evaluation_reference": context["evaluation_reference"],
+            }
+            if privacy
+            else {}
+        ),
         "base_snapshot_sha256": digest(canonical(base_snapshot)),
         **({"root_rotation": root_rotation} if root_rotation is not None else {}),
         "trust_lifecycle": {

@@ -81,7 +81,24 @@ Design review выявил пять actionable пробелов полного g
 
 Проверки и границы: [local evidence](../evidence/privacy-evidence-2026-10-20.md), [RB-67/PB-41](../operations/privacy-evidence-troubleshooting.md).
 
-## Основания
+## Исполняемая композиция 2026-11-06
+
+Новый [M13 runner](../../mlsecops/privacy_gate.py) реализован, но его собственная hosted acceptance ещё не проверена. Он использует уже проверенные [закрытые service windows](../evidence/kubernetes-service-privacy-2026-11-06.md) и не принимает исторический report как вход. Сначала сбрасываются текущие public gate/private observation в inconclusive, фиксируются clean source, exact image и hashes методов. Затем запускается фиксированный [набор contracts](../../scripts/privacy_contracts.py) и заново выполняются controlled CLI + actual candidate campaigns. Missing/extra/duplicate/skipped/expected-failing методы, stdout diagnostics вне canonical summary и stderr не принимаются.
+
+Композиция имеет две разные роли, не одну вымышленную approved модель:
+
+1. Actual candidate связывает исходный подписанный proposal, dataset/run/evaluation, qualification permit, real inference, независимо наблюдённые HTTP admission/outcomes, closed audit и worker output. Fresh parent повторяет signed-primary verification после очистки probe и проверяет сохранённые exact bytes.
+2. Controlled release проверяет ordinary `configured()/audit_path` startup/shutdown и wiring approval/selection/context через тот же pinned image и source. Его signed-material checks выполняются до и после CLI operation; gate повторно читает closed snapshot/context и сверяет HTTP outcomes. Controlled subject обязан отличаться от actual; CLI не объявляет независимо наблюдённый admission. Independent admission и HTTP linkage общего audit path проверены в actual campaign и обязательных contracts.
+
+Это compositional acceptance свойств synthetic serving реализации, а не замена actual assurance или разрешение production promotion. Принимаются только две fresh ветви на одном runtime source/image, проверенные теми же зафиксированными методами. Контрольные подписи не становятся одобрением actual subject. Failed M22/image/other gates остаются независимым запретом выпуска; M18 по-прежнему требует общий candidate-bound результат.
+
+Наблюдаемый scope: HTTP body/headers и reject paths; Python/native output до exit; disabled ambient telemetry и approved metrics; private audit/export; terminal private worker output; ordinary CLI lifecycle; storage/trust closed log windows; final public report. Runtime source не тождественен training source контролируемого fixture. Serving request не используется как training/tracking input: эти сервисы не входят в serving operation; это архитектурная граница, не утверждение о canary-scan всех historical training reports. Управляемый training dataset хранится по назначению и не является request telemetry. Не включаются privileged host administrator, неизвестные exporters и долговременное внешнее forensic хранение.
+
+Gate требует exact source/image/method hashes и порядок времени, сверяет component projection, перечитывает четыре candidate artifacts, signed-primary audit, controlled CLI snapshot и четыре service packets. При mutation/ошибке pass не сохраняется. Private observation/packet fingerprints пишутся только в `.runtime/evidence/privacy-gate-private.json`; публичный acceptance envelope содержит finite metrics, fixed contract IDs, synthetic candidate bindings и hashes проверяющих материалов. Первый draft ошибочно экспортировал private fingerprints: RED test подтвердил это, публичное поле удалено до hosted запуска.
+
+Окончательная публикация pass требует также terminal hosted CI и подтверждённых source SQL/cluster cleanup. Код gate сам проверяет завершение и очистку probe resources; workflow отвечает за последующий teardown лаборатории. Ни локальные mock tests, ни status одного шага не заменяют проверку конечного состояния.
+
+## Источники
 
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html): исключать секреты из logs, проверять logging failure modes и учитывать недоверенные источники событий.
 - [SLSA verifying artifacts v1.1](https://slsa.dev/spec/v1.1/verifying-artifacts): проверять provenance относительно ожидаемого producer/subject и доверенной policy, не принимать произвольный self-asserted metadata. Здесь это принцип привязки evidence, не заявление соответствия SLSA.

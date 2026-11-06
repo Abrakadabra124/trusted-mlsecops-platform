@@ -129,3 +129,26 @@ Run `42232406810` на `91a65ec` подтвердил Linux filesystem preflight
 | `privacy_service_control_not_detected` | Считать collector непроверенным, не объявлять отсутствие утечек |
 | `cli_privacy_handoff_*` | Не выводить request в журнал; проверить bounded private request/ack, exact Pod и cleanup |
 | `privacy_service_retained_*` | Не переписывать единственную копию packet; сохранить inconclusive/fail и проверить owner, mode, bytes и закрытый интервал |
+
+### Fresh M13 gate: диагностика и повторение
+
+[Композиционный контракт](../decisions/0048-privacy-acceptance.md#исполняемая-композиция-2026-11-06) реализован; native acceptance этого нового runner ещё ожидается. Ответственный - оператор disposable hosted campaign. Prerequisites: clean locked checkout, pinned tools/image, owned cluster/source storage и подготовленный actual candidate. На текущей Windows инфраструктуру не запускать.
+
+Разрешённый hosted workflow выполняет:
+
+```bash
+uv run --locked python -m mlsecops.acceptance --gate M13 --profile local-cpu --state .runtime --output .runtime/evidence/M13.json
+```
+
+Ожидаемый результат после успешной полной проверки - exit0, `gate=M13`, `status=pass`; это никогда не означает `release_ready=true`. Недоступная среда даёт inconclusive/exit2, доказанное нарушение - fail/exit1. `.runtime/evidence/privacy-gate.json` сначала получает inconclusive, поэтому сбой не сохраняет прежний pass. Private fingerprints находятся отдельно в `privacy-gate-private.json`; не печатать raw packets, context, request/ack, URLs и exception values.
+
+Порядок действий при отказе:
+
+1. Прочитать finite gate status и текущий source SHA; проверить, что pipeline не был отменён новым push. Сохранить первичный failed run, не заменять его успешным retry в истории.
+2. Для `M13_controlled_contracts_failed` проверить exact method inventory, failures/skips и stderr в приватном child evidence. Expected failure или platform skip не разрешают pass; threshold/список обязательных тестов ради результата не менять.
+3. Для `M13_evidence_binding`/`M13_evidence_shape` сверить текущие source/image/methods, fresh timestamps, разные actual/controlled campaigns и subjects. Затем локализовать retained-packet/hash/primary disagreement по приватным материалам и constant diagnostic location. Не заменять mismatched packet или signed artifact согласованным summary.
+4. Для service failures использовать таблицу выше. Для signed-primary refusal сверить public key pin, proposal/permit expiry и текущие immutable refs. Не переподписывать actual candidate контрольным approval.
+5. Дождаться always-stop source SQL и удаления именно owned cluster, проверить readback и terminal job. Не останавливать чужие ресурсы и не делать global prune.
+6. После исправления воспроизведённой причины выполнить новый workflow на clean commit. До этого результаты gate остаются fail/inconclusive. Rollback реализации - обычный revert конкретного изменения после завершения текущей campaign; он не превращает старые отчёты в новую acceptance.
+
+Эскалировать владельцу при ownership mismatch, недоступных primary bytes, неочищенных owned resources или реальной утечке canary. Не продолжать через ослабление guards. На этапе разработки выполнены negative contracts, включая stale/future/naive times, wrong source/image, incomplete controls, private fingerprint export и post-run mutation; hosted проверка и финальный статус публикуются отдельно.
