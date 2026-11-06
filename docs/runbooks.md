@@ -1,7 +1,12 @@
 # Эксплуатационные процедуры
 
+- [T18/M15: monitoring](operations/model-monitoring.md): frozen reference, достаточность
+  окон, drift/recall, replay/gaps и безопасная диагностика. Статистическое ядро
+  реализовано; actual collector, delivery/dashboard и full M15 открыты.
+
 - [M14: фиксированный нагрузочный профиль](operations/load-profile.md). Client/golden contracts,
-  учёт ошибок и таймаутов, диагностика 429 и неполного окна. Native интеграция и M14 открыты.
+  учёт ошибок и таймаутов, диагностика 429 и неполного окна. [M14 принят на bbff69e](evidence/m14-load-acceptance-bbff69e.md);
+  исторические shutdown failures остаются reliability debt до M18.
 - [M13 accepted synthetic profile](evidence/m13-privacy-acceptance-2026-11-06.md),
   `b03a5d9` / 42248499786. Более ранние component-status записи ниже исторические.
 

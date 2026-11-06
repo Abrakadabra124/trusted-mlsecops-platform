@@ -17,7 +17,7 @@ Runtime update 2026-10-07: историческая таблица ниже от
 | Serving | FastAPI + ONNX Runtime | Контролируемый небольшой surface и совместимость с foundation | KServe при множестве моделей/autoscaling/protocol needs после измерения ops cost |
 | Supply chain | Cosign, provenance, SBOM + ML-BOM | Проверяемые связи вместо доверия alias | in-toto layouts при усложнении многокомандной цепочки |
 | Delivery | Existing Flux/Cilium/Kyverno patterns | GitOps, network enforcement и admission уже освоены | Не добавлять Argo CD параллельно Flux без причины |
-| ML monitoring | Evidently batch reports + Prometheus/Grafana | Отдельно data/prediction/label metrics | Streaming stack только при latency/volume requirement |
+| ML monitoring | Fixed-reference evaluator + pinned Prometheus client; operator report/dashboard по ADR0057 | Проверяемые bins, отдельные data/prediction/label metrics и delivery receipt | Evidently/Grafana как дополнительные consumers после R1; не доказательство готовности monitoring |
 | Identity | Lab: раздельные credentials; production: OIDC/workload identity и KMS | Не выдавать локальные ключи за промышленное управление доверием | Конкретный IdP/KMS определяется средой, не логотипами |
 
 Официальные основания по DVC/MLflow/форматам/drift/supply-chain собраны в [S10-S19](sources.md#s10). Выбор конкретной комбинации - проектный вывод, не рекомендация источников «поставить всё вместе».
@@ -36,7 +36,7 @@ Feature store пока не нужен: нет нескольких online/offli
 | T01-T02 | Проверенные Docker/WSL/Linux/kubectl/foundation, отдельное Python environment | Inventory, свободные ресурсы, согласованный профиль и разрешённое обслуживание |
 | T03-T08 | Locked DVC, MLflow, NumPy/pandas/Pandera/scikit-learn, storage adapters | Compatibility + security/license review |
 | T12-T15 | skl2onnx/ONNX Runtime, verifier, existing signing tools | Conversion/parity spike, ограничения unsafe formats |
-| T18-T20 | Evidently и минимальные exporters/backup clients | Точные integration tests, мониторинг его собственного отказа |
+| T18-T20 | Существующий locked runtime, минимальные exporters/backup clients | [ADR0057](decisions/0057-fixed-monitoring-contract.md): точные integration tests, мониторинг собственного отказа; full M15 пока открыт |
 | Pilot | TLS, IdP/KMS, external storage/backup и on-call интеграция | Отдельное решение владельца среды и бюджета |
 
 Для каждой зависимости: версия, источник, checksum/digest, лицензия, известные vulnerabilities, update policy, owner и процедура rollback. «Зависимость поставилась» не является доказательством совместимости или безопасного доступа.

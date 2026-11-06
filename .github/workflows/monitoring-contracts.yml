@@ -1,0 +1,47 @@
+name: M15 monitoring contracts
+on:
+  push:
+    branches: [main, codex/cp4-m15-monitoring-20261107]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: monitoring-contracts-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  statistics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Fixed-reference contracts and per-module coverage
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops/monitoring.py scripts/monitoring_qualification.py
+          uv run --locked ruff format --check mlsecops/monitoring.py scripts/monitoring_qualification.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring -m unittest scripts.monitoring_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/monitor.coverage" -o "$RUNNER_TEMP/monitor-coverage.json"
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'monitor-coverage.json').read_text())['files']
+          if set(files) != {'mlsecops/monitoring.py'}:
+              raise SystemExit('monitor_coverage_inventory')
+          for name, report in sorted(files.items()):
+              summary = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
+                      raise SystemExit('monitor_coverage_below_95:' + name + ':' + total)
+              print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': summary}, sort_keys=True))
+          print('Controlled statistics only; authenticated collection/delivery and full M15/R1 remain unaccepted.')
+          PY
