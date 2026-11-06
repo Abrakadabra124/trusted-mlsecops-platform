@@ -1,5 +1,7 @@
 # Backlog реализации
 
+CP3/T16 2026-11-06: [Kubernetes privacy component](../docs/evidence/kubernetes-privacy-2026-11-06.md) **pass**, `90385fa` / 42215561469 success. Actual candidate: 26 checks, 25 HTTP responses, 68 audit events / 8 correlated requests, 9 input canaries, 12 privacy requests / 36 durable events, 69 metric series, zero native stderr. Exact terminal worker stream, два service log windows и cleanup проверены. Linux 155 method executions; clean Windows checkout 155 tests. Полный M13 остаётся inconclusive: normal CLI/all channels, private primary retention и общая acceptance ещё требуются. M22 independent 0/2, image findings, CP4/CP5 и M18/R1 открыты.
+
 CP3/T14 2026-11-06: [M11 acceptance](../docs/evidence/m11-trust-acceptance-2026-11-06.md) pass на `21317fd` / 42202109996: 141 cases, 656 Linux method executions, source/primary reports/cleanup verified, clean checkout 26 methods. Механизм trust lifecycle принят в synthetic scope; T14 остаётся открыт по зависимости T13/M10 и общей candidate-bound delivery chain. Далее T16/M13: Kubernetes output channels, private audit correlation и public projection. Independent M22 0/2 и остальные R1 blockers сохраняются.
 
 CP3/T14 2026-11-06: [live release signer component](../docs/evidence/release-signer-live-2026-11-06.md) проверен: `94f56a3` / 42198344418 success, 68 native cases, 56 tests, source/cleanup readback. T14 не закрыта: общая candidate-bound M11, независимый M22 0/2 и остальные R1 gates остаются обязательными.

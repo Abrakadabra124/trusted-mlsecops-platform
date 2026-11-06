@@ -68,6 +68,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 ## M13
 **Privacy и audit.** Искусственные PII/secret canaries из input не встречаются в logs/metrics/traces и публичном evidence; raw features по умолчанию не сохраняются. Проверены auth, per-client quotas и ограниченная cardinality. Audit связывает source/run/report/approval/release/request без raw payload. Public export не содержит private storage URLs, identifiers и легко перебираемых hashes чувствительных значений. Membership inference не объявляется устранённым; masking не называется DP. Реальный пилот требует purpose/retention/privacy specification, а DP при выборе - отдельного review privacy unit, adjacency, epsilon/delta, composition и реализации. T16.
 
+Компонентный результат 2026-11-06: [Kubernetes privacy 90385fa](evidence/kubernetes-privacy-2026-11-06.md), 26 checks и cleanup pass. Полный M13 остаётся inconclusive: normal CLI/all channels, private primary retention и общая acceptance ещё не завершены. Исходные критерии выше не изменены.
+
 ## M14
 **Нагрузка и деградация.** 10 s прогрева, затем 120 s, 10 concurrent clients, одна строка/запрос, pinned golden payload, >= 1 000 измеренных запросов. Предлагаемые lab targets: p95 <= 200 ms, p99 <= 500 ms, неожиданные 5xx < 0.1%; намеренные invalid-input тесты отдельно. Результат включает RPS, CPU/RAM, errors, latency distribution и отсутствие неверного digest. Overload приводит к ограниченному отказу, не OOM loop. T17.
 

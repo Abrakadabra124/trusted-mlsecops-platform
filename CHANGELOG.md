@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 Kubernetes privacy component - 2026-11-06
+
+- Actual-candidate HTTP, audit и private operator соединены; immutable probe bundle, exact terminal worker output и два service log windows. Production refusal без assurance сохраняется.
+- `90385fa` / 42215561469 success: 26 checks, 25 responses / 68 audit events, 9 canaries, zero native stderr, cleanup verified; 155 Linux и 155 clean Windows test executions.
+- [Evidence, история отказов и воспроизведение](docs/evidence/kubernetes-privacy-2026-11-06.md), [ранбук](docs/operations/kubernetes-privacy.md). Полные M13/M18/R1 остаются открытыми.
+
 ## R1 fresh M11 trust acceptance - 2026-11-06
 
 - Новый runner связывает свежую proposal, source/image, controlled contracts, actual trust lifecycle и live signer transitions; строгая сверка traces, типов, timestamps и первичных hashes. Failure/inconclusive не разрешают release.

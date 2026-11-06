@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-В разработке: [M13 Kubernetes private logs](operations/kubernetes-privacy.md), ownership/stream/cleanup diagnosis. Collector проверен pure/mocked tests; native и полный gate ещё не приняты.
+[M13 Kubernetes private logs](operations/kubernetes-privacy.md): ownership/stream/cleanup, immutable probe bundle, missing migration и CRI terminal race. [Native component verified](evidence/kubernetes-privacy-2026-11-06.md); полный M13 остаётся открытым.
 
 - [M11: свежая общая проверка trust lifecycle](operations/trust-acceptance.md). Привязка candidate/source, primary traces, независимые отзывы, expiry/replay/rollback/signers, fail-closed итог и scoped cleanup. Runner реализован; общий native запуск ещё не принят.
 
