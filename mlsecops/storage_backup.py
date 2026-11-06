@@ -161,7 +161,7 @@ def create(root, state, *, include_promotion=False):
         for table in TABLES:
             arguments.extend(("--table", f"ml.{table}"))
         if include_promotion:
-            for table in promotion_recovery.TABLES:
+            for table in promotion_recovery.tables_for(observed["promotion"]["migration"]):
                 arguments.extend(("--table", f"ml_promotion.{table}"))
         content = binary_command(arguments)
     statement = {

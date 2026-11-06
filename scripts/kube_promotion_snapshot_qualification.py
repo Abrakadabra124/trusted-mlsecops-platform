@@ -8,6 +8,11 @@ from scripts import kube_promotion_snapshot as snapshot
 
 
 class SnapshotContracts(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(snapshot.promotion_state, "migration_version", return_value=1)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def fixture(self):
         def tables(names):
             return {

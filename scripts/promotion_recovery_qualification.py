@@ -13,6 +13,13 @@ from mlsecops.signing import ROLES, create_key, sign
 
 
 class PromotionRecoveryContracts(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(
+            promotion_recovery.promotion_state, "migration_version", return_value=1
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def fixture(self):
         return {
             "migration": promotion_recovery.migration(),

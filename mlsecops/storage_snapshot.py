@@ -90,7 +90,10 @@ def json_session(arguments, query):
 
 @contextmanager
 def snapshot(name, *, include_promotion=False):
-    from mlsecops import promotion_recovery
+    from mlsecops import promotion_recovery, promotion_state
+    from mlsecops.storage_bootstrap import admin
+
+    version = promotion_state.migration_version(name, admin) if include_promotion else None
 
     arguments = [
         "docker",
@@ -112,7 +115,7 @@ def snapshot(name, *, include_promotion=False):
         DATABASE,
     ]
     extra = (
-        f"'promotion', ({promotion_recovery.ledger_sql()})"
+        f"'promotion', ({promotion_recovery.ledger_sql(version)})"
         if include_promotion
         else "'promotion_absent', NOT EXISTS (SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'ml_promotion')"
     )
@@ -136,7 +139,9 @@ def snapshot(name, *, include_promotion=False):
         ):
             raise Rejected("backup_snapshot_identity_invalid")
         if include_promotion:
-            promotion_recovery.validate_combined(result["tables"], result["promotion"])
+            promotion_recovery.validate_combined(
+                result["tables"], result["promotion"], version=version
+            )
         elif result["promotion_absent"] is not True:
             raise Rejected("backup_promotion_ledger_not_supported")
         validate_ledger(result["tables"])

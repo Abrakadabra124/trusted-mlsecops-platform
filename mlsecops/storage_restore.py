@@ -33,9 +33,7 @@ def ledger(name):
     return validate_ledger(decode(admin(name, ledger_sql() + ";", timeout=65).encode()))
 
 
-def validate_toc(content, *, include_promotion=False):
-    from mlsecops.promotion_recovery import TABLES as PROMOTION_TABLES
-
+def validate_toc(content, *, include_promotion=False, promotion_migration=None):
     try:
         lines = content.decode("utf-8").splitlines()
     except UnicodeError as error:
@@ -52,7 +50,10 @@ def validate_toc(content, *, include_promotion=False):
         names.append((match[1], match[2]))
     expected = {("ml", name) for name in TABLES}
     if include_promotion:
-        expected.update(("ml_promotion", name) for name in PROMOTION_TABLES)
+        history = (
+            promotion_recovery.migration() if promotion_migration is None else promotion_migration
+        )
+        expected.update(("ml_promotion", name) for name in promotion_recovery.tables_for(history))
     if len(names) != len(expected) or set(names) != expected:
         raise Rejected("restore_archive_table_scope_invalid")
 
@@ -154,6 +155,10 @@ def _restore_verified(
     if extended:
         promotion_recovery.freeze(marker["name"])
         promotion_state.install(target)
+        if promotion_recovery.schema_version(statement["promotion"]["migration"]) == 2:
+            from mlsecops.release_key_store import migrate
+
+            migrate(target)
         if any(
             entry["rows"] for entry in promotion_recovery.read(marker["name"])["tables"].values()
         ):
@@ -164,7 +169,9 @@ def _restore_verified(
         raise Rejected("restore_target_database_not_empty")
     prefix = ["docker", "exec", "--user", "999:999", "-i", marker["name"], "pg_restore"]
     validate_toc(
-        binary_command([*prefix, "--list"], content, output_limit=65536), include_promotion=extended
+        binary_command([*prefix, "--list"], content, output_limit=65536),
+        include_promotion=extended,
+        promotion_migration=statement["promotion"]["migration"] if extended else None,
     )
     binary_command(
         [

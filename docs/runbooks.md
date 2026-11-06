@@ -1,5 +1,7 @@
 # Эксплуатационные процедуры
 
+- [Ротация release signer и история политик](operations/release-signer-rotation.md). Signed transition для одной роли, явная migration 2, свежий online trust, отказ при конфликте/expiry, полный backup/restore истории и ambiguous commit. Локальные contracts проходят; native проверка в работе. [Решение и границы](decisions/0055-release-signer-policy-history.md).
+
 - [Live root rotation на actual candidate и прерванные проверки](operations/authority-root-rotation.md#live-qualification-на-том-же-candidate). Native `45c6bf8` / 42183215170 verified: HTTP отказ за 4.358405479 s, явный новый Engine с прежними permit/model, сохранённые histories/revocations и cleanup. [Evidence и fresh checkout](evidence/candidate-root-rotation-2026-11-06.md); полный M11 остаётся открыт.
 
 - [Плановая ротация ключа trust authority](operations/authority-root-rotation.md). Native `d18c361` / 40959762631 verified: две подписи, переход 2 -> 3, additive migration, сохранённые revocations/history, четыре точных отказа, retry без записи и явная смена serving config. 502 Linux method executions; полный M11 не закрыт.

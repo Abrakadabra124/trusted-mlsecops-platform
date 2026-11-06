@@ -162,6 +162,20 @@ GRANT EXECUTE ON FUNCTION ml_promotion.record_selection(text) TO ml_promoter;
 """
 
 
+def migration_version(name, execute):
+    from mlsecops.release_key_rotation import migration_sql as rotation_sql
+
+    original = f"1:{digest(migration_sql().encode())}"
+    observed = execute(
+        name, "SELECT version || ':' || sha256 FROM ml_promotion.migrations ORDER BY version;"
+    )
+    if observed == original:
+        return 1
+    if observed == original + f"\n2:{digest(rotation_sql().encode())}":
+        return 2
+    raise Rejected("promotion_migration_history_mismatch")
+
+
 def install(state, *, backend=None):
     name, execute = (validate(state)["name"], admin) if backend is None else backend(state)
     script = migration_sql()
@@ -171,13 +185,7 @@ def install(state, *, backend=None):
             name,
             f"BEGIN;\n{script}\nINSERT INTO ml_promotion.migrations VALUES (1, '{checksum}');\nCOMMIT;",
         )
-    if (
-        execute(
-            name, "SELECT version || ':' || sha256 FROM ml_promotion.migrations ORDER BY version;"
-        )
-        != f"1:{checksum}"
-    ):
-        raise Rejected("promotion_migration_history_mismatch")
+    migration_version(name, execute)
     return checksum
 
 
