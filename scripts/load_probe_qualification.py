@@ -98,6 +98,12 @@ class ProbeContracts(unittest.TestCase):
         observation = {"records": rows(), "elapsed_ns": 130_000_000_000, "exhausted": False}
         summary = probe.load_measurement.summarize(**observation)
         receipt = {"summary_sha256": "wrong" if fault == "receipt" else digest(canonical(summary))}
+
+        def listen(app):
+            self.assertTrue((probe.DIRECTORY / "audit").is_dir())
+            self.assertFalse((probe.DIRECTORY / "audit").is_symlink())
+            return nullcontext(1234)
+
         with (
             tempfile.TemporaryDirectory() as temporary,
             patch.object(probe, "DIRECTORY", Path(temporary) / "load"),
@@ -105,7 +111,7 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe, "candidate"),
             patch.object(probe, "Worker") as worker,
             patch.object(probe.serving, "Engine", return_value=engine) as construct,
-            patch.object(probe, "listen", return_value=nullcontext(1234)),
+            patch.object(probe, "listen", side_effect=listen),
             patch.object(
                 probe.load_measurement,
                 "request",

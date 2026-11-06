@@ -130,6 +130,7 @@ def qualify(config, expected):
     )
     try:
         PHASE = "activate"
+        (DIRECTORY / "audit").mkdir(mode=0o700)
         app = serving_http.create_app(
             engine,
             clients=Access(clients),
