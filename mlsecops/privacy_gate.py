@@ -71,6 +71,16 @@ def contract_diagnostic(process, expected):
     except (Rejected, KeyError, TypeError, ValueError):
         passed = set()
     missing = sorted(expected - passed)
+    markers = {
+        "onnx-gpu-discovery": b"GPU device discovery failed",
+        "onnx-runtime": b"onnxruntime",
+        "python-traceback": b"Traceback (most recent call last)",
+        "logging-handler": b"Logging error",
+        "resource-warning": b"ResourceWarning",
+        "runtime-warning": b"RuntimeWarning",
+        "thread-exception": b"Exception in thread",
+        "ignored-finalizer": b"Exception ignored",
+    }
     print(
         canonical(
             {
@@ -81,6 +91,10 @@ def contract_diagnostic(process, expected):
                 "missing_count": len(missing),
                 "nonzero_exit": process.returncode != 0,
                 "stderr_present": bool(process.stderr),
+                "stderr_bytes": len(process.stderr),
+                "stderr_markers": sorted(
+                    name for name, marker in markers.items() if marker in process.stderr
+                ),
             }
         ).decode(),
         flush=True,

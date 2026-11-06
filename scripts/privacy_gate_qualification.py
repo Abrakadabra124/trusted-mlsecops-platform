@@ -56,6 +56,16 @@ class PrivacyGateContracts(unittest.TestCase):
             value = output.getvalue()
             self.assertNotIn("private", value)
             self.assertIn('"missing_count":1', value)
+        process = subprocess.CompletedProcess(
+            [],
+            0,
+            canonical({"cases": []}),
+            b"GPU device discovery failed at synthetic-private-path",
+        )
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            gate.contract_diagnostic(process, set())
+        self.assertIn('"stderr_markers":["onnx-gpu-discovery"]', output.getvalue())
+        self.assertNotIn("synthetic-private", output.getvalue())
 
     def test_contract_cli_emits_only_canonical_summary_and_uses_failure_exit(self):
         from scripts import privacy_contracts
