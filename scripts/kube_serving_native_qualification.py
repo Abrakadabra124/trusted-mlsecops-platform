@@ -327,10 +327,12 @@ class NativeContracts(unittest.TestCase):
 
                 spec = {
                     "serviceAccountName": "promoter",
+                    "volumes": [],
                     "containers": [
                         {
                             "command": ["python", "-m", "mlsecops.promotion_controller"],
                             "resources": {"limits": {}, "requests": {}},
+                            "volumeMounts": [],
                         }
                     ],
                 }

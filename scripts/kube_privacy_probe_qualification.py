@@ -113,7 +113,7 @@ class PrivacyProbeEnvelopeContracts(unittest.TestCase):
                 self.assertNotIn("private-error", output.getvalue())
                 result = decode(output.getvalue().encode())
                 if failure:
-                    self.assertEqual(read_json(root / "failure.json"), {"phase": "http"})
+                    self.assertEqual(read_json(root / "failure.json")["phase"], "http")
                     self.assertEqual(result["code"], "kubernetes_privacy_rejected")
                 else:
                     self.assertEqual(result["observation"]["canary_count"], 9)

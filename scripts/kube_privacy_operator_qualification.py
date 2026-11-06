@@ -50,7 +50,9 @@ class OperatorHandoffContracts(unittest.TestCase):
                     patch.object(
                         operator,
                         "kubectl",
-                        side_effect=lambda *a, **k: SimpleNamespace(stdout=canonical(next(calls))),
+                        side_effect=lambda *a, **k: SimpleNamespace(
+                            returncode=0, stdout=canonical(next(calls))
+                        ),
                     ),
                     patch.object(
                         operator, "capture", return_value=(receipt, b"reply\n")
@@ -144,7 +146,8 @@ class OperatorHandoffContracts(unittest.TestCase):
                     operator,
                     "kubectl",
                     return_value=SimpleNamespace(
-                        stdout=canonical({"spec": docs[0]["spec"]["template"]["spec"]})
+                        returncode=0,
+                        stdout=canonical({"spec": docs[0]["spec"]["template"]["spec"]}),
                     ),
                 ) as api,
                 patch.object(operator, "verify_running_image") as image,
@@ -172,9 +175,9 @@ class OperatorHandoffContracts(unittest.TestCase):
 
             def kubectl(state, args, value=None, **kwargs):
                 if value is None:
-                    return SimpleNamespace(stdout=canonical(current[0]))
+                    return SimpleNamespace(returncode=0, stdout=canonical(current[0]))
                 acknowledgements.append(value)
-                return SimpleNamespace(stdout=b"")
+                return SimpleNamespace(returncode=0, stdout=b"")
 
             with (
                 patch.object(operator, "kubectl", side_effect=kubectl),
@@ -206,7 +209,9 @@ class OperatorHandoffContracts(unittest.TestCase):
             def kubectl(state, args, value=None, **kwargs):
                 if value is not None:
                     calls.append(value)
-                return SimpleNamespace(stdout=canonical(request) if value is None else b"")
+                return SimpleNamespace(
+                    returncode=0, stdout=canonical(request) if value is None else b""
+                )
 
             with (
                 patch.object(operator, "kubectl", side_effect=kubectl),
@@ -222,7 +227,9 @@ class OperatorHandoffContracts(unittest.TestCase):
     def test_missing_request_is_wait_not_success_and_foreign_campaign_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             control = operator.Coordinator(Path(directory), {}, {"campaign_id": "a" * 32}, {})
-            with patch.object(operator, "kubectl", return_value=SimpleNamespace(stdout=b"null")):
+            with patch.object(
+                operator, "kubectl", return_value=SimpleNamespace(returncode=0, stdout=b"null")
+            ):
                 control.observe({"metadata": {"name": "probe"}})
             self.assertEqual(control.phases, [])
             for request in (
@@ -233,7 +240,9 @@ class OperatorHandoffContracts(unittest.TestCase):
                 with (
                     self.subTest(request=request),
                     patch.object(
-                        operator, "kubectl", return_value=SimpleNamespace(stdout=canonical(request))
+                        operator,
+                        "kubectl",
+                        return_value=SimpleNamespace(returncode=0, stdout=canonical(request)),
                     ),
                     self.assertRaises(Rejected),
                 ):
@@ -274,6 +283,40 @@ class OperatorHandoffContracts(unittest.TestCase):
         for content in (None, "", "YQ===", "YWI=", "YR==", "%%%%"):
             with self.subTest(content=content), self.assertRaises(Rejected):
                 operator.decoded(content, 1)
+
+    def test_exec_exit_race_defers_only_for_same_terminal_pod(self):
+        initial = {
+            "metadata": {"name": "probe", "uid": "owned"},
+            "spec": {},
+            "status": {"phase": "Running"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for phase, uid in (
+                ("Succeeded", "owned"),
+                ("Failed", "owned"),
+                ("Running", "owned"),
+                ("Succeeded", "foreign"),
+            ):
+                current = {
+                    **initial,
+                    "metadata": {**initial["metadata"], "uid": uid},
+                    "status": {"phase": phase},
+                }
+                control = operator.Coordinator(Path(directory), {}, {"campaign_id": "a" * 32}, {})
+                with patch.object(
+                    operator,
+                    "kubectl",
+                    side_effect=[
+                        SimpleNamespace(returncode=1, stdout=b"", stderr=b"private"),
+                        SimpleNamespace(returncode=0, stdout=canonical(current)),
+                    ],
+                ):
+                    if uid == "owned" and phase in {"Succeeded", "Failed"}:
+                        control.observe(initial)
+                        self.assertEqual(control.phases, [])
+                    else:
+                        with self.assertRaisesRegex(Rejected, "privacy_operator_exec_failed"):
+                            control.observe(initial)
 
 
 if __name__ == "__main__":

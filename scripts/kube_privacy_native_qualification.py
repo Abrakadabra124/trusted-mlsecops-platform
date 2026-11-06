@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, decode, read_json, write_json
 from scripts import kube_privacy_native as native
+from scripts.kube_privacy_diagnostic import validated
 
 
 def report():
@@ -179,6 +180,26 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
         except ValueError as error:
             value = native.location(error)
         self.assertNotIn("private-token", canonical(value).decode())
+
+    def test_external_failure_location_is_validated_before_public_output(self):
+        good = {
+            "exception": "Rejected",
+            "source_file": "scripts/kube_privacy_probe.py",
+            "source_line": 1,
+        }
+        self.assertEqual(validated(good), good)
+        for changes in (
+            {"exception": []},
+            {"exception": "private"},
+            {"source_file": "../private.py"},
+            {"source_file": "scripts/nonexistent_private.py"},
+            {"source_line": True},
+            {"source_line": 0},
+            {"extra": "private"},
+        ):
+            with self.subTest(changes=changes):
+                self.assertIsNone(validated({**good, **changes}))
+        self.assertIsNone(validated(None))
 
 
 if __name__ == "__main__":

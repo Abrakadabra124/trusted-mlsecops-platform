@@ -47,11 +47,25 @@ class Coordinator:
             f"p=Path('{DIRECTORY}/request.json'); "
             f"sys.stdout.buffer.write(bounded_read(p,{MAX_REQUEST}) if p.exists() else b'null')"
         )
-        raw = kubectl(
+        response = kubectl(
             self.state,
             ["exec", name, "-n", "ml-serving", "-c", "worker", "--", "python", "-c", program],
-        ).stdout
-        request = decode(raw, MAX_REQUEST)
+            check=False,
+        )
+        if response.returncode:
+            current = decode(
+                kubectl(self.state, ["get", "pod", name, "-n", "ml-serving", "-o", "json"]).stdout
+            )
+            if (
+                current["metadata"]["uid"] == pod["metadata"]["uid"]
+                and canonical(current["spec"]) == canonical(pod["spec"])
+                and current["status"]["phase"] in {"Succeeded", "Failed"}
+            ):
+                # The process can exit between wait_job's Running snapshot and
+                # exec. Let the terminal path inspect its complete output.
+                return
+            raise Rejected("privacy_operator_exec_failed")
+        request = decode(response.stdout, MAX_REQUEST)
         if request is None:
             return
         require_fields(request, ("phase", "campaign", "payload"))

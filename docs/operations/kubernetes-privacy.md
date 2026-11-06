@@ -37,6 +37,10 @@ CRI (Container Runtime Interface) связывает Kubernetes с container run
 
 Отдельно при проверке кода исправлена передача PostgreSQL image в runtime verifier: ему нужен digest descriptor, а не полная строка `repository@digest`. Это подтверждённая несовместимость интерфейсов, но она не объявляется причиной раннего SQL отказа.
 
+[Run 42212390636](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42212390636) после миграции достиг HTTP stage, но probe не мог стартовать: production Dockerfile копирует `mlsecops`, а qualification entrypoint находится в `scripts`. [Packager](../../scripts/kube_privacy_bundle.py) теперь собирает ограниченное дерево импортов probe в immutable ConfigMap с digest, который проверяется при create/readback вместе с Pod spec. Только qualification Pod получает read-only `/app/scripts`; production image и worker RBAC не меняются. Отдельный тест импортирует probe из восстановленного bundle без fallback на host scripts. Полный actual-candidate run после исправления ещё требуется.
+
+При завершении контейнера между Running snapshot и `kubectl exec` operator повторно читает тот же Pod. Только совпадение UID/spec и terminal state позволяет передать обработку штатной проверке exit code/logs; работающий или подменённый Pod не превращает ошибку exec в успех. Диагностика child сохраняет только проверяемое расположение кода, без exception text. Все три неуспешных run завершили source SQL и cluster cleanup.
+
 ## Отказы и действия оператора
 
 | Код / симптом | Действие |

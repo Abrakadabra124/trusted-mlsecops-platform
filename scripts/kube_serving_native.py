@@ -26,6 +26,8 @@ from mlsecops.trust_targets import Target, select
 from scripts import promotion_qualification as fixtures
 from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
+from scripts.kube_privacy_bundle import manifest as privacy_bundle
+from scripts.kube_privacy_diagnostic import validated as privacy_location
 from scripts.kube_promotion_native import actual, stage
 from scripts.kube_promotion_replay import exercise as exercise_replay
 from scripts.kube_promotion_snapshot import read as ledger
@@ -79,6 +81,20 @@ def invoke(
     )
     spec["containers"][0]["resources"]["limits"]["memory"] = "1Gi"
     spec["containers"][0]["resources"]["requests"]["memory"] = "256Mi"
+    if privacy_operator is not None:
+        code = privacy_bundle(
+            Path(__file__).resolve().parents[1], name + "-code", workspace_id(state)
+        )
+        maps.append(code)
+        spec["volumes"].append(
+            {
+                "name": "qualification-code",
+                "configMap": {"name": code["metadata"]["name"], "defaultMode": 292},
+            }
+        )
+        spec["containers"][0]["volumeMounts"].append(
+            {"name": "qualification-code", "mountPath": "/app/scripts", "readOnly": True}
+        )
     mount_api(spec)
     job = job_document(name, NAMESPACE, spec, 240)
     job["metadata"]["labels"]["trusted-mlsecops/workspace"] = workspace_id(state)
@@ -170,15 +186,19 @@ def invoke(
                 if (
                     privacy_operator is not None
                     and isinstance(document, dict)
-                    and set(document) == {"status", "release_ready", "phase", "code"}
+                    and set(document) == {"status", "release_ready", "phase", "code", "location"}
                     and document["status"] == "fail"
                     and document["release_ready"] is False
                     and document["phase"]
                     in {"startup", "bind", "http", "worker", "audit", "capture"}
                     and document["code"] == "kubernetes_privacy_rejected"
+                    and privacy_location(document["location"]) is not None
                 ):
                     failure.update(
-                        probe_failure="privacy", phase=document["phase"], code=document["code"]
+                        probe_failure="privacy",
+                        phase=document["phase"],
+                        code=document["code"],
+                        location=document["location"],
                     )
                 if (
                     isinstance(document, dict)

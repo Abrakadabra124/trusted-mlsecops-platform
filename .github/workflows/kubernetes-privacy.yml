@@ -27,6 +27,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.kube_privacy_bundle_qualification
           uv run --locked python -m unittest scripts.data_source_lock_qualification scripts.kube_privacy_logs_qualification scripts.kube_privacy_worker_qualification scripts.kube_privacy_exchange_qualification scripts.kube_privacy_operator_qualification scripts.kube_privacy_probe_qualification scripts.kube_privacy_native_qualification scripts.kube_serving_runtime_qualification scripts.kube_serving_native_qualification scripts.kube_candidate_qualification
           uv run --locked python -m unittest scripts.serving_output_qualification scripts.serving_privacy_qualification scripts.serving_metrics_probe_qualification scripts.audit_evidence_qualification scripts.audit_correlation_qualification scripts.audit_export_qualification
       - name: Prepare pinned tools and image

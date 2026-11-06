@@ -17,6 +17,7 @@ from mlsecops.process_privacy import enforce
 from scripts import audit_correlation_probe, audit_evidence_probe, serving_output_probe
 from scripts.audit_http_observation import Ledger
 from scripts.candidate_serving_native import context_matrix, privacy_matrix
+from scripts.kube_privacy_diagnostic import location, validated
 from scripts.kube_privacy_exchange import DIRECTORY, send
 from scripts.kube_privacy_worker import Worker
 from scripts.serving_native import check_clients, site
@@ -254,14 +255,17 @@ def main(arguments=None):
             )
         print(canonical(report).decode())
         return 0
-    except Exception:
+    except Exception as error:
         phase = PHASE
+        diagnostic = location(error)
         if DIRECTORY.is_dir():
             try:
                 if options.child:
-                    write_json(DIRECTORY / "failure.json", {"phase": phase})
+                    write_json(DIRECTORY / "failure.json", {"phase": phase, "location": diagnostic})
                 else:
-                    phase = read_json(DIRECTORY / "failure.json")["phase"]
+                    failure = read_json(DIRECTORY / "failure.json")
+                    phase = failure["phase"]
+                    diagnostic = validated(failure.get("location")) or diagnostic
             except Exception:
                 pass
         print(
@@ -271,6 +275,7 @@ def main(arguments=None):
                     "release_ready": False,
                     "phase": phase if phase in PHASES else "capture",
                     "code": "kubernetes_privacy_rejected",
+                    "location": diagnostic,
                 }
             ).decode()
         )
