@@ -94,9 +94,11 @@ def extract(document, reference, *, observed_ns):
         raise Rejected("load_resource_missing") from None
 
 
-def summarize(samples, *, start_ns, end_ns):
+def summarize(samples, *, start_ns, end_ns, uncertainty_ns=0):
     if (
-        type(samples) is not list
+        type(uncertainty_ns) is not int
+        or not 0 <= uncertainty_ns <= 100_000_000
+        or type(samples) is not list
         or not 2 <= len(samples) <= 256
         or type(start_ns) is not int
         or type(end_ns) is not int
@@ -126,8 +128,8 @@ def summarize(samples, *, start_ns, end_ns):
         previous = row
 
     def window(field):
-        before = [i for i, row in enumerate(samples) if row[field] <= start_ns]
-        after = [i for i, row in enumerate(samples) if row[field] >= end_ns]
+        before = [i for i, row in enumerate(samples) if row[field] <= start_ns - uncertainty_ns]
+        after = [i for i, row in enumerate(samples) if row[field] >= end_ns + uncertainty_ns]
         if not before or not after:
             raise Rejected("load_resource_window_uncovered")
         selected = samples[before[-1] : after[0] + 1]
@@ -145,6 +147,7 @@ def summarize(samples, *, start_ns, end_ns):
         "source": "kubelet-summary-container",
         "samples": len(samples),
         "requested_window_seconds": (end_ns - start_ns) / NS,
+        "clock_uncertainty_ns": uncertainty_ns,
         "cpu_observed_seconds": cpu_window / NS,
         "cpu_core_seconds": cpu_ns / NS,
         "average_cpu_cores": cpu_ns / cpu_window,

@@ -56,8 +56,15 @@ def qualify(
     include_key_revocation=False,
     include_trust_lifecycle=False,
     privacy=False,
+    load=False,
 ):
     hosted()
+    if (
+        type(load) is not bool
+        or load
+        and (privacy or include_key_revocation or include_trust_lifecycle)
+    ):
+        raise Rejected("candidate_load_mode_conflict")
     if type(privacy) is not bool or privacy and (include_key_revocation or include_trust_lifecycle):
         raise Rejected("candidate_privacy_mode_conflict")
     root, state = Path(root).resolve(), Path(state).resolve()
@@ -136,7 +143,7 @@ def qualify(
         "issued_at": issued,
         "expires_at": min(issued + 600, verified["manifest"]["expires_at"]),
     }
-    if permit["expires_at"] - issued < 240:
+    if permit["expires_at"] - issued < (360 if load else 240):
         raise Rejected("candidate_inference_window")
     envelope = signing.sign(permit, KIND, key)
     permit_hash = digest(canonical(permit))
@@ -210,6 +217,10 @@ def qualify(
         write_json(destination / "config.json", config)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     options = {}
+    if load:
+        from scripts.kube_load_operator import Coordinator
+
+        options["load_operator"] = Coordinator(state, profile, campaign, expected)
     if privacy:
         from scripts import audit_correlation_probe
         from scripts.kube_privacy_operator import Coordinator
@@ -226,6 +237,8 @@ def qualify(
         write_json(private / "permit.json", envelope)
         write_json(private / "public.json", {"qualification": qualification_public})
     result = invoke(state, profile, config, expected, candidate_probe=True, **options)
+    if load:
+        result["operator_retained_reverified"] = options["load_operator"].reverify()
     if privacy:
         from scripts.serving_output_native import verify_packet
 
@@ -334,6 +347,7 @@ def qualify(
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
+        **({"full_M14": "inconclusive", "load_campaign_id": campaign} if load else {}),
         **(
             {
                 "full_M13": "inconclusive",

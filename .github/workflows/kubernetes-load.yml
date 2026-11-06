@@ -1,0 +1,99 @@
+name: Actual candidate M14 load baseline
+on:
+  push:
+    branches: [codex/cp4-m14-load-20261106]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-load-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  load-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked contracts and native harness regressions
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load-native.coverage" --source=mlsecops.load_golden,mlsecops.load_measurement,mlsecops.load_clock,mlsecops.load_exchange,mlsecops.load_probe,scripts.load_resources,scripts.kube_load_operator,scripts.kube_load_native -m unittest scripts.load_golden_qualification scripts.load_measurement_qualification scripts.load_clock_qualification scripts.load_exchange_qualification scripts.load_probe_qualification scripts.load_resources_qualification scripts.kube_load_operator_qualification scripts.kube_load_native_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/load-native.coverage" -o "$RUNNER_TEMP/load-native-coverage.json"
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'load-native-coverage.json').read_text())['files']
+          required = {'mlsecops/load_golden.py', 'mlsecops/load_measurement.py', 'mlsecops/load_clock.py', 'mlsecops/load_exchange.py', 'mlsecops/load_probe.py', 'scripts/load_resources.py', 'scripts/kube_load_operator.py', 'scripts/kube_load_native.py'}
+          if set(files) != required:
+              raise SystemExit('load_coverage_inventory')
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] * 100 < 95 * stats[total]:
+                      raise SystemExit('load_coverage_below_95:' + name + ':' + total)
+              print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
+          PY
+          uv run --locked python -m unittest scripts.kube_serving_native_qualification scripts.kube_candidate_qualification scripts.kube_serving_runtime_qualification scripts.serving_access_qualification
+      - name: Prepare pinned tools and image
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Prepare model storage and source candidate
+        run: |
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Actual candidate baseline and independent resource observation
+        run: uv run --locked python -m scripts.kube_load_native
+      - name: Finite baseline projection only
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          path = Path('.runtime/evidence/kubernetes-load-public.json')
+          result = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False,'full_M14':'inconclusive'}
+          print(canonical(result).decode())
+          PY
+      - name: Stop verified owned source SQL
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('load_source_cleanup_incomplete')
+          PY
+          fi
+      - name: Remove verified owned disposable cluster
+        if: always() && steps.bootstrap.outcome == 'success'
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import validate_cluster
+          validate_cluster(Path('.runtime'))
+          PY
+          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"

@@ -6,6 +6,7 @@ import re
 import time
 from collections import Counter
 
+from mlsecops import load_clock
 from mlsecops.contracts import Rejected, decode, require_fields
 
 CLIENTS = 10
@@ -92,7 +93,8 @@ async def collect(exchange, valid, *, warmup=WARMUP, duration=DURATION, limit=MA
         or not CLIENTS <= limit <= MAX_ATTEMPTS
     ):
         raise Rejected("load_collection_profile")
-    origin = time.monotonic_ns()
+    start_clock = load_clock.sample()
+    origin = start_clock["monotonic_ns"]
     deadline = int((warmup + duration) * NS)
     records, started = [], 0
     exhausted = False
@@ -136,10 +138,12 @@ async def collect(exchange, valid, *, warmup=WARMUP, duration=DURATION, limit=MA
             group.create_task(client(index))
     if len(records) != started:
         raise Rejected("load_attempts_lost")
+    end_clock = load_clock.sample()
     return {
         "records": sorted(records, key=lambda row: (row["start_ns"], row["client"])),
         "exhausted": exhausted,
-        "elapsed_ns": time.monotonic_ns() - origin,
+        "elapsed_ns": end_clock["monotonic_ns"] - origin,
+        "clock": {"start": start_clock, "end": end_clock},
     }
 
 

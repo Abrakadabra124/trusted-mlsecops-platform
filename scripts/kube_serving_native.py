@@ -53,8 +53,18 @@ def invoke(
     trust_target=Target.PRIMARY,
     privacy_operator=None,
     cli_privacy=False,
+    load_operator=None,
 ):
     trust_target = select(trust_target)
+    if load_operator is not None and (
+        not candidate_probe
+        or privacy_operator is not None
+        or coordinator is not None
+        or cli_privacy
+        or trust_target is not Target.PRIMARY
+        or "fault" in expected
+    ):
+        raise Rejected("load_probe_mode_conflict")
     if (
         type(cli_privacy) is not bool
         or cli_privacy
@@ -89,7 +99,9 @@ def invoke(
     )
     spec["serviceAccountName"] = "serving"
     spec["containers"][0]["command"][2] = (
-        "scripts.kube_cli_privacy_probe"
+        "mlsecops.load_probe"
+        if load_operator is not None
+        else "scripts.kube_cli_privacy_probe"
         if cli_privacy
         else "scripts.kube_privacy_probe"
         if privacy_operator is not None
@@ -117,7 +129,8 @@ def invoke(
             {"name": "qualification-code", "mountPath": "/app/scripts", "readOnly": True}
         )
     mount_api(spec)
-    job = job_document(name, NAMESPACE, spec, 240)
+    deadline = 360 if load_operator is not None else 240
+    job = job_document(name, NAMESPACE, spec, deadline)
     job["metadata"]["labels"]["trusted-mlsecops/workspace"] = workspace_id(state)
     created = []
     phases = []
@@ -133,6 +146,9 @@ def invoke(
             raise Rejected("kube_serving_probe_pod_changed")
         if privacy_operator is not None:
             privacy_operator.observe(pod)
+            return
+        if load_operator is not None:
+            load_operator.observe(pod)
             return
         if cli_receiver is not None:
             cli_receiver.observe(pod)
@@ -159,6 +175,8 @@ def invoke(
             phases.append(phase)
 
     try:
+        if load_operator is not None:
+            load_operator.start()
         if privacy_operator is not None:
             privacy_operator.start()
         for document in [*maps, job]:
@@ -170,12 +188,13 @@ def invoke(
             state,
             NAMESPACE,
             name,
-            240,
+            deadline,
             **(
                 {"observe": observe}
                 if coordinator is not None
                 or privacy_operator is not None
                 or cli_receiver is not None
+                or load_operator is not None
                 else {}
             ),
         )
@@ -213,6 +232,17 @@ def invoke(
             failure = {"probe_failure": "unclassified", "release_ready": False}
             with suppress(Rejected):
                 document = decode(raw.splitlines()[-1] if raw else raw, 65536)
+                if (
+                    load_operator is not None
+                    and isinstance(document, dict)
+                    and set(document) == {"status", "release_ready", "code", "phase"}
+                    and document["status"] == "fail"
+                    and document["release_ready"] is False
+                    and document["code"] == "load_probe_rejected"
+                    and document["phase"]
+                    in {"startup", "activate", "start", "measure", "finish", "cleanup"}
+                ):
+                    failure.update(probe_failure="load", **document)
                 if (
                     (privacy_operator is not None or cli_privacy)
                     and isinstance(document, dict)
@@ -261,6 +291,8 @@ def invoke(
             raise Rejected("kube_serving_probe_report")
         if privacy_operator is not None:
             report = privacy_operator.finish(report, raw)
+        if load_operator is not None:
+            report = load_operator.finish(report, raw)
         if cli_receiver is not None:
             report["_privacy_needles"] = cli_receiver.finish(raw)
         return {**report, "elapsed_seconds": elapsed}

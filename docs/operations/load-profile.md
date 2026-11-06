@@ -1,7 +1,7 @@
 # Диагностика нагрузочного профиля M14
 
-Статус 2026-11-06: client/golden contracts реализованы; native benchmark,
-CPU/RAM, overload recovery и M14 acceptance ещё не приняты.
+Статус 2026-11-06: client/golden/resource contracts проверены; native runner
+реализован, первый hosted baseline ещё не проверен. M14 acceptance открыт.
 Ответственный: platform operator. Метод: [ADR 0056](../decisions/0056-load-measurement-profile.md).
 
 ## Проверка без инфраструктуры
@@ -64,5 +64,46 @@ Native интеграция выполняется только в разреш�
 
 Публиковать только source-bound агрегаты с явным scope и ограничениями.
 Сырые latency records, credentials и service logs остаются в `.runtime`.
-Пока native coordinator не реализован, команды запуска полного M14 и подтверждение
-его recovery здесь намеренно не приводятся как готовая процедура.
+## Hosted baseline: воспроизводимый порядок
+
+[Workflow](../../.github/workflows/kubernetes-load.yml) сначала проверяет contracts,
+coverage >=95% отдельно statements/branches каждого нового модуля, затем собирает
+pinned image, создаёт owned disposable cluster и готовит actual candidate.
+Нагрузочный шаг использует существующий signed qualification permit; actual release
+остаётся запрещён при отсутствии assurance. Это baseline, не полная M14 acceptance.
+
+```powershell
+gh workflow run kubernetes-load.yml --ref codex/cp4-m14-load-20261106
+gh run list --workflow kubernetes-load.yml --limit 3
+gh run view <RUN_ID>
+```
+
+Запускать только на уже опубликованном точном source commit и не отправлять новый
+push в ту же ветку, пока workflow не завершён. Локальный запуск `kube_load_native`
+ограничен hosted guard. Внутри разрешённого CI выполняется
+`uv run --locked python -m scripts.kube_load_native`; это не команда для локальной Windows.
+
+Оператор сначала независимо сверяет Job/Pod UID, image/spec, node и restart count.
+После стартового resource sample подтверждает приватный start packet. Клиент
+фиксирует clock anchors: системное время до/после monotonic origin и завершения.
+Нестабильный clock mapping отклоняется; временная неопределённость расширяет
+границы требуемого resource observation, а не уменьшает 120-секундную нагрузку.
+
+После нагрузки выполняется отдельный burst из 40 запросов и golden recovery.
+Эти запросы не включаются в обычные percentiles. Finish packet с исходными
+наблюдениями передаётся только в приватный канал. Оператор пересчитывает summary,
+дожидается свежих samples после конца окна, сохраняет и читает evidence обратно.
+Только затем probe завершает worker; оператор отдельно проверяет отсутствие
+owned Job и Pod и неизменность сохранённых файлов.
+
+`profile_met=false` делает baseline workflow неуспешным, даже если сбор данных
+завершён. Значение `full_M14=inconclusive` сохраняется до общей приёмки.
+SQL stop и cluster removal запускаются через `always()` и подтверждают конечное
+состояние. При ошибке сборщика сначала проверять конечный cleanup; не считать
+пустой или старый report доказательством успешной нагрузки.
+
+Raw records находятся только в `.runtime/evidence/load/<campaign>` на CI runner.
+Они проверяются после выхода probe; постоянное внешнее хранение приватных packets
+этот workflow не обеспечивает. В лог выводится finite aggregate projection.
+Controller CPU/RAM включает loopback load generator и короткие operator exec reads;
+отдельный model worker измеряется отдельно. Это фиксированная стоимость lab-профиля.

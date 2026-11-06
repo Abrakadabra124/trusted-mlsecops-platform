@@ -54,7 +54,8 @@ benchmark, не смягчение исходных порогов M14. Intentio
 
 ## Границы и следующий шаг
 
-Сейчас реализованы primitives и controlled tests, а не полный native runner.
+Реализованы primitives, controlled tests и native baseline runner; первый
+нагрузочный запуск на actual candidate пока не проверен.
 `profile_met` означает только выполнение клиентских проверок на переданных
 наблюдениях. Отчёт явно имеет `scope=client-measurement-only` и
 `release_ready=false`; это не M14 acceptance и не разрешение promotion.
@@ -74,9 +75,9 @@ samples <=20 s, максимум 256 наблюдений. При missing/reset/
 реально наблюдавшимися границами, их длительность указана отдельно от 120 s.
 Memory выводится как максимум наблюдавшихся usage/working-set/RSS bytes.
 
-Это пока controlled parser, а не проверенная native реализация. Оператору ещё
-нужно независимо подтвердить UID/image/restart перед каждым чтением, связать
-samples с private start/end handshake и ограничить размер/частоту запросов.
+Native оператор теперь связывает parser с проверками UID/image/restart перед
+каждым чтением и private start/end handshake. Этот путь реализован и проверен
+на controlled API fixtures; живой результат будет опубликован отдельно.
 Максимум sampled RAM нельзя называть истинным peak RSS. Дополнительные права
 для model worker не требуются.
 
