@@ -138,3 +138,23 @@ Raw records находятся только в `.runtime/evidence/load/<campaign
 этот workflow не обеспечивает. В лог выводится finite aggregate projection.
 Controller CPU/RAM включает loopback load generator и короткие operator exec reads;
 отдельный model worker измеряется отдельно. Это фиксированная стоимость lab-профиля.
+
+## Диагностика внутренних задержек
+
+После baseline `3861d8a` probe собирает фиксированные агрегаты completed calls:
+count/failures/total/max nanoseconds для reader check, trust read, worker ping,
+worker predict, полного engine predict, ожидания и удержания engine lock.
+Это внутрипроцессная диагностика, не независимая latency acceptance. Окно включает
+warmup, measurement, отдельный overload и recovery; background heartbeat также
+может войти в счётчики. Длительности вложены, их нельзя суммировать как независимые.
+
+Обёртки работают только внутри load probe и восстанавливаются в `finally`.
+Аргументы, return values и exception text в агрегаты не записываются. Размер
+состояния постоянен: семь timing rows и три набора конечных причин 429.
+`overloaded`, `client_limited` и `unrecognized` считаются отдельно для normal
+(warmup + measurement), overload и recovery. Оператор сверяет их суммы с
+клиентским отчётом и связывает диагностический packet digest с receipt.
+
+Диагностика добавляет небольшую, пока отдельно не измеренную стоимость вызовов
+monotonic clock и lock. Внешние client-side latency, ошибки и пороги M14 остаются
+основой решения; внутренние timings помогают выбрать одно проверяемое исправление.

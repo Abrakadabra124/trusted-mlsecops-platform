@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlsecops import kube_worker, load_measurement
+from mlsecops import kube_worker, load_diagnostics, load_measurement
 from mlsecops.contracts import Rejected, canonical, read_json
 from scripts import kube_load_operator as operator
 from scripts.kube_serving_runtime_qualification import PROFILE
@@ -134,10 +134,13 @@ class OperatorContracts(unittest.TestCase):
         summary = load_measurement.summarize(
             **{key: observation[key] for key in ("records", "elapsed_ns", "exhausted")}
         )
+        limited = load_diagnostics.reasons()
+        limited["overload"]["overloaded"] = 32
         return {
             "observation": observation,
             "summary": summary,
             "golden": self.op.golden,
+            "diagnostics": load_diagnostics.result(load_diagnostics.Timings(), limited),
             "overload": {
                 "attempts": 40,
                 "correct": 8,
@@ -165,6 +168,7 @@ class OperatorContracts(unittest.TestCase):
             "operator": self.op.receipt,
             "measurement": payload["summary"],
             "overload": payload["overload"],
+            "diagnostics": payload["diagnostics"],
             "golden": self.op.golden,
             "worker_cleanup_verified": True,
             "profile_met": True,
@@ -287,6 +291,7 @@ class OperatorContracts(unittest.TestCase):
             ("operator", {}),
             ("measurement", {}),
             ("overload", {}),
+            ("diagnostics", {}),
             ("golden", {}),
             ("worker_cleanup_verified", 1),
             ("profile_met", 1),

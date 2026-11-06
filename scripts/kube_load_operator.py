@@ -4,7 +4,14 @@ import re
 import time
 from contextlib import suppress
 
-from mlsecops import cluster, kube_serving_runtime, kube_storage, load_clock, load_measurement
+from mlsecops import (
+    cluster,
+    kube_serving_runtime,
+    kube_storage,
+    load_clock,
+    load_diagnostics,
+    load_measurement,
+)
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import (
     Rejected,
@@ -309,7 +316,7 @@ class Coordinator:
         self.last_sample = time.monotonic()
 
     def end(self, payload):
-        require_fields(payload, ("observation", "summary", "overload", "golden"))
+        require_fields(payload, ("observation", "summary", "overload", "golden", "diagnostics"))
         observation = payload["observation"]
         require_fields(observation, ("records", "exhausted", "elapsed_ns", "clock"))
         if payload["golden"] != self.golden:
@@ -320,6 +327,7 @@ class Coordinator:
         if canonical(summary) != canonical(payload["summary"]):
             raise Rejected("load_summary_changed")
         overload(payload["overload"])
+        load_diagnostics.checked(payload["diagnostics"], summary, payload["overload"])
         window = load_clock.window(observation["clock"], observation["elapsed_ns"])
         deadline = time.monotonic() + 30
         while True:
@@ -342,6 +350,7 @@ class Coordinator:
         )
         self.receipt = {
             "summary_sha256": digest(canonical(summary)),
+            "diagnostics_sha256": digest(canonical(payload["diagnostics"])),
             "resources": resources,
             "compute": self.compute,
         }
@@ -356,6 +365,7 @@ class Coordinator:
             or report.get("operator") != self.receipt
             or report.get("measurement") != payload["summary"]
             or report.get("overload") != payload["overload"]
+            or report.get("diagnostics") != payload["diagnostics"]
             or report.get("golden") != self.golden
             or report.get("worker_cleanup_verified") is not True
             or report.get("profile_met")

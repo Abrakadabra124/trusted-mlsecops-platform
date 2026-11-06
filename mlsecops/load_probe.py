@@ -10,7 +10,7 @@ from pathlib import Path
 
 import uvicorn
 
-from mlsecops import load_measurement, serving, serving_http
+from mlsecops import load_diagnostics, load_measurement, serving, serving_http
 from mlsecops.contracts import Rejected, canonical, digest, read_json
 from mlsecops.controller_api import Client
 from mlsecops.kube_candidate_probe import candidate
@@ -81,23 +81,31 @@ def listen(app):
 
 
 async def exercise(port, tokens, golden):
+    limited = load_diagnostics.reasons()
+    phase = "normal"
+
     async def request(index):
-        return await load_measurement.request(port, tokens[index % 10], golden.body)
+        status, body = await load_measurement.request(port, tokens[index % 10], golden.body)
+        if status == 429:
+            limited[phase][load_diagnostics.reason(body)] += 1
+        return status, body
 
     observation = await load_measurement.collect(request, golden.valid)
     # A separate bounded burst; never included in normal-load percentiles.
+    phase = "overload"
     started = time.monotonic_ns()
     replies = await asyncio.gather(*(request(i) for i in range(40)), return_exceptions=True)
     elapsed = time.monotonic_ns() - started
-    correct = limited = errors = 0
+    correct = denials = errors = 0
     for value in replies:
         if isinstance(value, tuple) and value[0] == 200 and golden.valid(value[1]):
             correct += 1
         elif isinstance(value, tuple) and value[0] == 429:
-            limited += 1
+            denials += 1
         else:
             errors += 1
     await asyncio.sleep(2)
+    phase = "recovery"
     try:
         status, response = await request(0)
         recovered = status == 200 and golden.valid(response)
@@ -106,13 +114,13 @@ async def exercise(port, tokens, golden):
     overload = {
         "attempts": 40,
         "correct": correct,
-        "limited": limited,
+        "limited": denials,
         "errors": errors,
         "elapsed_ns": elapsed,
         "recovered": recovered,
-        "profile_met": limited > 0 and errors == 0 and recovered and elapsed <= 3_000_000_000,
+        "profile_met": denials > 0 and errors == 0 and recovered and elapsed <= 3_000_000_000,
     }
-    return observation, overload
+    return observation, overload, limited
 
 
 def qualify(config, expected):
@@ -164,7 +172,10 @@ def qualify(config, expected):
                 },
             )
             PHASE = "measure"
-            observation, overload = asyncio.run(exercise(port, tokens, golden))
+            timings = load_diagnostics.Timings()
+            with timings.instrument(engine):
+                observation, overload, limited = asyncio.run(exercise(port, tokens, golden))
+            diagnostics = load_diagnostics.result(timings, limited)
             summary = load_measurement.summarize(
                 **{key: observation[key] for key in ("records", "elapsed_ns", "exhausted")}
             )
@@ -178,9 +189,12 @@ def qualify(config, expected):
                     "summary": summary,
                     "overload": overload,
                     "golden": golden.binding(),
+                    "diagnostics": diagnostics,
                 },
             )
-            if receipt.get("summary_sha256") != digest(canonical(summary)):
+            if receipt.get("summary_sha256") != digest(canonical(summary)) or receipt.get(
+                "diagnostics_sha256"
+            ) != digest(canonical(diagnostics)):
                 raise Rejected("load_operator_summary_changed")
     finally:
         # Also covers failed thread creation before the application's lifespan.
@@ -198,6 +212,7 @@ def qualify(config, expected):
         "golden": golden.binding(),
         "measurement": summary,
         "overload": overload,
+        "diagnostics": diagnostics,
         "operator": receipt,
         "worker_cleanup_verified": True,
         "profile_met": summary["profile_met"] and overload["profile_met"],

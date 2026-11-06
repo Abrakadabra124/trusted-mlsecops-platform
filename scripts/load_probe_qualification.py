@@ -98,6 +98,10 @@ class ProbeContracts(unittest.TestCase):
         observation = {"records": rows(), "elapsed_ns": 130_000_000_000, "exhausted": False}
         summary = probe.load_measurement.summarize(**observation)
         receipt = {"summary_sha256": "wrong" if fault == "receipt" else digest(canonical(summary))}
+        limited = probe.load_diagnostics.reasons()
+        receipt["diagnostics_sha256"] = digest(
+            canonical(probe.load_diagnostics.result(probe.load_diagnostics.Timings(), limited))
+        )
 
         def listen(app):
             self.assertTrue((probe.DIRECTORY / "audit").is_dir())
@@ -120,7 +124,9 @@ class ProbeContracts(unittest.TestCase):
                 ),
             ),
             patch.object(
-                probe, "exercise", new=AsyncMock(return_value=(observation, {"profile_met": True}))
+                probe,
+                "exercise",
+                new=AsyncMock(return_value=(observation, {"profile_met": True}, limited)),
             ),
             patch.object(probe, "send", side_effect=[{}, receipt]) as send,
         ):
@@ -197,12 +203,13 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe.load_measurement, "request", new=AsyncMock(side_effect=replies)),
             patch.object(probe.asyncio, "sleep", new=AsyncMock()),
         ):
-            value, overload = asyncio.run(probe.exercise(1234, ["a" * 64] * 10, golden))
+            value, overload, limited = asyncio.run(probe.exercise(1234, ["a" * 64] * 10, golden))
         self.assertIs(value, observation)
         self.assertEqual(overload["attempts"], 40)
         self.assertEqual(overload["limited"], 39)
         self.assertEqual(overload["correct"], 1)
         self.assertEqual(overload["errors"], 0)
+        self.assertEqual(limited["overload"]["unrecognized"], 39)
         self.assertTrue(overload["recovered"])
         self.assertTrue(overload["profile_met"])
 
@@ -217,10 +224,34 @@ class ProbeContracts(unittest.TestCase):
             ),
             patch.object(probe.asyncio, "sleep", new=AsyncMock()),
         ):
-            _, overload = asyncio.run(probe.exercise(1234, ["a" * 64] * 10, golden))
+            _, overload, _ = asyncio.run(probe.exercise(1234, ["a" * 64] * 10, golden))
         self.assertEqual(overload["errors"], 40)
         self.assertFalse(overload["profile_met"])
         self.assertNotIn("private", str(overload))
+
+    def test_reason_counts_separate_normal_burst_and_recovery(self):
+        golden = Golden.from_expected(expected())
+        limited = {
+            "schema_version": 1,
+            "request_id": "a" * 32,
+            "error": {"code": "client_limited"},
+        }
+
+        async def collect(request, valid):
+            await request(0)
+            return {"controlled": True}
+
+        with (
+            patch.object(probe.load_measurement, "collect", side_effect=collect),
+            patch.object(
+                probe.load_measurement, "request", new=AsyncMock(return_value=(429, limited))
+            ),
+            patch.object(probe.asyncio, "sleep", new=AsyncMock()),
+        ):
+            _, _, reasons = asyncio.run(probe.exercise(1234, ["a" * 64] * 10, golden))
+        self.assertEqual(
+            [reasons[p]["client_limited"] for p in ("normal", "overload", "recovery")], [1, 40, 1]
+        )
 
     def test_initial_foreign_worker_refused_before_engine(self):
         with (
