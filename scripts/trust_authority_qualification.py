@@ -73,6 +73,65 @@ class AuthorityContracts(unittest.TestCase):
             ):
                 self.read()
 
+    def test_owned_factory_receives_host_pin_and_still_verifies_signed_document(self):
+        factory = MagicMock(return_value=self.connection)
+        with (
+            patch.object(storage, "connection_parameters") as parameters,
+            patch.object(storage, "connect") as connect,
+        ):
+            envelope, clock = trust_authority.read(
+                "client",
+                "local-cpu",
+                self.fixture.public,
+                expected_host=Target.PRIMARY.host,
+                connection_factory=factory,
+            )
+        factory.assert_called_once_with("client", expected_host=Target.PRIMARY.host)
+        parameters.assert_not_called()
+        connect.assert_not_called()
+        self.assertEqual(envelope, self.envelope)
+        self.assertEqual(clock, self.fixture.wall)
+        self.assertEqual(self.connection.execute.call_args.args[1], ("local-cpu",))
+        self.connection.__exit__.assert_called_once_with(None, None, None)
+
+    def test_owned_factory_cannot_bypass_document_integrity_or_root_pin(self):
+        for root, reference, reason in (
+            ("foreign", digest(self.content), "trust_authority_missing_or_foreign"),
+            (self.fixture.public, "0" * 64, "trust_document_integrity"),
+        ):
+            with self.subTest(reason=reason):
+                self.connection.reset_mock()
+                self.connection.execute.return_value.fetchone.return_value = (
+                    root,
+                    1,
+                    reference,
+                    self.content,
+                    int(self.fixture.wall),
+                )
+                factory = MagicMock(return_value=self.connection)
+                with self.assertRaisesRegex(Rejected, "^" + reason + "$"):
+                    trust_authority.read(
+                        "client", "local-cpu", self.fixture.public, connection_factory=factory
+                    )
+                factory.assert_called_once_with("client")
+                self.connection.__exit__.assert_called_once()
+                self.assertIs(self.connection.__exit__.call_args.args[0], Rejected)
+
+    def test_owned_factory_failure_has_no_fallback_transport(self):
+        factory = MagicMock(side_effect=Rejected("storage_connection_rejected"))
+        with (
+            patch.object(storage, "connection_parameters") as parameters,
+            patch.object(storage, "connect") as connect,
+            self.assertRaisesRegex(trust.Unavailable, "^trust_service_unavailable$"),
+        ):
+            trust_authority.read(
+                "client", "local-cpu", self.fixture.public, connection_factory=factory
+            )
+        factory.assert_called_once_with("client")
+        parameters.assert_not_called()
+        connect.assert_not_called()
+        self.connection.execute.assert_not_called()
+
     def test_corrupt_bytes_and_version_mismatch_clear_trust(self):
         for version, reference, content in (
             (2, digest(self.content), self.content),

@@ -18,6 +18,30 @@ uv run --locked python -m unittest scripts.trust_native_qualification
 
 ## Что это за компоненты
 
+### Отказ coverage после добавления Session
+
+Симптом: storage CI `42298587187` на source `2df0220` завершил 42 contract tests
+успешно, но остановился на обязательном `fail-under=100`: в
+`trust_authority.py` не проверялся переход `16 -> 27`, когда передана доверенная
+фабрика соединений. Это пробел тестового набора authority, а не доказанный отказ
+живого TLS-соединения. SQL cleanup того запуска завершился успешно.
+
+Диагностика без запуска инфраструктуры:
+
+```powershell
+uv run --locked coverage run --data-file=.runtime/evidence/.coverage-trust --source=mlsecops.trust,mlsecops.trust_authority -m unittest scripts.trust_qualification scripts.trust_authority_qualification scripts.trust_root_store_qualification scripts.kube_trust_qualification
+uv run --locked coverage report --data-file=.runtime/evidence/.coverage-trust --fail-under=100
+```
+
+Исправление добавляет проверку передачи host pin владельцу соединения, проверки
+подписи/root/digest после чтения и отсутствия fallback transport при отказе
+фабрики. Проверки свежих TLS credentials остаются обязанностью `Session` при
+каждом использовании. Порог покрытия и runtime-код не меняются. Локальный повтор
+на Windows: 45 tests, 0 skips, 259 statements и 102 branches полностью покрыты.
+Hosted повтор storage необходим отдельно; этот результат не закрывает M18/R1.
+Если причина отказа иная, сохранить private coverage report и точную revision,
+передать platform-owner; не отключать branch coverage или проверки доверия.
+
 PostgreSQL хранит текущую версию signed trust policy отдельно от model storage. Mutual TLS проверяет сертификаты обеих сторон; клиент требует TLS 1.3 и verify-full, а serving/promoter могут только читать policy. Подпись Ed25519 связывает документ с отдельно закреплённым root key.
 
 Lease - ограниченный срок действия последней online проверки, максимум 60 секунд от начала SQL-запроса. Monotonic clock измеряет длительность без продления при переводе системных часов; wall/server clocks дополнительно ограничивают expiry. Это разрешение проверить конкретный набор материалов, а не автоматическая активация модели.
