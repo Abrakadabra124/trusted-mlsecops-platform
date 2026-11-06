@@ -60,7 +60,7 @@ def checked_audit(value):
 
 def targets(engine):
     return (
-        (storage, "connection_parameters", "client_parameters"),
+        (storage, "connection_materials", "client_parameters"),
         (trust_session, "credentials", "session_credentials"),
         (engine.reader, "check", "reader_check"),
         (engine.reader.trust, "reader", "trust_read"),

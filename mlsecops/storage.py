@@ -4,13 +4,18 @@ from pathlib import Path
 import psycopg
 from psycopg import sql
 
-from mlsecops.contracts import Rejected, bounded_read, digest, read_json, require_fields, safe_child
+from mlsecops.contracts import Rejected, bounded_read, decode, digest, require_fields, safe_child
 from mlsecops.storage_pki import CLUSTER_HOST, ROLES, TRUST_HOST
 from mlsecops.storage_schema import DATABASE, MAX_BYTES, TABLES
 from mlsecops.trust_targets import HOSTS as TRUST_HOSTS
 
 
 def connection_parameters(directory, *, expected_host=None):
+    return connection_materials(directory, expected_host=expected_host)[0]
+
+
+def connection_materials(directory, *, expected_host=None):
+    """Validate fresh files and fingerprint those same bytes; retain no key bytes."""
     if expected_host is not None and (
         type(expected_host) is not str or expected_host not in TRUST_HOSTS
     ):
@@ -20,7 +25,9 @@ def connection_parameters(directory, *, expected_host=None):
     if directory.is_symlink():
         raise Rejected("storage_client_symlink")
     directory = directory.resolve()
-    settings = read_json(safe_child(directory, "connection.json"))
+    content = bounded_read(safe_child(directory, "connection.json"), 65536)
+    settings = decode(content, 65536)
+    files = {"connection.json": digest(content)}
     require_fields(settings, ("schema_version", "role", "host", "port", "certificates"))
     require_fields(settings["certificates"], ("ca.crt", "client.crt"))
     if (
@@ -34,14 +41,15 @@ def connection_parameters(directory, *, expected_host=None):
     ):
         raise Rejected("storage_client_config_invalid")
     for filename, expected in settings["certificates"].items():
-        if digest(bounded_read(safe_child(directory, filename), 4096)) != expected:
+        files[filename] = digest(bounded_read(safe_child(directory, filename), 4096))
+        if files[filename] != expected:
             raise Rejected("storage_client_certificate_changed")
     key = safe_child(directory, "client.key")
-    bounded_read(key, 4096)
+    files["client.key"] = digest(bounded_read(key, 4096))
     passfile = safe_child(directory, ".no-passwords")
     if passfile.exists():
         raise Rejected("storage_password_file_forbidden")
-    return {
+    parameters = {
         "dbname": DATABASE,
         "host": settings["host"],
         "hostaddr": settings["host"] if settings["host"] == "127.0.0.1" else "",
@@ -68,6 +76,7 @@ def connection_parameters(directory, *, expected_host=None):
         "application_name": f"trusted-mlsecops-{settings['role']}",
         "options": "-c search_path=pg_catalog -c statement_timeout=5000 -c lock_timeout=2000",
     }
+    return parameters, files
 
 
 def object_id(value):

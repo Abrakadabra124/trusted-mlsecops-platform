@@ -2,6 +2,11 @@
 
 ## Regression 2026-11-06: открытый TCP transport при blackhole
 
+Повторный [M11 на `7abacda`](../evidence/m11-transport-recovery-7abacda.md)
+принят: 143 cases, тот же lifecycle завершился штатно, source SQL и cluster
+cleanup подтверждены. Ниже сохранены симптом и диагностика исходного отказа.
+Это проверка на конкретном Linux source, не обещание bounded shutdown на любой ОС.
+
 [M11 run 42284704218](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42284704218),
 source `5f6fb84`, завершился отказом `kube_serving_shutdown_deadline` в phase
 `shutdown` после stage `live-trust-blackhole`. Ordinary serving не завершился
@@ -12,8 +17,8 @@ cleanup. Source SQL stop 20:16:01 UTC, owned cluster absence 20:16:06 UTC.
 Source inspection: reusable Session может ждать ответ в уже установленном TCP
 соединении. `connect_timeout=5` ограничивает установление соединения, а server
 `statement_timeout=5000` не прерывает клиентское ожидание потерянного сетевого
-ответа. Отсутствие transport timeout согласуется с симптомом; причинность и
-исправление ещё нужно подтвердить новым тем же native blackhole опытом.
+ответа. Отсутствие transport timeout согласуется с симптомом; после добавления
+параметров тот же native blackhole опыт прошёл на `7abacda`.
 
 В `storage.connection_parameters` добавлены фиксированные client libpq options:
 `tcp_user_timeout=5000` ms, `keepalives=1`, idle=5 s, interval=1 s, count=3.

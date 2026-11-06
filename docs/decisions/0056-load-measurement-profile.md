@@ -153,12 +153,24 @@ Controlled checks подтверждают порядок, timeout без execut
 проверка TLS-файлов перед входом в managed Session. `trust_authority.read`
 передаёт ответственность доверенному factory `Session.connection`; это внутренняя
 зависимость кода, не поле HTTP/CLI. Session на КАЖДОМ использовании выполняет
-полный `connection_parameters`, проверку serving/promoter role, host pin и
+полный `connection_materials`, проверку serving/promoter role, host pin и
 fingerprint четырёх файлов. Ошибка теперь попадает внутрь ownership boundary
 и закрывает прежнее соединение до SQL. Для обычного fresh-connect пути внешний
 role preflight сохранён. Новые внешние factories обязаны соблюдать тот же контракт.
 Документы доверия, подписи, версии и отзыв по-прежнему читаются и проверяются
 для каждого запроса; response cache не появился. Ускорение требует нового native run.
+
+Следующий шаг после p95=211.132398 ms на `91039fd`: одна bounded read каждого
+из четырёх TLS/client files на проверку. `connection_materials` валидирует
+settings/certificates и возвращает параметры с SHA-256 тех же прочитанных байтов.
+`connection_parameters` сохраняет прежний интерфейс; Session использует оба
+результата без повторного чтения. Fingerprints не кешируются, проверка после
+нового connect и на каждом reuse сохранена. Лимит settings 65536 bytes теперь
+применяется также к обычному fresh-connect пути (ранее этот предел уже был
+обязателен для Session). Private key bytes не возвращаются вызывающему коду.
+Diagnostic row `client_parameters` теперь измеряет весь `connection_materials`,
+включая fingerprints; прежняя строка измеряла только validation parameters.
+Это изменение состава timing, а не самостоятельное доказательство ускорения.
 
 Controlled tests проверяют потерю запросов, таймауты, malformed/truncated HTTP,
 границу прогрева, tail, cap, cancellation, неправильные digest/score/schema,

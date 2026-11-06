@@ -71,10 +71,10 @@ class DiagnosticContracts(unittest.TestCase):
             return "PRIVATE"
 
         def credentials(*args, **kwargs):
-            return diagnostic.storage.connection_parameters(*args, **kwargs)
+            return diagnostic.storage.connection_materials(*args, **kwargs)
 
         with (
-            patch.object(diagnostic.storage, "connection_parameters", parameters),
+            patch.object(diagnostic.storage, "connection_materials", parameters),
             patch.object(diagnostic.trust_session, "credentials", credentials),
         ):
             meter = diagnostic.Timings()
@@ -82,7 +82,7 @@ class DiagnosticContracts(unittest.TestCase):
                 self.assertEqual(diagnostic.trust_session.credentials("PRIVATE"), "PRIVATE")
                 with self.assertRaisesRegex(Rejected, "original_error"):
                     diagnostic.trust_session.credentials("PRIVATE", expected_host="bad")
-            self.assertIs(diagnostic.storage.connection_parameters, parameters)
+            self.assertIs(diagnostic.storage.connection_materials, parameters)
             self.assertIs(diagnostic.trust_session.credentials, credentials)
         value = meter.snapshot()
         for name in ("client_parameters", "session_credentials"):

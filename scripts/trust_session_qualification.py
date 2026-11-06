@@ -17,15 +17,17 @@ class TrustSessionContracts(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        for name in ("connection.json", "ca.crt", "client.crt", "client.key"):
-            (self.root / name).write_bytes(name.encode())
+        self.files = {
+            name: digest(name.encode())
+            for name in ("connection.json", "ca.crt", "client.crt", "client.key")
+        }
         self.options = {"user": "ml_serving", "sslmode": "verify-full"}
         self.connections = []
         self.session = trust_session.Session()
         self.addCleanup(self.session.close)
         self.addCleanup(patch.stopall)
         self.parameters = patch.object(
-            trust_session.storage, "connection_parameters", return_value=self.options
+            trust_session.storage, "connection_materials", return_value=(self.options, self.files)
         ).start()
         self.connect = patch.object(trust_session.storage, "connect", side_effect=self.new).start()
         self.clock = patch.object(trust_session.time, "monotonic", return_value=0).start()
@@ -61,7 +63,7 @@ class TrustSessionContracts(unittest.TestCase):
     def test_credential_changes_and_server_closed_connection_reconnect(self):
         previous = self.use()
         for name in ("connection.json", "ca.crt", "client.crt", "client.key"):
-            (self.root / name).write_bytes(b"changed")
+            self.files[name] = digest(b"changed")
             current = self.use()
             self.assertIsNot(current, previous)
             self.assertTrue(previous.closed)
@@ -220,6 +222,46 @@ class TrustSessionContracts(unittest.TestCase):
 
 
 class SessionFileContracts(unittest.TestCase):
+    def test_symlink_client_directory_is_rejected_before_material_reads(self):
+        from mlsecops import storage
+
+        with (
+            patch.object(Path, "is_symlink", return_value=True),
+            patch.object(storage, "bounded_read") as read,
+        ):
+            with self.assertRaisesRegex(Rejected, "storage_client_symlink"):
+                trust_session.credentials(Path("unused"), {})
+            read.assert_not_called()
+
+    def test_credentials_validate_and_fingerprint_each_file_once_without_caching(self):
+        from mlsecops import storage
+        from mlsecops.trust_targets import Target
+        from scripts.trust_targets_qualification import TrustTargetContracts
+
+        fixture = TrustTargetContracts()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        client = fixture.provision_files(Target.MODEL_REVOCATION) / "storage-clients/serving"
+        options = {"expected_host": Target.MODEL_REVOCATION.host}
+        names = ("connection.json", "ca.crt", "client.crt", "client.key")
+        parameters = storage.connection_parameters(client, **options)
+        files = {name: digest((client / name).read_bytes()) for name in names}
+        expected = digest(canonical({"parameters": parameters, "files": files}))
+        with patch.object(storage, "bounded_read", wraps=storage.bounded_read) as read:
+            self.assertEqual(trust_session.credentials(client, options), expected)
+            self.assertCountEqual([call.args[0].name for call in read.call_args_list], names)
+        # Whitespace preserves settings but changes exact file identity. Every
+        # validation must observe it, without caching prior fingerprints.
+        settings = client / "connection.json"
+        content = settings.read_bytes()
+        settings.write_bytes(content + b" ")
+        self.assertNotEqual(trust_session.credentials(client, options), expected)
+        settings.write_bytes(content + b" " * (65536 - len(content)))
+        trust_session.credentials(client, options)
+        settings.write_bytes(settings.read_bytes() + b" ")
+        with self.assertRaises(Rejected):
+            trust_session.credentials(client, options)
+
     def test_real_client_file_validation_precedes_query_on_reused_session(self):
         from mlsecops import storage
         from mlsecops.trust_targets import Target

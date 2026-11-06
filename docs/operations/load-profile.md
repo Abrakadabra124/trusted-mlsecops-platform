@@ -388,3 +388,19 @@ warmup, measurement, отдельный overload и recovery; background heartbe
 Диагностика добавляет небольшую, пока отдельно не измеренную стоимость вызовов
 monotonic clock и lock. Внешние client-side latency, ошибки и пороги M14 остаются
 основой решения; внутренние timings помогают выбрать одно проверяемое исправление.
+
+После `91039fd` fingerprint вычисляется из тех же байтов, которые проверил
+`storage.connection_materials`: четыре fresh bounded reads на validation,
+без второго чтения в Session. Timing `client_parameters` теперь включает
+fingerprints; сравнивать его прежнее и новое значение как одинаковую операцию
+нельзя. При изменении TLS-файла/роли/host ранее открытое соединение закрывается
+до SQL. Перепроверка после connect сохранена. JSON settings больше 65536 bytes
+отвергается также на fresh-connect пути; превышение диагностировать по размеру
+файла без вывода ключей. Нельзя обходить ошибку отключением TLS или fingerprint.
+
+Native `91039fd` / [42289079463](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42289079463)
+сохраняется как fail: 7130/7130 correct, 59.416667 RPS, p95=211.132398 ms,
+p99=223.147815 ms, 0 wrong/429/5xx/timeouts/transport errors.
+Полное окно, resources, overload/recovery и cleanup прошли; latency predicate
+не прошёл. Нельзя заменить этот результат более ранним pass `5f6fb84`.
+После изменения требуется новый полный M14; до него оптимизация не принята.

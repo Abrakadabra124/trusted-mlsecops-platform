@@ -3,27 +3,17 @@
 import threading
 import time
 from contextlib import contextmanager
-from pathlib import Path
 
 from mlsecops import storage
-from mlsecops.contracts import Rejected, bounded_read, canonical, digest, safe_child
+from mlsecops.contracts import Rejected, canonical, digest
 
 MAX_REUSE_SECONDS = 5
 
 
 def credentials(directory, options):
-    parameters = storage.connection_parameters(directory, **options)
+    parameters, files = storage.connection_materials(directory, **options)
     if parameters["user"] not in {"ml_serving", "ml_promoter"}:
         raise Rejected("trust_client_identity")
-    files = {
-        name: digest(bounded_read(safe_child(Path(directory), name), limit))
-        for name, limit in (
-            ("connection.json", 65536),
-            ("ca.crt", 4096),
-            ("client.crt", 4096),
-            ("client.key", 4096),
-        )
-    }
     return digest(canonical({"parameters": parameters, "files": files}))
 
 
