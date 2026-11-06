@@ -41,6 +41,22 @@ def fixture():
 
 
 class PrivacyGateContracts(unittest.TestCase):
+    def test_failure_diagnostic_never_exports_child_values_or_unknown_identifiers(self):
+        for stdout in (
+            b"private exception token",
+            canonical({"cases": [{"id": "private-token", "status": "pass"}]}),
+            canonical({"cases": [{"id": "allowed", "status": "fail"}]}),
+            canonical({"cases": []}),
+            canonical({"cases": [{"id": {}, "status": "pass"}]}),
+            b"null",
+        ):
+            process = subprocess.CompletedProcess([], 1, stdout, b"private stderr token")
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                gate.contract_diagnostic(process, {"allowed"})
+            value = output.getvalue()
+            self.assertNotIn("private", value)
+            self.assertIn('"missing_count":1', value)
+
     def test_contract_cli_emits_only_canonical_summary_and_uses_failure_exit(self):
         from scripts import privacy_contracts
 

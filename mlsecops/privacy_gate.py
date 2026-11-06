@@ -42,12 +42,13 @@ def contracts(root):
         timeout=300,
         check=False,
     )
+    names = privacy_contracts.case_ids(root)
     if process.returncode or process.stderr:
+        contract_diagnostic(process, names)
         raise Rejected("M13_controlled_contracts_failed")
     value = decode(process.stdout, 2 * 1024**2)
     expected = [
-        {"id": name, "status": "pass", "expected": True, "actual": True}
-        for name in sorted(privacy_contracts.case_ids(root))
+        {"id": name, "status": "pass", "expected": True, "actual": True} for name in sorted(names)
     ]
     require_fields(value, ("scope", "status", "checks", "cases"))
     require(
@@ -59,6 +60,31 @@ def contracts(root):
         and canonical(value["cases"]) == canonical(expected)
     )
     return value
+
+
+def contract_diagnostic(process, expected):
+    # Only identifiers from the current source's fixed inventory may be public.
+    # Never publish child exception text, values or a caller-provided identifier.
+    try:
+        value = decode(process.stdout, 2 * 1024**2)
+        passed = {c["id"] for c in value["cases"] if c["status"] == "pass"}
+    except (Rejected, KeyError, TypeError, ValueError):
+        passed = set()
+    missing = sorted(expected - passed)
+    print(
+        canonical(
+            {
+                "scope": "M13-contract-diagnostic",
+                "status": "fail",
+                "release_ready": False,
+                "missing_methods": missing[:16],
+                "missing_count": len(missing),
+                "nonzero_exit": process.returncode != 0,
+                "stderr_present": bool(process.stderr),
+            }
+        ).decode(),
+        flush=True,
+    )
 
 
 def campaign(value):

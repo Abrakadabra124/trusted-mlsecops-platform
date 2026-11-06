@@ -10,6 +10,7 @@ from mlsecops.contracts import canonical
 from scripts.evaluation_contracts import Result
 
 MODULES = (
+    "scripts.serving_access_qualification",
     "scripts.serving_http_qualification",
     "scripts.serving_http_audit_qualification",
     "scripts.serving_audit_qualification",

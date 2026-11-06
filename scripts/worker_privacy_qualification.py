@@ -110,7 +110,15 @@ runpy.run_module(module, run_name='__main__')
 
     def test_serving_guard_precedes_session_and_success_is_preserved(self):
         events = []
+        source, output, diagnostic = (
+            Mock(buffer=io.BytesIO()),
+            Mock(buffer=io.BytesIO()),
+            io.StringIO(),
+        )
         with (
+            patch.object(serving_worker.sys, "stdin", source),
+            patch.object(serving_worker.sys, "stdout", output),
+            patch.object(serving_worker.sys, "stderr", diagnostic),
             patch.object(
                 serving_worker, "enforce_privacy", side_effect=lambda: events.append("guard")
             ),
@@ -118,10 +126,11 @@ runpy.run_module(module, run_name='__main__')
             patch.object(serving_worker, "initialize_runtime"),
             patch.object(
                 serving_worker, "serve", side_effect=lambda *args: events.append("serve") or 0
-            ),
+            ) as serve,
         ):
             self.assertEqual(serving_worker.main(), 0)
         self.assertEqual(events, ["guard", "serve"])
+        self.assertEqual(serve.call_args.args[:3], (source.buffer, output.buffer, diagnostic))
 
     def invoke(self, arguments, *, failure=None):
         source = Mock(buffer=Mock(read=Mock(return_value=b'{"action":"predict"}')))
