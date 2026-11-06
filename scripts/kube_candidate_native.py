@@ -222,7 +222,46 @@ def qualify(
                 package, context, envelope, qualification_public, public
             ),
         )
+        private = options["privacy_operator"].destination
+        write_json(private / "permit.json", envelope)
+        write_json(private / "public.json", {"qualification": qualification_public})
     result = invoke(state, profile, config, expected, candidate_probe=True, **options)
+    if privacy:
+        from scripts.serving_output_native import verify_packet
+
+        # invoke has completed child exit and owned Job/ConfigMap cleanup. Reload
+        # current signed CAS materials and the retained host packet independently.
+        audit = result["audit"]
+        summary = verify_packet(
+            root,
+            state,
+            source,
+            campaign,
+            {
+                "campaign_id": campaign,
+                "qualification_permit_sha256": permit_hash,
+                "proposal_reference": refusal["proposal"],
+                "subject_sha256": verified["subject_sha256"],
+                "model_sha256": refusal["model"],
+                "candidate_reference": context["candidate_reference"],
+                "evaluation_reference": context["evaluation_reference"],
+                "runtime": {
+                    "audit_evidence": audit,
+                    "http_correlation": audit["correlation"],
+                    "public_audit_window": audit["public"],
+                },
+            },
+            evidence_directory="evidence/privacy/" + campaign,
+            proposal_report="release-proposals/" + refusal["campaign_id"] + "/report.json",
+        )
+        result["primary_reverification"] = summary
+        result["cases"].extend(
+            {"id": name, "status": "pass", "expected": True, "actual": True}
+            for name in (
+                "post-exit-retained-packet-reverified",
+                "post-cleanup-primary-materials-reverified",
+            )
+        )
     if snapshot(state) != base_snapshot:
         raise Rejected("candidate_inference_promotion_state_changed")
     revoked_key = digest(signing.decode64(public))

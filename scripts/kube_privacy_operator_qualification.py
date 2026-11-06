@@ -142,6 +142,7 @@ class OperatorHandoffContracts(unittest.TestCase):
                 return {"bytes": 0, "terminal": False}, b""
 
             with (
+                patch.object(operator.audit_snapshot, "store_packet") as store,
                 patch.object(
                     operator.kube_storage,
                     "validate",
@@ -170,6 +171,7 @@ class OperatorHandoffContracts(unittest.TestCase):
                 patch.object(operator, "capture", side_effect=capture),
             ):
                 result = control.audit({"packet": operator.signing.encode64(content)})
+                store.assert_called_once_with(control.destination / "audit-evidence", content)
                 self.assertEqual(
                     [c.args[1] for c in image.call_args_list], ["sha256:" + "d" * 64] * 2
                 )
@@ -273,8 +275,16 @@ class OperatorHandoffContracts(unittest.TestCase):
             control.needles = (b"private-canary",)
             report = {"worker_observation": control.worker_receipt, "audit": control.audit_receipt}
             raw = canonical(report) + b"\n"
-            result = control.finish(report, raw)
+            with (
+                patch.object(
+                    operator.audit_snapshot, "load_packet", return_value=b"packet"
+                ) as load,
+                patch.object(operator.audit_evidence, "verify", return_value=control.audit_receipt),
+            ):
+                result = control.finish(report, raw)
+            load.assert_called_once_with(control.destination / "audit-evidence")
             self.assertEqual(result["operator_observation"]["service_bytes"], 30)
+            self.assertTrue(result["operator_observation"]["retained_packet_reverified"])
             self.assertFalse(result["operator_observation"]["release_ready"])
             for content in (raw[:-1], b"prefix\n" + raw, raw + b"extra\n"):
                 with self.subTest(content=content), self.assertRaises(Rejected):
@@ -293,6 +303,40 @@ class OperatorHandoffContracts(unittest.TestCase):
                     self.assertRaises(Rejected),
                 ):
                     control.finish(report, raw)
+
+    def test_after_child_exit_missing_changed_or_invalid_retained_packet_rejects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = operator.Coordinator(
+                Path(directory), {}, audit_fixture.binding(), audit_fixture.expected()
+            )
+            content = audit_fixture.packet()
+            control.audit_receipt = operator.audit_evidence.verify(
+                content, binding=control.binding, expected_context=control.context
+            )
+            control.worker_receipt = {"worker": True}
+            control.phases = list(operator.PHASES)
+            control.services = {"ml-storage": {"bytes": 0}, "ml-trust": {"bytes": 0}}
+            control.needles = (b"private-canary",)
+            report = {"worker_observation": control.worker_receipt, "audit": control.audit_receipt}
+            for failure in (Rejected("missing"), b"changed", content):
+                with (
+                    self.subTest(failure=type(failure).__name__),
+                    patch.object(
+                        operator.audit_snapshot,
+                        "load_packet",
+                        **(
+                            {"side_effect": failure}
+                            if isinstance(failure, Exception)
+                            else {"return_value": failure}
+                        ),
+                    ),
+                ):
+                    if failure == content:
+                        # A self-consistent child report cannot replace retained primary bytes.
+                        control.audit_receipt = {**control.audit_receipt, "packet_sha256": "f" * 64}
+                        report["audit"] = control.audit_receipt
+                    with self.assertRaises(Rejected):
+                        control.finish(report, canonical(report) + b"\n")
 
     def test_encoding_is_bounded_and_canonical(self):
         self.assertEqual(operator.decoded("YQ==", 1), b"a")

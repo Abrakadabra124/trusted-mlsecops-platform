@@ -11,7 +11,7 @@ from scripts.kube_privacy_diagnostic import validated
 
 
 def report():
-    return {
+    value = {
         "status": "pass",
         "release_ready": False,
         "source_dirty": False,
@@ -31,7 +31,11 @@ def report():
                 "native_stderr_bytes": 0,
                 "canary_count": 9,
             },
-            "operator_observation": {"service_windows": 2, "worker_terminal": True},
+            "operator_observation": {
+                "service_windows": 2,
+                "worker_terminal": True,
+                "retained_packet_reverified": True,
+            },
             "privacy": {
                 "approved_metric_series": 69,
                 "request_cases": 12,
@@ -49,13 +53,15 @@ def report():
         },
         "private_url": "https://private-canary.invalid",
     }
+    value["native"]["primary_reverification"] = copy.deepcopy(value["native"]["audit"])
+    return value
 
 
 class NativePrivacyProjectionContracts(unittest.TestCase):
     def test_projection_contains_finite_counts_not_private_graph_or_hashes(self):
         projected = native.projection(report())
         self.assertNotIn("private-canary", canonical(projected).decode())
-        self.assertEqual(projected["checks"], 26)
+        self.assertEqual(projected["checks"], 28)
         self.assertEqual(projected["full_M13"], "inconclusive")
         self.assertFalse(projected["release_ready"])
 
@@ -67,6 +73,8 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
             lambda v: v["native"].update(model_sha256="foreign"),
             lambda v: v["native"]["output_observation"].update(native_stderr_bytes=1),
             lambda v: v["native"]["operator_observation"].update(service_windows=1),
+            lambda v: v["native"]["operator_observation"].update(retained_packet_reverified=1),
+            lambda v: v["native"].update(primary_reverification={}),
             lambda v: v["native"]["audit"].update(observed_responses="private-canary"),
             lambda v: v["native"]["audit"]["correlation"].update(events=True),
             lambda v: v["native"]["audit"]["correlation"].update(events=65537),

@@ -125,6 +125,53 @@ class ParentPacketContracts(unittest.TestCase):
         self.assertEqual(self.run_check(), self.summary)
         self.assertFalse(self.summary["release_ready"])
 
+    def test_kubernetes_parent_reloads_campaign_proposal_and_retained_packet(self):
+        proposal_path = "release-proposals/" + "e" * 32 + "/report.json"
+        evidence_directory = "evidence/privacy/" + self.campaign
+        from mlsecops.contracts import read_json
+
+        original = read_json(self.state / "evidence/release-native.json")
+        write_json(self.state / proposal_path, original)
+        destination = self.state / evidence_directory
+        write_json(destination / "permit.json", self.envelope)
+        write_json(destination / "public.json", {"qualification": self.public})
+        # The Docker-era default report must not supply the Kubernetes candidate.
+        write_json(self.state / "evidence/release-native.json", {"status": "fail"})
+        for fault in (None, "proposal", "packet", "permit"):
+            with (
+                self.subTest(fault=fault),
+                patch.object(release_bundle, "load", return_value=self.package),
+                patch.object(
+                    audit_snapshot,
+                    "load_packet",
+                    return_value=(b"changed" if fault == "packet" else self.content),
+                ) as read,
+                patch("time.time", return_value=self.bundle.clock + 10),
+            ):
+                if fault == "proposal":
+                    write_json(self.state / proposal_path, {**original, "status": "fail"})
+                elif fault == "permit":
+                    write_json(destination / "permit.json", {})
+
+                def check():
+                    return native.verify_packet(
+                        self.root,
+                        self.state,
+                        self.source,
+                        self.campaign,
+                        self.report,
+                        evidence_directory=evidence_directory,
+                        proposal_report=proposal_path,
+                    )
+
+                if fault is None:
+                    self.assertEqual(check(), self.summary)
+                    read.assert_called_once_with(destination / "audit-evidence")
+                else:
+                    with self.assertRaises(Rejected):
+                        check()
+                    write_json(self.state / proposal_path, original)
+
     def test_replayed_campaign_expired_and_invalid_signed_permit_reject(self):
         for fault in ("campaign", "expiry", "signature", "purpose", "image", "publisher-key"):
             permit = copy.deepcopy(self.permit)

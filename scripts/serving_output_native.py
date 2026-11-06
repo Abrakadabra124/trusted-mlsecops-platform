@@ -72,7 +72,7 @@ def qualified(root, state, image, port, observer, campaign=None):
     )
 
 
-def verified_materials(root, state, expected):
+def verified_materials(root, state, expected, *, report_path="evidence/release-native.json"):
     import math
     import time
 
@@ -82,7 +82,7 @@ def verified_materials(root, state, expected):
 
     report, source_trust, public = (
         read_json(safe_child(state, name))
-        for name in ("evidence/release-native.json", "storage-trust.json", "trusted-keys.json")
+        for name in (report_path, "storage-trust.json", "trusted-keys.json")
     )
     package = release_bundle.load(
         safe_child(state, "storage-clients/serving"),
@@ -114,7 +114,16 @@ def verified_subject(root, state, expected):
     }
 
 
-def verify_packet(root, state, expected, campaign, result):
+def verify_packet(
+    root,
+    state,
+    expected,
+    campaign,
+    result,
+    *,
+    evidence_directory=None,
+    proposal_report="evidence/release-native.json",
+):
     import math
     import time
 
@@ -136,8 +145,13 @@ def verify_packet(root, state, expected, campaign, result):
         or result["campaign_id"] != campaign
     ):
         raise Rejected("serving_output_campaign")
-    context, verified, package, publisher = verified_materials(root, state, expected)
-    destination = safe_child(state, f"serving-qualifications/{campaign}")
+    context, verified, package, publisher = verified_materials(
+        root, state, expected, report_path=proposal_report
+    )
+    destination = safe_child(
+        state,
+        f"serving-qualifications/{campaign}" if evidence_directory is None else evidence_directory,
+    )
     public = read_json(safe_child(destination, "public.json"))
     require_fields(public, ("qualification",))
     public = public["qualification"]

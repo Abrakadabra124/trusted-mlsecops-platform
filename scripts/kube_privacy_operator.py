@@ -3,7 +3,14 @@
 import re
 import time
 
-from mlsecops import audit_evidence, kube_serving_runtime, kube_storage, kube_trust, signing
+from mlsecops import (
+    audit_evidence,
+    audit_snapshot,
+    kube_serving_runtime,
+    kube_storage,
+    kube_trust,
+    signing,
+)
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import (
     Rejected,
@@ -240,7 +247,7 @@ class Coordinator:
         ]
         if any(needle in content for content in channels for needle in self.needles):
             raise Rejected("privacy_audit_canary")
-        atomic_write(self.destination / "audit-packet.json", packet)
+        audit_snapshot.store_packet(self.destination / "audit-evidence", packet)
         self.step = "service-logs"
         for module in (kube_storage, kube_trust):
             marker = module.validate(self.state)
@@ -278,12 +285,22 @@ class Coordinator:
             or any(needle in raw for needle in self.needles)
         ):
             raise Rejected("privacy_operator_incomplete")
+        # finish runs only after the exact probe Pod has terminated successfully.
+        # Re-read the stored bytes; agreement between two in-memory receipts is not proof.
+        retained = audit_evidence.verify(
+            audit_snapshot.load_packet(self.destination / "audit-evidence"),
+            binding=self.binding,
+            expected_context=self.context,
+        )
+        if canonical(retained) != canonical(self.audit_receipt):
+            raise Rejected("privacy_operator_retained_packet_changed")
         result = {
             **report,
             "operator_observation": {
                 "status": "pass",
                 "release_ready": False,
                 "worker_terminal": True,
+                "retained_packet_reverified": True,
                 "service_windows": len(self.services),
                 "service_bytes": sum(v["bytes"] for v in self.services.values()),
             },

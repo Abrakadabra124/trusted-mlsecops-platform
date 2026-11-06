@@ -26,6 +26,8 @@ CASES = {
     "all-client-input-canaries-available",
     "retained-primary-correlation",
     "operator-reverified-primary-packet",
+    "post-exit-retained-packet-reverified",
+    "post-cleanup-primary-materials-reverified",
     "context-candidate-not-release-selection",
     "context-ready-generation-bound",
     "context-prediction-generation-bound",
@@ -61,6 +63,8 @@ def projection(report):
         or native["output_observation"]["canary_count"] != 9
         or native["operator_observation"]["service_windows"] != 2
         or native["operator_observation"]["worker_terminal"] is not True
+        or native["operator_observation"]["retained_packet_reverified"] is not True
+        or canonical(native["primary_reverification"]) != canonical(native["audit"])
         or native["privacy"]["approved_metric_series"] != 69
         or native["privacy"]["request_cases"] != 12
         or native["privacy"]["audit_events_confirmed"] != 36
@@ -94,6 +98,8 @@ def projection(report):
         "service_log_windows": 2,
         "native_stderr_bytes": 0,
         "worker_cleanup": True,
+        "retained_packet_reverified": True,
+        "post_cleanup_primary_reverified": True,
     }
     if (
         type(result["source_revision"]) is not str
