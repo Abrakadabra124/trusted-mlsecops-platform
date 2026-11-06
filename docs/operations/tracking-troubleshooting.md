@@ -144,3 +144,11 @@ Leaf certificates действуют 30 дней. PB-01 блокирует stale
 - Полный M06, Kubernetes tracking integration, recovery и security image gate остаются открытыми. При неизвестном результате оставить fail/inconclusive и приложить [incident record](incident-template.md), не объявлять восстановление.
 
 При разработке doctor найдено различие между mock и реальным filesystem: `read_json` оборачивает отсутствующий файл в `Rejected(artifact_unavailable)`, а не возвращает FileNotFoundError напрямую. Добавлен реальный отрицательный тест и исправлена классификация в inconclusive без создания state; malformed JSON по-прежнему fail. Это исправление диагностического статуса, не восстановление пропавших данных. Поэтому одни mock tests без native проверки недостаточны.
+
+## Dependency audit: точечное обновление pyasn1
+
+Run `42226136291` на `d28f501` остановился до build/service: `pip-audit --strict --require-hashes` обнаружил в `pyasn1 0.6.4` CVE-2026-119194, CVE-2026-119195, CVE-2026-119196 и CVE-2026-119197. Официальный [release 0.6.5](https://github.com/pyasn1/pyasn1/releases/tag/v0.6.5) содержит четыре соответствующих decoder/CPU fixes. Это security patch транзитивной зависимости, не смена MLflow или storage architecture.
+
+Lock пересобран штатным `uv pip compile` с `--upgrade-package pyasn1==0.6.5`, прежними Python/platform/no-build/hash параметрами. Проверено, что из 91 package изменились только версия и hashes pyasn1. Локальный повторный audit дал 91 dependency / 0 известных findings; contract checks orchestration/configuration/client: 12/16/19 pass. Это не native MLflow compatibility proof: hosted build, TLS/readback/restart и M06 должны пройти заново. Предупреждения auditor о нечитаемом cache entry означали cache miss; аудит завершился с exit 0 и полным JSON без findings.
+
+При повторном отказе не добавлять ignore-vuln и не ослаблять strict/hash flags. Сохранить исходный audit, сверить advisory и upstream patch, обновить только нужную зависимость, сравнить весь package inventory, повторить audit и native workflow. Images/system packages проверяются отдельным image audit; отсутствие Python findings не закрывает его.
