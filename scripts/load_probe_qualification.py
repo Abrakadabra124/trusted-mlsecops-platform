@@ -4,7 +4,7 @@ import runpy
 import sys
 import tempfile
 import unittest
-from contextlib import nullcontext
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -18,6 +18,29 @@ from scripts.load_measurement_qualification import rows
 
 
 class ProbeContracts(unittest.TestCase):
+    def test_real_lifespan_shutdown_failure_cannot_be_reported_as_success(self):
+        @asynccontextmanager
+        async def lifespan(app):
+            yield
+            raise RuntimeError("controlled_shutdown_failure")
+
+        app = probe.serving_http.FastAPI(lifespan=lifespan)
+        with self.assertRaisesRegex(Rejected, "load_server_lifespan"), probe.listen(app):
+            pass
+
+        async def explicit_failure(scope, receive, send):
+            self.assertEqual(scope["type"], "lifespan")
+            self.assertEqual((await receive())["type"], "lifespan.startup")
+            await send({"type": "lifespan.startup.complete"})
+            self.assertEqual((await receive())["type"], "lifespan.shutdown")
+            await send({"type": "lifespan.shutdown.failed", "message": "controlled_failure"})
+
+        with (
+            self.assertRaisesRegex(Rejected, "load_server_lifespan"),
+            probe.listen(explicit_failure),
+        ):
+            pass
+
     def test_real_listener_closes_and_failed_thread_start_does_not_leak_socket(self):
         app = probe.serving_http.FastAPI()
 

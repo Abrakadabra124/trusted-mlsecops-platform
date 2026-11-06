@@ -83,14 +83,14 @@ class NativeLoadContracts(unittest.TestCase):
             command.assert_not_called()
 
     def test_load_dispatch_deadline_observer_and_owned_cleanup(self):
-        for failed in (False, True):
+        for failed in (False, "measure", "shutdown"):
             created = []
             report = (
                 {
                     "status": "fail",
                     "release_ready": False,
                     "code": "load_probe_rejected",
-                    "phase": "measure",
+                    "phase": failed,
                 }
                 if failed
                 else {"status": "pass", "release_ready": False}
@@ -117,7 +117,9 @@ class NativeLoadContracts(unittest.TestCase):
                     },
                     "spec": created[-1]["spec"]["template"]["spec"],
                     "status": {
-                        "containerStatuses": [{"state": {"terminated": {"exitCode": int(failed)}}}]
+                        "containerStatuses": [
+                            {"state": {"terminated": {"exitCode": int(bool(failed))}}}
+                        ]
                     },
                 }
                 kwargs["observe"](pod)
@@ -174,7 +176,7 @@ class NativeLoadContracts(unittest.TestCase):
                             candidate_probe=True,
                             load_operator=observer,
                         )
-                    self.assertIn('"phase":"measure"', output.getvalue())
+                    self.assertIn('"phase":"' + failed + '"', output.getvalue())
                 else:
                     result = serving.invoke(
                         Path(temporary),

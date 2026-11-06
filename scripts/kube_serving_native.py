@@ -242,7 +242,7 @@ def invoke(
                     and document["release_ready"] is False
                     and document["code"] == "load_probe_rejected"
                     and document["phase"]
-                    in {"startup", "activate", "start", "measure", "finish", "cleanup"}
+                    in {"startup", "activate", "start", "measure", "finish", "shutdown", "cleanup"}
                 ):
                     failure.update(probe_failure="load", **document)
                 if (

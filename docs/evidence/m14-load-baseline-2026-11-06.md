@@ -7,6 +7,43 @@ Workflow корректно завершился с failure из-за `profile_m
 
 ## Источник и первичные доказательства
 
+Следующий полный замер после исправления admission, trust connection reuse и
+audit capacity опубликован отдельно: [77c02af primary](m14-load-77c02af.md),
+[run 42279037992](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42279037992).
+Это **ещё failure по latency**, остальные client checks в этом запуске прошли.
+
+| Измерение 77c02af | Результат |
+|---|---:|
+| Полное measurement window | 120 s после 10 s warmup |
+| Корректные ответы / все измеренные попытки | 6455 / 6455 |
+| Successful RPS | 53.7917 |
+| p50 / p95 / p99 | 175.450 / 341.145 / 375.871 ms |
+| 429 / 5xx / timeout / transport / wrong prediction | 0 / 0 / 0 / 0 / 0 |
+| Overload burst | 10 correct + 30 bounded 429, 0 errors, recovery pass |
+| Audit до shutdown | 28040 accepted = durable; 0 pending/unconfirmed; 30328174 bytes |
+| Resource samples | 40 на каждый container, maximum gap upper bound 11 s |
+| Controller observed CPU / max sampled usage | 0.9308 cores / 183779328 bytes |
+| Worker observed CPU / max sampled usage | 0.0500 cores / 41799680 bytes |
+
+Новый sampling profile использует проверенный Kubelet interval 5 s; CPU/RAM
+не являются замером в прежней конфигурации. В JSON сохранены секундная
+неопределённость, реальные duration bounds и оговорка об отсутствии true peak.
+Нагрузочный профиль, клиентские quotas и latency thresholds не изменены.
+Source fingerprint пересчитан из Git archive, оба receipt digests проверены.
+Linux suites: 77 + 130 + 124 tests, 0 skips. Audit core 94/98 branches,
+retention 102/102; snapshot общий Cover 98%. Source SQL stopped 19:28:29 UTC,
+cluster absence verified 19:28:31 UTC. Worker removal и private packet readback
+подтверждены оператором. Этот source ещё не проверял Uvicorn terminal lifespan
+flags: независимую ошибку shutdown runner исправляет следующий increment.
+
+Внутренние timings всех фаз: engine hold 129.317 s / 7013 calls,
+trust read 74.898 s / 14026 calls, reader check 94.938 s, worker ping 14.647 s,
+worker predict 19.023 s. Это вложенные измерения; они помогают локализовать
+оставшийся p95, но не заменяют клиентскую latency. Следующий diagnostic slice
+отделяет повторную проверку SQL parameters и credential fingerprints.
+
+Материалы исходного 3861d8a ниже сохранены как исторический baseline.
+
 - Source: `3861d8a0522394ea6121eb7b0d6e15a58095b9c9`, dirty=false.
 - [Native run 42266248228](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42266248228),
   job `128058809744`.

@@ -78,6 +78,11 @@ def listen(app):
         listener.close()
         if started and thread.is_alive():
             raise Rejected("load_server_shutdown")
+        lifespan = getattr(server, "lifespan", None)
+        if any(
+            getattr(lifespan, flag, False) is True for flag in ("error_occurred", "shutdown_failed")
+        ):
+            raise Rejected("load_server_lifespan")
 
 
 async def exercise(port, tokens, golden):
@@ -200,6 +205,7 @@ def qualify(config, expected):
                 "diagnostics_sha256"
             ) != digest(canonical(diagnostics)):
                 raise Rejected("load_operator_summary_changed")
+            PHASE = "shutdown"
     finally:
         # Also covers failed thread creation before the application's lifespan.
         engine.close()

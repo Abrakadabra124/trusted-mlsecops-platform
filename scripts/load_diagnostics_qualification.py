@@ -55,8 +55,40 @@ class DiagnosticContracts(unittest.TestCase):
         self.assertIs(engine.exclusive, exclusive)
         result = meter.snapshot()
         self.assertNotIn("PRIVATE", str(result))
-        self.assertTrue(all(row["count"] == 1 and row["failed"] == 0 for row in result.values()))
+        self.assertTrue(
+            all(
+                row["count"] == (0 if name in {"client_parameters", "session_credentials"} else 1)
+                and row["failed"] == 0
+                for name, row in result.items()
+            )
+        )
         self.assertTrue(all(row["total_ns"] >= row["max_ns"] >= 0 for row in result.values()))
+
+    def test_credential_measurements_preserve_nested_calls_errors_and_restore_globals(self):
+        def parameters(*args, **kwargs):
+            if kwargs.get("expected_host") == "bad":
+                raise Rejected("original_error")
+            return "PRIVATE"
+
+        def credentials(*args, **kwargs):
+            return diagnostic.storage.connection_parameters(*args, **kwargs)
+
+        with (
+            patch.object(diagnostic.storage, "connection_parameters", parameters),
+            patch.object(diagnostic.trust_session, "credentials", credentials),
+        ):
+            meter = diagnostic.Timings()
+            with meter.instrument(fixture()):
+                self.assertEqual(diagnostic.trust_session.credentials("PRIVATE"), "PRIVATE")
+                with self.assertRaisesRegex(Rejected, "original_error"):
+                    diagnostic.trust_session.credentials("PRIVATE", expected_host="bad")
+            self.assertIs(diagnostic.storage.connection_parameters, parameters)
+            self.assertIs(diagnostic.trust_session.credentials, credentials)
+        value = meter.snapshot()
+        for name in ("client_parameters", "session_credentials"):
+            self.assertEqual(value[name]["count"], 2)
+            self.assertEqual(value[name]["failed"], 1)
+        self.assertNotIn("PRIVATE", str(value))
 
     def test_exact_timing_failure_propagation_and_refused_lock(self):
         meter = diagnostic.Timings()

@@ -163,6 +163,22 @@ Native интеграция выполняется только в разреш�
 
 ## Восстановление и публикация
 
+Отдельная обнаруженная ошибка runner: завершение Uvicorn thread само по себе
+не доказывало успешный lifespan shutdown. В закреплённой установленной версии
+`uvicorn/lifespan/on.py` исключение teardown сохраняется в `error_occurred`
+или `shutdown_failed`; `server.run()` может возвратиться без исключения.
+Реальный loopback failure-first test воспроизвёл ложный успешный выход.
+Listener теперь проверяет оба terminal flags и возвращает `load_server_lifespan`;
+фаза probe становится `shutdown` до закрытия. Проверены как исключение
+FastAPI lifespan, так и явный ASGI `lifespan.shutdown.failed`.
+Ошибка закрытия audit writer больше не должна исчезать за успешным thread join.
+
+Run `42278800477` на `0d19cfb` остановился до bootstrap: 77 + 130 + 116 Linux
+tests прошли без skips, audit core 94/98 branch exits, retention 102/102,
+но snapshot coverage был 79% из-за отсутствия существующего packet I/O suite
+в новой команде CI. На `77c02af` добавлен этот suite, пороги не изменены.
+Никакая инфраструктура не была создана этим неуспешным run.
+
 После исправления причины повторить controlled tests и полный baseline на том же
 профиле. Менять только один подтверждённый bottleneck за раз; хранить сравнимые
 результаты до/после. Не отключать audit, trust checks или quotas ради p95.
@@ -290,7 +306,11 @@ warmup, measurement, отдельный overload и recovery; background heartbe
 
 Обёртки работают только внутри load probe и восстанавливаются в `finally`.
 Аргументы, return values и exception text в агрегаты не записываются. Размер
-состояния постоянен: семь timing rows и три набора конечных причин 429.
+состояния постоянен: девять timing rows и три набора конечных причин 429.
+После `77c02af` добавлены `client_parameters` и `session_credentials`:
+они измеряют полную проверку SQL connection parameters и credential fingerprint
+внутри disposable probe. Обёртки модульных функций восстанавливаются в finally;
+новые строки не содержат имён файлов, certificate/key bytes или SQL arguments.
 `overloaded`, `client_limited` и `unrecognized` считаются отдельно для normal
 (warmup + measurement), overload и recovery. Оператор сверяет их суммы с
 клиентским отчётом и связывает диагностический packet digest с receipt.

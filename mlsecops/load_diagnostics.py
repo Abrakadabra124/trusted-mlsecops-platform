@@ -5,6 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 
+from mlsecops import storage, trust_session
 from mlsecops.contracts import Rejected, require_fields
 
 NAMES = (
@@ -15,6 +16,8 @@ NAMES = (
     "predict_total",
     "engine_wait",
     "engine_hold",
+    "client_parameters",
+    "session_credentials",
 )
 CODES = ("overloaded", "client_limited", "unrecognized")
 SCOPE = "probe-internal-diagnostics-not-independent"
@@ -57,6 +60,8 @@ def checked_audit(value):
 
 def targets(engine):
     return (
+        (storage, "connection_parameters", "client_parameters"),
+        (trust_session, "credentials", "session_credentials"),
         (engine.reader, "check", "reader_check"),
         (engine.reader.trust, "reader", "trust_read"),
         (engine.worker, "ping", "worker_ping"),
