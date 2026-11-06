@@ -208,12 +208,11 @@ def response_contract(value, path, status):
         raise Rejected("privacy_response_schema")
 
 
-def exercise(request, body, *, metrics_check=None, input_observer=None):
+def inputs(body, credential):
     marker = secrets.token_hex(16)
     secret = secrets.token_hex(32)
     feature = 0.3183098861837907
     valid = {**body, "instances": [{**body["instances"][0], "change_size": feature}]}
-    credential = getattr(request, "privacy_credential", None)
     if type(credential) is not str or re.fullmatch("[a-f0-9]{64}", credential) is None:
         raise Rejected("privacy_credential_missing")
     needles = tuple(
@@ -222,8 +221,6 @@ def exercise(request, body, *, metrics_check=None, input_observer=None):
     )
     response_needles = needles + (canonical(valid["instances"][0]),)
     private_needles = response_needles + (str(feature).encode(),)
-    if input_observer is not None:
-        input_observer(private_needles)
     cases = (
         ("/v1/predict", valid, {}, 200),
         (
@@ -260,6 +257,15 @@ def exercise(request, body, *, metrics_check=None, input_observer=None):
         ("/v1/predict", marker.encode() + b"x" * 65536, {}, 413),
         ("/readyz?email=" + marker, None, {}, 200),
     )
+    return cases, response_needles, private_needles
+
+
+def exercise(request, body, *, metrics_check=None, input_observer=None):
+    cases, response_needles, private_needles = inputs(
+        body, getattr(request, "privacy_credential", None)
+    )
+    if input_observer is not None:
+        input_observer(private_needles)
     before = drained(request)
     captures = {name: LifecycleCapture() for name in ("stdout", "stderr", "logs")}
     signals = Signals()

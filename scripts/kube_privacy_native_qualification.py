@@ -2,6 +2,7 @@ import copy
 import io
 import tempfile
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
@@ -52,8 +53,40 @@ def report():
             },
         },
         "private_url": "https://private-canary.invalid",
+        "controlled_cli": {
+            "status": "pass",
+            "release_ready": False,
+            "full_M13": "inconclusive",
+            "scope": "controlled-ordinary-cli-privacy-not-full-M13",
+            "model_sha256": "d" * 64,
+            "subject_sha256": "e" * 64,
+            "post_cleanup_primary_reverified": True,
+            "retained_snapshot_reverified": True,
+            "independent_admission_observed": False,
+            "native": {
+                "privacy": {
+                    "schema_version": 1,
+                    "status": "pass",
+                    "release_ready": False,
+                    "scope": "ordinary-cli-privacy-not-full-M13",
+                    "canaries": 9,
+                    "matrix_requests": 12,
+                    "quota_requests": 6,
+                    "fenced_requests": 2,
+                    "cli_output_bytes": 0,
+                    "metrics": {"series": 69},
+                    "audit": {"independent_admission_observed": False},
+                }
+            },
+        },
     }
     value["native"]["primary_reverification"] = copy.deepcopy(value["native"]["audit"])
+    value["controlled_cli"]["native"].update(
+        status="pass",
+        release_ready=False,
+        max_golden_error=0.0,
+        cases=sorted(native.CLI_CASES) + ["response-model-and-bundle-binding"] * 2,
+    )
     return value
 
 
@@ -80,6 +113,12 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
             lambda v: v["native"]["audit"]["correlation"].update(events=65537),
             lambda v: v["source"].update(source_revision="private-canary"),
             lambda v: v.update(release_ready=True),
+            lambda v: v["controlled_cli"].update(model_sha256=v["model_sha256"]),
+            lambda v: v["controlled_cli"].update(retained_snapshot_reverified=False),
+            lambda v: v["controlled_cli"].update(independent_admission_observed=True),
+            lambda v: v["controlled_cli"]["native"]["privacy"].update(cli_output_bytes=1),
+            lambda v: v["controlled_cli"]["native"].update(max_golden_error=0.1),
+            lambda v: v["controlled_cli"]["native"]["cases"].pop(),
         )
         for mutate in mutations:
             value = report()
@@ -110,6 +149,13 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
                 with (
                     patch.object(native, "hosted"),
                     patch.object(native.promotion_state, "install") as install,
+                    patch.object(
+                        native,
+                        "controlled",
+                        side_effect=lambda *args: nullcontext(
+                            (value["controlled_cli"], Path("test-key"))
+                        ),
+                    ),
                     patch.object(
                         native, "materials", side_effect=[{}, {"changed": "yes"} if changed else {}]
                     ),

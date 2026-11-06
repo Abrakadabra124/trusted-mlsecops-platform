@@ -146,7 +146,11 @@ def stop(process):
         raise Rejected("kube_serving_service_exit")
 
 
-def qualify(config, expected, progress=None):
+def qualify(config, expected, progress=None, *, privacy=None):
+    if privacy is not None and (
+        expected.get("ready") is not True or "fault" in expected or "expires_at" in expected
+    ):
+        raise Rejected("kube_serving_privacy_mode_conflict")
     client = Client("serving")
     cases = []
     progress = ["configuration"] if progress is None else progress
@@ -193,6 +197,8 @@ def qualify(config, expected, progress=None):
         token_path.chmod(0o600)
         config = copy.deepcopy(config)
         config.update(token_file=str(token_path), audit_directory=str(directory / "audit"))
+        if privacy is not None:
+            privacy.configure(directory, config, token)
         # Journal deliberately requires an existing, owned private directory.
         (directory / "audit").mkdir(mode=0o700)
         config_path = directory / "config.json"
@@ -213,20 +219,38 @@ def qualify(config, expected, progress=None):
                 start_new_session=True,
             )
 
-        def request(path, body=None, authorized=True):
+        def request(path, body=None, authorized=True, *, raw=False, credential=None, headers=None):
             connection = http.client.HTTPConnection("127.0.0.1", 8080, timeout=12)
             try:
                 connection.request(
                     "POST" if body is not None else "GET",
                     path,
-                    body=body,
+                    body=canonical(body) if isinstance(body, dict) else body,
                     headers={
                         "Content-Type": "application/json",
-                        **({"Authorization": "Bearer " + token} if authorized else {}),
+                        **(
+                            {
+                                "Authorization": "Bearer "
+                                + (token if credential is None else credential)
+                            }
+                            if authorized
+                            else {}
+                        ),
+                        **(headers or {}),
                     },
                 )
                 response = connection.getresponse()
-                return response.status, decode(response.read(65537), 65536)
+                content = response.read(65537)
+                if len(content) > 65536:
+                    raise Rejected("kube_serving_response_limit")
+                response_headers = response.getheaders() if raw or privacy is not None else []
+                if privacy is not None:
+                    privacy.observe(path, response.status, response_headers, content)
+                return (
+                    (response.status, response_headers, content)
+                    if raw
+                    else (response.status, decode(content, 65536))
+                )
             finally:
                 connection.close()
 
@@ -289,6 +313,8 @@ def qualify(config, expected, progress=None):
                 check("unauthenticated-401", request("/v1/predict", body, False)[0] == 401)
                 check("malformed-422", request("/v1/predict", b"{}")[0] == 422)
                 check("oversized-413", request("/v1/predict", b"x" * 65537)[0] == 413)
+                if privacy is not None:
+                    privacy.exercise(request, decode(body), expected)
                 if "expires_at" in expected:
                     lifecycle = kube_serving_expiry.exercise(request, body, expected, check)
                 elif "fault" in expected:
@@ -302,6 +328,8 @@ def qualify(config, expected, progress=None):
                     while client.request("pods")["items"] and time.monotonic() < deadline:
                         time.sleep(0.25)
                     check("stopped-worker-503", request("/v1/predict", body)[0] == 503)
+                    if privacy is not None:
+                        privacy.fenced(request, decode(body))
             else:
                 check("unapproved-or-revoked-ready-503", ready[0] == 503)
                 check("unapproved-or-revoked-predict-503", request("/v1/predict", body)[0] == 503)
@@ -327,12 +355,18 @@ def qualify(config, expected, progress=None):
             or (not expected["ready"] and serving_startup.validated(observed_output) is not None),
         )
         check("audit-journal-created", (directory / "audit").is_dir())
+        privacy_result = (
+            privacy.closed(directory / "audit", observed_output, expected)
+            if privacy is not None
+            else None
+        )
     return {
         "status": "pass",
         "cases": cases,
         "max_golden_error": max_error,
         "release_ready": False,
         **({"lifecycle": lifecycle} if lifecycle is not None else {}),
+        **({"privacy": privacy_result} if privacy_result is not None else {}),
     }
 
 

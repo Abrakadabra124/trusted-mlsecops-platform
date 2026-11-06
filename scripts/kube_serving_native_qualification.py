@@ -65,6 +65,9 @@ class NativeContracts(unittest.TestCase):
     def test_approved_probe_obeys_actual_http_body_contract(self):
         self.approved_probe("ordinary")
 
+    def test_privacy_observes_ordinary_cli_and_closed_audit_only_after_termination(self):
+        self.approved_probe("privacy")
+
     def test_expiry_probe_uses_existing_http_process_without_stopping_worker(self):
         self.approved_probe("expiry")
 
@@ -100,6 +103,17 @@ class NativeContracts(unittest.TestCase):
         api.exchange.side_effect = APIError(403, "Forbidden")
         process = Mock(returncode=0)
         process.poll.return_value = None
+        privacy = Mock() if mode == "privacy" else None
+        if privacy is not None:
+
+            def closed(directory, output, expected):
+                self.assertEqual(process.poll(), 0)
+                self.assertFalse(active[0])
+                self.assertTrue(directory.is_dir())
+                self.assertEqual(output, b"")
+                return {"controlled_privacy": True}
+
+            privacy.closed.side_effect = closed
         connection, pending = Mock(), []
 
         def http_request(method, path, *, body, headers):
@@ -152,6 +166,7 @@ class NativeContracts(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory
 
         def launch(args, **kwargs):
+            self.assertEqual(args[1:4], ["-m", "mlsecops.serving_http", "--startup-diagnostics"])
             self.assertTrue(Path(read_json(Path(args[-1]))["audit_directory"]).is_dir())
             active[0] = True
             return process
@@ -184,11 +199,22 @@ class NativeContracts(unittest.TestCase):
                     "bundle": bundle,
                     **({"expires_at": 123} if mode == "expiry" else {}),
                 },
+                **({"privacy": privacy} if privacy is not None else {}),
             )
         self.assertEqual(result["max_golden_error"], 0)
-        if mode == "ordinary":
+        if mode != "expiry":
             self.assertIn("stopped-worker-503", result["cases"])
             expiry.assert_not_called()
+            if privacy is not None:
+                for callback in (
+                    privacy.configure,
+                    privacy.exercise,
+                    privacy.fenced,
+                    privacy.closed,
+                ):
+                    callback.assert_called_once()
+                self.assertGreater(privacy.observe.call_count, 0)
+                self.assertEqual(result["privacy"], {"controlled_privacy": True})
         else:
             self.assertNotIn("stopped-worker-503", result["cases"])
             self.assertEqual(result["lifecycle"], {"expiry": True})

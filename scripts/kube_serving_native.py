@@ -51,8 +51,23 @@ def invoke(
     candidate_probe=False,
     trust_target=Target.PRIMARY,
     privacy_operator=None,
+    cli_privacy=False,
 ):
     trust_target = select(trust_target)
+    if (
+        type(cli_privacy) is not bool
+        or cli_privacy
+        and (
+            candidate_probe
+            or privacy_operator is not None
+            or coordinator is not None
+            or trust_target is not Target.PRIMARY
+            or expected.get("ready") is not True
+            or "fault" in expected
+            or "expires_at" in expected
+        )
+    ):
+        raise Rejected("cli_privacy_mode_conflict")
     if privacy_operator is not None and (
         not candidate_probe or coordinator is not None or trust_target is not Target.PRIMARY
     ):
@@ -73,7 +88,9 @@ def invoke(
     )
     spec["serviceAccountName"] = "serving"
     spec["containers"][0]["command"][2] = (
-        "scripts.kube_privacy_probe"
+        "scripts.kube_cli_privacy_probe"
+        if cli_privacy
+        else "scripts.kube_privacy_probe"
         if privacy_operator is not None
         else "mlsecops.kube_candidate_probe"
         if candidate_probe
@@ -81,9 +98,12 @@ def invoke(
     )
     spec["containers"][0]["resources"]["limits"]["memory"] = "1Gi"
     spec["containers"][0]["resources"]["requests"]["memory"] = "256Mi"
-    if privacy_operator is not None:
+    if privacy_operator is not None or cli_privacy:
         code = privacy_bundle(
-            Path(__file__).resolve().parents[1], name + "-code", workspace_id(state)
+            Path(__file__).resolve().parents[1],
+            name + "-code",
+            workspace_id(state),
+            **({"entry": "kube_cli_privacy_probe"} if cli_privacy else {}),
         )
         maps.append(code)
         spec["volumes"].append(
@@ -100,6 +120,7 @@ def invoke(
     job["metadata"]["labels"]["trusted-mlsecops/workspace"] = workspace_id(state)
     created = []
     phases = []
+    output_limit = 2 * 1024 * 1024 if cli_privacy else 65536
 
     def observe(pod):
         verify_running_image(pod, profile["image_id"])
@@ -120,7 +141,7 @@ def invoke(
                 NAMESPACE,
                 "-c",
                 "worker",
-                "--limit-bytes=65537",
+                "--limit-bytes=" + str(output_limit + 1),
             ],
         ).stdout
         safe_child(state, "evidence/" + name + "-private.log").write_bytes(raw)
@@ -164,7 +185,7 @@ def invoke(
                 NAMESPACE,
                 "-c",
                 "worker",
-                "--limit-bytes=65537",
+                "--limit-bytes=" + str(output_limit + 1),
             ],
         ).stdout
         # Raw output stays private, including on failure.
@@ -184,7 +205,7 @@ def invoke(
             with suppress(Rejected):
                 document = decode(raw.splitlines()[-1] if raw else raw, 65536)
                 if (
-                    privacy_operator is not None
+                    (privacy_operator is not None or cli_privacy)
                     and isinstance(document, dict)
                     and set(document) == {"status", "release_ready", "phase", "code", "location"}
                     and document["status"] == "fail"
@@ -222,7 +243,9 @@ def invoke(
                     failure["container_reason"] = terminated["reason"]
             print(canonical(failure).decode(), flush=True)
             raise Rejected("kube_serving_probe_job_failed")
-        report = decode(raw.splitlines()[-1] if raw else raw, 65536)
+        report = decode(raw.splitlines()[-1] if raw else raw, output_limit)
+        if cli_privacy and raw != canonical(report) + b"\n":
+            raise Rejected("cli_privacy_uncontrolled_output")
         if coordinator is not None and phases != ["ready", "denied"]:
             raise Rejected("kube_serving_fault_not_exercised")
         if report.get("status") != "pass" or report.get("release_ready") is not False:

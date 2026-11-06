@@ -65,6 +65,16 @@ Read-only diagnosis предшествует любым действиям. Пр
 
 ## Локальная проверка без инфраструктуры
 
+### Проверка обычного CLI: реализация ожидает native evidence
+
+[CLI privacy probe](../../scripts/kube_cli_privacy_probe.py) использует существующий `kube_serving_probe`: тот запускает отдельный `python -m mlsecops.serving_http`, а сервис самостоятельно создаёт и закрывает Journal через `configured`/`audit_path`. Внутри сервиса нет monkeypatch, подмены Journal или дополнительной serving-роли. Внешний клиент выполняет прежнюю матрицу 12 canary requests, шесть quota/refill requests, две проверки 503 после остановки собственного worker и scrape 69 approved metric series. Полный вывод CLI проверяется после подтверждённого завершения процесса.
+
+[Controlled runner](../../scripts/kube_cli_privacy_native.py) создаёт отдельный подписанный контрольный выпуск существующими fixture/promotion механизмами. После probe cleanup повторно читает digest-bound selection/authorization, проверяет snapshot закрытого журнала, его контекст и соответствие фактически полученным HTTP responses. Сохраняет private snapshot один раз и перечитывает его. Actual candidate проверяется затем своим qualification permit; контрольный release не разрешает actual production. Смешение subjects запрещено публичной проекцией.
+
+Граница доказательства: внешний CLI observer **не наблюдает независимо внутренний audit admission**. Он проверяет соответствие завершённых journal requests HTTP-ответам; для pre-admission 401/429/503 возможен ответ без journal request. Не выводить admission из проверяемого журнала и не выдавать этот snapshot за ADR 0049 independent-admission packet. Actual-candidate packet сохраняет прежний более строгий контракт. Полная M13 acceptance должна явно оценить достаточность этой композиции; текущий report остаётся inconclusive.
+
+При `cli_privacy_*` отказах сохранять первый результат, private bytes и exact source. Не запускать локальную инфраструктуру и не менять consumer policy, чтобы пропустить отказ. Проверить terminal CLI/owned worker, post-cleanup snapshot и fixed location в native diagnostics; повторять новую campaign только после установления причины. Raw snapshot/HTTP IDs/credentials не выводить в публичный CI log. Незавершённый процесс, stderr, потерянное наблюдение, canary, несовпадение signed context или испорченный сохранённый snapshot запрещают компонентный pass.
+
 ```powershell
 $env:PYTHONUTF8='1'
 uv run --locked python -m unittest scripts.kube_privacy_logs_qualification scripts.kube_privacy_worker_qualification scripts.kube_serving_runtime_qualification

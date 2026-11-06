@@ -1,5 +1,6 @@
 """Fresh hosted privacy integration, not the complete M13 acceptance gate."""
 
+import math
 import re
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ from mlsecops.inventory import command
 from mlsecops.private_cli import Arguments
 from mlsecops.trust_acceptance import materials
 from scripts import kube_candidate_native, kube_serving_native
+from scripts.kube_cli_privacy_native import CLI_CASES, controlled
 from scripts.kube_privacy_diagnostic import location
 from scripts.kube_trust_native import hosted
 
@@ -47,6 +49,46 @@ CASES = {
 
 def projection(report):
     native = report["native"]
+    cli = report["controlled_cli"]
+    observed = cli["native"]["privacy"]
+    cli_native = cli["native"]
+    cli_fixed = {
+        "schema_version": 1,
+        "status": "pass",
+        "release_ready": False,
+        "scope": "ordinary-cli-privacy-not-full-M13",
+        "canaries": 9,
+        "matrix_requests": 12,
+        "quota_requests": 6,
+        "fenced_requests": 2,
+        "cli_output_bytes": 0,
+    }
+    if (
+        cli["status"] != "pass"
+        or cli["release_ready"] is not False
+        or cli["full_M13"] != "inconclusive"
+        or cli["scope"] != "controlled-ordinary-cli-privacy-not-full-M13"
+        or cli["model_sha256"] == report["model_sha256"]
+        or cli["subject_sha256"] == report["subject_sha256"]
+        or cli["post_cleanup_primary_reverified"] is not True
+        or cli["retained_snapshot_reverified"] is not True
+        or cli["independent_admission_observed"] is not False
+        or canonical({k: observed[k] for k in cli_fixed}) != canonical(cli_fixed)
+        or type(observed["metrics"]["series"]) is not int
+        or observed["metrics"]["series"] != 69
+        or observed["audit"]["independent_admission_observed"] is not False
+        or cli_native["status"] != "pass"
+        or cli_native["release_ready"] is not False
+        or type(cli_native["cases"]) is not list
+        or len(cli_native["cases"]) != 22
+        or any(type(v) is not str for v in cli_native["cases"])
+        or set(cli_native["cases"]) != CLI_CASES
+        or cli_native["cases"].count("response-model-and-bundle-binding") != 3
+        or type(cli_native["max_golden_error"]) not in (int, float)
+        or not math.isfinite(cli_native["max_golden_error"])
+        or not 0 <= cli_native["max_golden_error"] <= 1e-6
+    ):
+        raise Rejected("privacy_cli_incomplete")
     if (
         report["status"] != "pass"
         or report["release_ready"] is not False
@@ -100,6 +142,14 @@ def projection(report):
         "worker_cleanup": True,
         "retained_packet_reverified": True,
         "post_cleanup_primary_reverified": True,
+        "controlled_cli_matrix_requests": 12,
+        "controlled_cli_checks": 22,
+        "controlled_cli_quota_requests": 6,
+        "controlled_cli_fenced_requests": 2,
+        "controlled_cli_output_bytes": 0,
+        "controlled_cli_metric_series": 69,
+        "controlled_cli_retained_snapshot_reverified": True,
+        "controlled_cli_independent_admission_observed": False,
     }
     if (
         type(result["source_revision"]) is not str
@@ -121,13 +171,16 @@ def qualify(root, state, image):
     # only the empty versioned journal before candidate snapshot comparisons;
     # this operator migration grants no authority, approval or release.
     promotion_state.install(state, backend=kube_storage.binding)
-    report = kube_candidate_native.qualify(
-        root,
-        state,
-        image,
-        prepared=(prepared["profile"], prepared["actual"]),
-        privacy=True,
-    )
+    with controlled(root, state, image, prepared["profile"]) as (cli, authority_key):
+        report = kube_candidate_native.qualify(
+            root,
+            state,
+            image,
+            prepared=(prepared["profile"], prepared["actual"]),
+            qualification_key=authority_key,
+            privacy=True,
+        )
+        report["controlled_cli"] = cli
     if (
         materials(root) != before
         or command(["git", "-C", str(root), "status", "--porcelain"])

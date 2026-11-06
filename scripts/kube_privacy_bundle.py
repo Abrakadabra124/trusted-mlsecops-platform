@@ -8,8 +8,10 @@ from mlsecops.contracts import Rejected, bounded_read, canonical, digest
 MAX_BYTES = 512 * 1024
 
 
-def manifest(root, name, workspace):
-    pending, data = ["kube_privacy_probe"], {"__init__.py": ""}
+def manifest(root, name, workspace, *, entry="kube_privacy_probe"):
+    if entry not in {"kube_privacy_probe", "kube_cli_privacy_probe"}:
+        raise Rejected("privacy_bundle_entry")
+    pending, data = [entry], {"__init__.py": ""}
     while pending:
         module = pending.pop()
         if re.fullmatch(r"[a-z_][a-z_0-9]*", module) is None:
