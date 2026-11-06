@@ -10,7 +10,7 @@ CPU/RAM, overload recovery и M14 acceptance ещё не приняты.
 
 ```powershell
 uv sync --locked --no-build --python 3.12.15
-uv run --locked python -m unittest scripts.load_golden_qualification scripts.load_measurement_qualification
+uv run --locked python -m unittest scripts.load_golden_qualification scripts.load_measurement_qualification scripts.load_resources_qualification
 uv run --locked python scripts/check_docs.py
 ```
 
@@ -37,7 +37,10 @@ Native интеграция выполняется только в разреш�
 6. При timeout проверить полный абсолютный бюджет обмена, HTTP response size,
    audit/trust failures и состояние worker. Отказ клиента не доказывает, что
    сервер прекратил уже начатую работу; это проверяется отдельно при cleanup.
-7. Если ресурсы или owned cleanup не подтверждены, оставить gate inconclusive
+7. Resource parser отвергает missing fields, stale/future timestamps, changed
+   PodRef/startTime, counter reset, gaps >20 s и отсутствие samples с обеих сторон
+   окна. Не заменять их нулями и не называть sampled memory истинным пиком.
+8. Если ресурсы или owned cleanup не подтверждены, оставить gate inconclusive
    либо fail по причине, а не объявлять R1 завершённым.
 
 ## Встреченные проблемы и исправления

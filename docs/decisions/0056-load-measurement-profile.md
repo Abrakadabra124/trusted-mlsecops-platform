@@ -65,10 +65,20 @@ cleanup. CPU/RAM должны включать раздельные controller/p
 containers. Выбранный источник для следующего шага - операторское чтение
 [Kubelet Summary API](https://kubernetes.io/docs/reference/kubelet-api/stats.v1alpha1/)
 через [API server proxy](https://kubernetes.io/docs/reference/instrumentation/node-metrics/).
-Пока это проектное решение, а не проверенная native реализация. Нужны UID/image
-binding, отсутствие restart/counter reset, временное покрытие окна, ограничение
-размера и частоты чтения. Максимум sampled RAM нельзя называть истинным peak RSS.
-Дополнительные права для model worker не требуются.
+[Чистый parser](../../scripts/load_resources.py) уже проверяет exact node/PodRef/container,
+наличие CPU/memory полей, timestamps без потери наносекунд, возраст sample <=30 s,
+неизменный startTime/identity, монотонность CPU counters и согласованность cached
+samples. Окно ровно 120 s должно быть охвачено с обеих сторон; промежуток между
+samples <=20 s, максимум 256 наблюдений. При missing/reset/gap он отказывает,
+не заменяет значения нулём. CPU core-seconds и average cores считаются между
+реально наблюдавшимися границами, их длительность указана отдельно от 120 s.
+Memory выводится как максимум наблюдавшихся usage/working-set/RSS bytes.
+
+Это пока controlled parser, а не проверенная native реализация. Оператору ещё
+нужно независимо подтвердить UID/image/restart перед каждым чтением, связать
+samples с private start/end handshake и ограничить размер/частоту запросов.
+Максимум sampled RAM нельзя называть истинным peak RSS. Дополнительные права
+для model worker не требуются.
 
 Closed-loop нагрузка не моделирует независимый поток входящих запросов и
 может уменьшать RPS при замедлении сервиса. Результат обязательно указывает
@@ -84,3 +94,5 @@ Controlled tests проверяют потерю запросов, таймау�
 [CI](../../.github/workflows/load-contracts.yml) требует >=95% statements и
 branches отдельно для каждого нового модуля. Фактические результаты CI и
 native нагрузки публикуются отдельно после проверки, не выводятся из наличия YAML.
+
+Первый компонентный результат: [measurement/golden contracts 41127b1](../evidence/m14-measurement-2026-11-06.md).

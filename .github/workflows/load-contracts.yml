@@ -28,14 +28,14 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load.coverage" --source=mlsecops.load_golden,mlsecops.load_measurement -m unittest scripts.load_golden_qualification scripts.load_measurement_qualification
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load.coverage" --source=mlsecops.load_golden,mlsecops.load_measurement,scripts.load_resources -m unittest scripts.load_golden_qualification scripts.load_measurement_qualification scripts.load_resources_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/load.coverage" -o "$RUNNER_TEMP/load-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'load-coverage.json').read_text())['files']
-          if set(files) != {'mlsecops/load_golden.py', 'mlsecops/load_measurement.py'}:
+          if set(files) != {'mlsecops/load_golden.py', 'mlsecops/load_measurement.py', 'scripts/load_resources.py'}:
               raise SystemExit('load_coverage_inventory')
           for name, report in sorted(files.items()):
               summary = report['summary']
