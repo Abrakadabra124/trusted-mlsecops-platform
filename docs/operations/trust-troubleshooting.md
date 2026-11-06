@@ -2,6 +2,20 @@
 
 Владелец: trust-owner; инфраструктуру authority обслуживает platform-owner. Scope: synthetic local CPU, [ADR 0029](../decisions/0029-online-trust.md). Инструкции не разрешают выпуск при failed/inconclusive ML gates. Отдельная authority не является production KMS или HA-сервисом.
 
+## Отказ model backup для authority
+
+`trust_authority_backup_forbidden` означает, что обычный или extended model backup получил trust workspace либо не смог однозначно подтвердить отсутствие `ml_trust`. Это ожидаемый запрет. Не создавать в authority таблицы `ml_promotion`, не удалять `ml_trust`, не менять ожидаемый результат на любой SQL error и не отключать guard ради зелёного теста. Model backup не является способом восстановления актуального trust policy или отмены отзывов.
+
+Диагностика начинается с source revision, ownership marker и назначения переданного state. Проверка в `storage_backup.create` выполняется после ownership validation и до model migration lookup; только точный ответ `f` разрешает дальнейшие проверки. Transaction-level guard в `storage_snapshot` остаётся действующим. Если предполагалось резервировать model storage, оператор должен заново подтвердить правильный owned workspace, сохранив отказ и исходную authority неизменными. Не запускать destructive recovery по одному generic failure.
+
+Regression: в run `42232406810` после успешных M03/M07 extended backup в trust qualification дошёл до отсутствующей promotion migration раньше явного scope refusal. `b60eb93` исправляет этот порядок. Failure-first тесты подтверждают запрет обоих вариантов до export и сохранение пути model storage; полный hosted повтор указан в [CI evidence](../evidence/ci-regression-2026-11-06.md#успешное-повторение-storage). Проверка без инфраструктуры:
+
+```powershell
+uv run --locked python -m unittest scripts.trust_native_qualification
+```
+
+В текущей цели native-проверки разрешены только в disposable GitHub-hosted CI. После изменения нужно подтвердить оба `model-backup-excludes-authority` cases, остальные trust/revocation/outage cases и cleanup. Успех одного отказа не закрывает M11, M17 или R1. При несовпадении причины оставить failure, сохранить приватный журнал и последний fixed case label, эскалировать platform-owner; не публиковать raw driver errors или ключи.
+
 ## Что это за компоненты
 
 PostgreSQL хранит текущую версию signed trust policy отдельно от model storage. Mutual TLS проверяет сертификаты обеих сторон; клиент требует TLS 1.3 и verify-full, а serving/promoter могут только читать policy. Подпись Ed25519 связывает документ с отдельно закреплённым root key.
