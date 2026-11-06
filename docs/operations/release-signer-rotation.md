@@ -58,3 +58,15 @@ uv run --locked python -m scripts.promotion_recovery_native --state .runtime --c
 Для отдельной проверки этих компонентов в [storage workflow](../../.github/workflows/storage.yml) есть явный dispatch `release_key_only=true`; полный storage job остаётся default. Такой запуск не заявляет повторение полного serving workflow. На `52a0a88` полный job failed после успешного serving: native script использовал ISO `contracts.now()` вместо epoch seconds и упал до SQL. Ошибка воспроизведена test case, clocks исправлены, focused run на `a501ac5` success. Сообщение о generic failure не является диагнозом: сначала сверять failed step, исходный commit и regression test, затем повторять исправленный сценарий.
 
 Результат `reused` означает, что exact receipt существовал при первом чтении. При конкуренции два callers могут получить `false` при одной записи: проверять конечный журнал, а не суммировать этот флаг. Если прежняя policy уже expired, плановая ротация откажет; emergency recovery требует отдельного решения владельца, а не продления подписанного payload вручную.
+
+## Live signer qualification: подготовлено, native проверка ожидается
+
+Focused storage dispatch дополнен [сценарием](../../scripts/release_key_serving_native.py) для publisher, assessor и approver. Он требует уже подготовленный disposable source с promotion ledger, создаёт два собственных TLS SQL-хранилища и последовательно меняет по одному ключу. На каждом переходе выполняется реальный HTTP predict до отзыва, online update, два ответа 503 не позднее 60 секунд, проверка удаления старого worker, signed storage rotation и явная новая активация. Контрольный release без M22 должен отклоняться без изменения таблиц. Новый worker обязан вернуть тот же model hash и golden scores с ошибкой не выше `1e-6`; старый экземпляр остаётся недоступным.
+
+```bash
+uv run --locked python -m scripts.release_key_serving_native --state .runtime --worker-image trusted-mlsecops:dev --confirm-disposable
+```
+
+Команда разрешена только внутри disposable hosted CI после предыдущих шагов focused job. Сценарий использует controlled signatures/reports для проверки механизма; это не независимое ML assurance. Итог пишется в private `.runtime/evidence/release-key-serving.json`, а очищенный отчёт содержит hashes, trace и результаты проверок. Private keys и SQL credentials не экспортируются. Успех требует конечного readback, удаления обоих собственных SQL targets и всех workers, неизменности source. До terminal success job сценарий считается непроверенным.
+
+При отказе найти последний фиксированный `stage`/`case` в job, сохранить private evidence и сверить source SHA. `signer_trace_late_ml`, поздний 503 или повторный 200 после отказа запрещают принятие результата. Не увеличивать grace period ради pass. Отказ cleanup также блокирует принятие; проверять только собственные resource IDs, без global prune. Ошибки содержимого не исправлять перезаписью старой истории или снятием отзыва.

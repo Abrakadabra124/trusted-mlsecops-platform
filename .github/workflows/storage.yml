@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_key_only:
-        description: Qualify signer SQL history and full recovery only
+        description: Qualify signer SQL history, recovery and live HTTP transitions
         type: boolean
         default: false
 permissions:
@@ -223,6 +223,11 @@ jobs:
           uv run --locked coverage run --branch --data-file=.coverage-release-key --source=mlsecops.release_key_rotation,mlsecops.release_key_store,mlsecops.promotion_recovery -m unittest scripts.release_key_rotation_qualification scripts.release_key_store_qualification scripts.promotion_policy_history_qualification scripts.promotion_recovery_qualification scripts.kube_promotion_snapshot_qualification scripts.release_key_native_qualification scripts.promotion_recovery_native_qualification
           uv run --locked coverage report --data-file=.coverage-release-key --fail-under=100
           uv run --locked coverage json --data-file=.coverage-release-key -o .coverage-release-key.json
+      - name: Controlled signer fixtures and strict HTTP refusal trace contracts
+        run: |
+          uv run --locked coverage run --branch --data-file=.coverage-release-signer-live --source=scripts.release_signer_fixture,scripts.release_signer_probe -m unittest scripts.release_signer_fixture_qualification scripts.release_signer_probe_qualification scripts.release_key_serving_qualification
+          uv run --locked coverage report --data-file=.coverage-release-signer-live --fail-under=100
+          uv run --locked coverage json --data-file=.coverage-release-signer-live -o .coverage-release-signer-live.json
       - name: Prepare owned SQL and actual source candidate
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -233,13 +238,15 @@ jobs:
         run: uv run --locked python -m scripts.release_key_native --state .runtime --confirm-disposable
       - name: Complete rotated policy history backup and independent recovery
         run: uv run --locked python -m scripts.promotion_recovery_native --state .runtime --confirm-disposable
+      - name: Live signer rotation with SQL trust, HTTP refusal and explicit ONNX reactivation
+        run: uv run --locked python -m scripts.release_key_serving_native --state .runtime --worker-image trusted-mlsecops:dev --confirm-disposable
       - name: Sanitized rotation and recovery outcomes
         if: always()
         run: |
           uv run --locked python - <<'PY'
           from pathlib import Path
           from mlsecops.contracts import canonical, read_json
-          for name in ('release-key-native', 'promotion-recovery'):
+          for name in ('release-key-native', 'promotion-recovery', 'release-key-serving'):
               path = Path('.runtime/evidence') / (name + '.json')
               report = read_json(path) if path.is_file() else {'status':'inconclusive','release_ready':False}
               print(canonical({'component':name,'report':report}).decode())
