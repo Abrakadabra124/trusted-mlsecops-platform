@@ -46,6 +46,20 @@ CODES = frozenset(
 )
 
 
+def failure_site(failure):
+    # Only public source locations, never exception text, arguments or locals.
+    roots = {"mlsecops", "scripts"}
+    site = {"module": "unknown", "line": 0}
+    trace = failure.__traceback__
+    source = Path(__file__).resolve().parent.parent
+    while trace is not None:
+        path = Path(trace.tb_frame.f_code.co_filename).resolve()
+        if path.parent.parent == source and path.parent.name in roots and path.suffix == ".py":
+            site = {"module": path.parent.name + "." + path.stem, "line": trace.tb_lineno}
+        trace = trace.tb_next
+    return site
+
+
 def run(root, state):
     hosted()
     write_json(
@@ -98,6 +112,7 @@ def main():
             "code": code
             if isinstance(failure, Rejected) and code in CODES
             else "load_native_rejected",
+            "site": failure_site(failure),
         }
         print(canonical(result).decode(), flush=True)
         return 1

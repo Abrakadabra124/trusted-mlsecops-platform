@@ -16,6 +16,23 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeLoadContracts(unittest.TestCase):
+    def test_failure_site_contains_only_owned_public_source_location(self):
+        self.assertEqual(native.failure_site(Rejected("PRIVATE")), {"module": "unknown", "line": 0})
+        with patch.object(candidate, "hosted"):
+            try:
+                candidate.qualify("unused", "unused", "unused", load=True, privacy=True)
+            except Rejected as failure:
+                site = native.failure_site(failure)
+        self.assertEqual(site["module"], "scripts.kube_candidate_native")
+        self.assertGreater(site["line"], 0)
+        try:
+            exec(compile("raise ValueError('PRIVATE')", "/foreign/secret.py", "exec"), {})
+        except ValueError as failure:
+            site = native.failure_site(failure)
+        self.assertEqual(site["module"], "scripts.kube_load_native_qualification")
+        self.assertNotIn("PRIVATE", str(site))
+        self.assertNotIn("secret", str(site))
+
     def test_mode_conflicts_do_not_create_resources(self):
         for options in (
             {},
