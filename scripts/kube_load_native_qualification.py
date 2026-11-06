@@ -83,7 +83,13 @@ class NativeLoadContracts(unittest.TestCase):
             command.assert_not_called()
 
     def test_load_dispatch_deadline_observer_and_owned_cleanup(self):
-        for failed in (False, "measure", "shutdown"):
+        for failed, cause in (
+            (False, "unknown"),
+            ("measure", "unknown"),
+            ("shutdown", "audit_shutdown_pending"),
+            ("shutdown", "PRIVATE"),
+            ("shutdown", ["PRIVATE"]),
+        ):
             created = []
             report = (
                 {
@@ -91,6 +97,7 @@ class NativeLoadContracts(unittest.TestCase):
                     "release_ready": False,
                     "code": "load_probe_rejected",
                     "phase": failed,
+                    "cause": cause,
                 }
                 if failed
                 else {"status": "pass", "release_ready": False}
@@ -176,7 +183,12 @@ class NativeLoadContracts(unittest.TestCase):
                             candidate_probe=True,
                             load_operator=observer,
                         )
-                    self.assertIn('"phase":"' + failed + '"', output.getvalue())
+                    if type(cause) is str and cause in serving.load_diagnostics.FAILURES:
+                        self.assertIn('"phase":"' + failed + '"', output.getvalue())
+                        self.assertIn('"cause":"' + cause + '"', output.getvalue())
+                    else:
+                        self.assertIn('"probe_failure":"unclassified"', output.getvalue())
+                    self.assertNotIn("PRIVATE", output.getvalue())
                 else:
                     result = serving.invoke(
                         Path(temporary),

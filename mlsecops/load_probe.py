@@ -42,6 +42,7 @@ def credentials():
 
 @contextmanager
 def listen(app):
+    observed = load_diagnostics.Lifespan(app)
     listener = socket.socket()
     server = thread = None
     started = False
@@ -51,7 +52,7 @@ def listen(app):
         port = listener.getsockname()[1]
         server = uvicorn.Server(
             uvicorn.Config(
-                app,
+                observed,
                 lifespan="on",
                 access_log=False,
                 log_config=None,
@@ -82,7 +83,9 @@ def listen(app):
         if any(
             getattr(lifespan, flag, False) is True for flag in ("error_occurred", "shutdown_failed")
         ):
-            raise Rejected("load_server_lifespan")
+            raise Rejected(
+                observed.cause if observed.cause != "unknown" else "load_server_lifespan"
+            )
 
 
 async def exercise(port, tokens, golden):
@@ -240,7 +243,7 @@ def main():
             canonical(qualify(read_json(arguments.config), read_json(arguments.request))).decode()
         )
         return 0
-    except Exception:
+    except Exception as failure:
         print(
             canonical(
                 {
@@ -248,6 +251,7 @@ def main():
                     "release_ready": False,
                     "code": "load_probe_rejected",
                     "phase": PHASE,
+                    "cause": load_diagnostics.failure_code(failure),
                 }
             ).decode()
         )

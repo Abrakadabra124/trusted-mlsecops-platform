@@ -404,3 +404,20 @@ p99=223.147815 ms, 0 wrong/429/5xx/timeouts/transport errors.
 Полное окно, resources, overload/recovery и cleanup прошли; latency predicate
 не прошёл. Нельзя заменить этот результат более ранним pass `5f6fb84`.
 После изменения требуется новый полный M14; до него оптимизация не принята.
+
+На `982b7ad` / [42291837843](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42291837843)
+load probe дошёл до shutdown и отказал; полный baseline не сформирован.
+Стенд удалён. Из generic `load_probe_rejected` нельзя заключить ни pass latency,
+ни конкретную причину сбоя. Для следующего опыта probe-only ASGI observer
+сохраняет один код из конечного списка: завершение сервера, аудита, worker или
+SQL-session. Произвольный exception text заменяется `unknown`, HTTP exceptions
+не записываются как lifespan cause. Native parent повторно проверяет точную
+схему и allowlist перед выводом; неизвестные поля/коды не публикуются.
+
+Если cause=`audit_shutdown_pending`, проверить время финальной проверки
+retained segments и состояние writer. Если `serving_cleanup_unconfirmed` -
+owned worker deletion/readback; если `trust_session_cleanup_unconfirmed` -
+подтверждение закрытия owned SQL transport. `load_server_lifespan` означает,
+что framework сообщил ошибку, но разрешённый вложенный код не получен.
+Во всех ветвях сохранять fail; не увеличивать сроки, не удалять segments и
+не принимать завершение server thread вместо успешного lifespan.

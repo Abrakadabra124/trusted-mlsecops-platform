@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 from mlsecops import load_probe as probe
-from mlsecops.contracts import Rejected, canonical, digest, write_json
+from mlsecops.contracts import Rejected, canonical, decode, digest, write_json
 from mlsecops.load_golden import Golden
 from mlsecops.serving_access import Access
 from scripts.load_diagnostics_qualification import audit_fixture
@@ -18,6 +18,24 @@ from scripts.load_measurement_qualification import rows
 
 
 class ProbeContracts(unittest.TestCase):
+    def test_real_lifespan_preserves_only_allowlisted_failure_codes(self):
+        for error, expected_code in (
+            (Rejected("audit_shutdown_pending"), "audit_shutdown_pending"),
+            (Rejected("serving_cleanup_unconfirmed"), "serving_cleanup_unconfirmed"),
+            (Rejected("PRIVATE"), "load_server_lifespan"),
+        ):
+
+            @asynccontextmanager
+            async def lifespan(app):
+                yield
+                raise error
+
+            app = probe.serving_http.FastAPI(lifespan=lifespan)
+            with self.subTest(code=expected_code), self.assertRaises(Rejected) as caught:
+                with probe.listen(app):
+                    pass
+            self.assertEqual(str(caught.exception), expected_code)
+
     def test_real_lifespan_shutdown_failure_cannot_be_reported_as_success(self):
         @asynccontextmanager
         async def lifespan(app):
@@ -181,7 +199,7 @@ class ProbeContracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "input.json"
             write_json(path, {})
-            for failure in (False, True):
+            for failure in (None, RuntimeError("PRIVATE"), Rejected("audit_shutdown_pending")):
                 output = io.StringIO()
                 with (
                     patch.object(probe, "enforce"),
@@ -192,12 +210,17 @@ class ProbeContracts(unittest.TestCase):
                     patch.object(
                         probe,
                         "qualify",
-                        side_effect=RuntimeError("PRIVATE") if failure else None,
+                        side_effect=failure,
                         return_value={"status": "pass"},
                     ),
                 ):
                     self.assertEqual(probe.main(), 1 if failure else 0)
                 self.assertNotIn("PRIVATE", output.getvalue())
+                if failure is not None:
+                    expected_cause = (
+                        "audit_shutdown_pending" if type(failure) is Rejected else "unknown"
+                    )
+                    self.assertEqual(decode(output.getvalue())["cause"], expected_cause)
         with (
             patch("mlsecops.process_privacy.enforce"),
             patch.object(sys, "argv", ["load"]),

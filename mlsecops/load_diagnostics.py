@@ -36,6 +36,46 @@ AUDIT_COUNTS = (
     "capacity",
 )
 AUDIT_FLAGS = ("healthy", "closed", "failed")
+FAILURES = frozenset(
+    {
+        "unknown",
+        "load_server_startup",
+        "load_server_shutdown",
+        "load_server_lifespan",
+        "audit_shutdown_pending",
+        "audit_failed",
+        "serving_cleanup_pending",
+        "serving_cleanup_unconfirmed",
+        "trust_session_cleanup_unconfirmed",
+    }
+)
+
+
+def failure_code(error):
+    if (
+        type(error) is Rejected
+        and len(error.args) == 1
+        and type(error.args[0]) is str
+        and error.args[0] in FAILURES
+    ):
+        return error.args[0]
+    return "unknown"
+
+
+class Lifespan:
+    """Probe-only ASGI observer; retain one finite code, never exception text."""
+
+    def __init__(self, app):
+        self.app = app
+        self.cause = "unknown"
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await self.app(scope, receive, send)
+        except Exception as error:
+            if scope["type"] == "lifespan":
+                self.cause = failure_code(error)
+            raise
 
 
 def audit_status(journal):

@@ -12,6 +12,7 @@ from mlsecops import (
     kube_serving_probe,
     kube_storage,
     kube_trust,
+    load_diagnostics,
     serving_startup,
     trust_authority,
 )
@@ -237,10 +238,12 @@ def invoke(
                 if (
                     load_operator is not None
                     and isinstance(document, dict)
-                    and set(document) == {"status", "release_ready", "code", "phase"}
+                    and set(document) == {"status", "release_ready", "code", "phase", "cause"}
                     and document["status"] == "fail"
                     and document["release_ready"] is False
                     and document["code"] == "load_probe_rejected"
+                    and type(document["cause"]) is str
+                    and document["cause"] in load_diagnostics.FAILURES
                     and document["phase"]
                     in {"startup", "activate", "start", "measure", "finish", "shutdown", "cleanup"}
                 ):

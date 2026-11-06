@@ -1,9 +1,10 @@
+import asyncio
 import copy
 import threading
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from mlsecops import load_diagnostics as diagnostic
 from mlsecops.contracts import Rejected
@@ -41,6 +42,23 @@ def fixture():
 
 
 class DiagnosticContracts(unittest.TestCase):
+    def test_failure_codes_are_exact_finite_and_http_errors_are_not_lifespan_errors(self):
+        for error, expected in (
+            (Rejected("audit_failed"), "audit_failed"),
+            (Rejected("PRIVATE"), "unknown"),
+            (RuntimeError("audit_failed"), "unknown"),
+            (Rejected(), "unknown"),
+            (Rejected("audit_failed", "PRIVATE"), "unknown"),
+            (Rejected(["PRIVATE"]), "unknown"),
+        ):
+            self.assertEqual(diagnostic.failure_code(error), expected)
+        error = Rejected("audit_failed")
+        observer = diagnostic.Lifespan(AsyncMock(side_effect=error))
+        with self.assertRaises(Rejected) as caught:
+            asyncio.run(observer({"type": "http"}, None, None))
+        self.assertIs(caught.exception, error)
+        self.assertEqual(observer.cause, "unknown")
+
     def test_wrapping_preserves_values_and_restores_every_method_after_failure(self):
         engine = fixture()
         originals = [getattr(obj, method) for obj, method, _ in diagnostic.targets(engine)]
