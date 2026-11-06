@@ -3,6 +3,7 @@
 import argparse
 import copy
 import sys
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
@@ -42,7 +43,7 @@ def qualify(root, state):
         for role in ("root", "online", *release_policy.ROLES)
     }
     public = {role: signing.create_key(path) for role, path in keys.items()}
-    clock = now()
+    clock = int(time.time())
     policy = {
         "schema_version": 1,
         "environment": environment,
@@ -101,7 +102,7 @@ def qualify(root, state):
     record(promoter, selected)
     revoked, references = [], []
     for sequence, role in enumerate(release_policy.ROLES, 1):
-        issued = now()
+        issued = int(time.time())
         new_key = safe_child(state, f"evidence/release-keys-{campaign}/{role}-next.pem")
         following = copy.deepcopy(policy)
         following.update(version=policy["version"] + 1, issued_at=issued)
@@ -147,7 +148,7 @@ def qualify(root, state):
 
         def rotate():
             lease = trust.Lease(
-                lambda: (envelope, now()),
+                lambda: (envelope, int(time.time())),
                 trusted_root=public["online"],
                 environment=environment,
                 minimum_version=sequence,

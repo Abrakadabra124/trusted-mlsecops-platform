@@ -12,6 +12,22 @@ from scripts import release_key_native as native
 
 
 class ReleaseKeyNativeCliContracts(unittest.TestCase):
+    def test_policy_uses_epoch_seconds_before_first_sql_mutation(self):
+        # contracts.now() is an ISO report timestamp, not an arithmetic clock.
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            with (
+                patch.object(native, "validate", return_value={"name": "owned"}),
+                patch.object(native, "command", side_effect=["", "a" * 40]),
+                patch.object(native, "source_fingerprint", return_value="b" * 64),
+                patch.object(
+                    native.promotion_state, "install", side_effect=Rejected("first-sql-boundary")
+                ) as install,
+                self.assertRaisesRegex(Rejected, "first-sql-boundary"),
+            ):
+                native.qualify(state, state)
+            install.assert_called_once_with(state.resolve())
+
     def test_confirmation_and_owned_state_are_required_before_mutation(self):
         with (
             patch.object(native.sys, "argv", ["native", "--state", "foreign"]),
