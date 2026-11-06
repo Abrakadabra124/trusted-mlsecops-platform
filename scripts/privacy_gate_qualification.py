@@ -4,6 +4,7 @@ import copy
 import io
 import runpy
 import subprocess
+import sys
 import tempfile
 import unittest
 import warnings
@@ -41,6 +42,35 @@ def fixture():
 
 
 class PrivacyGateContracts(unittest.TestCase):
+    def test_cli_initializes_pinned_runtime_before_importing_contract_fixtures(self):
+        from mlsecops import runtime_bootstrap
+
+        for platform, broken in (("linux", False), ("win32", False), ("linux", True)):
+            events = []
+
+            def initialize():
+                events.append("runtime")
+                if broken:
+                    raise Rejected("controlled-stop")
+
+            def parse(*args):
+                events.append("contracts")
+                raise Rejected("controlled-stop")
+
+            with (
+                patch.object(sys, "platform", platform),
+                patch.object(runtime_bootstrap, "initialize", side_effect=initialize),
+                patch.object(ast, "parse", side_effect=parse),
+                warnings.catch_warnings(),
+                self.assertRaisesRegex(Rejected, "controlled-stop"),
+            ):
+                warnings.simplefilter("ignore", RuntimeWarning)
+                runpy.run_module("scripts.privacy_contracts", run_name="__main__")
+            expected = (["runtime"] if platform == "linux" else []) + (
+                [] if broken else ["contracts"]
+            )
+            self.assertEqual(events, expected)
+
     def test_failure_diagnostic_never_exports_child_values_or_unknown_identifiers(self):
         for stdout in (
             b"private exception token",
@@ -68,6 +98,7 @@ class PrivacyGateContracts(unittest.TestCase):
         self.assertNotIn("synthetic-private", output.getvalue())
 
     def test_contract_cli_emits_only_canonical_summary_and_uses_failure_exit(self):
+        from mlsecops import runtime_bootstrap
         from scripts import privacy_contracts
 
         class Sample(unittest.TestCase):
@@ -84,6 +115,7 @@ class PrivacyGateContracts(unittest.TestCase):
                 case.id = lambda module=module: module + ".Sample.test_case"
                 cases.append(case)
             with (
+                patch.object(runtime_bootstrap, "initialize"),
                 patch.object(ast, "parse", return_value=tree),
                 patch.object(
                     unittest.defaultTestLoader,

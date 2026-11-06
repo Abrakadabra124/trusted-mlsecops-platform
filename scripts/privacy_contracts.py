@@ -3,6 +3,7 @@
 import ast
 import contextlib
 import io
+import sys
 import unittest
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from scripts.evaluation_contracts import Result
 
 MODULES = (
     "scripts.serving_access_qualification",
+    "scripts.runtime_bootstrap_qualification",
     "scripts.serving_http_qualification",
     "scripts.serving_http_audit_qualification",
     "scripts.serving_audit_qualification",
@@ -90,6 +92,10 @@ def qualify():
 
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        from mlsecops.runtime_bootstrap import initialize
+
+        initialize()
     value = qualify()
     print(canonical(value).decode())
     raise SystemExit(0 if value["status"] == "pass" else 1)
