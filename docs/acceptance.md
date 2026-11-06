@@ -77,6 +77,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 ## M14
 **Нагрузка и деградация.** 10 s прогрева, затем 120 s, 10 concurrent clients, одна строка/запрос, pinned golden payload, >= 1 000 измеренных запросов. Предлагаемые lab targets: p95 <= 200 ms, p99 <= 500 ms, неожиданные 5xx < 0.1%; намеренные invalid-input тесты отдельно. Результат включает RPS, CPU/RAM, errors, latency distribution и отсутствие неверного digest. Overload приводит к ограниченному отказу, не OOM loop. T17.
 
+[Fresh M14 pass на bbff69e](evidence/m14-load-acceptance-bbff69e.md): 143 cases, source-bound retained observations и cleanup проверены. Это lab acceptance, не M18/R1; исторический shutdown debt сохраняется в R1-B08.
+
 ## M15
 **Мониторинг качества и обратной связи.** Synthetic shift fixture даёт alert <= 120 s после попадания достаточного окна в scheduled evaluator. Initial profile: >=1 000 observations/window, фиксированные bins/reference, PSI >=0.2 как lab warning, минимум два окна; реальные пороги калибруются отдельно. Delayed-label fixture ухудшения recall на >0.05 после >=200 positives даёт другой alert. Clean control не создаёт alarm в 10 контрольных окнах; это не оценка production false-positive rate. Alert не запускает auto-promotion. T18.
 

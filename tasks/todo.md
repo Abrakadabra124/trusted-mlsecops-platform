@@ -1,5 +1,7 @@
 # Backlog реализации
 
+CP4/T17 2026-11-07 МСК: **[M14 fresh load acceptance](../docs/evidence/m14-load-acceptance-bbff69e.md) pass**, `bbff69e` / 42297023903 success. 143 cases (137 contracts + 6 aggregate), 15672/15672 correct, 130.6 RPS, p95=103.052346 ms, p99=117.668110 ms, 0 normal errors/429; overload/recovery и cleanup подтверждены. Source/policy/methods/primary bindings сверены. T17 lab profile принят; далее T18/M15. Исторический shutdown failure остаётся reliability debt R1-B08, не объявлен исправленным. M10/M19, independent M22 0/2, image findings, оставшиеся CP4/CP5 и общий M18/R1 открыты. Записи ниже - история конкретных commits.
+
 CP3/T16 2026-11-06: **[M13 synthetic serving acceptance](../docs/evidence/m13-privacy-acceptance-2026-11-06.md) pass**, `b03a5d9` / 42248499786 success. 438 cases (430 contracts + 8 aggregate criteria), 1116 Linux method executions с повторами / 0 skips; новая gate logic 144 statements / 22 branches 100%. Primary source/policy/methods и cleanup сверены; clean Windows subset85/0. T16 принят в этом профиле. Далее неделя10/T17/M14; M10/M19, independent M22 0/2, image findings, CP4/CP5 и весь R1 остаются открытыми. Более ранние записи ниже описывают состояние на соответствующих commits.
 
 CP3/T16 2026-11-06: [закрытые service-log windows](../docs/evidence/kubernetes-service-privacy-2026-11-06.md) **component pass**, `0d5ad83` / 42240476139 success. Четыре окна storage/trust для actual и controlled CLI, четыре positive leak controls, private packets перечитаны после cleanup; 244 Linux methods / 0 skips, новые modules 100%. Чистый Windows checkout с новой venv: 244 methods / 18 POSIX skips. Source SQL/cluster cleanup verified. Далее fresh M13 composition/acceptance; полный M13/R1, independent M22 0/2 и image findings остаются открытыми.
@@ -190,8 +192,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 - Проверка: test canaries не появляются в logs/evidence, чужие identity отвергаются, raw features не сохраняются по умолчанию.
 
 ## T17
-- [ ] Нагрузочный профиль. Зависимость: T16. Gate: M14.
-- [Baseline 3861d8a](../docs/evidence/m14-load-baseline-2026-11-06.md), run42266248228: полный замер и cleanup выполнены; 2676 корректных ответов, 112383 ответа429, successful p95=442.319ms. Normal-load contract fail, overload/recovery pass; T17 остаётся открыт. Далее локализация внутренних задержек и limiter split, затем измеримое исправление без ослабления критериев.
+- [x] Нагрузочный профиль synthetic local-cpu. Зависимость: T16. Gate: M14, source `bbff69e`. Исторический shutdown debt остаётся в R1-B08 до M18.
+- [Baseline 3861d8a](../docs/evidence/m14-load-baseline-2026-11-06.md), run42266248228: полный замер и cleanup выполнены; 2676 корректных ответов, 112383 ответа429, successful p95=442.319ms. Normal-load contract fail, overload/recovery pass; на этом историческом source T17 оставался открыт. Последующая fresh acceptance описана выше.
 - Результат: benchmark runner, client-side distribution, resource measurements и overload decision.
 - Проверка: воспроизводимый payload/compute profile, отдельные intentional negatives, отсутствие скрытого исключения timeouts.
 
