@@ -1,6 +1,6 @@
 # ADR 0055: ротация release signer с историей политик
 
-Дата: 2026-11-06. Статус: [native SQL/history/restore проверены](../evidence/release-signer-history-2026-11-06.md); live release-signer serving и полный M11 остаются открытыми.
+Дата: 2026-11-06. Статус: [native SQL/history/restore](../evidence/release-signer-history-2026-11-06.md) и [live release-signer serving](../evidence/release-signer-live-2026-11-06.md) проверены в controlled scope; полный M11 остаётся открытым.
 
 ## Требование
 
@@ -33,3 +33,5 @@ SQL history verifier проверяет структурную связност�
 Real-signature и mocked-transport тесты: [protocol](../../scripts/release_key_rotation_qualification.py), [store](../../scripts/release_key_store_qualification.py), [history/recovery](../../scripts/promotion_policy_history_qualification.py). [Native scenario](../../scripts/release_key_native.py) проверил три роли, конкуренцию, SQL отказы, права и повреждённую историю в disposable PostgreSQL; следующий CI step выполнил полный backup/restore с golden predictions. [42194888914 success](../evidence/release-signer-history-2026-11-06.md): 37 rotation + 36 recovery cases, 1 000 golden rows/error 0.0, cleanup verified. Эти component checks не закрывают M11/M17/M18/R1.
 
 Эксплуатационный порядок: [runbook](../operations/release-signer-rotation.md).
+
+Live qualification `94f56a3` / 42198344418 проверяет каждый новый signer через production cryptographic verifier, отдельную SQL trust authority и HTTP Engine: старый экземпляр fenced, missing-M22 release не записывается, новый экземпляр требует явной activation. 68 native cases, cleanup verified. Controlled reports не являются результатами независимой оценки actual candidate.

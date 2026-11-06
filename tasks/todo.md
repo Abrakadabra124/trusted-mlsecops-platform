@@ -1,5 +1,7 @@
 # Backlog реализации
 
+CP3/T14 2026-11-06: [live release signer component](../docs/evidence/release-signer-live-2026-11-06.md) проверен: `94f56a3` / 42198344418 success, 68 native cases, 56 tests, source/cleanup readback. T14 не закрыта: общая candidate-bound M11, независимый M22 0/2 и остальные R1 gates остаются обязательными.
+
 T11/T12/CP2 2026-10-29: [native balanced candidate](../docs/noise-training-validation.md#подтверждённый-native-результат-2026-10-29-мск) прошёл **M08/M09 на одном candidate**, `e7d166e`: 35 poisoning scenarios / 0 violations, evasion drop 0.0318367, ONNX parity 2.5172e-07. Paired `2d3e43e` pass на всех трёх fixed probes. Это закрывает прежние measured M08/M09 failures для этого source/candidate, не весь CP2. FPR/Brier regression опубликованы. Далее full main regression, M22, T02 system findings и CP3-CP5; 12 dispatch placeholders сохраняются.
 
 T02 node candidate 2026-10-29: [native build/audit f8a15c4](../docs/operations/node-candidate.md#native-результат-2026-10-29-мск), builder success, audit fail; Critical/High 67/394 -> 61/349. Обновление только Kubernetes недостаточно, candidate не принят. Полный T02 остаётся открытым. Следующая обязательная работа CP2 - T12/M09 actual-candidate binding, формат, parity и frozen evasion без ослабления исходных критериев.

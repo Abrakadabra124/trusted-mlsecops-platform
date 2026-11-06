@@ -1,5 +1,11 @@
 # История исследовательского проекта
 
+## R1 live release signer transitions - 2026-11-06
+
+- [94f56a3 / 42198344418](docs/evidence/release-signer-live-2026-11-06.md) success: 68 native cases на настоящих SQL trust, HTTP и ONNX worker, три последовательных смены ключа, сохранённые revocations/history, missing-M22 refusal/no-write и explicit reactivation.
+- Первые 503 за 0.532/0.536/0.537 s; golden error 7.5834e-08, шесть workers и два SQL targets удалены. Повторены 37 SQL rotation + 36 recovery cases и 56 tests; чистый Windows checkout подтвердил 56 tests.
+- Дополнены focused workflow и [runbook](docs/operations/release-signer-rotation.md). Controlled assurance не превращается в actual approval: общая M11/M18/R1 приёмка и independent M22 остаются открытыми.
+
 ## R1 release signer policy history - 2026-11-06
 
 - Signed authorization меняет одну роль и связывает переход с текущим head. Storage commit проверяет online отзыв старого ключа, сохраняет events и не выдаёт ready; повтор идемпотентен.

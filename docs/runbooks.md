@@ -1,6 +1,6 @@
 # Эксплуатационные процедуры
 
-- [Ротация release signer и история политик](operations/release-signer-rotation.md). Signed transition для одной роли, явная migration 2, свежий online trust, отказ при конфликте/expiry, полный backup/restore истории и ambiguous commit. [Native a501ac5 / 42194888914](evidence/release-signer-history-2026-11-06.md) success: 37 rotation + 36 recovery cases, 1 000 golden rows/error 0.0, cleanup verified. Live signer serving и полный M11 остаются открытыми. [Решение и границы](decisions/0055-release-signer-policy-history.md).
+- [Ротация release signer и история политик](operations/release-signer-rotation.md). Signed transition для одной роли, явная migration 2, свежий online trust, отказ при конфликте/expiry, полный backup/restore истории и ambiguous commit. [SQL/history evidence](evidence/release-signer-history-2026-11-06.md) и [live SQL/HTTP/ONNX evidence](evidence/release-signer-live-2026-11-06.md): `94f56a3` / 42198344418 success, 37 rotation + 36 recovery + 68 live cases, cleanup verified. Controlled assurance не закрывает полный M11. [Решение и границы](decisions/0055-release-signer-policy-history.md).
 
 - [Live root rotation на actual candidate и прерванные проверки](operations/authority-root-rotation.md#live-qualification-на-том-же-candidate). Native `45c6bf8` / 42183215170 verified: HTTP отказ за 4.358405479 s, явный новый Engine с прежними permit/model, сохранённые histories/revocations и cleanup. [Evidence и fresh checkout](evidence/candidate-root-rotation-2026-11-06.md); полный M11 остаётся открыт.
 

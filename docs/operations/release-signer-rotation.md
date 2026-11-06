@@ -1,6 +1,6 @@
 # Release signer rotation: диагностика и восстановление
 
-Статус 2026-11-06: [native SQL/history/restore проверены](../evidence/release-signer-history-2026-11-06.md), `a501ac5` / 42194888914 success, 37 rotation + 36 recovery cases. Процедура не разрешена для текущих локальных Docker/WSL/Kubernetes/SQL. Исполняемый стенд ограничен disposable hosted CI; live release-signer serving и полный M11 остаются открытыми.
+Статус 2026-11-06: [SQL/history/restore](../evidence/release-signer-history-2026-11-06.md) и [live signer serving](../evidence/release-signer-live-2026-11-06.md) проверены. Последний `94f56a3` / 42198344418 success: 37 rotation + 36 recovery + 68 live cases. Процедура не разрешена для текущих локальных Docker/WSL/Kubernetes/SQL. Исполняемый стенд ограничен disposable hosted CI; полный M11 остаётся открытым.
 
 ## Назначение и ответственность
 
@@ -59,7 +59,7 @@ uv run --locked python -m scripts.promotion_recovery_native --state .runtime --c
 
 Результат `reused` означает, что exact receipt существовал при первом чтении. При конкуренции два callers могут получить `false` при одной записи: проверять конечный журнал, а не суммировать этот флаг. Если прежняя policy уже expired, плановая ротация откажет; emergency recovery требует отдельного решения владельца, а не продления подписанного payload вручную.
 
-## Live signer qualification: подготовлено, native проверка ожидается
+## Live signer qualification: проверенный порядок
 
 Focused storage dispatch дополнен [сценарием](../../scripts/release_key_serving_native.py) для publisher, assessor и approver. Он требует уже подготовленный disposable source с promotion ledger, создаёт два собственных TLS SQL-хранилища и последовательно меняет по одному ключу. На каждом переходе выполняется реальный HTTP predict до отзыва, online update, два ответа 503 не позднее 60 секунд, проверка удаления старого worker, signed storage rotation и явная новая активация. Контрольный release без M22 должен отклоняться без изменения таблиц. Новый worker обязан вернуть тот же model hash и golden scores с ошибкой не выше `1e-6`; старый экземпляр остаётся недоступным.
 
@@ -68,5 +68,7 @@ uv run --locked python -m scripts.release_key_serving_native --state .runtime --
 ```
 
 Команда разрешена только внутри disposable hosted CI после предыдущих шагов focused job. Сценарий использует controlled signatures/reports для проверки механизма; это не независимое ML assurance. Итог пишется в private `.runtime/evidence/release-key-serving.json`, а очищенный отчёт содержит hashes, trace и результаты проверок. Private keys и SQL credentials не экспортируются. Успех требует конечного readback, удаления обоих собственных SQL targets и всех workers, неизменности source. До terminal success job сценарий считается непроверенным.
+
+На `94f56a3` / 42198344418 эти требования выполнены: 68 cases, первые 503 за 0.532/0.536/0.537 s, golden error 7.5834e-08, удалены шесть workers и оба SQL targets. При повторном запуске нужны собственные terminal evidence и cleanup readback; исторический success не заменяет текущую проверку.
 
 При отказе найти последний фиксированный `stage`/`case` в job, сохранить private evidence и сверить source SHA. `signer_trace_late_ml`, поздний 503 или повторный 200 после отказа запрещают принятие результата. Не увеличивать grace period ради pass. Отказ cleanup также блокирует принятие; проверять только собственные resource IDs, без global prune. Ошибки содержимого не исправлять перезаписью старой истории или снятием отзыва.
