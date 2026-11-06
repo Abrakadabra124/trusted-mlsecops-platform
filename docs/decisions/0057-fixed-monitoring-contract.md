@@ -79,6 +79,32 @@ acceptance predicates. Новые сервисы и зависимости дл�
 
 ## Обязательное продолжение до M15
 
+### Транспорт предупреждений
+
+`monitoring_alerts` определяет четыре вида событий: data/prediction drift,
+quality degradation и telemetry gap. Подписанный producer envelope связывает
+epoch, последовательность, reference/window/evidence digests и время admission.
+Срок ровно120s от admission, не от последней попытки отправки. Sink проверяет
+отдельный pinned producer key и epoch/reference, принимает последовательность
+без пропусков, отклоняет конфликт. Повтор в пределах cache128 событий возвращает
+первоначальную подписанную квитанцию и её время; вытесненный sequence не принимается
+как новое событие. Receipt key обязан отличаться от producer key.
+
+`monitoring_delivery` реализует реальный loopback HTTP POST `/v1/alerts` и ASGI
+sink. Клиент допускает только127.0.0.1, числовой port, signed envelope <=16KiB,
+один Content-Length и bounded JSON response. Общий timeout2s включает connect,
+headers и весь body; redirects/proxy/chunked/compression не поддерживаются.
+Подпись квитанции и binding к событию проверяются независимо от HTTP200.
+Сервер проверяет размер каждого фрагмента перед копированием в buffer, ограничивает
+чтение/отправку, выдаёт постоянный отказ без отражения входов. Подпись защищает
+подлинность, но loopback HTTP не объявляется сетевым TLS-профилем.
+
+Это component transport. Cache sink пока in-memory и не является durable store;
+его restart с тем же epoch без восстановления истории запрещён эксплуатационным
+контрактом. Новый epoch должен задаваться доверенной конфигурацией. Scheduler,
+retention/restart и actual candidate trace остаются следующей обязательной работой.
+Реальные loopback tests с controlled clocks не доказывают полный M15 deadline.
+
 Реализован `Accumulator`: принимает immutable ReleaseTrace/QualificationTrace,
 сверяет пять bindings reference, проверяет весь batch до изменения состояния,
 сохраняет только histogram counts и пары `observation_id -> positive`. ID равен

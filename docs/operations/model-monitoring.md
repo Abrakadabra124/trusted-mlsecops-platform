@@ -41,6 +41,39 @@ CI отдельно требует >=95% statements и branches каждого �
 
 ## Восстановление и ограничения
 
+### Доставка и её диагностика
+
+Для component проверки реального loopback HTTP, подписей, replay и таймаута:
+
+```powershell
+uv run --locked python -m unittest scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification
+```
+
+Sink и producer должны иметь разные ключи и одинаковые pins reference/epoch.
+HTTP200 без подлинной связанной квитанции не означает доставку. При timeout
+повторять то же подписанное событие с прежними sequence/admission/expiry;
+не обновлять expiry для обхода120s. После истечения срока результат delivery
+не подтверждён. Cache128 receipts ограничен; старое вытесненное событие
+не должно приниматься повторно. Полный scheduler и durable restart пока не приняты.
+
+При реализации найдено два controlled отказа:
+
+- Тест blackhole зависал в cleanup: Python3.12 `Server.wait_closed()` ждёт также
+  закрытия активных соединений. Исправлен порядок: перестать принимать подключения,
+  отменить только owned handler tasks, дождаться их `finally` с закрытием writers,
+  затем ждать server closure с отдельным3s пределом. Первый зависший процесс
+  был остановлен только после сверки PID/командной строки; автоматическая очистка
+  временных файлов прерванного запуска не подтверждалась. Не завершать все Python
+  процессы или чужие listeners. Повторные16 tests завершились штатно за4.128s.
+- Oversized ASGI chunk сначала копировался, затем отклонялся. Failure-first
+  allocation-guard test подтвердил дефект; теперь размер проверяется до `extend`.
+  Отказ не потребляет alert sequence. Это ошибка разработки до публикации,
+  не зафиксированный production-инцидент.
+
+Оба новых модуля локально покрыты полностью:194 statements/70 branches. Native
+HTTP candidate/SLO ещё не подтверждены. Raw traceback и private envelopes
+хранить только вне публичного evidence.
+
 После восстановления collector повторить только существующие неизменные окна
 с прежними IDs; новое reference допустимо только как отдельное явное
 переконфигурирование с подтверждённым candidate и сохранением прежней evidence.
