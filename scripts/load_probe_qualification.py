@@ -18,6 +18,15 @@ from scripts.load_measurement_qualification import rows
 
 
 class ProbeContracts(unittest.TestCase):
+    def test_actual_http_privacy_wrapper_retains_finite_owned_shutdown_failure(self):
+        engine = Mock()
+        engine.close.side_effect = Rejected("serving_cleanup_unconfirmed")
+        app = probe.serving_http.create_app(engine, token="a" * 64)
+        with self.assertRaises(Rejected) as caught, probe.listen(app):
+            pass
+        self.assertEqual(str(caught.exception), "serving_cleanup_unconfirmed")
+        engine.close.assert_called_once()
+
     def test_real_lifespan_preserves_only_allowlisted_failure_codes(self):
         for error, expected_code in (
             (Rejected("audit_shutdown_pending"), "audit_shutdown_pending"),

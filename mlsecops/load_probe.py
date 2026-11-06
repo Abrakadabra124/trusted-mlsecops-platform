@@ -10,7 +10,14 @@ from pathlib import Path
 
 import uvicorn
 
-from mlsecops import load_diagnostics, load_measurement, serving, serving_http, trust_session
+from mlsecops import (
+    load_diagnostics,
+    load_measurement,
+    serving,
+    serving_http,
+    serving_lifecycle,
+    trust_session,
+)
 from mlsecops.contracts import Rejected, canonical, digest, read_json
 from mlsecops.controller_api import Client
 from mlsecops.kube_candidate_probe import candidate
@@ -42,7 +49,11 @@ def credentials():
 
 @contextmanager
 def listen(app):
-    observed = load_diagnostics.Lifespan(app)
+    # Observe before the outer privacy wrapper consumes lifecycle exceptions.
+    # Keep that wrapper in place, so framework logging still receives constants.
+    private = type(app) is serving_lifecycle.Middleware
+    observed = load_diagnostics.Lifespan(app.app if private else app)
+    application = serving_lifecycle.Middleware(observed) if private else observed
     listener = socket.socket()
     server = thread = None
     started = False
@@ -52,7 +63,7 @@ def listen(app):
         port = listener.getsockname()[1]
         server = uvicorn.Server(
             uvicorn.Config(
-                observed,
+                application,
                 lifespan="on",
                 access_log=False,
                 log_config=None,

@@ -421,3 +421,11 @@ owned worker deletion/readback; если `trust_session_cleanup_unconfirmed` -
 что framework сообщил ошибку, но разрешённый вложенный код не получен.
 Во всех ветвях сохранять fail; не увеличивать сроки, не удалять segments и
 не принимать завершение server thread вместо успешного lifespan.
+
+Диагностический `521e6af` / [42293681470](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42293681470)
+повторил shutdown failure с generic `load_server_lifespan`. Observer стоял
+снаружи privacy middleware, который намеренно перехватывает exception.
+Controlled test через штатный `create_app` воспроизвёл потерю кода.
+Observer размещён внутри этой privacy boundary; внешняя обёртка сохранена и
+по-прежнему скрывает arbitrary exception text от framework logs.
+Это исправление диагностики, не устранение первичного shutdown failure.
