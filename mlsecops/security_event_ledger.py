@@ -3,9 +3,10 @@
 from mlsecops import security_event_health as health
 from mlsecops import security_events as events
 from mlsecops import signing
-from mlsecops.contracts import Rejected, canonical, decode
+from mlsecops.contracts import Rejected, canonical, decode, digest
 
 MAX_RECORDS = 1024
+MAX_PENDING = 16
 SCHEMA_VERSION = 3
 REORDER_WINDOW = health.REORDER_WINDOW
 FIELDS = ("schema_version", "config_sha256", "updated_at_ms", "records", "telemetry")
@@ -144,7 +145,10 @@ class Ledger:
         ):
             raise Rejected("security_store_receipt")
 
-    def ingest(self, envelope, *, clock_ms):
+    def admit(self, envelope, *, clock_ms):
+        return self.ingest(envelope, clock_ms=clock_ms, pending_limit=MAX_PENDING)
+
+    def ingest(self, envelope, *, clock_ms, pending_limit=None):
         self._clock(clock_ms)
         value = candidate(envelope).document()
         index = self._index.get(value["event_id"])
@@ -161,6 +165,8 @@ class Ledger:
         late = self._check_new(event)
         if len(self._document["records"]) >= MAX_RECORDS:
             raise Rejected("security_store_full")
+        if pending_limit is not None and len(self.pending()) >= pending_limit:
+            raise Rejected("security_delivery_backlog")
         record = {
             "envelope": decode(canonical(envelope)),
             "ingested_at_ms": clock_ms,
@@ -177,6 +183,70 @@ class Ledger:
         self._document["telemetry"] = control.document()
         self._document["updated_at_ms"] = clock_ms
         return decode(canonical(record))
+
+    def route(self, request, *, clock_ms):
+        """Commit to the local fixed incident route, not an external SIEM."""
+        self._clock(clock_ms)
+        event_id, key_path = request
+        events.hexadecimal(event_id)
+        public = signing.encode64(signing.load_key(key_path).public_key().public_bytes_raw())
+        if public != self.registry.receipt_public:
+            raise Rejected("security_receipt_authority")
+        if event_id not in self._index:
+            raise Rejected("security_unknown_event")
+        record = self._document["records"][self._index[event_id]]
+        if record["receipt"] is not None:
+            return decode(canonical(record))
+        event = self.registry.verify(record["envelope"], clock_ms=record["ingested_at_ms"])
+        receipt = events.delivered(
+            event,
+            self.registry.sha256,
+            ingested_at_ms=record["ingested_at_ms"],
+            routed_at_ms=clock_ms,
+            late=record["late"],
+        )
+        return self.acknowledge(
+            signing.sign(receipt, "security-event-receipt", key_path), clock_ms=clock_ms
+        )
+
+    def notice(self, request, *, clock_ms):
+        """Sign one event per persisted outage episode, inside the Store lock."""
+        self._clock(clock_ms)
+        notice_id, key_path = request
+        events.hexadecimal(notice_id)
+        public = signing.load_key(key_path).public_key().public_bytes_raw()
+        producer = self.registry.producer(digest(public))
+        if producer.role != "collector":
+            raise Rejected("security_notice_authority")
+        for record in self._document["records"]:
+            value = candidate(record["envelope"]).document()
+            if (
+                value["producer_id"] == producer.identity
+                and value["kind"] == "telemetry.gap"
+                and value["asset_sha256"] == notice_id
+                and value["correlation_id"] == notice_id[:32]
+            ):
+                return decode(canonical(record))
+        control = self._health()
+        control.reconcile(self._facts(), clock_ms)
+        report = control.report(clock_ms=clock_ms, pending=len(self.pending()), full=False)
+        problem = next((p for p in report["problems"] if p["notice_id"] == notice_id), None)
+        if problem is None:
+            raise Rejected("security_unknown_notice")
+        value = events.create(
+            kind="telemetry.gap",
+            producer_id=producer.identity,
+            epoch=producer.epoch,
+            sequence=self._highest.get((producer.identity, producer.epoch), 0) + 1,
+            occurred_at_ms=clock_ms,
+            observed_at_ms=clock_ms,
+            correlation_id=notice_id[:32],
+            asset_sha256=notice_id,
+            bundle_sha256=None,
+            policy_sha256=self.registry.policy_sha256,
+            reason=problem["reason"],
+        )
+        return self.ingest(signing.sign(value, "security-event", key_path), clock_ms=clock_ms)
 
     def acknowledge(self, envelope, *, clock_ms):
         self._clock(clock_ms)

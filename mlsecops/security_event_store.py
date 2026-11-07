@@ -196,6 +196,15 @@ class Store:
     def ingest(self, envelope, *, clock_ms):
         return self._update("ingest", envelope, clock_ms)
 
+    def admit(self, envelope, *, clock_ms):
+        return self._update("admit", envelope, clock_ms)
+
+    def route(self, request, *, clock_ms):
+        return self._update("route", request, clock_ms)
+
+    def notice(self, request, *, clock_ms):
+        return self._update("notice", request, clock_ms)
+
     def acknowledge(self, envelope, *, clock_ms):
         return self._update("acknowledge", envelope, clock_ms)
 

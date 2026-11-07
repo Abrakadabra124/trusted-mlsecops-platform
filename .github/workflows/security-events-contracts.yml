@@ -25,8 +25,8 @@ jobs:
       - name: Locked contracts and exact per-module coverage
         run: |
           uv sync --locked --no-build --python 3.12.15
-          uv run --locked ruff check mlsecops/security_event*.py scripts/security_events_qualification.py
-          uv run --locked ruff format --check mlsecops/security_event*.py scripts/security_events_qualification.py
+          uv run --locked ruff check mlsecops/security_event*.py scripts/security_event*_qualification.py
+          uv run --locked ruff format --check mlsecops/security_event*.py scripts/security_event*_qualification.py
           uv run --locked python scripts/check_docs.py
           uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-events.coverage" --source=mlsecops.security_events,mlsecops.security_event_config -m unittest scripts.security_events_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-events.coverage" -o "$RUNNER_TEMP/security-events-coverage.json"
@@ -51,7 +51,7 @@ jobs:
         run: |
           uv run --locked ruff check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py
           uv run --locked ruff format --check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-store.coverage" --source=mlsecops.security_event_ledger,mlsecops.security_event_store,mlsecops.security_event_health -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification scripts.security_event_health_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-store.coverage" --source=mlsecops.security_event_ledger,mlsecops.security_event_store,mlsecops.security_event_health -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification scripts.security_event_health_qualification scripts.security_event_routes_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-store.coverage" -o "$RUNNER_TEMP/security-store-coverage.json"
           uv run --locked python - <<'PY'
           import json
@@ -68,3 +68,7 @@ jobs:
                       raise SystemExit('security_store_coverage_incomplete:' + name)
           print('Durable journal component only. Actual routing, adapters, telemetry deadlines and promotion outage remain open.')
           PY
+      - name: Collector lifecycle and bounded HTTP contracts
+        run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
+      - name: Actual loopback delivery, elapsed heartbeat deadline, restart and cleanup
+        run: uv run --locked python -m unittest scripts.security_event_live_qualification

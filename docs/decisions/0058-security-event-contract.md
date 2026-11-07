@@ -217,3 +217,31 @@ Windows durability, network filesystem, volume loss/HA и реальная до�
 полномочия, семантика последовательностей и deadlines различаются. Общими
 остаются существующие signing и canonical JSON primitives. Новый оркестратор,
 SIEM/Sigma backend и внешние модели не нужны для этих требований и не внедрены.
+
+## Подключение collector к журналу
+
+Лабораторный получатель инцидентов - фиксированные очереди в том же private
+journal. `Store.route` подписывает квитанцию для серверного маршрута и возвращает
+её только после atomic commit/readback. Это сохраняемая очередь оператора,
+не внешняя SIEM и не доказательство прочтения человеком. HTTP `/incidents/N`
+выдаёт до четырёх записей за страницу. Новые внешние события блокируются при
+16 pending; точный retry возвращает первоначальный результат. Общий предел1024
+сохраняется, автоматического удаления истории нет.
+
+Один scheduler проверяет telemetry каждую секунду, формирует signed gap event
+по persisted notice ID и маршрутизирует pending записи. Повтор после crash
+не получает новые timestamp/sequence. Ключ собственного collector зарезервирован
+для этого пути; external ingress не может использовать его stream. Этот producer
+не мониторит собственную живость. Отдельные bearer tokens ограничивают ingress и
+чтение оператором; подлинность события определяют DSSE и pinned registry.
+
+HTTP слушает только loopback, имеет bounded bodies/ответы, quota, timeout чтения,
+постоянные ответы отказа и отключённый access log. Scheduler принадлежит ASGI
+lifespan и отменяется с ожиданием завершения. Private Linux state/keys и dumps-off
+проверяются существующими primitives. Скачок wall clock относительно monotonic
+больше5s или движение назад блокирует runtime до расследования/restart.
+
+O(n) journal verification и fsync остаются синхронными. Это исключает detached
+запись после остановки task, но не гарантирует срок при зависшем ядре/filesystem.
+Нагрузка, все source adapters и promotion audit boundary требуют отдельной общей
+M23-проверки. Один HTTP smoke с synthetic fixture не завершает R1.

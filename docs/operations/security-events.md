@@ -160,3 +160,60 @@ Controlled проверка выявила принятие registry, где в�
 обязательными их интеграция, gap/heartbeat evidence и проверка запрета
 promotion при недоступном sink. До подключения этих компонентов команд reset,
 автоматического очистителя или аварийного обхода контроля в этом ранбуке нет.
+
+## Проверка нового collector runtime
+
+Реализация и тесты добавлены; native результат этого revision публикуется отдельно
+после завершения CI. Проверка из checkout с locked environment:
+
+```text
+uv sync --locked --no-build --python 3.12.15
+uv run --locked python -m unittest scripts.security_event_routes_qualification scripts.security_event_runtime_qualification scripts.security_event_http_qualification
+uv run --locked python -m unittest scripts.security_event_live_qualification
+```
+
+Последняя команда выполняется только на разрешённом Linux host. На Windows она
+пропускается, что не является успешной native проверкой. Test harness создаёт
+private synthetic keys/config/state, запускает настоящий child collector на
+свободном loopback порту, проверяет HTTP receipts, duplicate/reorder, реальный
+heartbeat timeout до120s, restart и закрытие PID/порта. Нужны примерно90s ожидания
+потери heartbeat. Docker, Kubernetes и SQL не используются. Секреты и process log
+не выводятся и удаляются вместе с принадлежащим тесту temporary directory.
+
+Для уже явно подготовленного журнала entry point:
+
+```text
+uv run --locked python -m mlsecops.security_event_server --config /absolute/private/collector.json
+```
+
+Файл config содержит ровно `schema_version`=1, `registry_file`, `registry_root`,
+`registry_sha256`, `state_directory`, `state_sha256`, `receipt_key_file`,
+`collector_key_file`, `ingress_token_file`, `operator_token_file`, `port`.
+Все file paths абсолютные, registry подписан выделенным operator root,
+`registry_sha256` связан с canonical payload. State pin возвращает явный
+`security_event_store.initialize`; повторно вызывать initialize для рабочего
+журнала запрещено. Token files содержат ровно64 lowercase hex символа без newline,
+ключи и tokens имеют private permissions. Port1024..65535, bind127.0.0.1.
+Полный воспроизводимый synthetic provisioning находится в live qualification;
+он не заменяет production key management и не разрешает production promotion.
+
+Отправителю доступны POST `/events` и `/heartbeat`, оператору GET `/health` и
+`/incidents/0` с последующим `next_offset`. Заголовок Authorization передаётся
+из private token file, его значение не печатать. Ingress/оператор имеют разные
+tokens; ключи события и receipt также разделены. HTTP200 `/events` содержит
+подписанную квитанцию сохранённого маршрута. HTTP401 означает неверный transport
+credential,400 malformed framing/JSON,429 исчерпанную quota,503 runtime refusal
+или недоступное состояние. Body503 не раскрывает внутреннюю причину.
+
+При503 не переиздавать событие с новым ID. Сначала оператор проверяет PID/порт,
+срок registry, clocks и private volume. Затем повторяет исходный signed envelope:
+после неизвестного результата commit будет возвращена та же квитанция. Для
+`health.healthy=false` проверить pending, heartbeat и gaps, а не только process
+liveness. Исчезновение state, нарушение pin и corruption требуют сохранения
+доказательств и эскалации владельцу; автоматического reset/обхода нет.
+
+Останавливать только PID собственного collector через SIGTERM, дождаться exit и
+проверить закрытие принадлежащего порта. Уничтожение task или потеря ответа не
+являются доказательством отсутствия commit. После restart перечитать исходный
+event ID/receipt и incident page. Внешняя SIEM, подключение всех семи реальных
+источников, promotion outage test и полная M23/R1 приёмка ещё не заявлены.
