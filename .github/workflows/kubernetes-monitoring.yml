@@ -1,4 +1,4 @@
-name: Actual candidate M15 monitoring observation
+name: Actual candidate M15 monitoring acceptance
 on:
   push:
     branches: [codex/cp4-m15-monitoring-20261107]
@@ -45,6 +45,10 @@ jobs:
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': summary}, sort_keys=True))
           print('Controlled ASGI collection, owned scheduler and real loopback receipts; candidate-bound full M15/R1 remain unaccepted.')
           PY
+      - name: M15 aggregate gate and exact inventory contracts
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor-gate.coverage" --source=mlsecops.monitoring_gate,scripts.monitoring_contracts -m unittest scripts.monitoring_gate_qualification
+          uv run --locked coverage report --data-file="$RUNNER_TEMP/monitor-gate.coverage" --fail-under=100
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -59,9 +63,19 @@ jobs:
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
-      - name: Actual model reference, HTTP observations, signed labels, receipts and quarantine
+      - name: Fresh M15 source-bound acceptance
         id: campaign
-        run: uv run --locked python -m scripts.kube_monitoring_native
+        run: uv run --locked python -m mlsecops.acceptance --gate M15 --profile local-cpu --state .runtime --output .runtime/evidence/M15.json
+      - name: Public finite acceptance envelope
+        if: always()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          path = Path('.runtime/evidence/M15.json')
+          value = read_json(path) if path.is_file() else {'status': 'inconclusive', 'release_ready': False}
+          print(canonical(value).decode())
+          PY
       - name: Stop verified owned source SQL
         if: always()
         run: |
@@ -90,4 +104,11 @@ jobs:
           test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
       - name: Reconcile retained primary packet after infrastructure cleanup
         if: success() && steps.campaign.outcome == 'success'
-        run: uv run --locked python -m scripts.kube_monitoring_native --reverify
+        run: |
+          uv run --locked python -m scripts.kube_monitoring_native --reverify
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical
+          from mlsecops.monitoring_gate import post_cleanup
+          print(canonical(post_cleanup(Path('.runtime'))).decode())
+          PY

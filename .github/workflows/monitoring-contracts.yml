@@ -64,6 +64,10 @@ jobs:
                   raise SystemExit('monitor_privacy_coverage_below_95:' + total)
           print(json.dumps({'source': os.environ['GITHUB_SHA'], 'coverage': report, 'scope': 'controlled-monitoring-privacy-not-full-M13'}, sort_keys=True))
           PY
+      - name: M15 aggregate gate and exact inventory contracts
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor-gate.coverage" --source=mlsecops.monitoring_gate,scripts.monitoring_contracts -m unittest scripts.monitoring_gate_qualification
+          uv run --locked coverage report --data-file="$RUNNER_TEMP/monitor-gate.coverage" --fail-under=100
       - name: Existing HTTP audit, lifecycle and operator boundary regression
         run: |
           uv run --locked python -m unittest scripts.serving_http_qualification scripts.serving_metrics_qualification scripts.serving_http_audit_qualification scripts.serving_lifecycle_qualification

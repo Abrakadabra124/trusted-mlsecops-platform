@@ -165,3 +165,26 @@ inspect. Дополнительный HTTP service и доступ serving к з
 ground truth. Signed label authority и dataset approval остаются отдельными
 доверенными действиями. Эксплуатационные команды и ограничения описаны в
 [ранбуке карантина](../operations/feedback-quarantine.md).
+
+
+## Композиция общей M15 acceptance, 2026-11-07
+
+Новый [gate](../../mlsecops/monitoring_gate.py) реализован, hosted acceptance пока
+ожидается. Exact inventory исполняется заново без skips; свежая actual campaign
+связана с source/image/time. До teardown повторно читаются signed proposal,
+model и validation из разрешённой SQL. Signed reference связывается с lineage,
+approved validation digest/size/rows и сохранёнными artifacts; он не пересчитывается
+из эксплуатационных данных, чтобы скрыть drift.
+
+Retained monitoring packet заново сопоставляет 120 HTTP batches с 12 окнами,
+10 clean controls, двумя shift windows, подписанными delayed labels и тремя
+receipts с deadline. Quarantine proof проверяет submit/retry/curator readback,
+15 direct permission denials и отсутствие изменений authority/promotion.
+Gate не заменяет эти primary records самозаявленными counters. Private admission
+пинит exact bytes и hashes всех packets; после teardown выполняется offline replay.
+Сборка M18 на одном candidate остаётся отдельной обязательной границей.
+
+Используются существующие collector, scheduler, sink и workflow. Новый сервис,
+система очередей или внешний monitoring backend для synthetic CPU профиля не
+требуются. Restart inventory проверяет explicit history loss и запрет reuse epoch;
+это не обещание полного восстановления временного ряда или PV durability.

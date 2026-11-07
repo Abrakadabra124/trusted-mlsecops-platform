@@ -2,10 +2,10 @@
 
 Ответственные: platform-owner за сбор/доставку, model-owner за reference/quality,
 data-owner за проверенные labels. Scope: [ADR 0057](../decisions/0057-fixed-monitoring-contract.md).
-Сейчас реализованы статистическое ядро, bounded accumulator и signed label join.
-Actual HTTP collector, scheduled alert
-delivery, dashboard и full M15 пока не приняты. Команды ниже не запускают
-Docker, WSL, Kubernetes или SQL.
+Реализованы статистическое ядро, HTTP collector, scheduler, подписанная доставка,
+operator status, quarantine feedback и явный cold restart. Их компонентные
+hosted результаты и свежие M13/M14 опубликованы; общая M15 acceptance реализуется
+отдельно и пока не принята. Pure commands не запускают локальную инфраструктуру.
 
 ## Диагностика без изменения состояния
 
@@ -14,7 +14,7 @@ Docker, WSL, Kubernetes или SQL.
 2. Проверить sequence, times, суммы histogram и abstentions. Окно с999
    observations недостаточно; отсутствие alert при недостатке данных не значит
    нормальную работу. Public metrics не должны содержать feature values или IDs.
-3. Различать `data_drift`, `prediction_drift` и будущую доставку
+3. Различать `data_drift`, `prediction_drift` и доставку
    `quality_degradation`. PSI не доказывает падение recall или poisoning.
 4. При `telemetry_gap` найти потерянное окно/интервал и неисправный collector.
    Не восполнять потерю синтетическими наблюдениями. После восстановления
@@ -371,3 +371,48 @@ credential, состояние очереди и полную lineage context д
 пустой список faults и сопоставление 10 inference responses с audit admissions.
 Этот playbook подтверждает компонентную регрессию; fresh actual-candidate M13,
 feedback CLI privacy и общая приёмка R1 требуют отдельных доказательств.
+
+
+## Общая M15 acceptance и восстановление после отказа
+
+Реализация: [monitoring gate](../../mlsecops/monitoring_gate.py),
+[exact inventory](../../scripts/monitoring_contracts.py),
+[hosted workflow](../../.github/workflows/kubernetes-monitoring.yml).
+Статус на этапе подключения: реализовано, новый hosted результат ещё требуется.
+Ответственный platform-owner проверяет ownership runner/cluster/SQL перед запуском;
+model-owner отвечает за approved validation и frozen reference, data-owner за labels.
+
+На разрешённом disposable hosted Linux runner после обычного bootstrap:
+
+```sh
+uv run --locked python -m scripts.monitoring_contracts
+uv run --locked python -m mlsecops.acceptance --gate M15 --profile local-cpu --state .runtime --output .runtime/evidence/M15.json
+```
+
+Ожидается полный inventory без skips и `status=pass`, `exit_code=0` у M15 envelope.
+Pass не даёт права на promotion. Wrapper начинает с inconclusive и создаёт свежую
+campaign; скопированный старый отчёт не заменяет запуск. SQL/cluster teardown
+выполняется workflow с `always()` и проверкой остановки/отсутствия. После teardown:
+
+```sh
+uv run --locked python -c "from pathlib import Path; from mlsecops.monitoring_gate import post_cleanup; from mlsecops.contracts import canonical; print(canonical(post_cleanup(Path('.runtime'))).decode())"
+```
+
+Этот шаг повторно проверяет сохранённые signed packets, hashes и конечные метрики,
+но не обращается к остановленной SQL. Live source verification выполнена до teardown.
+Если cleanup не завершился, общий hosted run не принимается даже при pass M15 шага.
+
+| Симптом | Диагностика и безопасное действие |
+| --- | --- |
+| `M15_controlled_contracts_failed` | Проверить finite diagnostic: missing count, exit code и наличие stderr. Полный список методов обязателен; Linux restart/descriptor tests нельзя объявлять Windows pass или пропускать |
+| `M15_evidence_binding` | Сверить source revision/image, время campaign, model/bundle/permit/reference и hashes шести artifacts. Сохранить приватное состояние. Не править отчёт и не переподписывать его ради pass |
+| `monitor_packet_*` | Найти пропущенное окно, неверный HTTP binding, signature/epoch, label join или delivery deadline по исходному коду. Не менять 1000 observations, два shifted окна, 200 positives, recall delta и 120 s |
+| `feedback_*` | Сверить retained quarantine record, retry, curator readback, 15 permission denials и защищённые таблицы. Feedback не превращать в approved labels/dataset вручную |
+| Ошибка offline replay | Не удалять единственную копию packet. Сверить private observation и retained hashes; исправить причину и выполнить новую owned campaign, а не reuse старой |
+| Неподтверждённый teardown | Проверить конкретные owned container/cluster IDs и их конечное состояние по workflow. Не выполнять global prune или удаление чужих ресурсов |
+
+Rollback изменения gate - возврат к прежнему source commit с прежними честными
+`full_M15=inconclusive` component reports. Это не разрешение убрать проверку из
+release admission. Эскалация владельцу обязательна, если нельзя подтвердить
+ownership, сохранность primary evidence или завершение очистки. Raw HTTP records,
+feature values, keys, private URLs и unrestricted stack traces не публикуются.
