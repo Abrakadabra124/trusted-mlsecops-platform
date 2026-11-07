@@ -101,8 +101,9 @@ headers и весь body; redirects/proxy/chunked/compression не поддер�
 
 Это component transport. Cache sink пока in-memory и не является durable store;
 его restart с тем же epoch без восстановления истории запрещён эксплуатационным
-контрактом. Новый epoch должен задаваться доверенной конфигурацией. Scheduler,
-retention/restart и actual candidate trace остаются следующей обязательной работой.
+контрактом. Новый epoch должен задаваться доверенной конфигурацией. Owned scheduler
+и bounded in-memory retention реализованы в `monitoring_runtime`; durable restart
+и actual candidate trace остаются следующей обязательной работой.
 Реальные loopback tests с controlled clocks не доказывают полный M15 deadline.
 
 Реализован `Accumulator`: принимает immutable ReleaseTrace/QualificationTrace,
@@ -110,8 +111,10 @@ retention/restart и actual candidate trace остаются следующей 
 сохраняет только histogram counts и пары `observation_id -> positive`. ID равен
 SHA-256 canonical `[request_id, row_index]`; положительное решение соответствует
 score>=0.5, abstention даёт false. Один request ID не считается дважды внутри
-окна; максимум20000 наблюдений, закрытое окно неизменно. Счётчики доступны
-следующему scheduler, но этот компонент ещё не подключён к HTTP completion.
+окна; максимум20000 наблюдений, закрытое окно неизменно. `serving_http` подключает
+компонент к фактически завершённой отправке200; controlled tests проверяют
+audit substitution, deadline denial, immutable context и отсутствие raw features
+в операторском JSON. Это ещё не native candidate-bound приёмка.
 
 `Labels` проверяет окно, digest ledger и соответствие числа positive decisions
 prediction histogram. DSSE/Ed25519 envelope вида `monitor-labels` проверяется

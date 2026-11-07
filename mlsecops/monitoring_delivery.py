@@ -74,6 +74,7 @@ class Client:
         self.port = port_number(port)
         self.sink_public = monitoring_alerts.public_key(sink_public)
         producer = signing.encode64(signing.load_key(producer_key).public_key().public_bytes_raw())
+        self.producer_public = producer
         if producer == sink_public:
             raise Rejected("monitor_alert_roles_not_separated")
         self._key = producer_key

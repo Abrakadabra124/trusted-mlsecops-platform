@@ -199,6 +199,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T18
 - [ ] Model/data/security monitoring. Зависимость: T17. Gate: M15.
+- Component 2026-11-07: [HTTP/scheduler](../docs/evidence/monitoring-runtime-2026-11-07.md), локально76 tests/0 skips,686 statements/252 branches100%. Actual ASGI completion hook, bounded scheduler/retention, real signed loopback receipts и operator JSON реализованы; full candidate-bound M15, bootstrap/configuration и durable restart открыты. Linux CI ожидает публикации.
 - Component 2026-11-07: [ADR0057](../docs/decisions/0057-fixed-monitoring-contract.md), fixed bins/PSI, exact recall, bounded immutable-context aggregation и signed delayed-label join. [Evidence7969d32](../docs/evidence/monitoring-contracts-2026-11-07.md): CI42312591898 success, 32 Linux tests/0skips, 276 statements/112 branches100%; clean Windows32/0. Actual HTTP collector, scheduler/delivery, dashboard, retention и full M15 ещё открыты. [Диагностика](../docs/operations/model-monitoring.md).
 - Результат: scheduled reports, dashboards, alert routing, drift versus label-quality distinction и feedback quarantine.
 - Проверка: injected shift, degraded labels, clean windows, telemetry outage; ни один alert не повышает candidate автоматически.

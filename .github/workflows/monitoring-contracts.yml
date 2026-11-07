@@ -25,17 +25,17 @@ jobs:
       - name: Fixed-reference contracts and per-module coverage
         run: |
           uv sync --locked --no-build --python 3.12.15
-          uv run --locked ruff check mlsecops/monitoring*.py scripts/monitoring*_qualification.py
-          uv run --locked ruff format --check mlsecops/monitoring*.py scripts/monitoring*_qualification.py
+          uv run --locked ruff check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
+          uv run --locked ruff format --check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
           uv run --locked python scripts/check_docs.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery,mlsecops.monitoring_runtime -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/monitor.coverage" -o "$RUNNER_TEMP/monitor-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'monitor-coverage.json').read_text())['files']
-          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py'}:
+          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py', 'mlsecops/monitoring_runtime.py'}:
               raise SystemExit('monitor_coverage_inventory')
           for name, report in sorted(files.items()):
               summary = report['summary']
@@ -43,5 +43,8 @@ jobs:
                   if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
                       raise SystemExit('monitor_coverage_below_95:' + name + ':' + total)
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': summary}, sort_keys=True))
-          print('Controlled aggregation and signed label joins; actual HTTP collection/delivery and full M15/R1 remain unaccepted.')
+          print('Controlled ASGI collection, owned scheduler and real loopback receipts; candidate-bound full M15/R1 remain unaccepted.')
           PY
+      - name: Existing HTTP audit, lifecycle and operator boundary regression
+        run: |
+          uv run --locked python -m unittest scripts.serving_http_qualification scripts.serving_metrics_qualification scripts.serving_http_audit_qualification scripts.serving_lifecycle_qualification

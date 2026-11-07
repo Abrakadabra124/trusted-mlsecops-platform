@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, Response
 from mlsecops import (
     advisory,
     audit_retention,
+    monitoring_runtime,
     release_reader,
     serving,
     serving_access,
@@ -84,6 +85,7 @@ def create_app(
     audit=None,
     audit_path=None,
     metrics_token=None,
+    monitor=None,
     startup_diagnostics=False,
 ):
     if clients is None:
@@ -95,6 +97,10 @@ def create_app(
         if metrics_token is not None
         else None
     )
+    if monitor is not None and (
+        type(monitor) is not monitoring_runtime.Runtime or operator is None
+    ):
+        raise Rejected("http_monitor_configuration")
     if audit is not None and type(audit) is not serving_audit.Journal:
         raise Rejected("http_audit_configuration")
     if audit_path is not None and (
@@ -123,13 +129,19 @@ def create_app(
             except Rejected:
                 if startup_diagnostics is True:
                     print(serving_startup.content(engine).decode(), file=sys.stderr, flush=True)
+            if monitor is not None:
+                monitor.start()
             yield
         finally:
             try:
-                await asyncio.to_thread(engine.close)
+                if monitor is not None:
+                    await monitor.close()
             finally:
-                if managed is not None:
-                    await asyncio.to_thread(managed.close)
+                try:
+                    await asyncio.to_thread(engine.close)
+                finally:
+                    if managed is not None:
+                        await asyncio.to_thread(managed.close)
 
     app = FastAPI(
         lifespan=lifespan,
@@ -235,7 +247,7 @@ def create_app(
         return request.scope[serving_http_audit.SCOPE_KEY]
 
     class VerifiedResponse(JSONResponse):
-        def __init__(self, result, budget, code, request_id):
+        def __init__(self, result, budget, code, request_id, features=None):
             if (
                 type(result) is not serving.ServingResult
                 or result.generation is not budget.generation
@@ -247,19 +259,42 @@ def create_app(
                 model_sha256=result.payload["model_sha256"],
             )
             self.budget, self.code, self.request_id = budget, code, request_id
+            self.monitoring_features = features
+            self.monitoring_predictions = (
+                result.payload.get("predictions") if features is not None else None
+            )
             super().__init__(
                 {**result.payload, "request_id": request_id}, headers={"Cache-Control": "no-store"}
             )
 
         async def __call__(self, scope, receive, send):
             try:
-                remaining(self.budget)
-            except Exception:
-                self.audit_context = None
-                await error(503, self.code, self.request_id)(scope, receive, send)
-                return
-            scope[serving_http_audit.SCOPE_KEY].context = self.audit_context
-            await super().__call__(scope, receive, send)
+                try:
+                    remaining(self.budget)
+                except Exception:
+                    self.audit_context = None
+                    await error(503, self.code, self.request_id)(scope, receive, send)
+                    return
+                delivery = scope[serving_http_audit.SCOPE_KEY]
+                delivery.context = self.audit_context
+                await super().__call__(scope, receive, send)
+                if (
+                    monitor is not None
+                    and self.monitoring_features is not None
+                    and delivery.completed
+                    and delivery.status == 200
+                ):
+                    try:
+                        monitor.observe(
+                            self.audit_context,
+                            self.monitoring_features,
+                            self.monitoring_predictions,
+                            self.request_id,
+                        )
+                    except Exception:
+                        monitor.failed("observation")
+            finally:
+                self.monitoring_features = self.monitoring_predictions = None
 
     @app.get("/livez")
     async def live():
@@ -287,6 +322,13 @@ def create_app(
                         or request.headers.getlist("content-length") not in ([], ["0"])
                     ):
                         response = error(400, "invalid_request", request_id)
+                    elif request.url.path == "/monitoring":
+                        state = monitor.snapshot()
+                        response = JSONResponse(
+                            state,
+                            status_code=200 if state["healthy"] else 503,
+                            headers={"Cache-Control": "no-store"},
+                        )
                     else:
                         response = Response(
                             metrics.render(),
@@ -300,6 +342,9 @@ def create_app(
             except BaseException:
                 ticket.release()
                 raise
+
+        if monitor is not None:
+            app.add_api_route("/monitoring", scrape, methods=["GET"])
 
     @app.get("/readyz")
     async def ready(request: Request):
@@ -387,7 +432,7 @@ def create_app(
                 remaining(budget)
                 return error(422, "invalid_request", request_id)
             result = await execute(engine.predict_result, deferred, budget, delivery, features)
-            return VerifiedResponse(result, budget, "model_unavailable", request_id)
+            return VerifiedResponse(result, budget, "model_unavailable", request_id, features)
         except Rejected as failure:
             if str(failure) == "serving_busy":
                 return error(429, "overloaded", request_id)

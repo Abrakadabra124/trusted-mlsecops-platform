@@ -54,7 +54,7 @@ HTTP200 без подлинной связанной квитанции не о�
 повторять то же подписанное событие с прежними sequence/admission/expiry;
 не обновлять expiry для обхода120s. После истечения срока результат delivery
 не подтверждён. Cache128 receipts ограничен; старое вытесненное событие
-не должно приниматься повторно. Полный scheduler и durable restart пока не приняты.
+не должно приниматься повторно. Candidate-bound gate и durable restart пока не приняты.
 
 При реализации найдено два controlled отказа:
 
@@ -87,8 +87,8 @@ Delayed labels не принимать из произвольного HTTP payl
 конфликтов. При `monitor_label_unmatched` проверить нужное окно и исходный request
 ID/row index в private workflow; не добавлять отсутствующее предсказание вручную.
 При конфликте сохранить оба envelope приватно и передать data-owner. Public key
-не заменять ключом из отвергнутого запроса. Actual label delivery, persistence и
-retention ещё не реализованы. Численная `quality()` сама по себе не проверяет
+не заменять ключом из отвергнутого запроса. Actual label delivery и persistence
+ещё не реализованы; bounded in-memory retention описан ниже. Численная `quality()` сама по себе не проверяет
 происхождение агрегатов. Ни comparator,
 ни drift alert не разрешают retrain, promotion или rollback автоматически.
 
@@ -96,3 +96,67 @@ retention ещё не реализованы. Численная `quality()` с�
 точный отказ, наличие delivery receipt и пределы наблюдения. Не сохранять
 сырые признаки, тексты labels, токены и ключи в публичных reports. Native
 recovery и alert delivery будут проверяться только в owned disposable hosted CI.
+
+## Подключённый HTTP collector и scheduler
+
+`serving_http.create_app(..., monitor=Runtime(...), metrics_token=...)` подключает
+collector к завершению реальной ASGI-отправки. Учитывается только `/v1/predict`
+с фактически отправленным200. Ready, ошибки входа/auth, audit substitution503,
+истечение budget и прерванная отправка не добавляют наблюдений. Context берётся
+из immutable `ServingResult`, а не текущего состояния engine; ссылки на признаки
+и predictions очищаются в `finally`. Ошибка collector после отправки200 уже не
+может изменить ответ: она выставляет постоянный fault `observation`.
+
+Runtime принадлежит одному event loop и lifecycle приложения. Окно закрывается
+при >=1000 наблюдений либо через60s; маленькое окно остаётся `insufficient`.
+Последнее неполное окно закрывается и при остановке. Пределы:32 ожидающих окна,
+64 alerts,20 окон и максимум20000 сохранённых prediction IDs,128 receipts.
+При заполненной очереди alerts готовое окно сохраняется, пока доставка освобождает
+место. Окно с неподтверждённым alert не вытесняется. Это bounded память процесса,
+не durable backup и не гарантия сохранения при аварии процесса.
+
+Подпись label authority, producer и sink используют три разных ключа. Wall clock
+нужен для подписанных сроков, monotonic clock для измерения120s; обратный ход или
+расхождение >5s дают clock fault. Retry сохраняет исходный event/sequence/deadline.
+Квитанция после120s не превращает просроченную доставку в pass. Ошибка доставки
+видна оператору; успешный retry снимает только delivery fault, не другие ошибки.
+
+Оператор с отдельным metrics credential читает `GET /monitoring`: bounded JSON
+с окнами, quality reports, агрегированными receipts и health. HTTP503 означает
+неактивный/stale scheduler либо fault, HTTP200 означает здоровье сборщика, но
+не достаточность выборки и не разрешение выпуска (`release_ready=false`).
+Нет raw features, labels, private keys и подписанных envelopes. Сохраняются
+существующие rate limits и timeout отправки операторского endpoint.
+
+Диагностический плейбук на разрешённом CPU/loopback окружении:
+
+```powershell
+uv run --locked python -m unittest scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification
+uv run --locked python -m unittest scripts.serving_http_qualification scripts.serving_metrics_qualification scripts.serving_http_audit_qualification scripts.serving_lifecycle_qualification
+```
+
+Для первой команды локально проверены28 tests/0 skips; runtime215 statements и
+70 branches100%. Для второй смежной кампании вместе с monitoring HTTP suite:
+84 tests,3 Linux-only skips на Windows. Отдельный CI запускает Linux-проверки;
+их конкретный результат фиксируется после завершения, а не предполагается.
+
+При clock fault проверить синхронизацию времени и reference; не менять часы
+автоматически и не продлевать уже подписанные сроки. При queue fault сохранить
+pending counts/window digests приватно, восстановить sink и проверить receipts.
+При `monitor_shutdown_pending` задача ещё жива: её handle сохраняется, процесс
+нельзя объявлять очищенным. При `monitor_shutdown_unconfirmed` остановка owner
+или доставка не подтверждены полностью: проверить `task.done()`, faults и
+очереди отдельно. Cleanup engine и audit исполняется даже при ошибке monitor.
+Эскалировать владельцу потерю истории и неподтверждённые receipts; перезапуск
+со старым epoch без восстановления состояния не разрешён.
+
+Controlled ошибки разработки и исправления: неправильный тип подписанного
+label payload теперь даёт contract rejection; отмена shutdown остаётся отменой;
+субмиллисекундное округление не отвергает корректную свежую метку; неполное
+окно не теряется при штатной остановке. Failure-first tests сохранены в suites.
+Это не записи production-инцидентов.
+
+Ещё отсутствуют конфигурационный CLI для monitor, trusted candidate reference
+builder, durable restart, feedback quarantine composition и полный native M15.
+Новый HTTP hook требует свежих M13/M14 на общем candidate; старые результаты
+не переносятся автоматически. Этот компонент не имеет promotion API.
