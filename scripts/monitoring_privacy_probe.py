@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from mlsecops import load_monitoring, monitoring_stream, signing
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
-from scripts import serving_metrics_probe
+from scripts import monitoring_dashboard_probe, serving_metrics_probe
 from scripts.serving_privacy_probe import LifecycleCapture, Signals, drained, response_headers
 
 FIXED = {
@@ -32,6 +32,7 @@ FIXED = {
     "audit_events_confirmed": 40,
     "metric_series": 69,
     "ambient_signals_used": False,
+    "dashboard_requests": 9,
 }
 
 
@@ -130,6 +131,8 @@ def exercise(request, body, reference, label_key, needles):
 
 
 def matrix(request, body, reference, label_key, needles):
+    if monitoring_dashboard_probe.exercise(request, needles) != FIXED["dashboard_requests"]:
+        raise Rejected("monitor_privacy_dashboard_count")
     count = 0
     private = needles
 

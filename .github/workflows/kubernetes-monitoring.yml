@@ -25,6 +25,12 @@ jobs:
       - name: Fixed-reference contracts and per-module coverage
         run: |
           uv sync --locked --no-build --python 3.12.15
+          node --version
+          node -e "if (Number(process.versions.node.split('.')[0]) < 20) process.exit(1)"
+          uv run --locked ruff check scripts/monitoring_dashboard*.py
+          uv run --locked ruff format --check scripts/monitoring_dashboard*.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/dashboard.coverage" --source=mlsecops.monitoring_dashboard,scripts.monitoring_dashboard_probe -m unittest scripts.monitoring_dashboard_qualification
+          uv run --locked coverage report --data-file="$RUNNER_TEMP/dashboard.coverage" --fail-under=100
           uv run --locked ruff check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py mlsecops/feedback.py scripts/feedback*.py scripts/kube_monitoring_native*.py
           uv run --locked ruff format --check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py mlsecops/feedback.py scripts/feedback*.py scripts/kube_monitoring_native*.py
           uv run --locked python scripts/check_docs.py

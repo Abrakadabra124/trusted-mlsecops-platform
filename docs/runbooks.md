@@ -237,6 +237,9 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 
 ## Обязательный incident record
 
+Для интерфейса `/monitoring/ui` использовать [ранбук операторской панели](operations/monitoring-dashboard.md):
+доступ, квоты, недоступность API, неполные окна, очистка ключа и воспроизведение проверок.
+
 После остановки monitoring producer/sink использовать
 [плейбук безопасного перезапуска](operations/monitoring-restart.md). Он требует
 сохранного epoch registry, нового явно назначенного epoch и подтверждения gap;

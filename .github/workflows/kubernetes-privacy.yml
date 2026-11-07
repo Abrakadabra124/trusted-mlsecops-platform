@@ -24,6 +24,8 @@ jobs:
       - name: Locked dependencies and privacy regressions
         run: |
           uv sync --locked --no-build --python 3.12.15
+          node --version
+          node -e "if (Number(process.versions.node.split('.')[0]) < 20) process.exit(1)"
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py

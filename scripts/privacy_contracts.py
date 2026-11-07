@@ -49,6 +49,7 @@ MODULES = (
     "scripts.kube_cli_privacy_exchange_qualification",
     "scripts.monitoring_privacy_qualification",
     "scripts.monitoring_http_qualification",
+    "scripts.monitoring_dashboard_qualification",
     "scripts.feedback_qualification",
     "scripts.feedback_native_qualification",
     "scripts.feedback_privacy_qualification",

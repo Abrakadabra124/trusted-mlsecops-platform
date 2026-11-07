@@ -16,6 +16,7 @@ from mlsecops import (
     advisory,
     audit_retention,
     monitoring_config,
+    monitoring_dashboard,
     monitoring_ingress,
     monitoring_runtime,
     release_reader,
@@ -352,6 +353,7 @@ def create_app(
                 raise
 
         if monitor is not None:
+            monitoring_dashboard.install(app)
             app.add_api_route("/monitoring", scrape, methods=["GET"])
             app.add_api_route("/monitoring/labels", scrape, methods=["POST"])
 

@@ -17,6 +17,7 @@ MODULES = (
     "scripts.monitoring_delivery_qualification",
     "scripts.monitoring_runtime_qualification",
     "scripts.monitoring_http_qualification",
+    "scripts.monitoring_dashboard_qualification",
     "scripts.monitoring_config_qualification",
     "scripts.monitoring_cli_qualification",
     "scripts.monitoring_reference_qualification",

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from mlsecops import monitoring_alerts, monitoring_delivery, monitoring_runtime, serving, signing
+from mlsecops import monitoring_dashboard as dashboard
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.datasets import FEATURES
 from mlsecops.load_probe import listen
@@ -41,6 +42,22 @@ def replay():
     order = {"monitor": 0, "label": 0, "quota": 0}
 
     def request(path, payload=None, **options):
+        route = path.split("?", 1)[0]
+        if route in dashboard.ASSETS:
+            content = b"" if "?" in path else dashboard.ASSETS[route].encode()
+            headers = list(dashboard.HEADERS.items()) + [
+                ("content-length", str(len(content))),
+                ("date", "Sat, 07 Nov 2026 00:00:00 GMT"),
+            ]
+            if "?" not in path:
+                media = dashboard.MEDIA[route]
+                headers.append(
+                    (
+                        "content-type",
+                        media + ("; charset=utf-8" if media.startswith("text/") else ""),
+                    )
+                )
+            return (400 if "?" in path else 200), headers, content
         status, value = 200, {}
         if options.get("authorized") is False or options.get("credential") == "client":
             status, value = 401, {"error": {"code": "unauthorized"}}

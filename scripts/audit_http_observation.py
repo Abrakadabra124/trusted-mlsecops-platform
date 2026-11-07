@@ -2,6 +2,7 @@ import threading
 
 from mlsecops import audit_event, audit_evidence, audit_export
 from mlsecops.contracts import Rejected, canonical, decode
+from mlsecops.monitoring_dashboard import ASSETS
 
 LIMIT = audit_export.MAX_REQUESTS
 
@@ -51,6 +52,11 @@ class Ledger:
             try:
                 if self.failed or self.sealed or len(self.responses) >= LIMIT:
                     raise Rejected("audit_http_response_capacity")
+                if self.operator_routes and route in ASSETS:
+                    expected = b"" if "?" in path else ASSETS[route].encode()
+                    if status != (400 if "?" in path else 200) or content != expected:
+                        raise Rejected("audit_http_static_response")
+                    return
                 route = {"/v1/predict": "predict", "/readyz": "ready"}.get(route, "other")
                 value = decode(content, 65536)
                 if type(value) is not dict or route == "other" and value != {"detail": "Not Found"}:

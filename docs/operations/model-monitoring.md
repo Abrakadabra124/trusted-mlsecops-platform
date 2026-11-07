@@ -5,7 +5,9 @@ data-owner за проверенные labels. Scope: [ADR 0057](../decisions/00
 Реализованы статистическое ядро, HTTP collector, scheduler, подписанная доставка,
 operator status, quarantine feedback и явный cold restart. Их компонентные
 hosted результаты и свежие M13/M14 опубликованы; [общая M15 acceptance](../evidence/m15-monitoring-acceptance-2026-11-07.md)
-принята на bd90286. Визуальная dashboard и M23 security-event delivery ещё открыты. Pure commands не запускают локальную инфраструктуру.
+принята на bd90286. [Визуальная панель](monitoring-dashboard.md) реализована и проверена локально;
+hosted проверка нового revision ещё требуется. M23 security-event delivery остаётся открытым.
+Pure commands не запускают локальную инфраструктуру.
 
 ## Диагностика без изменения состояния
 
