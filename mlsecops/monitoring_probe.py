@@ -42,6 +42,7 @@ FAILURES = frozenset(
         "monitor_packet_quality_profile",
         "monitor_packet_receipt_binding",
         "load_server_lifespan",
+        "load_server_startup",
         "serving_cleanup_unconfirmed",
         "audit_shutdown_pending",
         "unknown",
@@ -225,6 +226,7 @@ def qualify(config, expected):
                 )
                 runtime = monitoring_config.producer(str(root / "producer.json"))
                 token, operator = secrets.token_hex(32), secrets.token_hex(32)
+                (root / "audit").mkdir(mode=0o700)
                 app = serving_http.create_app(
                     engine,
                     token,
@@ -275,6 +277,23 @@ def qualify(config, expected):
     }
 
 
+def location(failure):
+    """Only this public module's call site, never exception text or stack locals."""
+    line, frame = 0, failure.__traceback__
+    while frame is not None:
+        if frame.tb_frame.f_code.co_filename == __file__:
+            line = frame.tb_lineno
+        frame = frame.tb_next
+    kind = type(failure).__name__
+    return {
+        "exception": kind
+        if kind in {"Rejected", "KeyError", "TypeError", "ValueError", "OSError", "AttributeError"}
+        else "other",
+        "source_file": "mlsecops/monitoring_probe.py" if line else "unknown",
+        "source_line": line,
+    }
+
+
 def main():
     try:
         enforce()
@@ -300,6 +319,7 @@ def main():
                     "release_ready": False,
                     "code": "monitor_probe_rejected",
                     "cause": cause,
+                    "location": location(failure),
                 }
             ).decode(),
             flush=True,

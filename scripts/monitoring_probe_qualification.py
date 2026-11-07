@@ -16,6 +16,59 @@ from scripts.monitoring_stream_qualification import context
 
 
 class ProbeContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "retained audit requires Linux descriptors")
+    def test_real_linux_lifespan_opens_owned_retained_audit_and_closes_scheduler(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            key = root / "reference.pem"
+            public = signing.create_key(key)
+            supplied = {
+                "monitoring": {
+                    "reference": signing.sign(reference(), "monitor-reference", key),
+                    "reference_public": public,
+                    "rows": [],
+                }
+            }
+            engine, api = Mock(audit_context=context()), Mock()
+            api.request.return_value = {"items": []}
+            summary = {"packet_sha256": "a" * 64, "release_ready": False}
+            with (
+                patch.object(probe, "Client", return_value=api),
+                patch.object(probe, "candidate"),
+                patch.object(probe.serving, "Engine", return_value=engine),
+                patch.object(probe, "campaign", return_value={}),
+                patch.object(probe.monitoring_packet, "verify", return_value=summary),
+                patch.object(probe, "DIRECTORY", root / "exchange"),
+                patch.object(probe, "send", return_value={"packet_sha256": "a" * 64}),
+            ):
+                result = probe.qualify(
+                    {"expected_campaign": "b" * 32, "kubernetes_worker": {}}, supplied
+                )
+                self.assertTrue(result["worker_cleanup_verified"])
+                engine.activate.assert_called_once()
+                self.assertGreaterEqual(engine.close.call_count, 1)
+
+    def test_failure_location_never_contains_foreign_paths_or_exception_text(self):
+        self.assertEqual(
+            probe.location(RuntimeError("PRIVATE")),
+            {
+                "exception": "other",
+                "source_file": "unknown",
+                "source_line": 0,
+            },
+        )
+        try:
+            raise OSError("PRIVATE/path")
+        except OSError as failure:
+            self.assertEqual(
+                probe.location(failure),
+                {
+                    "exception": "OSError",
+                    "source_file": "unknown",
+                    "source_line": 0,
+                },
+            )
+
     def test_http_status_and_transport_failure_always_close_connection(self):
         for fault in (None, "status", "transport", "oversize"):
             connection = Mock()
@@ -66,7 +119,13 @@ class ProbeContracts(unittest.TestCase):
                     patch.object(probe, "Worker") as worker,
                     patch.object(probe.serving, "Engine", return_value=engine) as factory,
                     patch.object(probe, "listen", side_effect=lambda app: nullcontext(12345)),
-                    patch.object(probe.serving_http, "create_app"),
+                    patch.object(
+                        probe.serving_http,
+                        "create_app",
+                        side_effect=lambda *args, **kwargs: (
+                            self.assertTrue(kwargs["audit_path"].is_dir()) or Mock()
+                        ),
+                    ),
                     patch.object(probe.monitoring_config, "producer", return_value=runtime),
                     patch.object(
                         probe,

@@ -258,12 +258,13 @@ def invoke(
                 if (
                     monitoring_operator is not None
                     and isinstance(document, dict)
-                    and set(document) == {"status", "release_ready", "code", "cause"}
+                    and set(document) == {"status", "release_ready", "code", "cause", "location"}
                     and document["status"] == "fail"
                     and document["release_ready"] is False
                     and document["code"] == "monitor_probe_rejected"
                     and type(document["cause"]) is str
                     and document["cause"] in monitoring_probe.FAILURES
+                    and privacy_location(document["location"]) is not None
                 ):
                     failure.update(probe_failure="monitoring", **document)
                 if (

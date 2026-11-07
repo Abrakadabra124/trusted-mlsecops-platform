@@ -309,3 +309,12 @@ HTTP статусы. Не увеличивать counters вручную. При
 контрольный predictor. Hosted результат нужно подтвердить отдельно. Полный M15
 остаётся inconclusive до общей приёмки, feedback quarantine, recovery/restart и
 смежных regression checks. Alert не запускает обучение или promotion автоматически.
+
+При отказе startup проверить prerequisite retained audit: его directory должен
+существовать до `create_app`, принадлежать процессу и иметь mode0700 на Linux.
+Probe создаёт этот каталог внутри собственного TemporaryDirectory. Нельзя
+исправлять такой отказ отключением audit или расширением permissions. Отсутствие
+каталога воспроизведено controlled regression; отдельный Linux test поднимает
+настоящие retained audit, HTTP lifespan и scheduler без Kubernetes. Если причина
+в bounded diagnostic неизвестна, использовать только публичную строку module
+для диагностики, не печатать exception text, raw config или traceback locals.
