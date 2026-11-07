@@ -78,8 +78,27 @@ Prometheus пока показывает существующие HTTP metrics; 
 Полный M15 потребует сверки primary evidence после cleanup и новой M13/M14
 регрессии. Этот компонент не разрешает выпуск и не обучает модель.
 
-Следующий increment добавляет signed configuration и sink CLI; он не входит
-в результат `6c0b505`. Его проверка записывается отдельно после своего CI.
+## Signed configuration и sink CLI
+
+Отдельный commit `82fda36d626f42835b3d7283659ee06857a44d8f`:
+[CI42318170530](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42318170530)
+**success**. На Linux85 monitoring/config/CLI tests за17.589s и77 смежных tests
+за7.003s, без пропусков. Восемь modules734 statements/260 branches100%; к
+таблице выше добавлены `monitoring_config`29/6 и `monitoring_cli`19/2.
+
+Проверены подпись и digest reference, отдельные ключи, точная схема config,
+отказ относительных путей/неизвестных полей и отсутствие startup side effects.
+`serving_http.configured` читает опциональный `monitor_file` до создания engine
+и требует отдельный metrics credential. Native test запускает настоящий
+`python -m mlsecops.monitoring_cli`, получает подписанную связанную квитанцию,
+отправляет SIGINT и проверяет завершение PID/закрытие порта. Exit130 и одна
+постоянная diagnostic строка соответствуют существующему CLI-контракту.
+Принудительное завершение в этом тесте означало бы failure.
+
+Локальный config/CLI/HTTP subset:46 tests/1 Linux-only skip за7.789s. Native
+проверка выполнена в CI, а не выдана за пройденную на Windows. Этот increment
+не реализует построение reference от actual candidate и durable restart;
+полный M15/R1 остаётся непринятым. Raw subprocess outputs и ключи не публикуются.
 
 Решения: [ADR0057](../decisions/0057-fixed-monitoring-contract.md).
 Диагностика и восстановление: [model-monitoring](../operations/model-monitoring.md).
