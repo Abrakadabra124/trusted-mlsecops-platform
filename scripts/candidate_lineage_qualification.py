@@ -77,9 +77,15 @@ class CandidateLineageContracts(unittest.TestCase):
             "features": list(FEATURES),
             "source_approval_digest": self.trust["source_approval_digest"],
             "objects": {
-                f"{name}.json": {"sha256": digest(name.encode()), "bytes": 100, "rows": count}
+                f"{name}.json": {
+                    "sha256": digest(getattr(self, "split_contents", {}).get(name, name.encode())),
+                    "bytes": len(self.split_contents[name])
+                    if name in getattr(self, "split_contents", {})
+                    else 100,
+                    "rows": count,
+                }
                 for name, count in zip(
-                    ("train", "validation", "holdout"), (64, 32, 400), strict=True
+                    ("train", "validation", "holdout"), self.policy["split_counts"], strict=True
                 )
             },
         }

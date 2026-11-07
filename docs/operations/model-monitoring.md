@@ -212,3 +212,42 @@ PID и недоступность прежнего loopback port. Тест `moni
 In-memory receipt cache теряется при аварии. Сохранять private evidence и
 назначать новый epoch после ручного разбора; reused epoch без восстановления
 истории не считается безопасным restart и не принимается полным M15.
+
+## Построение frozen reference
+
+`monitoring_reference.build` проверяет весь signed release package существующим
+`release_bundle.verify`, затем связывает отдельные validation bytes с descriptor
+`split_manifest.objects["validation.json"]`: точные digest, размер и число строк.
+Дополнительно проверяются canonical encoding, уникальные entity IDs, числовой
+домен и labels0/1. Для reference требуется >=1000 строк и >=200 positives.
+Holdout не читается; текущий inference stream не используется для настройки bins.
+
+Далее builder создаёт `PredictionBatch` и передаёт запрос владельцу isolated
+worker. До подписи проверяются model/request/row bindings и scan receipt ответа.
+Histogram и исходный recall вычисляются из настоящих validation features/labels
+и возвращённых scores. Model/bundle/dataset/evaluation/source pins извлекаются
+из проверенного package до worker callback. Повторно проверяется время действия
+package после вычисления; clock rollback/expiry не создают подписанный reference.
+Reference signer отделён от publisher, curator и evaluator.
+
+Выход: DSSE `monitor-reference` и ограниченное evidence с validation digest/bytes,
+prediction receipt и `release_ready=false`. Для итоговой native приёмки вызывающий
+controller обязан сохранить private request/response, execution metadata и
+подтверждение очистки реального worker. Успешный callback сам по себе не доказывает
+изоляцию процесса; controlled tests не заменяют этот этап.
+
+Диагностика перед подписью:
+
+```powershell
+uv run --locked python -m unittest scripts.monitoring_reference_qualification scripts.candidate_lineage_qualification scripts.material_bundle_qualification scripts.release_bundle_qualification
+```
+
+Локально61 tests/0 skips, builder36 statements/10 branches100%. В fixture
+используются1000 уникальных synthetic rows и настоящий набор подписанных
+материалов, но worker response controlled, не actual ONNX execution. При
+`monitor_validation_binding` заново получить validation по digest из подписанного
+manifest через разрешённую read-only роль. Не подставлять train/holdout, не
+дублировать строки для достижения порога, не переподписывать изменённые байты.
+При insufficient positives сохранить inconclusive; замена labels запрещена.
+При expiry нужно заново авторизовать campaign, а не менять время в отвергнутом
+package. Native candidate-bound сборка и полный M15 ещё не приняты.
