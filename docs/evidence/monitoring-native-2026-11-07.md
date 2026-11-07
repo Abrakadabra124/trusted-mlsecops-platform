@@ -1,7 +1,8 @@
 # M15: candidate-bound monitoring observation
 
-Код: `2249f350f3befd1892c65fbc3566a9981d0a57cb`, ветка
-`codex/cp4-m15-monitoring-20261107`. Полный M15 и R1 пока не приняты.
+Проверенный native код: `acb5b18d8d45b5d329a8794ff49c9503800afc49`, ветка
+`codex/cp4-m15-monitoring-20261107`. Native observation **pass**, полный M15 и R1
+пока не приняты. Начальная композиция `2249f35` и её отказ сохранены ниже.
 
 ## Проверенный контрактный слой
 
@@ -46,6 +47,43 @@ HTTP lifespan и scheduler. Исходный ограниченный diagnostic
 место исключения, поэтому связь с этим конкретным CI failure проверяется
 повторным native запуском. Новая диагностика выводит только тип исключения и
 строку публичного probe module, без exception text, stack locals и private paths.
+
+Исправление: `acb5b18d8d45b5d329a8794ff49c9503800afc49`.
+[Contract CI42322768944](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42322768944),
+job128250962526, **success**:113 monitoring tests/0 skips/49.276s,
+77 HTTP tests/0 skips/7.718s,52 material tests/0 skips/4.751s. В том числе выполнен
+новый Linux test с реальным retained audit и HTTP lifecycle. Покрытие14 modules:
+1122/1124 statements,384/386 branches; каждый module >=95% по обеим метрикам.
+Локальный targeted regression:25 tests/1 Linux-only skip/1.100s. Эти результаты
+не заменяют отдельный повтор native observation.
+
+Повтор [Native CI42322768934](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42322768934),
+job128250962479, commit`acb5b18`: **success**. Workflow использовал чистый hosted
+checkout и новую locked установку, собрал image, выполнил source pipeline и
+actual-candidate composition. `source_dirty=false`; source revision, fingerprint,
+image, model, subject, permit и reference связаны в
+[публичной JSON-проекции](monitoring-native-2026-11-07-summary.md).
+
+| Проверка | Подтверждённый результат |
+| --- | --- |
+| HTTP observations | 12000,120 batches |
+| Контрольные окна | 10 окон по1000, без drift alarm |
+| Shift fixture | 2 окна по1000, data и prediction drift |
+| Delayed labels | 200 positives, отдельный quality alert, повтор принимает0 |
+| Подписанные receipt | 3, максимальная доставка0.368848423s при пороге120s |
+| Probe Job elapsed | 23.100061s, это не load benchmark |
+| Worker cleanup | Проверено отсутствие worker pods |
+| Source SQL cleanup | success, проверено stopped state |
+| Disposable cluster cleanup | success, проверено отсутствие кластера |
+| Primary packet после удаления инфраструктуры | Перечитан и пересчитан, pass |
+| Release | `release_ready=false`, `full_M15=inconclusive` |
+
+Packet SHA256`5043b3f57c115c81156b1754c0d6ad8a7854c5b9a1438589b736abc78a3b2530`
+совпадает в live operator summary и post-cleanup пересчёте. Reference
+SHA256`23746f54f7e86258b94cb38fb02d428d16cea12ca19178e5ca5120c2ee1e2b3c` также
+совпадает. SQL/promotion snapshots проверены до и после inference существующим
+candidate harness. Пропущенный audit prerequisite исправлен, повторный native
+startup и teardown прошли; прежний R1-B08 shutdown debt этим не объявляется закрытым.
 
 Сценарий соединяет actual signed package, frozen validation reference, isolated
 ONNX worker, HTTP collector, scheduler, operator-only signed-label intake,
