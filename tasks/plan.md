@@ -198,7 +198,7 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
-Checkpoint 2026-11-07: реализован подписанный контракт v1, 21 локальный тест без пропусков, 206 statements/74 branches, 100% двух новых модулей. Hosted CI и clean checkout пока ожидаются. [ADR 0058](../docs/decisions/0058-security-event-contract.md) задаёт следующие этапы: постоянный collector -> порядок/heartbeat -> доставка -> source adapters -> promotion boundary -> общая M23 acceptance. Контракт сам по себе не закрывает T29.
+Checkpoint 2026-11-07: [подписанный контракт v1 проверен](../docs/evidence/security-event-contract-2026-11-07.md), `c2f7bf9` /42345739729 success:21 новый +25 смежных Linux tests без пропусков, 206 statements/74 branches, 100% двух новых модулей; чистый Windows checkout46tests/3POSIX skips. [ADR 0058](../docs/decisions/0058-security-event-contract.md) задаёт следующие этапы: постоянный collector -> порядок/heartbeat -> доставка -> source adapters -> promotion boundary -> общая M23 acceptance. Контракт сам по себе не закрывает T29.
 
 **Задачи:** T29. Реализовать семь event contracts, доверенных producers, bounded fields и воспроизводимый replay. Проверить forgery, duplicates, reorder, gaps и sink outage. Событие от model worker не получает автоматически статус достоверного security finding.
 

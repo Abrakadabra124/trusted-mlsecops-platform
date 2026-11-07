@@ -285,6 +285,6 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 - [ ] Security event contracts и replay. Зависимости: T14, T18. Gate: M23.
-- 2026-11-07: контракт v1 реализован и локально проверен (21 тест, 0 skips, два модуля 100% statements/branches). Hosted CI/clean checkout пока ожидаются. [ADR 0058](../docs/decisions/0058-security-event-contract.md) и [ранбук](../docs/operations/security-events.md); далее постоянный collector, replay/gaps/delivery, source adapters и promotion outage. M23 не принят.
+- 2026-11-07: [контракт v1 проверен](../docs/evidence/security-event-contract-2026-11-07.md), `c2f7bf9` /42345739729 success:21 новый +25 смежных Linux tests/0skips, два модуля100% statements/branches; чистый Windows checkout46tests/3POSIX skips. [ADR 0058](../docs/decisions/0058-security-event-contract.md) и [ранбук](../docs/operations/security-events.md); далее постоянный collector, replay/gaps/delivery, source adapters и promotion outage. M23 не принят.
 - Результат: семь типизированных событий, trusted producers, schema validation, idempotent ingestion, gap/heartbeat detection и fail-closed promotion при недоступном audit sink.
 - Проверка: positive/negative replay, forgery, duplicates, out-of-order, sequence gaps и sink outage; alert/gap latency измерены. Sigma добавляется только с выбранным и проверенным backend.

@@ -5,6 +5,10 @@ Collector, durable deduplication, реальные source adapters и promotion 
 gate ещё не приняты. Приведённые команды проверяют компонент; не считать их
 подтверждением работающей доставки или завершённого M23.
 
+Подтверждённое [component evidence](../evidence/security-event-contract-2026-11-07.md):
+runtime `c2f7bf9`, Linux CI 42345739729 success,21 новых+25 смежных tests/0skips;
+чистый Windows checkout46tests/3POSIX skips с новой `.venv`.
+
 ## Назначение и ответственность
 
 Platform-owner управляет отдельным registry root и receipt authority; владельцы
@@ -24,6 +28,7 @@ registry, а не поле из stdout или имя файла с ключом.
 ```text
 uv sync --locked --no-build --python 3.12.15
 uv run --locked python -m unittest scripts.security_events_qualification
+uv run --locked python -m unittest scripts.key_files_qualification scripts.monitoring_alerts_qualification scripts.release_policy_qualification
 uv run --locked python -m coverage run --branch --source=mlsecops.security_events,mlsecops.security_event_config -m unittest scripts.security_events_qualification
 uv run --locked python -m coverage report --fail-under=100
 uv run --locked python scripts/check_docs.py
