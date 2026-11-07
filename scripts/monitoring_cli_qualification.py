@@ -15,7 +15,13 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-from mlsecops import monitoring_alerts, monitoring_cli, monitoring_delivery, signing
+from mlsecops import (
+    monitoring_alerts,
+    monitoring_cli,
+    monitoring_delivery,
+    monitoring_state,
+    signing,
+)
 from mlsecops.contracts import canonical
 
 
@@ -84,6 +90,8 @@ class CliContracts(unittest.TestCase):
                 allocation.bind(("127.0.0.1", 0))
                 port = allocation.getsockname()[1]
             path = root / "sink.json"
+            state_directory = str(root / "epochs")
+            state_sha256 = monitoring_state.initialize(state_directory)
             path.write_bytes(
                 canonical(
                     {
@@ -93,6 +101,8 @@ class CliContracts(unittest.TestCase):
                         "receipt_key_file": str(sink_key),
                         "port": port,
                         "epoch": "b" * 32,
+                        "state_directory": state_directory,
+                        "state_sha256": state_sha256,
                     }
                 )
             )

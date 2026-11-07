@@ -87,8 +87,8 @@ Delayed labels не принимать из произвольного HTTP payl
 конфликтов. При `monitor_label_unmatched` проверить нужное окно и исходный request
 ID/row index в private workflow; не добавлять отсутствующее предсказание вручную.
 При конфликте сохранить оба envelope приватно и передать data-owner. Public key
-не заменять ключом из отвергнутого запроса. Actual label delivery и persistence
-ещё не реализованы; bounded in-memory retention описан ниже. Численная `quality()` сама по себе не проверяет
+не заменять ключом из отвергнутого запроса. Actual signed label delivery проверена в native campaign; durable persistence
+окон и labels не заявляется. Bounded in-memory retention описан ниже. Численная `quality()` сама по себе не проверяет
 происхождение агрегатов. Ни comparator,
 ни drift alert не разрешают retrain, promotion или rollback автоматически.
 
@@ -156,8 +156,8 @@ label payload теперь даёт contract rejection; отмена shutdown о
 окно не теряется при штатной остановке. Failure-first tests сохранены в suites.
 Это не записи production-инцидентов.
 
-Ещё не подтверждена native сборка reference от actual candidate; остаются
-durable restart, feedback quarantine composition и полный native M15.
+Native сборка reference и feedback quarantine проверены на отдельных commits.
+Текущие evidence перечислены в STATUS; полный M15 остаётся открытым до общей приёмки.
 Новый HTTP hook требует свежих M13/M14 на общем candidate; старые результаты
 не переносятся автоматически. Этот компонент не имеет promotion API.
 
@@ -179,17 +179,25 @@ digest и смешанные ключи отклоняются до создан
 | sink_public | Отдельный pinned public key подписанта receipts |
 | sink_port | Порт loopback receiver1024..65535 |
 | epoch | Явный уникальный для запуска идентификатор32 lowercase hex |
+| state_directory | Абсолютный путь к заранее provisioned private epoch registry |
+| state_sha256 | SHA-256 identity реестра, закреплённый оператором |
 
 Четыре роли используют разные ключи. Подпись не доказывает корректность выбора
-эталонной выборки: reference builder от actual candidate остаётся обязательным
-незавершённым шагом. Подменять его произвольным вручную подписанным histogram
+эталонной выборки: для этого используется проверенный reference builder
+от actual candidate и его подписанных validation materials. Подменять его произвольным вручную подписанным histogram
 для итоговой приёмки нельзя. Public pins устанавливает доверенный оператор,
 а не входящий envelope. Existing key_files проверяет private key identity,
 размер, symlinks и POSIX owner/mode. Windows ACL этим не доказываются.
 
 Sink JSON содержит ровно `schema_version`, `reference_sha256`, `producer_public`,
-`receipt_key_file`, `port`, `epoch`; пути абсолютные. Reference/epoch должны
+`receipt_key_file`, `port`, `epoch`, `state_directory`, `state_sha256`; пути абсолютные. Reference/epoch должны
 совпадать с producer. Загрузчик не запускает процессы, задачи или listener.
+
+До первого запуска выполнить [подготовку epoch registry](monitoring-restart.md).
+Startup потребляет epoch отдельно для producer и sink; повторное использование
+после остановки запрещается сохраняемым marker. Удалять registry для перезапуска
+нельзя. Плейбук cold recovery описывает новый epoch и явное сообщение о потере
+истории; restoration прежних окон не заявляется.
 
 Команды на разрешённом disposable Linux runner после подготовки private configs:
 

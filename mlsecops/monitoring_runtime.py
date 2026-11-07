@@ -14,6 +14,7 @@ from mlsecops import (
     monitoring_alerts,
     monitoring_delivery,
     monitoring_labels,
+    monitoring_state,
     monitoring_stream,
 )
 from mlsecops.contracts import Rejected, canonical, decode, digest
@@ -36,6 +37,7 @@ class Runtime:
         interval=0.25,
         clock=time.monotonic_ns,
         wall_clock=lambda: time.time_ns() // 1000000,
+        epoch_guard=None,
     ):
         self._evaluator = monitoring.Evaluator(reference, reference_sha256)
         if (
@@ -77,6 +79,13 @@ class Runtime:
         self._last_cycle = None
         self._closed = self._stopping = False
         self.task = None
+        if epoch_guard is not None and (
+            type(epoch_guard) is not monitoring_state.Guard
+            or (epoch_guard.role, epoch_guard.epoch, epoch_guard.reference)
+            != ("producer", client.epoch, reference_sha256)
+        ):
+            raise Rejected("monitor_epoch_guard")
+        self._epoch_guard, self._epoch_receipt = epoch_guard, None
 
     def failed(self, kind):
         if kind not in FAULTS:
@@ -104,6 +113,17 @@ class Runtime:
             if self.task.done():
                 raise Rejected("monitor_runtime_stopped")
             return
+        if self._epoch_guard is not None:
+            self._epoch_receipt = self._epoch_guard.claim()
+            if self._epoch_receipt["history_unavailable"]:
+                wall, mono = self.sample()
+                report = {
+                    "schema_version": 1,
+                    "reason": "new_epoch_history_unavailable",
+                    "window_sha256": digest(canonical(self._epoch_receipt)),
+                    "admission": self._epoch_receipt,
+                }
+                self.enqueue(report, "telemetry_gap", wall, mono)
         operation = self.run()
         try:
             self.task = asyncio.create_task(operation, name="mlsecops-monitor")
@@ -273,6 +293,8 @@ class Runtime:
             "schema_version": 1,
             "reference_sha256": self._reference_sha256,
             "epoch": self._client.epoch,
+            "epoch_admission": self._epoch_receipt,
+            "history_restored": False,
             "state": "stopped" if self._closed else "observing" if running else "inactive",
             "healthy": running and fresh and not self._faults,
             "faults": sorted(self._faults),

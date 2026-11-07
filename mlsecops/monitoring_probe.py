@@ -11,6 +11,7 @@ from pathlib import Path
 from mlsecops import (
     monitoring_config,
     monitoring_packet,
+    monitoring_state,
     serving,
     serving_http,
     signing,
@@ -179,12 +180,6 @@ def qualify(config, expected):
         raise Rejected("monitor_probe_initial_worker")
     supplied = expected["monitoring"]
     reference = checked(supplied["reference"], "monitor-reference", supplied["reference_public"])
-    session = trust_session.Session()
-    engine = serving.Engine(
-        candidate(config, connection_factory=session.connection),
-        worker_factory=lambda model, image: Worker(model, image, config["kubernetes_worker"]),
-        close_reader=session.close,
-    )
     with tempfile.TemporaryDirectory(prefix="monitor-") as temporary:
         root = Path(temporary)
         producer, sink_key, label_key = (
@@ -195,6 +190,8 @@ def qualify(config, expected):
         )
         epoch = config["expected_campaign"]
         reference_sha = digest(canonical(reference))
+        state_directory = str(root / "epochs")
+        state_sha256 = monitoring_state.initialize(state_directory)
         write_json(root / "reference.json", supplied["reference"])
         write_json(
             root / "sink.json",
@@ -205,9 +202,23 @@ def qualify(config, expected):
                 "receipt_key_file": str(sink_key),
                 "port": 8910,
                 "epoch": epoch,
+                "state_directory": state_directory,
+                "state_sha256": state_sha256,
             },
         )
         sink_app, _unused_port = monitoring_config.sink(str(root / "sink.json"))
+        session = trust_session.Session()
+        try:
+            engine = serving.Engine(
+                candidate(config, connection_factory=session.connection),
+                worker_factory=lambda model, image: Worker(
+                    model, image, config["kubernetes_worker"]
+                ),
+                close_reader=session.close,
+            )
+        except BaseException:
+            session.close()
+            raise
         try:
             with listen(sink_app) as sink_port:
                 write_json(
@@ -222,6 +233,8 @@ def qualify(config, expected):
                         "label_public": label_public,
                         "sink_port": sink_port,
                         "epoch": epoch,
+                        "state_directory": state_directory,
+                        "state_sha256": state_sha256,
                     },
                 )
                 runtime = monitoring_config.producer(str(root / "producer.json"))

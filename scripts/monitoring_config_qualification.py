@@ -40,6 +40,8 @@ class ConfigurationContracts(unittest.TestCase):
             "sink_public": self.public["sink"],
             "sink_port": 8910,
             "epoch": "b" * 32,
+            "state_directory": str(self.root / "epochs"),
+            "state_sha256": "d" * 64,
         }
         self.path = self.root / "monitor.json"
         self.write()
@@ -98,6 +100,8 @@ class ConfigurationContracts(unittest.TestCase):
             "receipt_key_file": str(self.keys["sink"]),
             "port": 8910,
             "epoch": self.config["epoch"],
+            "state_directory": self.config["state_directory"],
+            "state_sha256": self.config["state_sha256"],
         }
         self.path.write_bytes(canonical(config))
         app, port = monitoring_config.sink(str(self.path))

@@ -8,7 +8,7 @@ import asyncio
 import re
 import time
 
-from mlsecops import monitoring, monitoring_alerts, signing
+from mlsecops import monitoring, monitoring_alerts, monitoring_state, signing
 from mlsecops.contracts import Rejected, canonical, decode
 
 MAX_PACKET = 16384
@@ -92,10 +92,19 @@ class Client:
 
 
 class App:
-    def __init__(self, sink, *, clock=lambda: time.time_ns() // 1000000):
+    def __init__(self, sink, *, clock=lambda: time.time_ns() // 1000000, epoch_guard=None):
         if type(sink) is not monitoring_alerts.Sink or not callable(clock):
             raise Rejected("monitor_sink_configuration")
         self.sink, self.clock = sink, clock
+        if epoch_guard is not None and (
+            type(epoch_guard) is not monitoring_state.Guard
+            or (epoch_guard.role, epoch_guard.epoch, epoch_guard.reference)
+            != ("sink", sink._epoch, sink._reference)
+        ):
+            raise Rejected("monitor_epoch_guard")
+        self._epoch_guard = epoch_guard
+        self._admitted = epoch_guard is None
+        self.startup_failed = False
 
     async def read(self, scope, receive):
         if (scope["method"], scope["path"], scope.get("query_string", b"")) != (
@@ -136,8 +145,20 @@ class App:
             while True:
                 message = await receive()
                 if message["type"] == "lifespan.startup":
+                    self._admitted = False
+                    try:
+                        if self._epoch_guard is not None:
+                            self._epoch_guard.claim()
+                    except Exception:
+                        self.startup_failed = True
+                        await send(
+                            {"type": "lifespan.startup.failed", "message": "monitor_epoch_rejected"}
+                        )
+                        return
+                    self._admitted = True
                     await send({"type": "lifespan.startup.complete"})
                 elif message["type"] == "lifespan.shutdown":
+                    self._admitted = False
                     await send({"type": "lifespan.shutdown.complete"})
                     return
                 else:
@@ -145,6 +166,8 @@ class App:
         if scope["type"] != "http":
             raise Rejected("monitor_sink_protocol")
         try:
+            if not self._admitted:
+                raise Rejected("monitor_epoch_inactive")
             envelope = await self.read(scope, receive)
             body = canonical(self.sink.accept(envelope, clock_ms=self.clock()))
             status = 200

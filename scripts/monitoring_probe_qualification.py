@@ -87,7 +87,18 @@ class ProbeContracts(unittest.TestCase):
             connection.close.assert_called_once()
 
     def test_native_composition_and_failures_require_worker_and_monitor_shutdown(self):
-        for fault in (None, "initial", "worker", "task", "pending", "fault", "ack", "campaign"):
+        for fault in (
+            None,
+            "initial",
+            "state",
+            "candidate",
+            "worker",
+            "task",
+            "pending",
+            "fault",
+            "ack",
+            "campaign",
+        ):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 key = root / "reference.pem"
@@ -115,7 +126,12 @@ class ProbeContracts(unittest.TestCase):
                 summary = {"packet_sha256": "a" * 64, "status": "pass", "release_ready": False}
                 with (
                     patch.object(probe, "Client", return_value=api),
-                    patch.object(probe, "candidate") as candidate,
+                    patch.object(
+                        probe,
+                        "candidate",
+                        side_effect=Rejected("PRIVATE") if fault == "candidate" else None,
+                    ) as candidate,
+                    patch.object(probe.trust_session, "Session", return_value=Mock()) as session,
                     patch.object(probe, "Worker") as worker,
                     patch.object(probe.serving, "Engine", return_value=engine) as factory,
                     patch.object(probe, "listen", side_effect=lambda app: nullcontext(12345)),
@@ -127,6 +143,12 @@ class ProbeContracts(unittest.TestCase):
                         ),
                     ),
                     patch.object(probe.monitoring_config, "producer", return_value=runtime),
+                    patch.object(
+                        probe.monitoring_state,
+                        "initialize",
+                        return_value="e" * 64,
+                        side_effect=Rejected("PRIVATE") if fault == "state" else None,
+                    ),
                     patch.object(
                         probe,
                         "campaign",
@@ -151,8 +173,12 @@ class ProbeContracts(unittest.TestCase):
                         self.assertFalse(result["release_ready"])
                         factory.call_args.kwargs["worker_factory"](b"model", "image")
                         worker.assert_called_once_with(b"model", "image", {})
-                    if fault == "initial":
+                    if fault in ("initial", "state"):
                         candidate.assert_not_called()
+                        session.assert_not_called()
+                    elif fault == "candidate":
+                        session.return_value.close.assert_called_once()
+                        factory.assert_not_called()
                     else:
                         engine.close.assert_called_once()
                     if fault not in (None, "ack"):

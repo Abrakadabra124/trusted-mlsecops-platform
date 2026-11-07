@@ -236,6 +236,11 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 
 ## Обязательный incident record
 
+После остановки monitoring producer/sink использовать
+[плейбук безопасного перезапуска](operations/monitoring-restart.md). Он требует
+сохранного epoch registry, нового явно назначенного epoch и подтверждения gap;
+потерянная память процесса не считается восстановленной историей.
+
 При отказах приёма непроверенных меток использовать
 [ранбук и плейбук карантина обратной связи](operations/feedback-quarantine.md):
 role boundary, bounded submission, idempotent retry, curator readback и запрет

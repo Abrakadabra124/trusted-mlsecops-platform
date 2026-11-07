@@ -26,6 +26,8 @@ def main():
             limit_concurrency=16,
             log_level="warning",
         )
+        if getattr(app, "startup_failed", False) is True:
+            raise ValueError("monitor_sink_startup_failed")
         return 0
     except (Exception, KeyboardInterrupt) as error:
         print("monitoring_sink_rejected", file=sys.stderr)

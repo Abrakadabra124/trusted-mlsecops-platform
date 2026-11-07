@@ -142,6 +142,18 @@ duplicates внутри batch и конфликт с уже принятым lab
 Проверки ядра находятся в `scripts.monitoring_qualification`; [ранбук](../operations/model-monitoring.md)
 отделяет их от ещё не выполненной эксплуатационной приёмки.
 
+## Восстановление с новым epoch
+
+Для R1 выбран fail-closed cold restart: сохраняемый private registry запрещает
+повтор epoch после потери in-memory состояния. Runtime не сериализует raw
+observations и не выдаёт потерянные окна за восстановленные. Новый доверенный
+epoch запускает явный telemetry_gap и начинает сбор с insufficient. Это делает
+разрыв видимым и предотвращает повтор старого receipt sequence. Полноценный
+checkpoint observations/labels не является результатом этого изменения.
+Реестр создаётся отдельным provisioning, проверяется по fingerprint и не
+инициализируется при missing state. Команды, предел1024 markers, отказ при
+повреждении и условия cold recovery приведены в [ранбуке](../operations/monitoring-restart.md).
+
 ## Карантин непроверенной обратной связи
 
 Для существующего CLI-контура добавлен `mlsecops.feedback`. Он использует
