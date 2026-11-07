@@ -94,3 +94,11 @@ write, fsync failure, capacity, lock contention, crash child, отказ ста�
 отказом старому событию, затем штатную очистку замены. Windows skips не заменяют
 этот тест. Результат hosted CI публикуется отдельно в [STATUS](../../STATUS.md);
 наличие теста не является доказательством его успешного запуска.
+
+В первом Linux прогоне разработки обнаружен отказ CLI с code3 вместо ожидаемого
+code1 при повторном epoch. Причина - SystemExit Uvicorn после startup.failed;
+реестр при этом правильно запретил reuse. Wrapper теперь нормализует этот выход,
+а regression проверяет и code0, и code3. Проверять конечное состояние нужно по
+exit1 и отсутствию listener, а не только по сообщению startup failure. Это
+исправление разработки, не запись production-инцидента; результаты и исходный
+отказ сохранены в [evidence](../evidence/monitoring-restart-2026-11-07.md).

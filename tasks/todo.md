@@ -199,6 +199,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T18
 
+- Component 2026-11-07: [epoch registry и cold restart](../docs/evidence/monitoring-restart-2026-11-07.md), `361b7dd` /42327687983+42327687810 success. Reuse запрещён после process crash, новый epoch явно сообщает history loss; full history restore не заявлен. 142+77+52Linux tests/0skips, native12000observations/3receipts,quarantine+cleanup+offline replay. [Плейбук](../docs/operations/monitoring-restart.md). Далее M13/M14 с включённым monitoring и полная M15 acceptance.
+
 - Component 2026-11-07: [feedback quarantine](../docs/evidence/feedback-quarantine-2026-11-07.md), `9162a2f` /42325145874 success. Actual HTTP IDs -> SQL quarantine10claims/1row, retry/curator readback,15 direct permission denials, защищённые tables/promotion unchanged. Cleanup и offline primary replay success. Contracts129+77+52Linux tests/0skips. [Ранбук](../docs/operations/feedback-quarantine.md). Full M15 ещё требует restart/recovery, fresh M13/M14 и общей acceptance.
 - [ ] Model/data/security monitoring. Зависимость: T17. Gate: M15.
 - Native component `acb5b18` /42322768934 success: [evidence](../docs/evidence/monitoring-native-2026-11-07.md).12000 actual ONNX/HTTP observations,10 clean+2 shift windows,3 signed receipts(max0.368848423s),200 delayed positives/retry. Worker/SQL/cluster cleanup и post-cleanup packet recheck подтверждены. CI113+77+52 tests/0skips;14 modules individually>=95%. Полный M15 остаётся открытым: feedback quarantine, безопасный restart, свежие M13/M14 и aggregate acceptance. Первый native failure и исправление audit prerequisite сохранены.
