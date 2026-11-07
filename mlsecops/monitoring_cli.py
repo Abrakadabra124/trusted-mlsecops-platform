@@ -29,7 +29,7 @@ def main():
         if getattr(app, "startup_failed", False) is True:
             raise ValueError("monitor_sink_startup_failed")
         return 0
-    except (Exception, KeyboardInterrupt) as error:
+    except (Exception, KeyboardInterrupt, SystemExit) as error:
         print("monitoring_sink_rejected", file=sys.stderr)
         return 130 if isinstance(error, KeyboardInterrupt) else 1
 

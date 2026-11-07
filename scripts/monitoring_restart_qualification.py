@@ -121,6 +121,18 @@ class RestartContracts(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertEqual(monitoring_cli.main(), 1)
             self.assertEqual(error.getvalue(), "monitoring_sink_rejected\n")
+        for code in (0, 3):
+            with (
+                patch.object(monitoring_cli, "enforce_privacy"),
+                patch.object(sys, "argv", ["sink", "--config", "PRIVATE"]),
+                patch.object(
+                    monitoring_cli.monitoring_config, "sink", return_value=(object(), 8910)
+                ),
+                patch.object(monitoring_cli, "run_server", side_effect=SystemExit(code)),
+                patch.object(sys, "stderr", io.StringIO()) as error,
+            ):
+                self.assertEqual(monitoring_cli.main(), 1)
+                self.assertEqual(error.getvalue(), "monitoring_sink_rejected\n")
 
 
 @unittest.skipUnless(sys.platform == "linux", "native crash/restart uses private Linux CLI")
