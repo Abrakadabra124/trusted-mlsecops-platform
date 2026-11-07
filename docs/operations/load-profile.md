@@ -74,6 +74,31 @@ Evaluator требует два последовательных достато�
 с отдельным assertion числа окон. Порог и рабочая логика не ослаблены. Этот run
 остановился до infrastructure bootstrap; новое нагрузочное измерение не состоялось.
 
+### Отказ закрытия аудита при включённом monitoring
+
+`9e361a0`, [42330627959](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42330627959):
+Linux preflight прошёл (118 + 136 + 124 + 8 test executions, без skips),
+новый модуль monitoring/load имеет 98 statements и 22 branches, покрытие 100%.
+Native probe дошёл до `shutdown` и отказал с `audit_shutdown_pending`.
+SQL stop и cluster deletion/readback завершились успешно; финальная сверка
+primary после cleanup пропущена, M14 остаётся fail. Значения latency этого
+незавершённого отчёта не объявляются принятыми.
+
+В `Spool.close(clean=True)` найден повторный JSON/sequence разбор всех retained
+records. Каждый record уже проверяется при `write`, а загруженный сегмент -
+при `_load`. Контрольный CPU-only опыт на Windows: 60000 записей, 29268894 bytes,
+повторный разбор с проверкой digest занял 0.857562 s; чтение/hash comparison уже
+проверенных bytes без повторного JSON-разбора - 0.016159 s. Это измерение стоимости
+операции в памяти, не измерение диска и не доказанная длительность native shutdown.
+
+Исправление сохраняет readback каждого сегмента, file identity, точный размер,
+SHA-256, inventory/lease и fsync manifest. При закрытии исключён только повторный
+разбор уже проверенных неизменных bytes. Restore по-прежнему разбирает все
+sequences, включая cross-segment continuity. Timeout закрытия остаётся одной
+секундой. Negative tests проверяют подмену bytes/size/identity/digest, сохранение
+lease при отказе и отсутствие ложного clean manifest. Native подтверждение
+исправления требуется отдельно; прежний R1-B08 не закрывается по одному pass.
+
 Первый общий запуск [7abacda / 42287711273](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42287711273)
 отказал до нового baseline. Он не является повторным успешным замером latency.
 SQL stop 20:24:30 UTC, cluster absence 20:24:33 UTC 2026-11-06. Старый baseline

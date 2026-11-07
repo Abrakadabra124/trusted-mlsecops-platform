@@ -18,6 +18,33 @@ from scripts.serving_audit_qualification import event
 
 
 class PolicyContracts(unittest.TestCase):
+    def test_live_segment_integrity_does_not_require_redecoding_validated_records(self):
+        content = record(1) + record(2)
+        segment = {
+            "name": "owned.jsonl",
+            "identity": [1, 2],
+            "size": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+        spool = audit_retention.Spool.__new__(audit_retention.Spool)
+        spool.policy = audit_retention.Policy()
+        with patch.object(spool, "_read", return_value=(content, [1, 2])):
+            with patch.object(
+                audit_retention, "sequences", side_effect=AssertionError("already validated")
+            ):
+                spool._verify(segment, parse=False)
+                for field, value in (
+                    ("identity", [2, 1]),
+                    ("size", len(content) + 1),
+                    ("sha256", "0" * 64),
+                ):
+                    with (
+                        self.subTest(field=field),
+                        self.assertRaisesRegex(Rejected, "audit_spool_identity"),
+                    ):
+                        spool._verify({**segment, field: value}, parse=False)
+            self.assertEqual(spool._verify(segment), (1, 2))
+
     def test_larger_retained_budget_is_explicit_and_does_not_change_single_file_limit(self):
         budget = 512 * 1024 * 1024
         policy = audit_retention.Policy(segment_bytes=16 * 1024 * 1024, max_segments=40)
@@ -365,6 +392,18 @@ class NativeRetention(unittest.TestCase):
             self.assertEqual((spool.sequence, spool.retained_bytes), (1, len(before)))
             self.assertEqual(path.read_bytes(), before)
         spool.close(clean=True)
+
+    def test_clean_close_checks_actual_segment_bytes_before_releasing_lease(self):
+        spool = self.spool()
+        spool.write(record(1))
+        target = self.root / spool.active["name"]
+        changed = target.read_bytes().replace(b'"sequence":1', b'"sequence":2')
+        target.write_bytes(changed)
+        with self.assertRaisesRegex(Rejected, "audit_spool_identity"):
+            spool.close(clean=True)
+        self.assertTrue((self.root / ".lease").is_file())
+        self.assertFalse((self.root / "manifest.json").exists())
+        self.assertEqual(target.read_bytes(), changed)
 
     def test_reopen_denies_cross_segment_gap_and_over_budget_without_deleting_bytes(self):
         for change in ("gap", "budget", "duplicate"):

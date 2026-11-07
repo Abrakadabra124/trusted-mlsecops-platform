@@ -266,7 +266,7 @@ class Spool:
         if previous_sequence is not None and previous_sequence != self.sequence:
             raise Rejected("audit_spool_sequence")
 
-    def _verify(self, segment):
+    def _verify(self, segment, *, parse=True):
         content, identity = self._read(segment["name"], self.policy.segment_bytes)
         if (
             identity != segment["identity"]
@@ -274,7 +274,7 @@ class Spool:
             or hashlib.sha256(content).hexdigest() != segment["sha256"]
         ):
             raise Rejected("audit_spool_identity")
-        return sequences(content)
+        return sequences(content) if parse else None
 
     def _inventory(self):
         expected = {".lease", *(segment["name"] for segment in self.segments)}
@@ -379,7 +379,10 @@ class Spool:
             if clean:
                 self._inventory()
                 for segment in self.segments:
-                    self._verify(segment)
+                    # Every live byte was validated by write() or _load().
+                    # Recheck disk identity/size/digest before sealing; reopening
+                    # still reparses sequences from the persisted manifest.
+                    self._verify(segment, parse=False)
                 manifest = canonical(
                     {
                         "schema_version": 1,
