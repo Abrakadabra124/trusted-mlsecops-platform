@@ -136,6 +136,10 @@ Run `42232406810` на `91a65ec` подтвердил Linux filesystem preflight
 
 ### M13 monitoring и feedback
 
+Проверено на [582b34c / 42337722963](../evidence/m13-monitoring-feedback-2026-11-07.md): 491 criteria pass, 483 обязательных метода без skips, 31 actual native check, 1014 monitoring observations и 11 feedback commands. Пять service windows закрыты, leak controls обнаружены, retained packets перечитаны. SQL stop/readback, cluster absence и offline ingress replay завершились успешно. Все команды ниже относятся только к owned disposable hosted runner.
+
+При сверке envelope используйте canonical JSON для policy digest и exact Git blobs указанного source для method/source fingerprints. Raw formatted policy bytes и Windows CRLF не являются тем же представлением. Для локального Windows воспроизведения подтверждён только переносимый subset41; полный inventory требует Linux `resource` и native process-privacy prerequisites. Не превращайте эти ошибки в skips, чтобы получить pass.
+
 [Increment2026-11-07](../evidence/m13-monitoring-feedback-2026-11-07.md) требует
 подключённого monitoring и ordinary feedback CLI того же actual candidate.
 Ответственный - оператор disposable CI. Локальные SQL/Docker/WSL/Kubernetes не
