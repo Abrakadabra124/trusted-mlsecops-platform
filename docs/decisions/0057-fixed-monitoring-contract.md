@@ -141,3 +141,15 @@ duplicates внутри batch и конфликт с уже принятым lab
 
 Проверки ядра находятся в `scripts.monitoring_qualification`; [ранбук](../operations/model-monitoring.md)
 отделяет их от ещё не выполненной эксплуатационной приёмки.
+
+## Карантин непроверенной обратной связи
+
+Для существующего CLI-контура добавлен `mlsecops.feedback`. Он использует
+готовую SQL таблицу quarantine, ingestor для INSERT/readback и curator для
+inspect. Дополнительный HTTP service и доступ serving к записи не требуются.
+Хранятся только bounded model/bundle/request/row IDs и claimed binary labels;
+свободный текст и features запрещены. CAS устраняет идентичный retry, но не
+разрешает противоречия между claims. Ни SQL digest, ни форма ID не доказывают
+ground truth. Signed label authority и dataset approval остаются отдельными
+доверенными действиями. Эксплуатационные команды и ограничения описаны в
+[ранбуке карантина](../operations/feedback-quarantine.md).

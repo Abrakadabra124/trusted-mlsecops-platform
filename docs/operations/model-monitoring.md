@@ -254,6 +254,11 @@ package. Native candidate-bound сборка и полный M15 ещё не п�
 
 ## Приватный пакет сквозного наблюдения M15
 
+Непроверенные operator claims принимаются отдельным
+[CLI карантина](feedback-quarantine.md). Они не подаются в `/monitoring/labels`.
+Native campaign обязан проверить SQL quarantine, повторную отправку и curator
+readback, а после cleanup - сохранённый feedback proof вместе с monitoring packet.
+
 Workflow `.github/workflows/kubernetes-monitoring.yml` запускается только на
 disposable hosted runner. Он использует прежние pinned tools, source SQL,
 Kubernetes worker/controller и действующий qualification permit. Это проверка

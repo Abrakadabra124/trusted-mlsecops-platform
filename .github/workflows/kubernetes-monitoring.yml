@@ -25,17 +25,17 @@ jobs:
       - name: Fixed-reference contracts and per-module coverage
         run: |
           uv sync --locked --no-build --python 3.12.15
-          uv run --locked ruff check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
-          uv run --locked ruff format --check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
+          uv run --locked ruff check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py mlsecops/feedback.py scripts/feedback*.py scripts/kube_monitoring_native*.py
+          uv run --locked ruff format --check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py mlsecops/feedback.py scripts/feedback*.py scripts/kube_monitoring_native*.py
           uv run --locked python scripts/check_docs.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery,mlsecops.monitoring_runtime,mlsecops.monitoring_config,mlsecops.monitoring_cli,mlsecops.monitoring_reference,mlsecops.monitoring_ingress,mlsecops.monitoring_packet,mlsecops.monitoring_probe,scripts.kube_monitoring_operator,scripts.kube_monitoring_native -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification scripts.monitoring_config_qualification scripts.monitoring_cli_qualification scripts.monitoring_reference_qualification scripts.monitoring_packet_qualification scripts.monitoring_probe_qualification scripts.kube_monitoring_native_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery,mlsecops.monitoring_runtime,mlsecops.monitoring_config,mlsecops.monitoring_cli,mlsecops.monitoring_reference,mlsecops.monitoring_ingress,mlsecops.monitoring_packet,mlsecops.monitoring_probe,scripts.kube_monitoring_operator,scripts.kube_monitoring_native,mlsecops.feedback,scripts.feedback_native -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification scripts.monitoring_config_qualification scripts.monitoring_cli_qualification scripts.monitoring_reference_qualification scripts.monitoring_packet_qualification scripts.monitoring_probe_qualification scripts.kube_monitoring_native_qualification scripts.feedback_qualification scripts.feedback_native_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/monitor.coverage" -o "$RUNNER_TEMP/monitor-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'monitor-coverage.json').read_text())['files']
-          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py', 'mlsecops/monitoring_runtime.py', 'mlsecops/monitoring_config.py', 'mlsecops/monitoring_cli.py', 'mlsecops/monitoring_reference.py', 'mlsecops/monitoring_ingress.py', 'mlsecops/monitoring_packet.py', 'mlsecops/monitoring_probe.py', 'scripts/kube_monitoring_operator.py', 'scripts/kube_monitoring_native.py'}:
+          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py', 'mlsecops/monitoring_runtime.py', 'mlsecops/monitoring_config.py', 'mlsecops/monitoring_cli.py', 'mlsecops/monitoring_reference.py', 'mlsecops/monitoring_ingress.py', 'mlsecops/monitoring_packet.py', 'mlsecops/monitoring_probe.py', 'scripts/kube_monitoring_operator.py', 'scripts/kube_monitoring_native.py', 'mlsecops/feedback.py', 'scripts/feedback_native.py'}:
               raise SystemExit('monitor_coverage_inventory')
           for name, report in sorted(files.items()):
               summary = report['summary']
@@ -59,7 +59,7 @@ jobs:
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
-      - name: Actual model reference, HTTP observations, signed labels and receipts
+      - name: Actual model reference, HTTP observations, signed labels, receipts and quarantine
         id: campaign
         run: uv run --locked python -m scripts.kube_monitoring_native
       - name: Stop verified owned source SQL

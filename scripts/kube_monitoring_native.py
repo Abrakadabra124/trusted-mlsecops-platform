@@ -15,6 +15,7 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.serving_context import QualificationTrace
+from scripts import feedback_native
 from scripts.kube_candidate_native import qualify
 from scripts.kube_load_native import failure_site
 from scripts.kube_serving_native import prepare
@@ -58,7 +59,15 @@ def reverify(state):
         or result != public["native"]["operator_retained_reverified"]
     ):
         raise Rejected("monitor_public_summary_changed")
-    return {"status": "pass", "post_cleanup_reverified": True, **result}
+    feedback = feedback_native.reverify(
+        state, public["campaign"], public["feedback_quarantine"], payload["packet"]
+    )
+    return {
+        "status": "pass",
+        "post_cleanup_reverified": True,
+        **result,
+        "feedback_quarantine": feedback,
+    }
 
 
 def run(root, state):
@@ -74,6 +83,7 @@ def run(root, state):
         monitoring=True,
         prepared=(prepared["profile"], prepared["actual"]),
     )
+    result["feedback_quarantine"] = feedback_native.qualify(state, result)
     write_json(state / "evidence/kubernetes-monitoring-private.json", result)
     directory = safe_child(state, "evidence/monitoring/" + result["monitoring_campaign_id"])
     public = {
@@ -91,6 +101,7 @@ def run(root, state):
             "full_M15",
             "release_ready",
             "native",
+            "feedback_quarantine",
         )
     }
     public.update(

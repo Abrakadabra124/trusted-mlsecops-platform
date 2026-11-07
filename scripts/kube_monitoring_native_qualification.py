@@ -58,7 +58,7 @@ class NativeMonitoringContracts(unittest.TestCase):
             command.assert_not_called()
 
     def test_run_keeps_inconclusive_until_candidate_and_primary_reverification_succeed(self):
-        for failure in (None, "prepare", "qualify", "reverify"):
+        for failure in (None, "prepare", "qualify", "feedback", "reverify"):
             with tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
                 campaign = "a" * 32
@@ -99,6 +99,12 @@ class NativeMonitoringContracts(unittest.TestCase):
                         side_effect=Rejected("PRIVATE") if failure == "qualify" else None,
                     ) as qualify,
                     patch.object(
+                        native.feedback_native,
+                        "qualify",
+                        return_value={"status": "pass", "release_ready": False},
+                        side_effect=Rejected("PRIVATE") if failure == "feedback" else None,
+                    ),
+                    patch.object(
                         native,
                         "reverify",
                         return_value={"status": "pass"},
@@ -114,7 +120,7 @@ class NativeMonitoringContracts(unittest.TestCase):
                         self.assertFalse(public["release_ready"])
                         self.assertTrue(qualify.call_args.kwargs["monitoring"])
                     install.assert_called_once_with(state, backend=native.kube_storage.binding)
-                    if failure in ("prepare", "qualify"):
+                    if failure in ("prepare", "qualify", "feedback"):
                         self.assertEqual(
                             read_json(state / "evidence/kubernetes-monitoring-public.json")[
                                 "status"

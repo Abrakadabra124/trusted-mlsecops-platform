@@ -227,9 +227,19 @@ class PacketContracts(unittest.TestCase):
                 "campaign": op.campaign,
                 "binding_sha256": pin,
                 "native": {"operator_retained_reverified": op.summary},
+                "feedback_quarantine": {},
             }
             write_json(state / "evidence/kubernetes-monitoring-public.json", public)
-            self.assertTrue(native.reverify(state)["post_cleanup_reverified"])
+            # This isolates primary monitoring transport. Quarantine's real primary
+            # records and failures are covered by feedback_native_qualification.
+            with patch.object(native.feedback_native, "reverify", return_value={}) as feedback:
+                self.assertTrue(native.reverify(state)["post_cleanup_reverified"])
+            feedback.assert_called_once_with(state, op.campaign, {}, payload["packet"])
+            with patch.object(
+                native.feedback_native, "reverify", side_effect=Rejected("missing_feedback")
+            ):
+                with self.assertRaisesRegex(Rejected, "missing_feedback"):
+                    native.reverify(state)
             binding = read_json(op.destination / "binding.json")
             for changed_context in (False, True):
                 modified = copy.deepcopy(payload)

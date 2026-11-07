@@ -236,4 +236,9 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 
 ## Обязательный incident record
 
+При отказах приёма непроверенных меток использовать
+[ранбук и плейбук карантина обратной связи](operations/feedback-quarantine.md):
+role boundary, bounded submission, idempotent retry, curator readback и запрет
+превращения claim в approved dataset.
+
 Время, тип инцидента, затронутые dataset/model/bundle digest, исполнители и права, выполненные действия, разрешённый следующий state, влияние на пользователей, ссылки на redacted evidence, остаточный риск и owner follow-up. Пароли, signing keys и исходные payloads сюда не включаются.
