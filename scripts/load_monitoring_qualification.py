@@ -278,18 +278,19 @@ class MonitoredLoadContracts(unittest.TestCase):
                 async def lifecycle(app):
                     session.runtime.start()
                     try:
-                        for index in range(1001):
+                        # Drift requires two sufficient consecutive windows.
+                        for index in range(2001):
                             session.runtime.observe(
                                 context(), [[0.55] * 6], decisions(1), f"{index:032x}"
                             )
-                        await session.runtime.cycle()
                         yield
                     finally:
                         await session.runtime.close()
 
                 with listen(FastAPI(lifespan=lifecycle)) as port:
-                    packet, summary = session.finish(1001)
-                    self.assertEqual(summary["observations"], 1001)
+                    packet, summary = session.finish(2001)
+                    self.assertEqual(summary["observations"], 2001)
+                    self.assertGreaterEqual(summary["windows_evaluated"], 2)
                     self.assertGreater(summary["alerts_delivered"], 0)
                     self.assertEqual(packet["state"]["pending_alerts"], 0)
                 self.assertTrue(session.runtime.task.done())

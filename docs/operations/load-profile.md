@@ -67,6 +67,13 @@ Worker, serving listener и scheduler закрываются до sink; при �
 
 ### Отказ controlled preflight
 
+`188c8fd`, [42330214255](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42330214255):
+новый Linux test создал только 1001 observation и ошибочно ожидал drift receipt.
+Evaluator требует два последовательных достаточных окна, поэтому ноль alerts
+при одном окне был корректным поведением. Fixture исправлен на 2001 observation
+с отдельным assertion числа окон. Порог и рабочая логика не ослаблены. Этот run
+остановился до infrastructure bootstrap; новое нагрузочное измерение не состоялось.
+
 Первый общий запуск [7abacda / 42287711273](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42287711273)
 отказал до нового baseline. Он не является повторным успешным замером latency.
 SQL stop 20:24:30 UTC, cluster absence 20:24:33 UTC 2026-11-06. Старый baseline
