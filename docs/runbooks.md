@@ -237,6 +237,9 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 
 ## Обязательный incident record
 
+Для M23 contract/config/signature failures использовать [ранбук событий безопасности](operations/security-events.md).
+Его текущая проверка компонентная; durable collector и promotion outage gate ещё не приняты.
+
 Для интерфейса `/monitoring/ui` использовать [ранбук операторской панели](operations/monitoring-dashboard.md):
 доступ, квоты, недоступность API, неполные окна, очистка ключа и воспроизведение проверок.
 

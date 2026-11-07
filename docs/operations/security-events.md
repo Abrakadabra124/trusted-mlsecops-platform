@@ -1,0 +1,71 @@
+# T29/M23: ранбук событий безопасности
+
+Текущий статус: реализован контракт v1 и pinned producer registry.
+Collector, durable deduplication, реальные source adapters и promotion outage
+gate ещё не приняты. Приведённые команды проверяют компонент; не считать их
+подтверждением работающей доставки или завершённого M23.
+
+## Назначение и ответственность
+
+Platform-owner управляет отдельным registry root и receipt authority; владельцы
+компонентов отвечают за producer keys и корректное происхождение событий.
+Model worker не является доверенным producer. Подпись Ed25519 связывает сообщение
+с ключом, а DSSE отделяет типы сообщения. Полномочия определяет подписанный
+registry, а не поле из stdout или имя файла с ключом.
+
+Схема, допустимые причины, роли, маршруты и полный порядок дальнейшей работы
+зафиксированы в [ADR 0058](../decisions/0058-security-event-contract.md).
+Дополнительный процент готовности из покрытия тестов не рассчитывается.
+
+## Плейбук проверки контракта
+
+В чистом checkout установить locked dependencies, затем выполнить:
+
+```text
+uv sync --locked --no-build --python 3.12.15
+uv run --locked python -m unittest scripts.security_events_qualification
+uv run --locked python -m coverage run --branch --source=mlsecops.security_events,mlsecops.security_event_config -m unittest scripts.security_events_qualification
+uv run --locked python -m coverage report --fail-under=100
+uv run --locked python scripts/check_docs.py
+```
+
+Тесты создают временные синтетические ключи, применяют реальные подписи и
+удаляют собственную временную директорию. Они не запускают Docker, WSL,
+Kubernetes, SQL или внешние модели. Не подставлять production keys в тестовые
+фикстуры. Coverage относится только к двум названным модулям.
+
+Ожидается 21 tests, 0 skips; все негативные случаи приводят к `Rejected`,
+а успешные fixtures имеют только фиксированные поля. После выполнения
+проверить exit code и отсутствие оставшихся test processes. Успешный builder
+или verifier не доказывает запись в collector и не разрешает выпуск.
+
+## Диагностика отказа
+
+Сначала сохранить только конечный reason code, source revision и разрешённые
+artifact/config digests в приватный incident record. Не копировать envelopes,
+private keys, сырые features, labels, headers или произвольное исключение в тикет.
+
+| Ошибка | Причина и безопасное действие | Критерий восстановления |
+| --- | --- | --- |
+| `security_config_pin` | Registry не совпадает с ожидаемым digest. Проверить источник operator configuration; не брать pin из полученного сообщения | Проверена та же подписанная конфигурация и её ожидаемый pin |
+| `security_config_expired_or_future` | Срок registry не включает момент проверки | Исправлены часы либо оператор выпустил новую конфигурацию; expiry не отключён |
+| `security_producer_authority` / `security_unknown_producer` | Ключ повторяется, роль запрещена или sender не зарегистрирован | Уникальный разрешённый producer; worker key остаётся отвергнутым |
+| `security_event_role` | Подписант не имеет права утверждать данный тип события | Событие формирует действительная доверенная граница; не расширять роли ради pass |
+| `security_producer_binding` | Не совпал sender ID, epoch или policy | Установлена правильная конфигурация процесса и повторены неизменные допустимые байты |
+| `security_event_identity` | Изменились поля сохранённого события при том же ID | Не перезаписывать intent; расследовать конфликт и состояние записи |
+| `security_envelope_shape` / `security_envelope_size` | Вложенное либо слишком большое сообщение | Источник выдаёт конечный контракт, parser limits не увеличены ради payload |
+| `security_heartbeat_required` | Registry отключил наблюдение за всеми producers | Явно выбран обязательный непрерывный producer; пустота не считается здоровьем |
+| `security_delivery_deadline` / `security_receipt_binding` | Неверный срок, event, маршрут, config или время квитанции | Фактическая доставка и точная подписанная квитанция подтверждены; не менять timestamps вручную |
+
+## Обнаруженные при реализации проблемы
+
+Controlled проверка выявила принятие registry, где все heartbeat requirements
+выключены, и receipt с ingest раньше issued-at конфигурации. Добавлены отдельные
+отрицательные тесты и проверки. Это ошибки нового компонента в ходе разработки,
+а не утверждение о production incident. Вложенные значения envelope теперь
+отклоняются до JSON serialization, без надежды на перехват рекурсивной ошибки.
+
+Для будущего runtime остаются обязательными recovery после interrupted write,
+deduplication после перезапуска, out-of-order/gap evidence и проверка запрета
+promotion при недоступном sink. До подключения этих компонентов команд reset,
+автоматического очистителя или аварийного обхода контроля в этом ранбуке нет.

@@ -1,0 +1,49 @@
+name: M23 security event contracts
+on:
+  push:
+    branches: [main, codex/cp4-m23-security-events-20261107]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-events-contracts-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked contracts and exact per-module coverage
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops/security_event*.py scripts/security_events_qualification.py
+          uv run --locked ruff format --check mlsecops/security_event*.py scripts/security_events_qualification.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-events.coverage" --source=mlsecops.security_events,mlsecops.security_event_config -m unittest scripts.security_events_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/security-events.coverage" -o "$RUNNER_TEMP/security-events-coverage.json"
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'security-events-coverage.json').read_text())['files']
+          if set(files) != {'mlsecops/security_events.py', 'mlsecops/security_event_config.py'}:
+              raise SystemExit('security_event_coverage_inventory')
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] != stats[total]:
+                      raise SystemExit('security_event_coverage_incomplete:' + name)
+              print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
+          print('Authenticated contracts only. No durable collector, runtime delivery, promotion outage or full M23/R1 acceptance claimed.')
+          PY
+      - name: Existing signature and monitoring domain regressions
+        run: uv run --locked python -m unittest scripts.key_files_qualification scripts.monitoring_alerts_qualification scripts.release_policy_qualification
