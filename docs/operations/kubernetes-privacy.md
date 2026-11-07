@@ -132,6 +132,51 @@ Run `42232406810` на `91a65ec` подтвердил Linux filesystem preflight
 
 ### Fresh M13 gate: диагностика и повторение
 
+Текущий ingress профиль описан ниже; исторический результат сохранён отдельно.
+
+### M13 monitoring и feedback
+
+[Increment2026-11-07](../evidence/m13-monitoring-feedback-2026-11-07.md) требует
+подключённого monitoring и ordinary feedback CLI того же actual candidate.
+Ответственный - оператор disposable CI. Локальные SQL/Docker/WSL/Kubernetes не
+поднимать. Перед повторным dispatch дождаться terminal state прежнего запуска и
+подтвердить его owned cleanup; новый push может отменить одноимённый workflow.
+
+1. Проверить exact method inventory: новый Linux профиль требует483метода без
+   skips, source/current policy/image bindings и31 actual privacy cases. Windows
+   `resource` errors не разрешают исключить Linux process-privacy tests из gate.
+2. При `privacy_monitoring_incomplete`, `monitor_privacy_*` или
+   `load_monitor_inactive_or_lost` сверить1014 фактических observations, approved
+   reference/model/bundle, epoch, scheduler health и completed response accounting.
+   Не включать direct engine calls, failed responses или operator requests в счётчик.
+3. При `feedback_privacy_output_*` сохранить оба ограниченных child streams только
+   приватно. Ожидаются3 canonical receipts и8 отказов с пустым stdout и единственной
+   строкой `feedback_rejected` в stderr. Не печатать command arguments, file content
+   или exception values; не принимать nonzero exit без проверки его вывода.
+4. При `feedback_privacy_audit_binding`/`feedback_privacy_http_binding` проверить
+   первый retained admitted HTTP200 и actual model/bundle. Не подменять его M15
+   fixture packet и не приписывать строке0 десять вымышленных предсказаний.
+5. При `feedback_sql_*` проверить owned source container, start time, settings и
+   закрытые markers. `privacy_log_canary` означает утечку либо ожидаемый отдельный
+   positive control после закрытия окна; контекст определяет проверяющий код.
+   Empty/rotated/foreign stream нельзя считать отсутствием утечек. Docker stdout
+   не склеивается со stderr, чтобы не выдумывать порядок логов.
+6. Сверить source ledger после отказов с последним разрешённым quarantine append,
+   а cluster promotion - с исходным состоянием. При mutation оставить fail,
+   сохранить evidence и разобраться до повторного выпуска. Не очищать реальные
+   quarantine records для получения нужного счётчика.
+7. Дождаться SQL stop/readback и cluster absence. Затем workflow повторяет offline
+   ingress verification. Успех этого шага подтверждает сохранённые новые packets,
+   не доступность выключенной SQL и не завершение R1. Все gates/independent review
+   и разрешения на release сохраняются.
+
+Recovery: исправить установленную причину, новый owned campaign из clean checkout,
+повтор всех обязательных checks. Failed run сохраняется в истории. Rollback при
+непринятом gate означает отсутствие нового release; существующий verified release
+не заменяется qualification model. Не удалять единственные primary packets.
+
+### Исторический M13 без новых ingress
+
 [Композиционный контракт](../decisions/0048-privacy-acceptance.md#исполняемая-композиция-2026-11-06) [проверен native на b03a5d9](../evidence/m13-privacy-acceptance-2026-11-06.md): M13 pass438cases, все430 required methods и cleanup verified. Ответственный - оператор disposable hosted campaign. Prerequisites: clean locked checkout, pinned tools/image, owned cluster/source storage и подготовленный actual candidate. На текущей Windows инфраструктуру не запускать.
 
 Разрешённый hosted workflow выполняет:

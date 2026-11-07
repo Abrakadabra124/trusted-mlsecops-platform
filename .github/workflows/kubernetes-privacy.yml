@@ -58,6 +58,24 @@ jobs:
           value = contracts(Path.cwd())
           print('Fresh M13 pure preflight passed:', value['checks'])
           PY
+      - name: Monitoring and ordinary feedback privacy contracts
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/ingress-privacy.coverage" --source=scripts.monitoring_privacy_probe,scripts.feedback_privacy_native,scripts.source_sql_privacy -m unittest scripts.monitoring_privacy_qualification scripts.feedback_privacy_qualification scripts.source_sql_privacy_qualification scripts.feedback_native_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/ingress-privacy.coverage" -o "$RUNNER_TEMP/ingress-privacy-coverage.json"
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'ingress-privacy-coverage.json').read_text())['files']
+          if set(files) != {'scripts/monitoring_privacy_probe.py', 'scripts/feedback_privacy_native.py', 'scripts/source_sql_privacy.py'}:
+              raise SystemExit('ingress_privacy_coverage_inventory')
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] * 100 < 95 * stats[total]:
+                      raise SystemExit('ingress_privacy_coverage_below_95:' + name + ':' + total)
+              print(json.dumps({'module': name, 'coverage': stats}, sort_keys=True))
+          PY
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -110,3 +128,12 @@ jobs:
           PY
           kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
           test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
+      - name: Reverify monitoring and feedback packets after infrastructure cleanup
+        if: success()
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical
+          from mlsecops.privacy_gate import ingress_retained
+          print(canonical(ingress_retained(Path('.runtime'))).decode())
+          PY

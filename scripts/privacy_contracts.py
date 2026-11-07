@@ -47,6 +47,12 @@ MODULES = (
     "scripts.kube_privacy_probe_qualification",
     "scripts.kube_cli_privacy_qualification",
     "scripts.kube_cli_privacy_exchange_qualification",
+    "scripts.monitoring_privacy_qualification",
+    "scripts.monitoring_http_qualification",
+    "scripts.feedback_qualification",
+    "scripts.feedback_native_qualification",
+    "scripts.feedback_privacy_qualification",
+    "scripts.source_sql_privacy_qualification",
 )
 SCOPE = "controlled-M13-privacy-contracts"
 

@@ -11,7 +11,7 @@ import time
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
-from mlsecops import monitoring_stream, signing
+from mlsecops import load_monitoring, monitoring_stream, signing
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 from scripts import serving_metrics_probe
 from scripts.serving_privacy_probe import LifecycleCapture, Signals, drained, response_headers
@@ -55,6 +55,20 @@ def checked(value):
 
 def summary(**counts):
     return checked({**FIXED, **counts})
+
+
+def reverify(native, expected, epoch):
+    checked(native["monitoring_privacy"])
+    # Initial golden + context prediction + two quota-refill predictions each
+    # use the actual three-row golden batch; the old privacy matrix adds two
+    # one-row predictions. Direct engine/context calls are not HTTP observations.
+    wanted = 4 * len(expected["features"]) + 2 + FIXED["observations_added"]
+    result = load_monitoring.verify(
+        native["monitoring_proof"], load_monitoring.reference(expected), epoch, wanted
+    )
+    if canonical(result) != canonical(native["monitoring_observation"]):
+        raise Rejected("monitor_privacy_primary_binding")
+    return result
 
 
 def wire(response, needles):

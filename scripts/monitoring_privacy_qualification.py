@@ -13,6 +13,7 @@ from mlsecops import monitoring_alerts, monitoring_delivery, monitoring_runtime,
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.datasets import FEATURES
 from mlsecops.load_probe import listen
+from scripts import load_monitoring_qualification as load_fixtures
 from scripts import monitoring_privacy_probe as probe
 from scripts.audit_http_observation import Ledger
 from scripts.monitoring_qualification import reference
@@ -90,6 +91,36 @@ def replay():
 
 
 class MonitoringPrivacyContracts(unittest.TestCase):
+    def test_retained_monitoring_proof_requires_exact_actual_reference_count_and_summary(self):
+        expected = load_fixtures.expected()
+        expected["features"] = [[0.5] * 6] * 3
+        primary = load_fixtures.proof(observations=1014)
+        observed = probe.load_monitoring.verify(
+            primary, probe.load_monitoring.reference(expected), "a" * 32, 1014
+        )
+        baseline = {
+            "monitoring_privacy": probe.summary(
+                operator_requests=20, quota_accepted=8, quota_limited=12
+            ),
+            "monitoring_proof": primary,
+            "monitoring_observation": observed,
+        }
+        self.assertEqual(probe.reverify(baseline, expected, "a" * 32), observed)
+        for fault in ("reference", "count", "epoch", "summary", "matrix"):
+            value, golden, epoch = copy.deepcopy(baseline), copy.deepcopy(expected), "a" * 32
+            if fault == "reference":
+                golden["model"] = "f" * 64
+            if fault == "count":
+                value["monitoring_proof"]["state"]["observations"] = 1013
+            if fault == "epoch":
+                epoch = "f" * 32
+            if fault == "summary":
+                value["monitoring_observation"]["proof_sha256"] = "f" * 64
+            if fault == "matrix":
+                value["monitoring_privacy"]["label_retry_accepted"] = 1
+            with self.subTest(fault=fault), self.assertRaises(Rejected):
+                probe.reverify(value, golden, epoch)
+
     def test_operator_wire_rejects_plain_and_json_escaped_canaries(self):
         for content in (b'{"private":"secret-canary"}', b'{"private":"secret-\\u0063anary"}'):
             headers = [

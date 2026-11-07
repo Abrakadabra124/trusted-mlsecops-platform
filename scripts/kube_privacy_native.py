@@ -10,10 +10,11 @@ from mlsecops.contracts import Rejected, canonical, digest, safe_child, write_js
 from mlsecops.inventory import command
 from mlsecops.private_cli import Arguments
 from mlsecops.trust_acceptance import materials
-from scripts import kube_candidate_native, kube_serving_native
+from scripts import feedback_privacy_native, kube_candidate_native, kube_serving_native
 from scripts.kube_cli_privacy_native import CLI_CASES, controlled
 from scripts.kube_privacy_diagnostic import location
 from scripts.kube_trust_native import hosted
+from scripts.monitoring_privacy_probe import checked as checked_monitor_privacy
 
 CASES = {
     "actual-golden-response",
@@ -44,6 +45,9 @@ CASES = {
     "independent-client-burst-boundary",
     "client-quota-refill-recovers",
     "client-admission-accounting",
+    "privacy-monitoring-operator-matrix",
+    "privacy-monitoring-bound-observations",
+    "privacy-monitoring-shutdown",
 }
 
 
@@ -73,6 +77,17 @@ def checked_services(rows):
 
 def projection(report):
     native = report["native"]
+    monitor = checked_monitor_privacy(native["monitoring_privacy"])
+    feedback_privacy = feedback_privacy_native.checked(report["feedback_privacy"]["summary"])
+    observed_monitor = native["monitoring_observation"]
+    if (
+        observed_monitor["status"] != "pass"
+        or observed_monitor["enabled"] is not True
+        or type(observed_monitor["observations"]) is not int
+        or observed_monitor["observations"] != 1014
+        or observed_monitor["release_ready"] is not False
+    ):
+        raise Rejected("privacy_monitoring_incomplete")
     cli = report["controlled_cli"]
     checked_services(cli.get("service_windows"))
     operator = native["operator_observation"]
@@ -164,15 +179,19 @@ def projection(report):
         "privacy_requests": 12,
         "privacy_durable_events": 36,
         "metric_series": 69,
+        "monitoring_privacy": monitor,
+        "monitoring_observations": observed_monitor["observations"],
+        "feedback_privacy": feedback_privacy,
         "observed_http_responses": native["audit"]["observed_responses"],
         "correlated_requests": native["audit"]["correlation"]["correlated_requests"],
         "audit_events": native["audit"]["correlation"]["events"],
         "worker_terminal_stream": True,
         "service_log_windows": 2,
         "controlled_cli_service_log_windows": 2,
-        "closed_service_windows": 4,
-        "detected_service_leak_controls": 4,
-        "retained_service_packets_reverified": 4,
+        "closed_service_windows": 5,
+        "detected_service_leak_controls": 5,
+        "retained_service_packets_reverified": 5,
+        "source_feedback_service_windows": 1,
         "native_stderr_bytes": 0,
         "worker_cleanup": True,
         "retained_packet_reverified": True,
@@ -221,6 +240,7 @@ def qualify(root, state, image):
             "source_fingerprint": prepared["source_fingerprint"],
             "image_id": prepared["profile"]["image_id"],
         }
+    report["feedback_privacy"] = feedback_privacy_native.qualify(state, report)
     if (
         materials(root) != before
         or command(["git", "-C", str(root), "status", "--porcelain"])

@@ -149,6 +149,14 @@ def snapshot(name, *, include_promotion=False):
 
 
 def binary_command(arguments, content=None, output_limit=MAX_ARCHIVE, timeout=120):
+    result = binary_streams(arguments, content, output_limit, timeout)
+    if result["returncode"] or result["stderr"]:
+        raise Rejected("backup_process_failed_or_warned")
+    return result["stdout"]
+
+
+def binary_streams(arguments, content=None, output_limit=MAX_ARCHIVE, timeout=120):
+    """Bound both complete child streams, including intentional nonzero CLI exits."""
     process = subprocess.Popen(
         arguments, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
@@ -174,10 +182,12 @@ def binary_command(arguments, content=None, output_limit=MAX_ARCHIVE, timeout=12
         threading.Thread(target=read, args=("stderr", process.stderr, 65536), daemon=True),
         threading.Thread(target=write, daemon=True),
     ]
-    for thread in threads:
-        thread.start()
+    started_threads = []
     started = time.monotonic()
     try:
+        for thread in threads:
+            thread.start()
+            started_threads.append(thread)
         while process.poll() is None:
             if excessive.is_set() or time.monotonic() - started > timeout:
                 raise Rejected("backup_process_limit_or_deadline")
@@ -188,15 +198,15 @@ def binary_command(arguments, content=None, output_limit=MAX_ARCHIVE, timeout=12
             raise Rejected("backup_process_limit_or_deadline")
         if any(thread.is_alive() for thread in threads):
             raise Rejected("backup_process_incomplete")
-        if process.returncode or captured["stderr"]:
-            raise Rejected("backup_process_failed_or_warned")
-        return captured["stdout"]
+        return {"returncode": process.returncode, **captured}
     finally:
         if process.poll() is None:
             process.kill()
         process.wait(timeout=5)
-        for thread in threads:
+        for thread in started_threads:
             thread.join(timeout=2)
-        if not any(thread.is_alive() for thread in threads):
+        if not any(thread.is_alive() for thread in started_threads):
+            if not process.stdin.closed:
+                process.stdin.close()
             process.stdout.close()
             process.stderr.close()

@@ -98,6 +98,23 @@ Gate требует exact source/image/method hashes и порядок врем�
 
 Окончательная публикация pass требует также terminal hosted CI и подтверждённых source SQL/cluster cleanup. Код gate сам проверяет завершение и очистку probe resources; workflow отвечает за последующий teardown лаборатории. Ни локальные mock tests, ни status одного шага не заменяют проверку конечного состояния.
 
+## Расширение ingress 2026-11-07
+
+[Monitoring и feedback](../evidence/m13-monitoring-feedback-2026-11-07.md) входят в
+тот же actual-candidate M13. Native observation требует1014 HTTP observations,
+ordinary operator auth/labels/quota/privacy matrix и checked shutdown. Шесть
+candidate artifacts включают frozen reference и независимый reference-worker result.
+Feedback source связывается с первым admitted HTTP200 из уже проверенного private
+audit; отдельный source SQL quarantine имеет closed log window и positive leak
+control. Всего пять service windows. Public counters не содержат private feedback
+record hash, request ID, container identity или canaries.
+
+Primary recheck выполняется до teardown, когда CAS доступен. После SQL/cluster
+cleanup новые monitoring/feedback packets отдельно перечитываются offline с
+привязкой к ранее проверенным bytes. Это не новая release authority и не замена
+полной M18 на одном candidate. Hosted результат расширения фиксируется в evidence;
+наличие кода и controlled tests не означает pass нового M13.
+
 ## Источники
 
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html): исключать секреты из logs, проверять logging failure modes и учитывать недоверенные источники событий.

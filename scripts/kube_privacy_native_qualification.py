@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, decode, read_json, write_json
 from scripts import kube_privacy_native as native
+from scripts.feedback_privacy_native import SUMMARY as FEEDBACK_SUMMARY
 from scripts.kube_privacy_diagnostic import validated
+from scripts.monitoring_privacy_probe import summary as monitoring_summary
 
 
 def report():
@@ -33,6 +35,7 @@ def report():
         "model_sha256": "b" * 64,
         "subject_sha256": "c" * 64,
         "actual_refusal": {"parent_refusal": "release_assurance_required"},
+        "feedback_privacy": {"summary": dict(FEEDBACK_SUMMARY), "proof_sha256": "f" * 64},
         "native": {
             "status": "pass",
             "release_ready": False,
@@ -56,6 +59,16 @@ def report():
                 "approved_metric_series": 69,
                 "request_cases": 12,
                 "audit_events_confirmed": 36,
+            },
+            "monitoring_privacy": monitoring_summary(
+                operator_requests=20, quota_accepted=8, quota_limited=12
+            ),
+            "monitoring_observation": {
+                "status": "pass",
+                "enabled": True,
+                "observations": 1014,
+                "release_ready": False,
+                "proof_sha256": "e" * 64,
             },
             "cases": [
                 {"id": label, "status": "pass", "expected": True, "actual": True}
@@ -107,6 +120,21 @@ def report():
 
 
 class NativePrivacyProjectionContracts(unittest.TestCase):
+    def test_monitoring_matrix_and_actual_observations_are_required(self):
+        for field in ("monitoring_privacy", "monitoring_observation"):
+            value = report()
+            del value["native"][field]
+            with self.subTest(missing=field), self.assertRaises((Rejected, KeyError)):
+                native.projection(value)
+        value = report()
+        value["native"]["monitoring_observation"]["observations"] = 1000
+        with self.assertRaises(Rejected):
+            native.projection(value)
+        value = report()
+        value["feedback_privacy"]["summary"]["rejected_commands"] = 0
+        with self.assertRaises(Rejected):
+            native.projection(value)
+
     def test_missing_or_fabricated_closed_window_controls_and_primary_receipts_refuse(self):
         for location in ("actual", "cli"):
             for fault in (
@@ -152,7 +180,7 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
     def test_projection_contains_finite_counts_not_private_graph_or_hashes(self):
         projected = native.projection(report())
         self.assertNotIn("private-canary", canonical(projected).decode())
-        self.assertEqual(projected["checks"], 28)
+        self.assertEqual(projected["checks"], 31)
         self.assertEqual(projected["full_M13"], "inconclusive")
         self.assertFalse(projected["release_ready"])
 
@@ -209,6 +237,11 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
             for changed in (False, True):
                 with (
                     patch.object(native, "hosted"),
+                    patch.object(
+                        native.feedback_privacy_native,
+                        "qualify",
+                        return_value=value["feedback_privacy"],
+                    ),
                     patch.object(native.promotion_state, "install") as install,
                     patch.object(
                         native,

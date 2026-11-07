@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from mlsecops import privacy_gate as gate
 from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
+from scripts import feedback_privacy_native, monitoring_privacy_probe
 from scripts.kube_privacy_native_qualification import report
 
 
@@ -42,6 +43,50 @@ def fixture():
 
 
 class PrivacyGateContracts(unittest.TestCase):
+    def test_offline_ingress_replay_requires_prior_acceptance_exact_primary_and_artifacts(self):
+        for fault in (None, "acceptance", "primary", "artifact", "monitor", "feedback"):
+            with tempfile.TemporaryDirectory() as temporary:
+                state = Path(temporary).resolve()
+                value, _ = fixture()
+                directory = state / "candidate-inference" / value["privacy_campaign_id"]
+                directory.mkdir(parents=True)
+                value["artifact_hashes"] = {name: digest(b"{}") for name in gate.ARTIFACTS}
+                for name in gate.ARTIFACTS:
+                    (directory / name).write_bytes(
+                        b"changed" if fault == "artifact" and name == "request.json" else b"{}"
+                    )
+                write_json(state / "evidence/kubernetes-privacy-private.json", value)
+                content = (state / "evidence/kubernetes-privacy-private.json").read_bytes()
+                write_json(
+                    state / "evidence/privacy-gate-private.json",
+                    {"private_observation": "f" * 64 if fault == "primary" else digest(content)},
+                )
+                write_json(
+                    state / "evidence/M13.json",
+                    {"status": "fail" if fault == "acceptance" else "pass"},
+                )
+                with (
+                    patch.object(
+                        gate.monitoring_privacy_probe,
+                        "reverify",
+                        return_value={"observations": 1014},
+                        side_effect=Rejected("controlled") if fault == "monitor" else None,
+                    ),
+                    patch.object(
+                        gate.feedback_privacy_native,
+                        "reverify",
+                        side_effect=Rejected("controlled") if fault == "feedback" else None,
+                    ),
+                ):
+                    if fault:
+                        with self.assertRaises(Rejected):
+                            gate.ingress_retained(state)
+                    else:
+                        result = gate.ingress_retained(state)
+                        self.assertEqual(result["monitoring_observations"], 1014)
+                        self.assertEqual(result["feedback_commands"], 11)
+                        self.assertEqual(result["private_observation"], digest(content))
+
     def test_cli_initializes_pinned_runtime_before_importing_contract_fixtures(self):
         from mlsecops import runtime_bootstrap
 
@@ -136,8 +181,15 @@ class PrivacyGateContracts(unittest.TestCase):
         value["actual_refusal"]["campaign_id"] = "f" * 32
         value["native"]["audit"].update(public={}, packet_sha256="7" * 64)
         value["artifact_hashes"] = {
-            name: digest(name.encode())
-            for name in ("reference.json", "config.json", "request.json", "probe.json")
+            name: digest(b"{}" if name == "request.json" else name.encode())
+            for name in (
+                "reference.json",
+                "config.json",
+                "request.json",
+                "probe.json",
+                "monitor-worker.json",
+                "monitor-reference.json",
+            )
         }
         cli = value["controlled_cli"]
         cli["native"]["privacy"].update(snapshot={}, http=[], audit={"accepted": True})
@@ -147,13 +199,25 @@ class PrivacyGateContracts(unittest.TestCase):
         ):
             for row in rows.values():
                 row["sha256"] = digest(b"service packet")
-        for fault in (None, "primary", "artifact", "context", "cli-bytes", "cli-audit", "service"):
+        for fault in (
+            None,
+            "primary",
+            "artifact",
+            "context",
+            "cli-bytes",
+            "cli-audit",
+            "service",
+            "monitor",
+            "feedback",
+        ):
             with tempfile.TemporaryDirectory() as directory:
                 state = Path(directory)
                 actual_path = state / "candidate-inference" / value["privacy_campaign_id"]
                 actual_path.mkdir(parents=True)
                 for name in value["artifact_hashes"]:
-                    (actual_path / name).write_bytes(name.encode())
+                    (actual_path / name).write_bytes(
+                        b"{}" if name == "request.json" else name.encode()
+                    )
                 if fault == "artifact":
                     (actual_path / "probe.json").write_bytes(b"changed")
                 context = {
@@ -178,6 +242,18 @@ class PrivacyGateContracts(unittest.TestCase):
 
                 with (
                     patch.object(
+                        feedback_privacy_native,
+                        "reverify",
+                        return_value={},
+                        side_effect=Rejected("controlled") if fault == "feedback" else None,
+                    ) as feedback_check,
+                    patch.object(
+                        monitoring_privacy_probe,
+                        "reverify",
+                        return_value={},
+                        side_effect=Rejected("controlled") if fault == "monitor" else None,
+                    ) as monitor,
+                    patch.object(
                         gate,
                         "verify_packet",
                         return_value={} if fault == "primary" else value["native"]["audit"],
@@ -194,10 +270,14 @@ class PrivacyGateContracts(unittest.TestCase):
                             gate.retained(state, state, value)
                     else:
                         result = gate.retained(state, state, value)
-                        self.assertEqual(len(result), 6)
+                        self.assertEqual(len(result), 8)
                         self.assertEqual(load.call_count, 5)
                         self.assertEqual(primary.call_args.args[2], value["source"])
                         self.assertEqual(primary.call_args.args[3], value["privacy_campaign_id"])
+                        monitor.assert_called_once_with(
+                            value["native"], {}, value["privacy_campaign_id"]
+                        )
+                        feedback_check.assert_called_once_with(state, value)
 
     def test_fresh_runner_clears_old_success_and_rejects_mutation_without_publishing(self):
         for fault in (None, "native", "projection", "source", "methods", "private", "stale"):
@@ -338,7 +418,7 @@ class PrivacyGateContracts(unittest.TestCase):
     def test_composition_keeps_subjects_distinct_and_exports_only_finite_metrics(self):
         value, source = fixture()
         result = self.reconcile(value, source)
-        self.assertEqual(result["closed_service_windows"], 4)
+        self.assertEqual(result["closed_service_windows"], 5)
         self.assertNotIn("private-canary", canonical(result).decode())
         self.assertNotIn("packet_sha256", canonical(result).decode())
 

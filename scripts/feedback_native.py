@@ -115,6 +115,10 @@ def denials(state, reference, content):
 
 
 def verify(proof, packet):
+    return verify_record(proof, fixture(packet))
+
+
+def verify_record(proof, source):
     require_fields(
         proof,
         (
@@ -134,10 +138,10 @@ def verify(proof, packet):
             "label_refused",
         ),
     )
-    record = feedback.document(canonical(fixture(packet)))
+    record = feedback.document(canonical(source))
     receipt = feedback.receipt(record)
     if (
-        proof["input"] != fixture(packet)
+        proof["input"] != source
         or canonical(proof["stored"]) != canonical(record)
         or any(proof[key] != receipt for key in ("receipt", "retry", "inspection"))
     ):
@@ -197,6 +201,14 @@ def qualify(state, result):
     ]
     destination = directory(state, campaign)
     source = fixture(packet)
+    proof = qualify_record(state, destination, source)
+    summary = verify(proof, packet)
+    return reverify(state, campaign, summary, packet)
+
+
+def qualify_record(state, destination, source, *, invoke=None):
+    """Caller first verifies hosted ownership and its actual HTTP source binding."""
+    invoke = cli if invoke is None else invoke
     write_json(destination / "submission.json", source)
     record = feedback.document(canonical(source))
     wanted = feedback.receipt(record)
@@ -205,11 +217,11 @@ def qualify(state, result):
     )
     before, promotion_before = ledger(state), promotion_snapshot(state)
     arguments = ["submit", "--client", ingestor, "--file", str(destination / "submission.json")]
-    receipt = cli(arguments)
+    receipt = invoke(arguments)
     after = ledger(state)
-    retry = cli(arguments)
+    retry = invoke(arguments)
     after_retry = ledger(state)
-    inspected = cli(["inspect", "--client", curator, "--reference", wanted["record_sha256"]])
+    inspected = invoke(["inspect", "--client", curator, "--reference", wanted["record_sha256"]])
     stored = feedback.read(curator, wanted["record_sha256"])
     denied = denials(state, wanted["record_sha256"], canonical(record))
     refused = []
@@ -241,6 +253,6 @@ def qualify(state, result):
         "dataset_refused": refused[0],
         "label_refused": refused[1],
     }
-    summary = verify(proof, packet)
+    verify_record(proof, source)
     write_json(destination / "proof.json", proof)
-    return reverify(state, campaign, summary, packet)
+    return proof

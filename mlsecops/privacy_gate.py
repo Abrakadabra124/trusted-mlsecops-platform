@@ -21,12 +21,25 @@ from mlsecops.contracts import (
 )
 from mlsecops.storage import object_id
 from mlsecops.trust_acceptance import materials
-from scripts import kube_privacy_native, privacy_contracts
+from scripts import (
+    feedback_privacy_native,
+    kube_privacy_native,
+    monitoring_privacy_probe,
+    privacy_contracts,
+)
 from scripts.kube_cli_privacy_probe import verify_snapshot
 from scripts.kube_trust_native import hosted
 from scripts.serving_output_native import source, verify_packet
 
 SCOPE = "M13-fresh-serving-privacy-and-controlled-release-contracts"
+ARTIFACTS = (
+    "reference.json",
+    "config.json",
+    "request.json",
+    "probe.json",
+    "monitor-worker.json",
+    "monitor-reference.json",
+)
 
 
 def require(condition):
@@ -204,7 +217,7 @@ def retained(root, state, value):
         + "/report.json",
     )
     require(canonical(checked) == canonical(audit))
-    artifact_names = ("reference.json", "config.json", "request.json", "probe.json")
+    artifact_names = ARTIFACTS
     require_fields(value["artifact_hashes"], artifact_names)
     for name in artifact_names:
         require(
@@ -215,6 +228,12 @@ def retained(root, state, value):
             )
             == value["artifact_hashes"][name]
         )
+    monitoring_privacy_probe.reverify(
+        value["native"],
+        read_json(safe_child(state, "candidate-inference/" + actual_campaign + "/request.json")),
+        actual_campaign,
+    )
+    feedback_privacy_native.reverify(state, value)
     cli_path = safe_child(state, "evidence/cli-privacy/" + cli_campaign)
     context = read_json(cli_path / "context.json")
     cli = value["controlled_cli"]
@@ -232,6 +251,8 @@ def retained(root, state, value):
     hashes = {
         "actual_audit": object_id(audit["packet_sha256"]),
         "controlled_cli_packet": digest(raw),
+        "monitoring": object_id(value["native"]["monitoring_observation"]["proof_sha256"]),
+        "feedback_privacy": object_id(value["feedback_privacy"]["proof_sha256"]),
     }
     for name, path, receipts in (
         (
@@ -247,6 +268,32 @@ def retained(root, state, value):
             require(digest(content) == receipt["sha256"])
             hashes[name + "_" + namespace] = digest(content)
     return hashes
+
+
+def ingress_retained(state):
+    """Offline replay of the newly added ingress evidence, not a live CAS reread."""
+    state = Path(state).resolve()
+    raw = bounded_read(state / "evidence/kubernetes-privacy-private.json", 4 * 1024**2)
+    admission = read_json(state / "evidence/privacy-gate-private.json")
+    require(read_json(state / "evidence/M13.json")["status"] == "pass")
+    require(digest(raw) == admission["private_observation"])
+    value = decode(raw, 4 * 1024**2)
+    where = safe_child(state, "candidate-inference/" + campaign(value["privacy_campaign_id"]))
+    require_fields(value["artifact_hashes"], ARTIFACTS)
+    for name in ARTIFACTS:
+        require(digest(bounded_read(where / name)) == value["artifact_hashes"][name])
+    observed = monitoring_privacy_probe.reverify(
+        value["native"], read_json(where / "request.json"), value["privacy_campaign_id"]
+    )
+    feedback_privacy_native.reverify(state, value)
+    return {
+        "scope": "M13-monitoring-feedback-post-cleanup",
+        "status": "pass",
+        "release_ready": False,
+        "private_observation": digest(raw),
+        "monitoring_observations": observed["observations"],
+        "feedback_commands": 11,
+    }
 
 
 def qualify(root, state, image="trusted-mlsecops:dev"):

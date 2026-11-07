@@ -6,15 +6,28 @@ from dataclasses import asdict
 from functools import partial
 from pathlib import Path
 
-from mlsecops import audit_snapshot, release_bundle, serving, signing, worker_transport
+from mlsecops import (
+    audit_snapshot,
+    load_monitoring,
+    release_bundle,
+    serving,
+    signing,
+    worker_transport,
+)
 from mlsecops.contracts import Rejected, canonical, read_json, require_fields, write_json
 from mlsecops.controller_api import Client
 from mlsecops.datasets import FEATURES
 from mlsecops.kube_candidate_probe import candidate
 from mlsecops.kube_serving_lifecycle import valid
+from mlsecops.load_probe import listen
 from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce
-from scripts import audit_correlation_probe, audit_evidence_probe, serving_output_probe
+from scripts import (
+    audit_correlation_probe,
+    audit_evidence_probe,
+    monitoring_privacy_probe,
+    serving_output_probe,
+)
 from scripts.audit_http_observation import Ledger
 from scripts.candidate_serving_native import context_matrix, privacy_matrix
 from scripts.kube_privacy_diagnostic import location, validated
@@ -51,7 +64,7 @@ def qualify(config, expected, input_observer):
         },
     }
     cases, needles, workers = [], [], []
-    ledger, retained = Ledger(), {}
+    ledger, retained = Ledger(operator_routes=True), {}
 
     def check(label, value):
         if value is not True:
@@ -115,7 +128,17 @@ def qualify(config, expected, input_observer):
         ],
     }
     engine = serving.Engine(candidate(config), worker_factory=factory)
-    with site(engine, clients=clients, audit_export=closed, http_ledger=ledger) as transport:
+    monitor_root = DIRECTORY / "monitoring"
+    with (
+        load_monitoring.session(monitor_root, expected, binding["campaign_id"], listen) as monitor,
+        site(
+            engine,
+            clients=clients,
+            audit_export=closed,
+            http_ledger=ledger,
+            monitor=monitor.runtime,
+        ) as transport,
+    ):
         PHASE = "http"
         request = partial(transport, credential=clients["clients"][2]["token"])
         for name in ("audit_status", "audit_scan", "metrics_credential"):
@@ -150,6 +173,12 @@ def qualify(config, expected, input_observer):
             needles.extend(all_values)
 
         privacy = privacy_matrix(request, body, check, observe)
+        monitor_privacy = monitoring_privacy_probe.exercise(
+            request, body, monitor.reference, monitor_root / "label.pem", needles
+        )
+        check("privacy-monitoring-operator-matrix", monitor_privacy["status"] == "pass")
+        monitor_proof, monitor_observation = monitor.finish(4 * len(expected["features"]) + 1002)
+        check("privacy-monitoring-bound-observations", monitor_observation["status"] == "pass")
         with engine.lock:
             check("actual-pressure-429", request("/v1/predict", body)[0] == 429)
         with engine.exclusive():
@@ -157,6 +186,10 @@ def qualify(config, expected, input_observer):
         check("fenced-predict-503", request("/v1/predict", body)[0] == 503)
         check("fenced-ready-503", request("/readyz")[0] == 503)
         engine.drain()
+    check(
+        "privacy-monitoring-shutdown",
+        monitor.runtime.task.done() and not monitor.runtime.snapshot()["faults"],
+    )
     check("one-observed-worker", len(workers) == 1 and workers[0].observation is not None)
     check("final-worker-absence", client.request("pods")["items"] == [])
     return {
@@ -168,6 +201,9 @@ def qualify(config, expected, input_observer):
         "subject_sha256": expected["bundle"],
         "max_golden_error": error,
         "privacy": privacy,
+        "monitoring_privacy": monitor_privacy,
+        "monitoring_proof": monitor_proof,
+        "monitoring_observation": monitor_observation,
         "quotas": quotas,
         "context": context_result,
         "audit": retained,
