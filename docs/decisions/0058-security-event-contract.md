@@ -115,6 +115,44 @@ schema не заменяет их. До общей приёмки T29 и M23 о�
 
 ## Проверка и альтернативы
 
+### Постоянный журнал: решение следующего increment
+
+Добавлены `security_event_ledger` и Linux `security_event_store`; native filesystem
+проверка этого increment ещё ожидается. Ledger отдельно описывает переходы
+состояния, но не обещает durability. Store держит эксклюзивный неблокирующий
+`flock` на pinned directory descriptor, читает только фиксированные файлы без
+следования symlinks и принимает только private owner-controlled regular files
+с одним hardlink. Registry и случайная identity привязаны внешним digest.
+
+Provisioning явный и только в новом каталоге. Runtime не создаёт пропавший
+state. Каждая изменяющая операция пишет `.pending`, выполняет file fsync,
+atomic rename, directory fsync и readback. После неопределённого исхода повтор
+перечитывает состояние. Незавершённый `.pending` удаляется только после полной
+проверки старого committed state; повреждённый или отсутствующий state не чинится
+автоматически. При чтении вновь проверяются подписи, роли, порядок записей,
+sequence uniqueness и квитанции. Это не защита от rollback диска host-admin.
+
+Профиль фиксирован до runtime campaign: максимум 1024 события на registry,
+snapshot <=16 MiB, reorder window64. Старые event IDs не вытесняются: при
+заполнении новые события отвергаются, exact retries ещё доступны. Нет тихого
+reset или автоматического нового epoch. Перед rollover необходим операторский
+handoff pending records, новый registry и отдельное доказательство continuity;
+этот lifecycle ещё не реализован. Переполнение должно блокировать здоровый
+статус будущего runtime и новую promotion, а не терять аудит.
+
+Ingest сохраняет pending record. Отдельный `acknowledge` принимает подписанную
+квитанцию только для того же события, ingest timestamp, late flag и fixed route;
+изменённая повторная квитанция отвергается. Точный retry после пяти минут
+проверяет исходную подпись на сохранённом admission time при ещё действующем
+registry. Это не позволяет принять новое старое событие. Late flag сохраняется
+в момент первого ingest и не пересчитывается после закрытия sequence gap.
+
+Выбран bounded snapshot вместо нового SQL service: небольшой security-event
+поток и один collector не требуют отдельной базы. Цена - O(n) verification/write
+и лимит ёмкости, которые должны быть измерены в общей M23 campaign. Native
+Windows durability, network filesystem, volume loss/HA и реальная доставка
+внешнему получателю этим компонентом не заявляются.
+
 В первом increment 21 controlled test с реальными подписями. Два модуля:
 206 statements, 74 branches, 100% каждого. Проверки включают неверные роли,
 ключи, domains, policy/epoch, expiry/skew, mutable input, nested/oversized data,

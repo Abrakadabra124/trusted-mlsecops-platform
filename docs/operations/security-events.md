@@ -5,6 +5,10 @@ Collector, durable deduplication, реальные source adapters и promotion 
 gate ещё не приняты. Приведённые команды проверяют компонент; не считать их
 подтверждением работающей доставки или завершённого M23.
 
+Следующий increment добавляет bounded journal и atomic Linux store. Проверка
+реального filesystem ещё ожидается; локальный Windows запуск пропускает
+Linux cases, не подтверждая их завершение.
+
 Подтверждённое [component evidence](../evidence/security-event-contract-2026-11-07.md):
 runtime `c2f7bf9`, Linux CI 42345739729 success,21 новых+25 смежных tests/0skips;
 чистый Windows checkout46tests/3POSIX skips с новой `.venv`.
@@ -61,6 +65,40 @@ private keys, сырые features, labels, headers или произвольно
 | `security_envelope_shape` / `security_envelope_size` | Вложенное либо слишком большое сообщение | Источник выдаёт конечный контракт, parser limits не увеличены ради payload |
 | `security_heartbeat_required` | Registry отключил наблюдение за всеми producers | Явно выбран обязательный непрерывный producer; пустота не считается здоровьем |
 | `security_delivery_deadline` / `security_receipt_binding` | Неверный срок, event, маршрут, config или время квитанции | Фактическая доставка и точная подписанная квитанция подтверждены; не менять timestamps вручную |
+
+## Журнал: диагностика и восстановление
+
+Проверки журнала выполняются командами:
+
+```text
+uv run --locked python -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification
+```
+
+На Linux suite должна выполнять filesystem cases без skips. На Windows
+storage намеренно возвращает `security_store_platform`, без попытки записи.
+Журнал не запускает SQL/Docker/WSL/Kubernetes; hosted CI проверяет частичную
+запись, ошибку до rename, неизвестный итог после rename, отдельный child process,
+symlinks/hardlinks/permissions и lock contention.
+
+При `security_store_missing`, `security_store_pin`, `security_store_canonical`
+или отказе проверки подписей остановить новые admission и сохранить каталог
+целиком вне публичного репозитория. Не удалять `state`, `identity` или записи
+дедупликации. Без проверенной резервной копии восстановление не объявляется
+успешным; применять R1 recovery procedure после её отдельной приёмки.
+
+При I/O failure исход операции может быть неизвестен. Повторить те же подписанные
+байты через существующий Store; он сначала проверит committed state. После сбоя
+до rename восстановится старая версия, после rename может обнаружиться уже
+сохранённое событие. Остаточный `.pending` очищается только после успешной
+проверки состояния. Ожидаемый итог: один event ID и первоначальный receipt,
+а не второй incident. Повреждение state не должно запускать автоматический reset.
+
+`security_store_full` означает предел1024 событий; retries не расходуют новый
+slot, новые события отвергаются. `security_sequence_window` ограничивает окно
+перестановки64. Оба отказа требуют расследования producer/collector continuity;
+увеличивать лимит после наблюдения failure ради pass или удалять историю нельзя.
+Постоянный volume, внешний backup, routing scheduler и promotion fail-closed
+integration пока остаются отдельной обязательной работой.
 
 ## Обнаруженные при реализации проблемы
 
