@@ -1,5 +1,11 @@
 # Trusted MLSecOps Platform
 
+Неделя 10/T18 завершена для synthetic CPU лаборатории: добавлена операторская панель `/monitoring/ui`. Она показывает состояние сбора, PSI, качество по меткам и доставку сигналов через существующий защищённый API. [Инструкция и диагностика](docs/operations/monitoring-dashboard.md).
+
+На runtime commit `6fa4d96` свежие M15 (188 критериев) и M13 (512 критериев) прошли с проверенной очисткой инфраструктуры. Из чистого checkout воспроизведены 37 связанных тестов без пропусков; интерфейс отдельно проверен в браузере. [Доказательства и точные ограничения](docs/evidence/monitoring-dashboard-2026-11-07.md).
+
+Полный R1 ещё не принят. Следующий этап по плану - неделя 11/T29/M23: доставка security events и блокировка promotion при недоступном audit sink. Исторические результаты ниже относятся к своим revisions.
+
 CP4/T17 2026-11-07 МСК: **[M14 fresh load acceptance](docs/evidence/m14-load-acceptance-bbff69e.md) pass**, `bbff69e` / 42297023903 success. 143 cases (137 contracts + 6 aggregate), 15672/15672 correct, 130.6 RPS, p95=103.052346 ms, p99=117.668110 ms, 0 normal errors/429; overload/recovery и cleanup подтверждены. Source/policy/methods/primary bindings сверены. T17 lab profile принят; далее T18/M15. Исторический shutdown failure остаётся reliability debt R1-B08, не объявлен исправленным. M10/M19, independent M22 0/2, image findings, оставшиеся CP4/CP5 и общий M18/R1 открыты. Записи ниже - история конкретных commits.
 
 CP3/T16 2026-11-06: **[M13 synthetic serving acceptance](docs/evidence/m13-privacy-acceptance-2026-11-06.md) pass**, `b03a5d9` / 42248499786 success. 438 cases (430 contracts + 8 aggregate criteria), 1116 Linux method executions с повторами / 0 skips; новая gate logic 144 statements / 22 branches 100%. Primary source/policy/methods и cleanup сверены; clean Windows subset85/0. T16 принят в этом профиле. Далее неделя10/T17/M14; M10/M19, independent M22 0/2, image findings, CP4/CP5 и весь R1 остаются открытыми. Более ранние записи ниже описывают состояние на соответствующих commits.

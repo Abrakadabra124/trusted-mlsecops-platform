@@ -122,6 +122,8 @@ receipts; это не отдельная приёмка actual ONNX candidate. D
 проверены, ширина страницы на узком экране совпала с client width (375 px).
 Оба временных стенда завершены штатно, принадлежащие им порты закрыты.
 
-Hosted проверка нового revision и итоговая R1 ещё не объявлены завершёнными.
-Предыдущая [M15 acceptance](../evidence/m15-monitoring-acceptance-2026-11-07.md)
-относится к bd90286 и автоматически на новое содержимое не переносится.
+[Hosted проверка 6fa4d96](../evidence/monitoring-dashboard-2026-11-07.md) завершена:
+M15 188 criteria, M13 512 criteria и 9 static privacy requests, cleanup и
+post-cleanup replay подтверждены. Node hosted v22.23.4, contracts350Linux
+executions/0skips. На чистом checkout37tests/0skips. Общий R1 остаётся открытым;
+дальше T29/M23. Разные candidate references M13/M15 не являются общей M18 acceptance.

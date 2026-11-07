@@ -83,6 +83,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 
 ## M15
 
+[Fresh M15 с операторской панелью](evidence/monitoring-dashboard-2026-11-07.md): `6fa4d96` /42343109962 pass,188criteria, max delivery0.374568635s. Fresh M13 /42343123664 pass,512criteria,9staticprivacyrequests. Source и cleanup проверены; T18 lab scope принят, T29/M23 и общий M18/R1 открыты. Запись bd90286 ниже описывает предыдущий revision.
+
 **[Fresh M15 acceptance bd90286 /42339902029](evidence/m15-monitoring-acceptance-2026-11-07.md) pass**,167criteria:12000observations,10clean+2shift windows,200signedpositive labels,3receipts,max0.437768848s;feedbackquarantine,source/policy/methods и post-cleanup replay verified. Synthetic-only, остальные M18/R1 gates обязательны. Визуальная dashboard T18 и security-event M23 не объявлены завершёнными.
 **Мониторинг качества и обратной связи.** Synthetic shift fixture даёт alert <= 120 s после попадания достаточного окна в scheduled evaluator. Initial profile: >=1 000 observations/window, фиксированные bins/reference, PSI >=0.2 как lab warning, минимум два окна; реальные пороги калибруются отдельно. Delayed-label fixture ухудшения recall на >0.05 после >=200 positives даёт другой alert. Clean control не создаёт alarm в 10 контрольных окнах; это не оценка production false-positive rate. Alert не запускает auto-promotion. T18.
 
