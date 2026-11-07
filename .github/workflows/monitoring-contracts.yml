@@ -28,14 +28,14 @@ jobs:
           uv run --locked ruff check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
           uv run --locked ruff format --check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
           uv run --locked python scripts/check_docs.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery,mlsecops.monitoring_runtime -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery,mlsecops.monitoring_runtime,mlsecops.monitoring_config,mlsecops.monitoring_cli -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification scripts.monitoring_config_qualification scripts.monitoring_cli_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/monitor.coverage" -o "$RUNNER_TEMP/monitor-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'monitor-coverage.json').read_text())['files']
-          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py', 'mlsecops/monitoring_runtime.py'}:
+          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py', 'mlsecops/monitoring_runtime.py', 'mlsecops/monitoring_config.py', 'mlsecops/monitoring_cli.py'}:
               raise SystemExit('monitor_coverage_inventory')
           for name, report in sorted(files.items()):
               summary = report['summary']

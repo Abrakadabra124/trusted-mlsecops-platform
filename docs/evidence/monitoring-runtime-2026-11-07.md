@@ -1,6 +1,11 @@
 # M15: HTTP collection и owned scheduler
 
-Статус: component checks пройдены на Windows; Linux CI ожидает публикации.
+Статус: component pass на `6c0b5050ff3799c151a7e0a1436f9d9a1a285404`.
+[Linux CI42317454624](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42317454624)
+завершён success:76 monitoring tests/0 skips за17.304s,77 смежных HTTP/audit/lifecycle
+tests/0 skips за8.007s. Coverage шести modules совпадает с таблицей ниже.
+Чистый detached Windows checkout того же commit:76 tests/0 skips за20.749s,
+working tree clean; использовалась существующая locked venv, не новая установка.
 Это не full M15, M18 или R1. Исторический M14 на `bbff69e` не подтверждает
 производительность нового HTTP hook.
 
@@ -72,6 +77,9 @@ durable restart, quarantine composition и native candidate-bound M15 acceptance
 Prometheus пока показывает существующие HTTP metrics; ML status доступен в JSON.
 Полный M15 потребует сверки primary evidence после cleanup и новой M13/M14
 регрессии. Этот компонент не разрешает выпуск и не обучает модель.
+
+Следующий increment добавляет signed configuration и sink CLI; он не входит
+в результат `6c0b505`. Его проверка записывается отдельно после своего CI.
 
 Решения: [ADR0057](../decisions/0057-fixed-monitoring-contract.md).
 Диагностика и восстановление: [model-monitoring](../operations/model-monitoring.md).

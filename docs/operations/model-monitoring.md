@@ -156,7 +156,59 @@ label payload теперь даёт contract rejection; отмена shutdown о
 окно не теряется при штатной остановке. Failure-first tests сохранены в suites.
 Это не записи production-инцидентов.
 
-Ещё отсутствуют конфигурационный CLI для monitor, trusted candidate reference
-builder, durable restart, feedback quarantine composition и полный native M15.
+Ещё отсутствуют trusted candidate reference builder, durable restart,
+feedback quarantine composition и полный native M15.
 Новый HTTP hook требует свежих M13/M14 на общем candidate; старые результаты
 не переносятся автоматически. Этот компонент не имеет promotion API.
+
+## Конфигурация и отдельный sink CLI
+
+В serving JSON добавлены `monitor_file` и обязательный при этом
+`metrics_token_file`. Значение `monitor_file` - абсолютный путь к JSON с точными
+полями ниже. Неизвестные поля, относительные пути, неправильная подпись, другой
+digest и смешанные ключи отклоняются до создания engine или сетевого listener.
+
+| Поле producer config | Значение |
+| --- | --- |
+| schema_version | Целое1 |
+| reference_file | Абсолютный путь к DSSE `monitor-reference` envelope |
+| reference_sha256 | SHA-256 canonical payload эталона, заданный оператором |
+| reference_public | Pinned Ed25519 public key издателя reference, canonical base64 |
+| producer_key_file | Абсолютный путь к private Ed25519 key отправителя alerts |
+| label_public | Отдельный pinned public key проверенной label authority |
+| sink_public | Отдельный pinned public key подписанта receipts |
+| sink_port | Порт loopback receiver1024..65535 |
+| epoch | Явный уникальный для запуска идентификатор32 lowercase hex |
+
+Четыре роли используют разные ключи. Подпись не доказывает корректность выбора
+эталонной выборки: reference builder от actual candidate остаётся обязательным
+незавершённым шагом. Подменять его произвольным вручную подписанным histogram
+для итоговой приёмки нельзя. Public pins устанавливает доверенный оператор,
+а не входящий envelope. Existing key_files проверяет private key identity,
+размер, symlinks и POSIX owner/mode. Windows ACL этим не доказываются.
+
+Sink JSON содержит ровно `schema_version`, `reference_sha256`, `producer_public`,
+`receipt_key_file`, `port`, `epoch`; пути абсолютные. Reference/epoch должны
+совпадать с producer. Загрузчик не запускает процессы, задачи или listener.
+
+Команды на разрешённом disposable Linux runner после подготовки private configs:
+
+```sh
+uv run --locked python -m mlsecops.monitoring_cli --config /work/private/sink.json
+uv run --locked python -m mlsecops.serving_http --config /work/private/serving.json --port 8080
+```
+
+Это два отдельных foreground процесса, каждый с известным владельцу PID.
+Sink слушает только127.0.0.1; внешние host/proxy/redirect options не принимаются.
+CLI включает существующую Linux process privacy: core dumps запрещены,
+dumpable=0. На Windows CLI корректно отказывается, не обходить эту проверку.
+Локальные Docker/WSL/Kubernetes/SQL для воспроизведения этой задачи не запускать.
+
+После SIGINT ожидается закрытый listener, завершённый процесс с кодом130 и
+одна постоянная diagnostic строка `monitoring_sink_rejected`, без traceback
+и содержимого config. Сам код130 не доказывает cleanup: проверить завершение
+PID и недоступность прежнего loopback port. Тест `monitoring_cli_qualification`
+проверяет настоящий дочерний процесс только на Linux; на Windows он skipped.
+In-memory receipt cache теряется при аварии. Сохранять private evidence и
+назначать новый epoch после ручного разбора; reused epoch без восстановления
+истории не считается безопасным restart и не принимается полным M15.

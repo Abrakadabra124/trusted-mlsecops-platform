@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, Response
 from mlsecops import (
     advisory,
     audit_retention,
+    monitoring_config,
     monitoring_runtime,
     release_reader,
     serving,
@@ -467,6 +468,7 @@ def configured(path, *, startup_diagnostics=False):
             credential_field,
         )
         + (("metrics_token_file",) if "metrics_token_file" in config else ())
+        + (("monitor_file",) if "monitor_file" in config else ())
         + (("kubernetes_worker",) if "kubernetes_worker" in config else ()),
     )
     worker_factory = None
@@ -501,6 +503,11 @@ def configured(path, *, startup_diagnostics=False):
         if os.name == "posix" and metric_path.stat().st_mode & 0o077:
             raise Rejected("http_token_permissions")
         metrics_token = bounded_read(metric_path, 65).decode("ascii").strip()
+    monitor = None
+    if "monitor_file" in config:
+        if metrics_token is None:
+            raise Rejected("http_monitor_configuration")
+        monitor = monitoring_config.producer(config["monitor_file"])
     session = trust_session.Session()
     lease = trust.Lease(
         lambda: trust_authority.read(
@@ -532,6 +539,7 @@ def configured(path, *, startup_diagnostics=False):
         clients=clients,
         audit_path=config["audit_directory"],
         metrics_token=metrics_token,
+        monitor=monitor,
         startup_diagnostics=startup_diagnostics,
     )
 
