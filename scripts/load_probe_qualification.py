@@ -116,7 +116,18 @@ class ProbeContracts(unittest.TestCase):
             listener.close.assert_called_once()
 
     def test_completed_run_and_all_binding_failure_paths_close_engine(self):
-        for fault in (None, "identity", "permit", "release", "prediction", "receipt", "cleanup"):
+        for fault in (
+            None,
+            "identity",
+            "permit",
+            "release",
+            "prediction",
+            "receipt",
+            "monitor-receipt",
+            "monitor-summary",
+            "monitor-finish",
+            "cleanup",
+        ):
             with self.subTest(fault=fault):
                 self.scenario(fault)
 
@@ -149,6 +160,15 @@ class ProbeContracts(unittest.TestCase):
         observation = {"records": rows(), "elapsed_ns": 130_000_000_000, "exhausted": False}
         summary = probe.load_measurement.summarize(**observation)
         receipt = {"summary_sha256": "wrong" if fault == "receipt" else digest(canonical(summary))}
+        monitor = Mock()
+        monitor.binding = {"fixture": "binding"}
+        monitor.finish.return_value = ({"fixture": "proof"}, {"fixture": "summary"})
+        if fault == "monitor-finish":
+            monitor.finish.side_effect = Rejected("load_monitor_inactive_or_lost")
+        receipt["monitoring_sha256"] = (
+            "wrong" if fault == "monitor-receipt" else digest(canonical({"fixture": "proof"}))
+        )
+        receipt["monitoring"] = {} if fault == "monitor-summary" else {"fixture": "summary"}
         limited = probe.load_diagnostics.reasons()
         receipt["diagnostics_sha256"] = digest(
             canonical(
@@ -172,6 +192,8 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe, "Worker") as worker,
             patch.object(probe.serving, "Engine", return_value=engine) as construct,
             patch.object(probe, "listen", side_effect=listen),
+            patch.object(probe.serving_http, "create_app") as create_app,
+            patch.object(probe.load_monitoring, "session", return_value=nullcontext(monitor)),
             patch.object(
                 probe.load_measurement,
                 "request",
@@ -182,7 +204,13 @@ class ProbeContracts(unittest.TestCase):
             patch.object(
                 probe,
                 "exercise",
-                new=AsyncMock(return_value=(observation, {"profile_met": True}, limited)),
+                new=AsyncMock(
+                    return_value=(
+                        observation,
+                        {"profile_met": True, "correct": 8, "recovered": True},
+                        limited,
+                    )
+                ),
             ),
             patch.object(probe, "send", side_effect=[{}, receipt]) as send,
         ):
@@ -194,6 +222,10 @@ class ProbeContracts(unittest.TestCase):
                 report = probe.qualify(config, expected())
                 self.assertTrue(report["profile_met"])
                 self.assertFalse(report["release_ready"])
+                self.assertEqual(report["monitoring"], {"fixture": "summary"})
+                self.assertIs(create_app.call_args.kwargs["monitor"], monitor.runtime)
+                monitor.finish.assert_called_once_with(1 + len(observation["records"]) + 8 + 1)
+                self.assertEqual(send.call_args_list[0].args[3]["monitoring"], monitor.binding)
                 self.assertEqual(
                     [call.args[1] for call in send.call_args_list], ["start", "finish"]
                 )
@@ -348,6 +380,8 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe, "candidate"),
             patch.object(probe.serving, "Engine", return_value=engine),
             patch.object(probe, "listen", return_value=nullcontext(1234)),
+            patch.object(probe.serving_http, "create_app"),
+            patch.object(probe.load_monitoring, "session", return_value=nullcontext(Mock())),
             patch.object(
                 probe.load_measurement, "request", new=AsyncMock(return_value=(200, response()))
             ),

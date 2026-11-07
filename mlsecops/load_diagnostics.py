@@ -47,6 +47,9 @@ FAILURES = frozenset(
         "serving_cleanup_pending",
         "serving_cleanup_unconfirmed",
         "trust_session_cleanup_unconfirmed",
+        "load_monitor_inactive_or_lost",
+        "load_monitor_pending",
+        "load_monitor_shutdown",
     }
 )
 

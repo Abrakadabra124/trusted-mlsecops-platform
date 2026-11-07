@@ -5,7 +5,7 @@ import secrets
 import socket
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import uvicorn
@@ -13,6 +13,7 @@ import uvicorn
 from mlsecops import (
     load_diagnostics,
     load_measurement,
+    load_monitoring,
     serving,
     serving_http,
     serving_lifecycle,
@@ -157,14 +158,22 @@ def qualify(config, expected):
         worker_factory=lambda model, image: Worker(model, image, config["kubernetes_worker"]),
         close_reader=session.close,
     )
+    resources = ExitStack()
     try:
         PHASE = "activate"
         (DIRECTORY / "audit").mkdir(mode=0o700)
+        monitor = resources.enter_context(
+            load_monitoring.session(
+                DIRECTORY / "monitor", expected, config["expected_campaign"], listen
+            )
+        )
         app = serving_http.create_app(
             engine,
             clients=Access(clients),
             audit_path=DIRECTORY / "audit",
             startup_diagnostics=True,
+            monitor=monitor.runtime,
+            metrics_token=secrets.token_hex(32),
         )
         with listen(app) as port:
             identity = engine.check()
@@ -190,6 +199,7 @@ def qualify(config, expected):
                     "job_uid": worker.job_uid,
                     "pod_uid": worker.pod_uid,
                     "golden": golden.binding(),
+                    "monitoring": monitor.binding,
                 },
             )
             PHASE = "measure"
@@ -203,6 +213,9 @@ def qualify(config, expected):
                 **{key: observation[key] for key in ("records", "elapsed_ns", "exhausted")}
             )
             PHASE = "finish"
+            monitor_proof, monitor_summary = monitor.finish(
+                load_monitoring.observations(observation, overload)
+            )
             receipt = send(
                 DIRECTORY,
                 "finish",
@@ -213,16 +226,23 @@ def qualify(config, expected):
                     "overload": overload,
                     "golden": golden.binding(),
                     "diagnostics": diagnostics,
+                    "monitoring": monitor_proof,
                 },
             )
-            if receipt.get("summary_sha256") != digest(canonical(summary)) or receipt.get(
-                "diagnostics_sha256"
-            ) != digest(canonical(diagnostics)):
+            if (
+                receipt.get("summary_sha256") != digest(canonical(summary))
+                or receipt.get("diagnostics_sha256") != digest(canonical(diagnostics))
+                or receipt.get("monitoring_sha256") != digest(canonical(monitor_proof))
+                or receipt.get("monitoring") != monitor_summary
+            ):
                 raise Rejected("load_operator_summary_changed")
             PHASE = "shutdown"
     finally:
         # Also covers failed thread creation before the application's lifespan.
-        engine.close()
+        try:
+            resources.close()
+        finally:
+            engine.close()
     PHASE = "cleanup"
     if client.request("pods")["items"]:
         raise Rejected("load_worker_cleanup_unconfirmed")
@@ -237,6 +257,7 @@ def qualify(config, expected):
         "measurement": summary,
         "overload": overload,
         "diagnostics": diagnostics,
+        "monitoring": monitor_summary,
         "operator": receipt,
         "worker_cleanup_verified": True,
         "profile_met": summary["profile_met"] and overload["profile_met"],

@@ -27,14 +27,14 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load-native.coverage" --source=mlsecops.storage,mlsecops.trust_session,mlsecops.load_golden,mlsecops.load_measurement,mlsecops.load_clock,mlsecops.load_exchange,mlsecops.load_probe,mlsecops.load_diagnostics,scripts.load_resources,scripts.kube_load_operator,scripts.kube_load_native -m unittest scripts.trust_targets_qualification scripts.kube_trust_qualification scripts.trust_session_qualification scripts.load_golden_qualification scripts.load_measurement_qualification scripts.load_clock_qualification scripts.load_exchange_qualification scripts.load_probe_qualification scripts.load_diagnostics_qualification scripts.load_resources_qualification scripts.kube_load_operator_qualification scripts.kube_load_native_qualification
+          uv run --locked python -m coverage run --branch --data-file="$RUNNER_TEMP/load-native.coverage" --source=mlsecops.storage,mlsecops.trust_session,mlsecops.load_golden,mlsecops.load_measurement,mlsecops.load_monitoring,mlsecops.load_clock,mlsecops.load_exchange,mlsecops.load_probe,mlsecops.load_diagnostics,scripts.load_resources,scripts.kube_load_operator,scripts.kube_load_native -m unittest scripts.trust_targets_qualification scripts.kube_trust_qualification scripts.trust_session_qualification scripts.load_golden_qualification scripts.load_measurement_qualification scripts.load_monitoring_qualification scripts.load_clock_qualification scripts.load_exchange_qualification scripts.load_probe_qualification scripts.load_diagnostics_qualification scripts.load_resources_qualification scripts.kube_load_operator_qualification scripts.kube_load_native_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/load-native.coverage" -o "$RUNNER_TEMP/load-native-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'load-native-coverage.json').read_text())['files']
-          required = {'mlsecops/storage.py', 'mlsecops/trust_session.py', 'mlsecops/load_golden.py', 'mlsecops/load_measurement.py', 'mlsecops/load_clock.py', 'mlsecops/load_exchange.py', 'mlsecops/load_probe.py', 'mlsecops/load_diagnostics.py', 'scripts/load_resources.py', 'scripts/kube_load_operator.py', 'scripts/kube_load_native.py'}
+          required = {'mlsecops/storage.py', 'mlsecops/trust_session.py', 'mlsecops/load_golden.py', 'mlsecops/load_measurement.py', 'mlsecops/load_monitoring.py', 'mlsecops/load_clock.py', 'mlsecops/load_exchange.py', 'mlsecops/load_probe.py', 'mlsecops/load_diagnostics.py', 'scripts/load_resources.py', 'scripts/kube_load_operator.py', 'scripts/kube_load_native.py'}
           if set(files) != required:
               raise SystemExit('load_coverage_inventory')
           for name, report in sorted(files.items()):
@@ -114,3 +114,16 @@ jobs:
           PY
           kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
           test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
+      - name: Reverify primary evidence after SQL and cluster cleanup
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, read_json
+          from mlsecops.load_gate import retained
+          state = Path('.runtime')
+          if read_json(state / 'evidence/M14.json')['status'] != 'pass':
+              raise Rejected('load_acceptance_missing')
+          content = bounded_read(state / 'evidence/kubernetes-load-private.json', 4 * 1024**2)
+          hashes = retained(state, decode(content, 4 * 1024**2))
+          print(canonical({'scope': 'M14-post-cleanup-primary-reverification', 'status': 'pass', 'release_ready': False, 'private_sha256': digest(content), 'artifacts': hashes}).decode())
+          PY

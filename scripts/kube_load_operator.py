@@ -11,6 +11,7 @@ from mlsecops import (
     load_clock,
     load_diagnostics,
     load_measurement,
+    load_monitoring,
 )
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import (
@@ -87,6 +88,8 @@ class Coordinator:
             raise Rejected("load_campaign")
         self.state, self.profile, self.campaign = state, profile, campaign
         self.golden = Golden.from_expected(expected).binding()
+        self.monitor_reference = load_monitoring.reference(expected)
+        self.monitor_binding = None
         self.destination = safe_child(state, "evidence/load/" + campaign)
         self.destination.mkdir(parents=True, mode=0o700)
         self.phases, self.references, self.hashes = [], {}, {}
@@ -212,7 +215,14 @@ class Coordinator:
         self.hashes[name] = digest(content)
 
     def begin(self, payload):
-        require_fields(payload, ("session", "job", "job_uid", "pod_uid", "golden"))
+        require_fields(payload, ("session", "job", "job_uid", "pod_uid", "golden", "monitoring"))
+        self.monitor_binding = decode(
+            canonical(
+                load_monitoring.binding(
+                    payload["monitoring"], self.monitor_reference, self.campaign
+                )
+            )
+        )
         if (
             type(payload["session"]) is not str
             or re.fullmatch("[a-f0-9]{32}", payload["session"]) is None
@@ -341,7 +351,9 @@ class Coordinator:
         self.last_sample = time.monotonic()
 
     def end(self, payload):
-        require_fields(payload, ("observation", "summary", "overload", "golden", "diagnostics"))
+        require_fields(
+            payload, ("observation", "summary", "overload", "golden", "diagnostics", "monitoring")
+        )
         observation = payload["observation"]
         require_fields(observation, ("records", "exhausted", "elapsed_ns", "clock"))
         if payload["golden"] != self.golden:
@@ -353,6 +365,14 @@ class Coordinator:
             raise Rejected("load_summary_changed")
         overload(payload["overload"])
         load_diagnostics.checked(payload["diagnostics"], summary, payload["overload"])
+        if payload["monitoring"]["binding"] != self.monitor_binding:
+            raise Rejected("load_monitor_binding_changed")
+        monitor_summary = load_monitoring.verify(
+            payload["monitoring"],
+            self.monitor_reference,
+            self.campaign,
+            load_monitoring.observations(observation, payload["overload"]),
+        )
         window = load_clock.window(observation["clock"], observation["elapsed_ns"])
         deadline = time.monotonic() + 30
         while True:
@@ -395,6 +415,8 @@ class Coordinator:
             "retained_sha256": dict(self.hashes),
             "summary_sha256": digest(canonical(summary)),
             "diagnostics_sha256": digest(canonical(payload["diagnostics"])),
+            "monitoring_sha256": digest(canonical(payload["monitoring"])),
+            "monitoring": monitor_summary,
             "resources": resources,
             "compute": self.compute,
         }
@@ -410,6 +432,7 @@ class Coordinator:
             or report.get("measurement") != payload["summary"]
             or report.get("overload") != payload["overload"]
             or report.get("diagnostics") != payload["diagnostics"]
+            or report.get("monitoring") != self.receipt["monitoring"]
             or report.get("golden") != self.golden
             or report.get("worker_cleanup_verified") is not True
             or report.get("profile_met")

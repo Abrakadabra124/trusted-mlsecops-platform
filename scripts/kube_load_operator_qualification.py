@@ -13,8 +13,8 @@ from scripts import kube_load_operator as operator
 from scripts.kube_serving_runtime_qualification import PROFILE
 from scripts.load_clock_qualification import anchors
 from scripts.load_diagnostics_qualification import audit_fixture
-from scripts.load_golden_qualification import expected
 from scripts.load_measurement_qualification import rows
+from scripts.load_monitoring_qualification import expected, proof
 from scripts.load_resources_qualification import ORIGIN, snapshot
 
 
@@ -24,6 +24,7 @@ class OperatorContracts(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.op = operator.Coordinator(self.root, PROFILE, "a" * 32, expected())
+        self.monitor = proof(observations=1110)
         self.job = operator.kube_serving_runtime.document(PROFILE, "b" * 32)
         self.job["metadata"]["uid"] = "job-uid"
         self.worker = {
@@ -118,6 +119,7 @@ class OperatorContracts(unittest.TestCase):
             "job_uid": "job-uid",
             "pod_uid": "worker-uid",
             "golden": self.op.golden,
+            "monitoring": copy.deepcopy(self.monitor["binding"]),
         }
 
     def begin(self):
@@ -140,9 +142,11 @@ class OperatorContracts(unittest.TestCase):
         )
         limited = load_diagnostics.reasons()
         limited["overload"]["overloaded"] = 32
+        self.monitor["state"]["observations"] = 1 + len(observation["records"]) + 8 + 1
         return {
             "observation": observation,
             "summary": summary,
+            "monitoring": copy.deepcopy(self.monitor),
             "golden": self.op.golden,
             "diagnostics": load_diagnostics.result(
                 load_diagnostics.Timings(), limited, audit_fixture()
@@ -175,6 +179,7 @@ class OperatorContracts(unittest.TestCase):
             "measurement": payload["summary"],
             "overload": payload["overload"],
             "diagnostics": payload["diagnostics"],
+            "monitoring": self.op.receipt["monitoring"],
             "golden": self.op.golden,
             "worker_cleanup_verified": True,
             "profile_met": True,
@@ -356,6 +361,7 @@ class OperatorContracts(unittest.TestCase):
             ("measurement", {}),
             ("overload", {}),
             ("diagnostics", {}),
+            ("monitoring", {}),
             ("golden", {}),
             ("worker_cleanup_verified", 1),
             ("profile_met", 1),
@@ -377,6 +383,10 @@ class OperatorContracts(unittest.TestCase):
 
     def test_incomplete_resource_tail_and_changed_golden_or_summary_fail(self):
         self.begin()
+        payload = self.finish_payload()
+        payload["monitoring"]["binding"]["state_sha256"] = "1" * 64
+        with self.assertRaisesRegex(Rejected, "load_monitor_binding_changed"):
+            self.op.end(payload)
         for field, value in (("golden", {}), ("summary", {})):
             payload = self.finish_payload()
             payload[field] = value

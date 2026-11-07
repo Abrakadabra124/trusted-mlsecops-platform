@@ -1,8 +1,8 @@
 # Диагностика нагрузочного профиля M14
 
-Статус 2026-11-06: [baseline 5f6fb84](../evidence/m14-load-pass-5f6fb84.md)
-прошёл неизменный профиль: 8330 корректных ответов, 0 ошибок, p95=167.744 ms.
-Fresh M14 composition реализована, но новый native acceptance ещё не проверен.
+Статус 2026-11-07: [fresh M14 на bbff69e](../evidence/m14-load-acceptance-bbff69e.md)
+прошёл профиль до подключения monitoring. Новый опыт с включённым collector,
+evaluator и receipt sink требует отдельного подтверждения CI.
 Первый [baseline 3861d8a](../evidence/m14-load-baseline-2026-11-06.md) и отказы
 ниже сохраняются как история диагностики; они не являются текущим pass.
 Ответственный: platform operator. Метод: [ADR 0056](../decisions/0056-load-measurement-profile.md).
@@ -20,7 +20,7 @@ hosted guard. Она сначала выполняет текущие controlled
 затем новый опыт. Старый public baseline не является входом для получения pass.
 До и после опыта сверяются source/image и хеши всех Python methods/dependency
 descriptors. После worker/controller cleanup перечитываются три operator packets
-и четыре candidate artifacts. Из client records повторно вычисляются полный
+и шесть candidate artifacts. Из client records повторно вычисляются полный
 профиль и latency, из samples - CPU/RAM; clock window должен находиться внутри
 свежего опыта. Пакеты связаны с primary через SHA-256, сырые записи не публикуются.
 
@@ -33,6 +33,37 @@ cleanup. `M14: pass` не закрывает M18/R1 и не выдаёт product
 
 Ни эту команду, ни подготовку инфраструктуры не запускать локально в текущей
 Windows. В этой работе инфраструктурная проверка разрешена только в hosted CI.
+
+### Нагрузка с включённым monitoring
+
+В новой связке `load_probe` обязательно создаёт обычный configured Runtime и
+подписывающий receipt sink. Reference строится из validation split того же
+подписанного candidate через отдельный isolated worker, до выдачи ограниченного
+qualification permit. Monitoring работает в controller Pod, поэтому его CPU/RAM
+входят в прежние независимые Kubelet samples. Прогрев 10 s, измерение 120 s,
+10 клиентов и пороги latency не меняются.
+
+Start packet фиксирует reference digest, campaign/epoch, публичный ключ sink и
+идентификатор реестра эпох. Finish packet содержит bounded state и не более
+128 последних подписанных receipts. Host сверяет их с start, а затем повторяет
+проверку по сохранённым primary packets. Ожидаемые observations - один начальный
+golden response, все успешные warmup/measurement responses, успешные overload
+responses и recovery response. Неполные очереди, остановленный или нездоровый
+collector, неверный счётчик, подмена ключа/эпохи или receipt блокируют результат.
+
+При `load_monitor_pending`, `load_monitor_inactive_or_lost` или
+`load_monitor_shutdown` оператор сохраняет private packets и проверяет bounded
+state, точный campaign и terminal cleanup в этом run. Не удалять epoch markers
+для повторного использования. После исправления запускать новый owned campaign
+через workflow `kubernetes-load.yml`; прежний M14 pass не переносится на него.
+Worker, serving listener и scheduler закрываются до sink; при ошибке запуска
+также закрывается engine. Эскалация нужна при неподтверждённой очистке или
+повторяющемся расхождении observations: такой run остаётся failed/inconclusive.
+
+Проверка receipt tail подтверждает работу доставки в нагрузочном опыте. Она не
+заменяет M15 clean/shift/delayed-label сценарии, независимый restart/restore,
+проверку privacy M13 или общую приёмку R1. Golden workload намеренно повторяет
+одну строку и может создавать drift warnings; это не оценка false-positive rate.
 
 ### Отказ controlled preflight
 

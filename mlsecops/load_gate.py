@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from mlsecops import load_clock, load_diagnostics, load_measurement
+from mlsecops import load_clock, load_diagnostics, load_measurement, load_monitoring
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -131,7 +131,9 @@ def retained(state, value):
         require(packet["phase"] == phase and packet["campaign"] == campaign)
         require(canonical(packet["payload"]["golden"]) == canonical(native["golden"]))
     payload = packets["finish-request.json"]["payload"]
-    require_fields(payload, ("observation", "summary", "overload", "golden", "diagnostics"))
+    require_fields(
+        payload, ("observation", "summary", "overload", "golden", "diagnostics", "monitoring")
+    )
     observation = payload["observation"]
     require_fields(observation, ("records", "exhausted", "elapsed_ns", "clock"))
     summary = load_measurement.summarize(
@@ -159,14 +161,45 @@ def retained(state, value):
     }
     require(canonical(measured) == canonical(receipt["resources"]))
     require(canonical(resource["compute"]) == canonical(receipt["compute"]))
-    artifact_names = ("reference.json", "config.json", "request.json", "probe.json")
+    artifact_names = (
+        "reference.json",
+        "config.json",
+        "request.json",
+        "probe.json",
+        "monitor-worker.json",
+        "monitor-reference.json",
+    )
     require_fields(value["artifact_hashes"], artifact_names)
+    artifacts = {}
     for name in artifact_names:
         content = bounded_read(safe_child(state, "candidate-inference/" + campaign + "/" + name))
         require(digest(content) == object_id(value["artifact_hashes"][name]))
         hashes["candidate-" + name] = digest(content)
+        artifacts[name] = decode(content)
         if name == "probe.json":
             require(canonical(decode(content)) == canonical(native))
+    expected = artifacts["request.json"]
+    require(
+        expected["model"] == native["model_sha256"]
+        and expected["bundle"] == native["subject_sha256"]
+    )
+    require(
+        canonical(expected["monitoring"]["reference"])
+        == canonical(artifacts["monitor-reference.json"]["envelope"])
+    )
+    reference = load_monitoring.reference(expected)
+    proof = payload["monitoring"]
+    require(
+        canonical(proof["binding"])
+        == canonical(packets["start-request.json"]["payload"]["monitoring"])
+    )
+    monitored = load_monitoring.verify(
+        proof, reference, campaign, load_monitoring.observations(observation, payload["overload"])
+    )
+    require(
+        canonical(monitored) == canonical(native["monitoring"]) == canonical(receipt["monitoring"])
+    )
+    require(digest(canonical(proof)) == receipt["monitoring_sha256"])
     return hashes
 
 
@@ -196,6 +229,7 @@ def qualify(root, state):
         "full-client-window-and-latency",
         "independent-resource-window",
         "bounded-overload-and-recovery",
+        "active-monitor-accounting-and-signed-receipts",
         "retained-packets-after-owned-cleanup",
     )
     cases = controlled["cases"] + [
@@ -236,6 +270,7 @@ def qualify(root, state):
             "measurement": native["measurement"],
             "overload": native["overload"],
             "operator": native["operator"],
+            "monitoring": native["monitoring"],
             "post_cleanup_primary_reverified": True,
         },
         "limitations": [

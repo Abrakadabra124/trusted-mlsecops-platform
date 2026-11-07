@@ -143,7 +143,7 @@ def qualify(
         {"response": output, "receipt": receipt, "execution": execution},
     )
     monitor_materials = None
-    if monitoring:
+    if monitoring or load:
         descriptor = decode(package["documents"]["split_manifest"])["objects"]["validation.json"]
         validation = storage.get(
             state / "storage-clients/publisher", "validation", descriptor["sha256"]
@@ -240,7 +240,7 @@ def qualify(
             "expected_permit": digest(canonical(unsigned_permit)),
         },
     }
-    if monitoring:
+    if monitoring or load:
         expected["monitoring"] = monitor_materials
     write_json(destination / "config.json", config)
     write_json(destination / "request.json", expected)
@@ -464,7 +464,7 @@ def qualify(
                 "config.json",
                 "request.json",
                 "probe.json",
-                *(("monitor-worker.json", "monitor-reference.json") if monitoring else ()),
+                *(("monitor-worker.json", "monitor-reference.json") if monitoring or load else ()),
                 *(("root-rotation.json",) if root_rotation is not None else ()),
                 *(name + ".json" for name in fault_results),
                 *(("independent-authorities.json",) if terminals is not None else ()),

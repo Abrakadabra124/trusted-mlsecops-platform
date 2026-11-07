@@ -14,6 +14,7 @@ from mlsecops import load_gate as gate
 from mlsecops.contracts import Rejected, bounded_read, canonical, digest, read_json, write_json
 from scripts import kube_load_operator_qualification as operator_fixtures
 from scripts import load_contracts
+from scripts.load_monitoring_qualification import expected
 from scripts.load_resources_qualification import ORIGIN
 
 
@@ -71,8 +72,16 @@ class LoadGateContracts(unittest.TestCase):
         }
         self.artifacts = self.root / "candidate-inference" / fixture.op.campaign
         self.value["artifact_hashes"] = {}
-        for name in ("reference.json", "config.json", "request.json", "probe.json"):
-            write_json(self.artifacts / name, native if name == "probe.json" else {"fixture": name})
+        artifacts = {
+            "reference.json": {"fixture": "reference"},
+            "config.json": {"fixture": "config"},
+            "request.json": expected(),
+            "probe.json": native,
+            "monitor-worker.json": {"fixture": "worker"},
+            "monitor-reference.json": {"envelope": expected()["monitoring"]["reference"]},
+        }
+        for name, content in artifacts.items():
+            write_json(self.artifacts / name, content)
             self.value["artifact_hashes"][name] = digest(bounded_read(self.artifacts / name))
         self.controlled = {
             "scope": load_contracts.SCOPE,
@@ -92,7 +101,7 @@ class LoadGateContracts(unittest.TestCase):
     def test_real_retained_composition_checks_hashes_measurement_and_resources(self):
         self.assertEqual(self.reconcile(), self.value["native"])
         result = gate.retained(self.root, self.value)
-        self.assertEqual(len(result), 7)
+        self.assertEqual(len(result), 9)
         self.assertEqual(
             result["finish-request.json"],
             self.value["native"]["operator"]["retained_sha256"]["finish-request.json"],
@@ -174,6 +183,8 @@ class LoadGateContracts(unittest.TestCase):
             ("finish-request.json", ("payload", "observation", "exhausted"), True),
             ("finish-request.json", ("payload", "summary", "measured", "successes"), 999),
             ("finish-request.json", ("payload", "overload", "recovered"), False),
+            ("finish-request.json", ("payload", "monitoring", "state", "observations"), 0),
+            ("start-request.json", ("payload", "monitoring", "state_sha256"), "1" * 64),
             (
                 "finish-request.json",
                 ("payload", "diagnostics", "timings", "engine_wait", "count"),
@@ -203,6 +214,8 @@ class LoadGateContracts(unittest.TestCase):
             (("native", "operator", "resources", "worker", "samples"), 0),
             (("native", "operator", "summary_sha256"), "0" * 64),
             (("native", "operator", "diagnostics_sha256"), "0" * 64),
+            (("native", "monitoring", "enabled"), False),
+            (("native", "operator", "monitoring_sha256"), "0" * 64),
             (("started_at",), self.finish),
             (("finished_at",), self.start),
         ):
@@ -266,7 +279,7 @@ class LoadGateContracts(unittest.TestCase):
             result = gate.qualify(self.root, self.root)
             self.assertEqual(result["status"], "pass")
             self.assertFalse(result["release_ready"])
-            self.assertEqual(result["checks"], 7)
+            self.assertEqual(result["checks"], 8)
             for what in ("source", "methods", "private", "status", "native", "observed-source"):
                 with self.subTest(what=what):
                     clock.side_effect = [self.start, self.finish, self.finish]

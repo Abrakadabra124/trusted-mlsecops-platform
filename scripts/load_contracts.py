@@ -12,6 +12,7 @@ from scripts.evaluation_contracts import case_ids as loaded_ids
 MODULES = (
     "scripts.load_golden_qualification",
     "scripts.load_measurement_qualification",
+    "scripts.load_monitoring_qualification",
     "scripts.load_clock_qualification",
     "scripts.load_exchange_qualification",
     "scripts.load_probe_qualification",
