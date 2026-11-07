@@ -94,13 +94,15 @@ def bind_release(fixture, image):
 
 
 @contextmanager
-def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=None):
+def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=None, monitor=None):
     from scripts.serving_privacy_probe import scan_owned_audit
 
     if audit is not None:
         if audit_export is not None or http_ledger is not None:
             raise Rejected("serving_native_export_ownership")
-        with _site(engine, clients=clients, audit=audit, http_ledger=http_ledger) as request:
+        with _site(
+            engine, clients=clients, audit=audit, http_ledger=http_ledger, monitor=monitor
+        ) as request:
             yield request
         return
     with tempfile.TemporaryDirectory() as temporary:
@@ -111,7 +113,9 @@ def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=Non
         )
         journal.start()
         try:
-            with _site(engine, clients=clients, audit=journal, http_ledger=http_ledger) as request:
+            with _site(
+                engine, clients=clients, audit=journal, http_ledger=http_ledger, monitor=monitor
+            ) as request:
                 request.audit_scan = partial(scan_owned_audit, path)
                 yield request
         finally:
@@ -121,7 +125,7 @@ def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=Non
 
 
 @contextmanager
-def _site(engine, *, clients, audit, http_ledger=None):
+def _site(engine, *, clients, audit, http_ledger=None, monitor=None):
     if http_ledger is not None:
         from scripts.audit_http_observation import ObservedJournal
 
@@ -133,7 +137,9 @@ def _site(engine, *, clients, audit, http_ledger=None):
         access = serving_access.Access(clients)
         token = clients["clients"][0]["token"]
     metrics_token = secrets.token_hex(32)
-    app = serving_http.create_app(engine, clients=access, audit=audit, metrics_token=metrics_token)
+    app = serving_http.create_app(
+        engine, clients=access, audit=audit, metrics_token=metrics_token, monitor=monitor
+    )
     server = uvicorn.Server(
         uvicorn.Config(
             app,

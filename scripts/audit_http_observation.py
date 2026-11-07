@@ -7,7 +7,8 @@ LIMIT = audit_export.MAX_REQUESTS
 
 
 class Ledger:
-    def __init__(self):
+    def __init__(self, *, operator_routes=False):
+        self.operator_routes = operator_routes
         self.lock = threading.Lock()
         self.admissions = {}
         self.responses = []
@@ -40,7 +41,11 @@ class Ledger:
 
     def response(self, path, status, content):
         route = path.split("?", 1)[0]
-        if route == "/metrics":
+        if (
+            route == "/metrics"
+            or self.operator_routes
+            and route in ("/monitoring", "/monitoring/labels")
+        ):
             return
         with self.lock:
             try:

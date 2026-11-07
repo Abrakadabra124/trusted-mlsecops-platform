@@ -45,6 +45,25 @@ jobs:
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': summary}, sort_keys=True))
           print('Controlled ASGI collection, owned scheduler and real loopback receipts; candidate-bound full M15/R1 remain unaccepted.')
           PY
+      - name: Monitoring privacy matrix and per-module coverage
+        run: |
+          uv run --locked ruff check scripts/monitoring_privacy_probe.py scripts/monitoring_privacy_qualification.py scripts/serving_native.py scripts/audit_http_observation.py
+          uv run --locked ruff format --check scripts/monitoring_privacy_probe.py scripts/monitoring_privacy_qualification.py scripts/serving_native.py scripts/audit_http_observation.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor-privacy.coverage" --source=scripts.monitoring_privacy_probe -m unittest scripts.monitoring_privacy_qualification scripts.audit_http_observation_qualification scripts.serving_native_qualification scripts.monitoring_http_qualification scripts.serving_privacy_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/monitor-privacy.coverage" -o "$RUNNER_TEMP/monitor-privacy-coverage.json"
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'monitor-privacy-coverage.json').read_text())['files']
+          if set(files) != {'scripts/monitoring_privacy_probe.py'}:
+              raise SystemExit('monitor_privacy_coverage_inventory')
+          report = files['scripts/monitoring_privacy_probe.py']['summary']
+          for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+              if report[total] <= 0 or report[covered] * 100 < 95 * report[total]:
+                  raise SystemExit('monitor_privacy_coverage_below_95:' + total)
+          print(json.dumps({'source': os.environ['GITHUB_SHA'], 'coverage': report, 'scope': 'controlled-monitoring-privacy-not-full-M13'}, sort_keys=True))
+          PY
       - name: Existing HTTP audit, lifecycle and operator boundary regression
         run: |
           uv run --locked python -m unittest scripts.serving_http_qualification scripts.serving_metrics_qualification scripts.serving_http_audit_qualification scripts.serving_lifecycle_qualification

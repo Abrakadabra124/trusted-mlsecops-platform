@@ -331,3 +331,43 @@ Probe создаёт этот каталог внутри собственног
 настоящие retained audit, HTTP lifespan и scheduler без Kubernetes. Если причина
 в bounded diagnostic неизвестна, использовать только публичную строку module
 для диагностики, не печатать exception text, raw config или traceback locals.
+
+## Privacy regression для operator API
+
+Компонентный playbook 2026-11-07, [границы evidence](../evidence/monitoring-privacy-2026-11-07.md).
+Ответственный - разработчик qualification harness; обычная диагностика не требует
+Docker, WSL, Kubernetes или SQL. В чистом checkout после locked установки:
+
+```sh
+uv run --locked python -m unittest scripts.monitoring_privacy_qualification scripts.audit_http_observation_qualification scripts.serving_native_qualification
+```
+
+Тест владеет временными ключами и loopback listeners, закрывает HTTP lifespan,
+scheduler и audit перед удалением собственного временного каталога. Положительный
+сценарий должен подтвердить 1000 наблюдений от десяти HTTP 200, одну подписанную
+label, ноль новых labels при повторе, 4 отказа в доступе, 9 отказов для неверных
+labels/framing, отдельный burst из 20 запросов с 429 и восстановление после refill.
+В audit должны быть 40 новых durable events; operator routes отдельно наблюдаются
+матрицей и не выдаются за inference admissions. Metric cardinality остаётся 69.
+
+При `monitor_privacy_http_status` или `monitor_privacy_initial_state` сохранить
+bounded status/fault codes в приватном evidence. Проверить lifecycle, operator
+credential, состояние очереди и полную lineage context для модели: короткий
+`ReleaseContext` без dataset/evaluation/source не принимается monitor accumulator.
+Не заменять fail на success, не обнулять faults и не отключать сбор наблюдений.
+В controlled fixture именно неполный context вызвал observation fault; исправлена
+фикстура, production-валидация сохранена.
+
+При `monitor_privacy_window_pending` проверить реальные завершённые predictions
+и scheduler. При `monitor_privacy_quota_window` сохранить inconclusive/fail: это
+отдельный burst <1.5s, не основание повышать лимит 4 requests/s или burst 8.
+После 0.27s обычный операторский запрос должен восстановиться. При отказе
+`monitor_privacy_*canary`, `privacy_response_canary` или capture overflow остановить
+принятие evidence, локализовать источник по типу канала без печати canary/тела.
+Удалять можно только принадлежащий данному тесту disposable каталог после закрытия
+процессов. Не очищать runtime state рабочего сервиса или чужие audit spool.
+
+После исправления повторить тест и проверить терминальное состояние scheduler,
+пустой список faults и сопоставление 10 inference responses с audit admissions.
+Этот playbook подтверждает компонентную регрессию; fresh actual-candidate M13,
+feedback CLI privacy и общая приёмка R1 требуют отдельных доказательств.

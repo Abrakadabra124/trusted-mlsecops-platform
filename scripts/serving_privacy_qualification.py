@@ -321,13 +321,20 @@ class PrivacyProbeContracts(unittest.TestCase):
                 elif fault == "stderr":
                     print(marker, file=sys.stderr)
                 elif fault == "logging":
-                    logging.getLogger("uvicorn.error").warning("%s", marker)
+                    logger = logging.getLogger("uvicorn.error")
+                    # This is a deliberate emitted-leak control. An earlier
+                    # loopback sink may set CRITICAL globally; filtering the
+                    # control would test no emission instead of leak detection.
+                    with patch.object(logger, "isEnabledFor", return_value=True):
+                        logger.warning("%s", marker)
                 elif fault == "response":
                     headers = [("X-Private", marker)]
                 elif fault == "active-credential-response":
                     headers = [("X-Debug-Authorization", "Bearer " + request.privacy_credential)]
                 elif fault == "active-credential-log":
-                    logging.getLogger("uvicorn.error").warning("%s", request.privacy_credential)
+                    logger = logging.getLogger("uvicorn.error")
+                    with patch.object(logger, "isEnabledFor", return_value=True):
+                        logger.warning("%s", request.privacy_credential)
                 elif fault == "flat-features":
                     content = canonical({**value, **payload["instances"][0]})
                 elif fault == "vector-features":
