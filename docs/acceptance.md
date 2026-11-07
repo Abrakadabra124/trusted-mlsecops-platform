@@ -82,6 +82,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 [Fresh M14 pass на bbff69e](evidence/m14-load-acceptance-bbff69e.md): 143 cases, source-bound retained observations и cleanup проверены. Это lab acceptance, не M18/R1; исторический shutdown debt сохраняется в R1-B08.
 
 ## M15
+
+**[Fresh M15 acceptance bd90286 /42339902029](evidence/m15-monitoring-acceptance-2026-11-07.md) pass**,167criteria:12000observations,10clean+2shift windows,200signedpositive labels,3receipts,max0.437768848s;feedbackquarantine,source/policy/methods и post-cleanup replay verified. Synthetic-only, остальные M18/R1 gates обязательны. Визуальная dashboard T18 и security-event M23 не объявлены завершёнными.
 **Мониторинг качества и обратной связи.** Synthetic shift fixture даёт alert <= 120 s после попадания достаточного окна в scheduled evaluator. Initial profile: >=1 000 observations/window, фиксированные bins/reference, PSI >=0.2 как lab warning, минимум два окна; реальные пороги калибруются отдельно. Delayed-label fixture ухудшения recall на >0.05 после >=200 positives даёт другой alert. Clean control не создаёт alarm в 10 контрольных окнах; это не оценка production false-positive rate. Alert не запускает auto-promotion. T18.
 
 ## M16

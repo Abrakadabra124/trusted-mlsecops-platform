@@ -147,6 +147,8 @@ HTTP outage slice после `cdea4236` реализуется отдельны�
 
 ## Неделя 10: Нагрузка и ML monitoring
 
+Актуальный checkpoint M15: [bd90286 /42339902029](../docs/evidence/m15-monitoring-acceptance-2026-11-07.md) pass167criteria, cleanup и offline primary replay verified. T18 сохраняет незавершённую визуальную dashboard; security-event delivery проверяется M23. Эти требования и весь M18/R1 не закрываются по одному M15 pass.
+
 Актуальный checkpoint 2026-11-07: [M13 с monitoring/feedback](../docs/evidence/m13-monitoring-feedback-2026-11-07.md), `582b34c`, принят на 491 criteria с cleanup и offline ingress replay. M14 с monitoring ранее принят на `cab2cad`; результаты разных candidates не являются общей M18 acceptance. Следующий обязательный шаг T18 - полная M15 acceptance. Исторические checkpoints ниже сохраняют прежние ограничения.
 
 Checkpoint перед переходом к T16: [ed87e97 evidence](../docs/evidence/serving-deadline-2026-10-15.md) подтвердил 52 candidate cases при свежем lease, но без отдельного ACTIVE timestamp до HTTP completion. Следующий [native increment 960091f](../docs/evidence/serving-expiry-2026-10-15.md) подтвердил **62 cases**, включая подлинную 8 s signed policy без подмены часов: client-completed 503 за 6.694990456 s до expiry, повторный 503 после expiry при pending SQL, timed ACTIVE, no-auto-reactivation, renewal version 3/readback и source preservation. Production code/thresholds не ослаблены. Теперь следующий slice T16: ограниченный список authenticated principals, per-client quotas до body/executor, bounded audit allowlist и canary export tests. Это будущие deliverables, не завершённые функции; полная M11/M12/R1 acceptance остаётся открытой.

@@ -199,6 +199,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T18
 
+- 2026-11-07: [общий M15](../docs/evidence/m15-monitoring-acceptance-2026-11-07.md) pass, `bd90286` /42339902029:167criteria,12000observations,3signedreceipts(max0.437768848s),200delayedpositive labels,quarantine10claims/1row,15SQLdenials,source+cleanup+offline replay verified. Contracts329Linux executions/0skips, native310с повторами/0skips, новая gate logic183/24 100%, clean Windows8/0. M15 принят, T18 ещё не закрыт: operator JSON endpoint есть, визуальная dashboard не поставлена; M23 security-event delivery остаётся отдельной обязательной задачей.
+
 - 2026-11-07: [fresh M13 с monitoring и feedback](../docs/evidence/m13-monitoring-feedback-2026-11-07.md) pass, `582b34c` /42337722963 success: 491 criteria, 1014 observations, 11 feedback CLI commands, 5 closed service windows, source bindings и cleanup/offline replay verified. Clean checkout 41 tests / 0 skips. M15 regression success, но общая M15 acceptance и T18/R1 ещё открыты. Следующий шаг - агрегатор M15 без ослабления критериев.
 
 - 2026-11-07: [monitoring privacy matrix](../docs/evidence/monitoring-privacy-2026-11-07.md) controlled component pass, `d8cb286` /42334890962 success,49Linux tests/0skips и49/0clean Windows checkout;1000HTTP observations,подписанные labels/retry,auth/quota,canary capture,audit40events. Actual-candidate M13 с monitoring и feedback CLI privacy остаётся следующим обязательным шагом, не принят по fixture tests.

@@ -4,8 +4,8 @@
 data-owner за проверенные labels. Scope: [ADR 0057](../decisions/0057-fixed-monitoring-contract.md).
 Реализованы статистическое ядро, HTTP collector, scheduler, подписанная доставка,
 operator status, quarantine feedback и явный cold restart. Их компонентные
-hosted результаты и свежие M13/M14 опубликованы; общая M15 acceptance реализуется
-отдельно и пока не принята. Pure commands не запускают локальную инфраструктуру.
+hosted результаты и свежие M13/M14 опубликованы; [общая M15 acceptance](../evidence/m15-monitoring-acceptance-2026-11-07.md)
+принята на bd90286. Визуальная dashboard и M23 security-event delivery ещё открыты. Pure commands не запускают локальную инфраструктуру.
 
 ## Диагностика без изменения состояния
 
@@ -378,7 +378,7 @@ feedback CLI privacy и общая приёмка R1 требуют отдель
 Реализация: [monitoring gate](../../mlsecops/monitoring_gate.py),
 [exact inventory](../../scripts/monitoring_contracts.py),
 [hosted workflow](../../.github/workflows/kubernetes-monitoring.yml).
-Статус на этапе подключения: реализовано, новый hosted результат ещё требуется.
+Статус: [bd90286 /42339902029](../evidence/m15-monitoring-acceptance-2026-11-07.md) success,167criteria. SQL stop/readback04:52:17UTC, cluster absence04:52:25, offline replay04:52:28 подтверждены.
 Ответственный platform-owner проверяет ownership runner/cluster/SQL перед запуском;
 model-owner отвечает за approved validation и frozen reference, data-owner за labels.
 

@@ -1,8 +1,9 @@
 # ADR 0057: фиксированный контракт ML monitoring
 
 Дата: 2026-11-07. Scope: T18/M15, synthetic local CPU. Решение принято для
-статистического ядра, in-process accumulator и signed label join; HTTP collector, authenticated delivery, dashboard и полный
-M15 ещё не приняты. Исходные критерии [M15](../acceptance.md#m15) сохраняются.
+статистического ядра, in-process accumulator, signed label join, HTTP collector
+и authenticated delivery. [Полный M15](../evidence/m15-monitoring-acceptance-2026-11-07.md)
+принят на bd90286; визуальная dashboard и общий R1 ещё не поставлены. Исходные критерии [M15](../acceptance.md#m15) сохраняются.
 
 ## Требование и граница доверия
 
@@ -169,8 +170,8 @@ ground truth. Signed label authority и dataset approval остаются отд
 
 ## Композиция общей M15 acceptance, 2026-11-07
 
-Новый [gate](../../mlsecops/monitoring_gate.py) реализован, hosted acceptance пока
-ожидается. Exact inventory исполняется заново без skips; свежая actual campaign
+Новый [gate](../../mlsecops/monitoring_gate.py) реализован, [hosted acceptance](../evidence/m15-monitoring-acceptance-2026-11-07.md)
+подтверждена на bd90286:167criteria,source bindings,cleanup и offline replay. Exact inventory исполняется заново без skips; свежая actual campaign
 связана с source/image/time. До teardown повторно читаются signed proposal,
 model и validation из разрешённой SQL. Signed reference связывается с lineage,
 approved validation digest/size/rows и сохранёнными artifacts; он не пересчитывается
