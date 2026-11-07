@@ -1,13 +1,13 @@
 # T29/M23: ранбук событий безопасности
 
-Текущий статус: реализован контракт v1 и pinned producer registry.
-Collector, durable deduplication, реальные source adapters и promotion outage
-gate ещё не приняты. Приведённые команды проверяют компонент; не считать их
+Текущий статус: проверены контракт v1, pinned producer registry и постоянный журнал.
+Полный collector runtime, реальные source adapters и promotion outage
+gate ещё не приняты. Приведённые команды проверяют компоненты; не считать их
 подтверждением работающей доставки или завершённого M23.
 
-Следующий increment добавляет bounded journal и atomic Linux store. Проверка
-реального filesystem ещё ожидается; локальный Windows запуск пропускает
-Linux cases, не подтверждая их завершение.
+Bounded journal и atomic Linux store [проверены как компонент](../evidence/security-event-journal-2026-11-07.md):
+`d17434b` /42347317046,70Linux tests/0skips; clean Windows70tests/17skips.
+Windows запуск пропускает Linux cases, не подтверждая их завершение.
 
 Подтверждённое [component evidence](../evidence/security-event-contract-2026-11-07.md):
 runtime `c2f7bf9`, Linux CI 42345739729 success,21 новых+25 смежных tests/0skips;
@@ -106,8 +106,9 @@ integration пока остаются отдельной обязательно�
 но завершился failure на coverage gate: store имел30/36покрытых branches.
 Порог95% не уменьшен. Добавлены отдельные fault checks изменения файла при
 чтении, short/zero writes, readback mismatch и oversized snapshot. Это пробел
-проверок, а не доказанный сбой durability; окончательный результат следующего
-CI должен быть проверен отдельно.
+проверок, а не доказанный сбой durability. Следующий CI на `d17434b` /42347317046
+прошёл24journal tests без skips, store139/140statements и36/36branches.
+Полный M23 по этому результату не закрыт.
 
 Controlled проверка выявила принятие registry, где все heartbeat requirements
 выключены, и receipt с ingest раньше issued-at конфигурации. Добавлены отдельные
@@ -115,7 +116,7 @@ Controlled проверка выявила принятие registry, где в�
 а не утверждение о production incident. Вложенные значения envelope теперь
 отклоняются до JSON serialization, без надежды на перехват рекурсивной ошибки.
 
-Для будущего runtime остаются обязательными recovery после interrupted write,
-deduplication после перезапуска, out-of-order/gap evidence и проверка запрета
+Файловые recovery и deduplication проверены; для полного runtime остаются
+обязательными их интеграция, gap/heartbeat evidence и проверка запрета
 promotion при недоступном sink. До подключения этих компонентов команд reset,
 автоматического очистителя или аварийного обхода контроля в этом ранбуке нет.

@@ -117,8 +117,9 @@ schema не заменяет их. До общей приёмки T29 и M23 о�
 
 ### Постоянный журнал: решение следующего increment
 
-Добавлены `security_event_ledger` и Linux `security_event_store`; native filesystem
-проверка этого increment ещё ожидается. Ledger отдельно описывает переходы
+Добавлены `security_event_ledger` и Linux `security_event_store`; [native filesystem
+проверка](../evidence/security-event-journal-2026-11-07.md) прошла на `d17434b`.
+Ledger отдельно описывает переходы
 состояния, но не обещает durability. Store держит эксклюзивный неблокирующий
 `flock` на pinned directory descriptor, читает только фиксированные файлы без
 следования symlinks и принимает только private owner-controlled regular files
