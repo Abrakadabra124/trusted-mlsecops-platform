@@ -5,7 +5,7 @@ import dataclasses
 import unittest
 from unittest.mock import patch
 
-from mlsecops import serving_http, serving_http_audit
+from mlsecops import serving_http, serving_http_audit, signing
 from mlsecops.contracts import Rejected, canonical
 from scripts import monitoring_runtime_qualification as runtime_fixtures
 from scripts import serving_http_qualification as http_fixtures
@@ -121,6 +121,52 @@ class MonitoringHttpContracts(unittest.IsolatedAsyncioTestCase):
                     monitor=monitor,
                     metrics_token=token,
                 )
+
+    async def test_signed_label_ingress_requires_operator_and_does_not_observe_feedback(self):
+        headers = [
+            (b"authorization", b"Bearer " + b"9" * 64),
+            (b"content-type", b"application/json"),
+        ]
+        self.assertEqual((await self.invoke(path="/monitoring/labels", body={}))[0], 401)
+        envelope = signing.sign(
+            {"private": "PRIVATE-LABEL-CANARY"}, "monitor-labels", self.label_key
+        )
+        headers.append((b"content-length", str(len(canonical(envelope))).encode()))
+        status, response, _ = await self.invoke(
+            path="/monitoring/labels", body=envelope, headers=headers
+        )
+        self.assertEqual(status, 400)
+        self.assertNotIn("PRIVATE-LABEL-CANARY", canonical(response).decode())
+        self.assertEqual(self.runtime.snapshot()["observations"], 0)
+        with patch.object(
+            self.runtime, "labels", return_value={"accepted_labels": 1, "release_ready": False}
+        ) as accept:
+            status, result, _ = await self.invoke(
+                path="/monitoring/labels", body=envelope, headers=headers
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(result["accepted_labels"], 1)
+            accept.assert_called_once_with(envelope)
+
+    async def test_label_body_rejects_oversize_framing_and_content_before_accept(self):
+        base = [(b"authorization", b"Bearer " + b"9" * 64), (b"content-type", b"application/json")]
+        for extra in (
+            [(b"content-encoding", b"gzip")],
+            [(b"transfer-encoding", b"chunked")],
+            [(b"content-length", b"999999")],
+            [(b"content-length", b"-1")],
+            [(b"content-length", b"1")],
+            [(b"content-length", b"3")],
+            [(b"content-length", b"2"), (b"content-length", b"2")],
+        ):
+            with self.subTest(headers=extra), patch.object(self.runtime, "labels") as accept:
+                self.assertEqual(
+                    (await self.invoke(path="/monitoring/labels", body={}, headers=base + extra))[
+                        0
+                    ],
+                    400,
+                )
+                accept.assert_not_called()
 
 
 if __name__ == "__main__":

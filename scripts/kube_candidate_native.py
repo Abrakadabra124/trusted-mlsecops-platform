@@ -10,11 +10,14 @@ from functools import partial
 from pathlib import Path
 
 from mlsecops import (
+    audit_lineage,
     controller_bootstrap,
     kube_storage,
     kube_trust,
+    monitoring_reference,
     release_bundle,
     signing,
+    storage,
     trust_authority,
 )
 from mlsecops.candidate_serving_reader import KIND
@@ -22,6 +25,7 @@ from mlsecops.contracts import (
     Rejected,
     bounded_read,
     canonical,
+    decode,
     digest,
     now,
     read_json,
@@ -34,6 +38,7 @@ from mlsecops.kube_storage_migration import ledger
 from mlsecops.kube_worker import run_worker
 from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.private_cli import Arguments
+from mlsecops.serving_context import QualificationTrace
 from mlsecops.trust_targets import Target
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_candidate_faults import NONTERMINAL
@@ -57,8 +62,15 @@ def qualify(
     include_trust_lifecycle=False,
     privacy=False,
     load=False,
+    monitoring=False,
 ):
     hosted()
+    if (
+        type(monitoring) is not bool
+        or monitoring
+        and (load or privacy or include_key_revocation or include_trust_lifecycle)
+    ):
+        raise Rejected("candidate_monitoring_mode_conflict")
     if (
         type(load) is not bool
         or load
@@ -130,6 +142,42 @@ def qualify(
         destination / "reference.json",
         {"response": output, "receipt": receipt, "execution": execution},
     )
+    monitor_materials = None
+    if monitoring:
+        descriptor = decode(package["documents"]["split_manifest"])["objects"]["validation.json"]
+        validation = storage.get(
+            state / "storage-clients/publisher", "validation", descriptor["sha256"]
+        )
+        reference_key = destination / "monitor-reference.pem"
+        reference_public = signing.create_key(reference_key)
+
+        def reference_worker(request):
+            response, execution = run_worker(state, image, request)
+            write_json(
+                destination / "monitor-worker.json",
+                {
+                    "request": request,
+                    "response": response,
+                    "execution": execution,
+                },
+            )
+            return response
+
+        frozen = monitoring_reference.build(
+            package,
+            context=context,
+            publisher_public=public,
+            expected_serving_image=profile["image_id"],
+            validation_content=validation,
+            run_worker=reference_worker,
+            signing_key=reference_key,
+        )
+        monitor_materials = {
+            "reference": frozen["envelope"],
+            "reference_public": reference_public,
+            "rows": decode(validation),
+        }
+        write_json(destination / "monitor-reference.json", frozen)
     issued = int(time.time())
     permit = {
         "schema_version": 1,
@@ -143,7 +191,7 @@ def qualify(
         "issued_at": issued,
         "expires_at": min(issued + 600, verified["manifest"]["expires_at"]),
     }
-    if permit["expires_at"] - issued < (360 if load else 240):
+    if permit["expires_at"] - issued < (360 if load or monitoring else 240):
         raise Rejected("candidate_inference_window")
     envelope = signing.sign(permit, KIND, key)
     permit_hash = digest(canonical(permit))
@@ -192,6 +240,8 @@ def qualify(
             "expected_permit": digest(canonical(unsigned_permit)),
         },
     }
+    if monitoring:
+        expected["monitoring"] = monitor_materials
     write_json(destination / "config.json", config)
     write_json(destination / "request.json", expected)
     before = ledger(state)
@@ -217,6 +267,25 @@ def qualify(
         write_json(destination / "config.json", config)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     options = {}
+    if monitoring:
+        from mlsecops.release_policy import checked
+        from scripts.kube_monitoring_operator import Coordinator
+
+        trace = QualificationTrace(
+            permit_hash,
+            refusal["proposal"],
+            verified["subject_sha256"],
+            refusal["model"],
+            audit_lineage.from_verified_package(
+                package, verified["manifest"], context["trust"]["curator"]
+            ),
+        )
+        reference = checked(
+            monitor_materials["reference"],
+            "monitor-reference",
+            monitor_materials["reference_public"],
+        )
+        options["monitoring_operator"] = Coordinator(state, profile, campaign, reference, trace)
     if load:
         from scripts.kube_load_operator import Coordinator
 
@@ -237,6 +306,9 @@ def qualify(
         write_json(private / "permit.json", envelope)
         write_json(private / "public.json", {"qualification": qualification_public})
     result = invoke(state, profile, config, expected, candidate_probe=True, **options)
+    if monitoring:
+        result["operator_retained_reverified"] = options["monitoring_operator"].reverify()
+        options["monitoring_operator"].retain_binding()
     if load:
         result["operator_retained_reverified"] = options["load_operator"].reverify()
     if privacy:
@@ -348,6 +420,7 @@ def qualify(
         "qualification_permit_sha256": permit_hash,
         "native": result,
         **({"full_M14": "inconclusive", "load_campaign_id": campaign} if load else {}),
+        **({"full_M15": "inconclusive", "monitoring_campaign_id": campaign} if monitoring else {}),
         **(
             {
                 "full_M13": "inconclusive",
@@ -391,6 +464,7 @@ def qualify(
                 "config.json",
                 "request.json",
                 "probe.json",
+                *(("monitor-worker.json", "monitor-reference.json") if monitoring else ()),
                 *(("root-rotation.json",) if root_rotation is not None else ()),
                 *(name + ".json" for name in fault_results),
                 *(("independent-authorities.json",) if terminals is not None else ()),

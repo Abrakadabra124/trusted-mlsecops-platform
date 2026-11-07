@@ -251,3 +251,61 @@ manifest через разрешённую read-only роль. Не подста
 При insufficient positives сохранить inconclusive; замена labels запрещена.
 При expiry нужно заново авторизовать campaign, а не менять время в отвергнутом
 package. Native candidate-bound сборка и полный M15 ещё не приняты.
+
+## Приватный пакет сквозного наблюдения M15
+
+Workflow `.github/workflows/kubernetes-monitoring.yml` запускается только на
+disposable hosted runner. Он использует прежние pinned tools, source SQL,
+Kubernetes worker/controller и действующий qualification permit. Это проверка
+кандидата, не разрешение production release. Локальную инфраструктуру не запускать.
+
+1. Проверить подписи proposal/package и source/image pins. Прочитать validation
+   через существующую read-only роль publisher; trainer SQL identity отсутствует.
+   Сверить digest, размер, строки и labels с подписанным descriptor.
+2. До выдачи короткого permit выполнить validation inference настоящим isolated
+   worker. Сохранить private request/response/execution metadata и подписать
+   frozen reference отдельным ключом. Holdout и inference traffic для reference
+   не использовать.
+3. Поднять loopback HTTP serving с действующим worker, scheduler и signed sink.
+   Отправить 10 контрольных окон по 1000 наблюдений и два окна shift fixture.
+   Источник каждого окна - действительно завершённые HTTP 200 ответы.
+4. Отдельно передать 200 положительных delayed labels для выбранных отрицательных
+   предсказаний. Это намеренно ухудшающий recall synthetic fixture, не реальные
+   исправления ground truth. Повтор того же подписанного пакета должен принять
+   ноль новых labels. `/monitoring/labels` требует operator credential, точную
+   подпись и bounded JSON body; обычный inference credential доступа не даёт.
+5. Проверить три подписанных receipt, monotonic delivery time <120 секунд,
+   reference/context/window/evidence bindings, отсутствие alarm в первых десяти
+   окнах и `release_ready=false`. Сверить окно с собственными HTTP records.
+6. Закрыть HTTP, scheduler, audit и worker; проверить отсутствие worker pods.
+   Host сохраняет packet только из owned probe pod, закрепляет UID и подтверждает
+   digest. Повторный pod/неверный campaign/потеря packet не дают success.
+7. После удаления owned Job/ConfigMap, остановки source SQL и удаления кластера
+   перечитать private primary packet и выполнить тот же пересчёт без инфраструктуры.
+
+На разрешённом подготовленном runner команды:
+
+```sh
+uv run --locked python -m scripts.kube_monitoring_native
+uv run --locked python -m scripts.kube_monitoring_native --reverify
+```
+
+Вторая команда не создаёт окружение. Private packet, reference/worker records,
+ключи и bindings находятся в `.runtime`; raw artifacts не загружать в публичный
+GitHub. Публичен только ограниченный summary с hashes, counts и состоянием.
+Digest сам по себе не доказывает независимость администратора: ключи lab sink
+и labels принадлежат доверенному qualification probe; это не внешний audit.
+
+При `monitor_probe_windows_incomplete` сначала проверить bounded diagnostic и
+health snapshot: количество закрытых окон, faults scheduler/delivery, реальные
+HTTP статусы. Не увеличивать counters вручную. При недостатке отрицательных
+предсказаний для recall fixture сохранить fail, не уменьшать 200 positives.
+При `monitor_operator_*` или `monitor_packet_*` сверить ownership, UID, campaign,
+подписи и неизменность private файлов. Не пересоздавать binding для изменённого
+пакета и не заменять primary evidence одним summary. При ошибке очистки
+не объявлять observation завершённым; пользоваться существующим owned cleanup.
+
+Локальные controlled tests проверяют настоящий HTTP/подписи, но используют
+контрольный predictor. Hosted результат нужно подтвердить отдельно. Полный M15
+остаётся inconclusive до общей приёмки, feedback quarantine, recovery/restart и
+смежных regression checks. Alert не запускает обучение или promotion автоматически.

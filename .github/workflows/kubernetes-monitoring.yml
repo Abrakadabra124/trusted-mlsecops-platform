@@ -1,0 +1,93 @@
+name: Actual candidate M15 monitoring observation
+on:
+  push:
+    branches: [codex/cp4-m15-monitoring-20261107]
+    paths: ['mlsecops/**', 'scripts/**', '.github/workflows/kubernetes-monitoring.yml', 'uv.lock', 'pyproject.toml', 'Dockerfile', 'policies/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-monitoring-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  monitoring-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Fixed-reference contracts and per-module coverage
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
+          uv run --locked ruff format --check mlsecops/monitoring*.py mlsecops/serving_http.py scripts/monitoring*_qualification.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/monitor.coverage" --source=mlsecops.monitoring,mlsecops.monitoring_stream,mlsecops.monitoring_labels,mlsecops.monitoring_alerts,mlsecops.monitoring_delivery,mlsecops.monitoring_runtime,mlsecops.monitoring_config,mlsecops.monitoring_cli,mlsecops.monitoring_reference,mlsecops.monitoring_ingress,mlsecops.monitoring_packet,mlsecops.monitoring_probe,scripts.kube_monitoring_operator,scripts.kube_monitoring_native -m unittest scripts.monitoring_qualification scripts.monitoring_stream_qualification scripts.monitoring_labels_qualification scripts.monitoring_alerts_qualification scripts.monitoring_delivery_qualification scripts.monitoring_runtime_qualification scripts.monitoring_http_qualification scripts.monitoring_config_qualification scripts.monitoring_cli_qualification scripts.monitoring_reference_qualification scripts.monitoring_packet_qualification scripts.monitoring_probe_qualification scripts.kube_monitoring_native_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/monitor.coverage" -o "$RUNNER_TEMP/monitor-coverage.json"
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'monitor-coverage.json').read_text())['files']
+          if set(files) != {'mlsecops/monitoring.py', 'mlsecops/monitoring_stream.py', 'mlsecops/monitoring_labels.py', 'mlsecops/monitoring_alerts.py', 'mlsecops/monitoring_delivery.py', 'mlsecops/monitoring_runtime.py', 'mlsecops/monitoring_config.py', 'mlsecops/monitoring_cli.py', 'mlsecops/monitoring_reference.py', 'mlsecops/monitoring_ingress.py', 'mlsecops/monitoring_packet.py', 'mlsecops/monitoring_probe.py', 'scripts/kube_monitoring_operator.py', 'scripts/kube_monitoring_native.py'}:
+              raise SystemExit('monitor_coverage_inventory')
+          for name, report in sorted(files.items()):
+              summary = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
+                      raise SystemExit('monitor_coverage_below_95:' + name + ':' + total)
+              print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': summary}, sort_keys=True))
+          print('Controlled ASGI collection, owned scheduler and real loopback receipts; candidate-bound full M15/R1 remain unaccepted.')
+          PY
+      - name: Prepare pinned tools and image
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Prepare model storage and source candidate
+        run: |
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Actual model reference, HTTP observations, signed labels and receipts
+        id: campaign
+        run: uv run --locked python -m scripts.kube_monitoring_native
+      - name: Stop verified owned source SQL
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('monitor_source_cleanup_incomplete')
+          PY
+          fi
+      - name: Remove verified owned disposable cluster
+        if: always() && steps.bootstrap.outcome == 'success'
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import validate_cluster
+          validate_cluster(Path('.runtime'))
+          PY
+          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
+      - name: Reconcile retained primary packet after infrastructure cleanup
+        if: success() && steps.campaign.outcome == 'success'
+        run: uv run --locked python -m scripts.kube_monitoring_native --reverify

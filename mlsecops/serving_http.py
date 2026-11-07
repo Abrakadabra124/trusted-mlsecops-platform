@@ -16,6 +16,7 @@ from mlsecops import (
     advisory,
     audit_retention,
     monitoring_config,
+    monitoring_ingress,
     monitoring_runtime,
     release_reader,
     serving,
@@ -317,7 +318,13 @@ def create_app(
                 return serving_metrics.ScrapeResponse(error(503, "metrics_unavailable", request_id))
             try:
                 try:
-                    if (
+                    if request.url.path == "/monitoring/labels":
+                        try:
+                            labels = monitor.labels(await monitoring_ingress.read(request))
+                            response = JSONResponse(labels, headers={"Cache-Control": "no-store"})
+                        except (Rejected, TimeoutError):
+                            response = error(400, "invalid_labels", request_id)
+                    elif (
                         request.scope.get("query_string")
                         or request.headers.getlist("transfer-encoding")
                         or request.headers.getlist("content-length") not in ([], ["0"])
@@ -346,6 +353,7 @@ def create_app(
 
         if monitor is not None:
             app.add_api_route("/monitoring", scrape, methods=["GET"])
+            app.add_api_route("/monitoring/labels", scrape, methods=["POST"])
 
     @app.get("/readyz")
     async def ready(request: Request):

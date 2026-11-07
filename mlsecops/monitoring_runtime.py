@@ -245,6 +245,9 @@ class Runtime:
                         "received_at_ms": receipt["received_at_ms"],
                         "delivery_seconds": (finished - admitted_ns) / 1000000000,
                         "envelope": acknowledgement,
+                        "event": event,
+                        "admitted_ns": admitted_ns,
+                        "finished_ns": finished,
                     }
                 )
                 self._faults.discard("delivery")
@@ -285,7 +288,11 @@ class Runtime:
             "reports": list(self._reports),
             "label_reports": list(self._label_reports.values()),
             "receipts": [
-                {key: value for key, value in receipt.items() if key != "envelope"}
+                {
+                    key: value
+                    for key, value in receipt.items()
+                    if key not in ("envelope", "event", "admitted_ns", "finished_ns")
+                }
                 for receipt in self._receipts
             ],
             "release_ready": False,

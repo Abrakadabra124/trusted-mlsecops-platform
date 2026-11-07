@@ -13,6 +13,7 @@ from mlsecops import (
     kube_storage,
     kube_trust,
     load_diagnostics,
+    monitoring_probe,
     serving_startup,
     trust_authority,
 )
@@ -55,8 +56,19 @@ def invoke(
     privacy_operator=None,
     cli_privacy=False,
     load_operator=None,
+    monitoring_operator=None,
 ):
     trust_target = select(trust_target)
+    if monitoring_operator is not None and (
+        not candidate_probe
+        or load_operator is not None
+        or privacy_operator is not None
+        or coordinator is not None
+        or cli_privacy
+        or trust_target is not Target.PRIMARY
+        or "fault" in expected
+    ):
+        raise Rejected("monitor_probe_mode_conflict")
     if load_operator is not None and (
         not candidate_probe
         or privacy_operator is not None
@@ -100,7 +112,9 @@ def invoke(
     )
     spec["serviceAccountName"] = "serving"
     spec["containers"][0]["command"][2] = (
-        "mlsecops.load_probe"
+        "mlsecops.monitoring_probe"
+        if monitoring_operator is not None
+        else "mlsecops.load_probe"
         if load_operator is not None
         else "scripts.kube_cli_privacy_probe"
         if cli_privacy
@@ -132,7 +146,7 @@ def invoke(
             {"name": "qualification-code", "mountPath": "/app/scripts", "readOnly": True}
         )
     mount_api(spec)
-    deadline = 360 if load_operator is not None else 240
+    deadline = 360 if load_operator is not None or monitoring_operator is not None else 240
     job = job_document(name, NAMESPACE, spec, deadline)
     job["metadata"]["labels"]["trusted-mlsecops/workspace"] = workspace_id(state)
     created = []
@@ -152,6 +166,9 @@ def invoke(
             return
         if load_operator is not None:
             load_operator.observe(pod)
+            return
+        if monitoring_operator is not None:
+            monitoring_operator.observe(pod)
             return
         if cli_receiver is not None:
             cli_receiver.observe(pod)
@@ -178,6 +195,8 @@ def invoke(
             phases.append(phase)
 
     try:
+        if monitoring_operator is not None:
+            monitoring_operator.start()
         if load_operator is not None:
             load_operator.start()
         if privacy_operator is not None:
@@ -198,6 +217,7 @@ def invoke(
                 or privacy_operator is not None
                 or cli_receiver is not None
                 or load_operator is not None
+                or monitoring_operator is not None
                 else {}
             ),
         )
@@ -235,6 +255,17 @@ def invoke(
             failure = {"probe_failure": "unclassified", "release_ready": False}
             with suppress(Rejected):
                 document = decode(raw.splitlines()[-1] if raw else raw, 65536)
+                if (
+                    monitoring_operator is not None
+                    and isinstance(document, dict)
+                    and set(document) == {"status", "release_ready", "code", "cause"}
+                    and document["status"] == "fail"
+                    and document["release_ready"] is False
+                    and document["code"] == "monitor_probe_rejected"
+                    and type(document["cause"]) is str
+                    and document["cause"] in monitoring_probe.FAILURES
+                ):
+                    failure.update(probe_failure="monitoring", **document)
                 if (
                     load_operator is not None
                     and isinstance(document, dict)
@@ -298,6 +329,8 @@ def invoke(
             report = privacy_operator.finish(report, raw)
         if load_operator is not None:
             report = load_operator.finish(report, raw)
+        if monitoring_operator is not None:
+            report = monitoring_operator.finish(report, raw)
         if cli_receiver is not None:
             report["_privacy_needles"] = cli_receiver.finish(raw)
         return {**report, "elapsed_seconds": elapsed}
