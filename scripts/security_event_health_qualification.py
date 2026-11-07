@@ -44,12 +44,21 @@ class HealthContracts(unittest.TestCase):
         self.assertIs(result["release_ready"], False)
         self.assertEqual(result["config_sha256"], self.registry.sha256)
 
+    def test_detection_reserves_scheduler_budget_before_the_hard_deadline(self):
+        self.book.heartbeat(self.heartbeat(), clock_ms=2100)
+        self.assertEqual(self.book.poll(clock_ms=91999)["problems"], [])
+        problems = self.book.poll(clock_ms=92000)["problems"]
+        self.assertEqual(len(problems), 1)
+        problem = problems[0]
+        self.assertEqual(problem["since_ms"], 92000)
+        self.assertEqual(problem["deadline_at_ms"], 122000)
+
     def test_retry_cannot_extend_heartbeat_deadline_and_restart_preserves_episode(self):
         message = self.heartbeat()
         original = self.book.heartbeat(message, clock_ms=2100)
         self.assertEqual(self.book.heartbeat(message, clock_ms=100000), original)
-        self.assertEqual(self.book.poll(clock_ms=121999)["problems"], [])
-        due = self.book.poll(clock_ms=122000)
+        self.assertEqual(self.book.poll(clock_ms=91999)["problems"], [])
+        due = self.book.poll(clock_ms=92000)
         self.assertFalse(due["healthy"])
         self.assertEqual([p["reason"] for p in due["problems"]], ["heartbeat"])
         self.restore()
@@ -71,9 +80,9 @@ class HealthContracts(unittest.TestCase):
         self.book.heartbeat(self.heartbeat(role="intake", last=3), clock_ms=2100)
         self.book.ingest(self.fx.envelope(3), clock_ms=2200)
         self.restore()
-        before = self.book.poll(clock_ms=122099)
+        before = self.book.poll(clock_ms=92099)
         self.assertEqual([p for p in before["problems"] if p["reason"] == "sequence"], [])
-        due = self.book.poll(clock_ms=122100)
+        due = self.book.poll(clock_ms=92100)
         problem = [p for p in due["problems"] if p["reason"] == "sequence"][0]
         self.assertEqual(problem["since_ms"], 2100)
         self.assertEqual(due["open_sequence_gaps"], 1)
@@ -191,7 +200,7 @@ class HealthContracts(unittest.TestCase):
         rows = {s["producer_id"]: s for s in changed["telemetry"]["streams"]}
         rows[intake]["heartbeat"] = copy.deepcopy(rows[serving]["heartbeat"])
         variants.append(changed)
-        for version in (True, 1):
+        for version in (True, 1, 2):
             variants.append({**baseline, "schema_version": version})
         for value in variants:
             with self.subTest(version=value["schema_version"]), self.assertRaises(Rejected):

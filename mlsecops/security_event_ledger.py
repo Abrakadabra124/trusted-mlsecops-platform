@@ -6,6 +6,7 @@ from mlsecops import signing
 from mlsecops.contracts import Rejected, canonical, decode
 
 MAX_RECORDS = 1024
+SCHEMA_VERSION = 3
 REORDER_WINDOW = health.REORDER_WINDOW
 FIELDS = ("schema_version", "config_sha256", "updated_at_ms", "records", "telemetry")
 RECORD_FIELDS = ("envelope", "ingested_at_ms", "late", "receipt")
@@ -22,7 +23,10 @@ def candidate(envelope):
 class Ledger:
     def __init__(self, registry, document):
         events.shape(document, FIELDS)
-        if type(document["schema_version"]) is not int or document["schema_version"] != 2:
+        if (
+            type(document["schema_version"]) is not int
+            or document["schema_version"] != SCHEMA_VERSION
+        ):
             raise Rejected("security_store_schema")
         if document["config_sha256"] != registry.sha256:
             raise Rejected("security_store_config")
@@ -57,7 +61,7 @@ class Ledger:
         return cls(
             registry,
             {
-                "schema_version": 2,
+                "schema_version": SCHEMA_VERSION,
                 "config_sha256": registry.sha256,
                 "updated_at_ms": clock_ms,
                 "records": [],

@@ -4,6 +4,8 @@ from mlsecops import security_events as events
 from mlsecops.contracts import Rejected, canonical, decode, digest
 
 REORDER_WINDOW = 64
+DETECTION_MS = 3 * events.HEARTBEAT_MS
+HEADROOM_MS = events.GAP_MS - DETECTION_MS
 FIELDS = ("started_at_ms", "streams")
 STREAM_FIELDS = (
     "producer_id",
@@ -65,8 +67,8 @@ class Health:
                     raise Rejected("security_telemetry_identity")
                 self._claim(facts, identity, heartbeat["last_event_sequence"])
             missing = self._missing(stream, facts)
-            deadline = self._heartbeat_deadline(stream)
-            due = registry.producer(identity).heartbeat_required and updated_at_ms >= deadline
+            trigger = self._heartbeat_trigger(stream)
+            due = registry.producer(identity).heartbeat_required and updated_at_ms >= trigger
             for kind, active in (("sequence", missing), ("heartbeat", due)):
                 generation = events.integer(stream[kind + "_generation"], 0)
                 since = stream[kind + "_gap_since_ms"]
@@ -76,7 +78,7 @@ class Health:
                     events.integer(since)
                     if not started <= since <= updated_at_ms or generation == 0:
                         raise Rejected("security_telemetry_episode")
-                    if kind == "heartbeat" and since > deadline:
+                    if kind == "heartbeat" and since > trigger:
                         raise Rejected("security_telemetry_episode")
 
     def document(self):
@@ -108,6 +110,9 @@ class Health:
         if heartbeat is not None:
             observed = min(heartbeat["observed_at_ms"], stream["heartbeat"]["ingested_at_ms"])
         return max(self._document["started_at_ms"], observed + events.GAP_MS)
+
+    def _heartbeat_trigger(self, stream):
+        return max(self._document["started_at_ms"], self._heartbeat_deadline(stream) - HEADROOM_MS)
 
     def heartbeat(self, envelope, *, facts, clock_ms):
         producer = self.registry.producer(events.signer(envelope))
@@ -146,12 +151,12 @@ class Health:
     def reconcile(self, facts, clock_ms):
         for stream in self._document["streams"]:
             self._episode(stream, "sequence", self._missing(stream, facts), clock_ms)
-            deadline = self._heartbeat_deadline(stream)
+            trigger = self._heartbeat_trigger(stream)
             due = (
                 self.registry.producer(stream["producer_id"]).heartbeat_required
-                and clock_ms >= deadline
+                and clock_ms >= trigger
             )
-            self._episode(stream, "heartbeat", due, deadline)
+            self._episode(stream, "heartbeat", due, trigger)
 
     def report(self, *, clock_ms, pending, full):
         problems, awaiting = [], []
@@ -166,8 +171,12 @@ class Health:
                     continue
                 gaps += int(kind == "sequence")
                 expired += int(kind == "heartbeat")
-                deadline = since + (events.GAP_MS if kind == "sequence" else 0)
-                if clock_ms >= deadline:
+                if kind == "sequence":
+                    trigger, deadline = since + DETECTION_MS, since + events.GAP_MS
+                else:
+                    trigger = since
+                    deadline = min(since + HEADROOM_MS, self._heartbeat_deadline(stream))
+                if clock_ms >= trigger:
                     notice_id = digest(
                         canonical(
                             {

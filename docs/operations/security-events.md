@@ -100,7 +100,7 @@ slot, новые события отвергаются. `security_sequence_windo
 Постоянный volume, внешний backup, routing scheduler и promotion fail-closed
 integration пока остаются отдельной обязательной работой.
 
-## Heartbeat, gap episodes и journal v2
+## Heartbeat, gap episodes и journal v3
 
 Добавлен persistent control state; Linux проверка нового increment пока ожидается.
 Воспроизведение проверок:
@@ -123,11 +123,12 @@ stream с claim; не расширять окно после получения 
 При `security_telemetry_episode`, `security_telemetry_identity` или
 `security_telemetry_time` admission должен оставаться запрещённым до проверки
 state и producer ownership. Нельзя очищать episode, менять deadline вручную или
-заменять потерянный control state пустым словарём. Journal v1 отвергается schema
-v2; автоматическая миграция с обнулением telemetry отсутствует. Сохранить старый
+заменять потерянный control state пустым словарём. Journal v1/v2 отвергается schema
+v3; автоматическая миграция с обнулением telemetry отсутствует. Сохранить старый
 volume и его source/config pins; не запускать initialize поверх него.
 
-Controlled тесты сверяют inclusive120s boundary, сохранение notice ID при restart,
+Controlled тесты сверяют inclusive90s detection boundary и120s hard deadline,
+сохранение notice ID при restart,
 late recovery и новый ID при повторном outage после восстановления. Это ещё не
 измерение scheduler latency: периодический runtime, доставка и promotion gate
 остаются обязательными следующими этапами.

@@ -118,12 +118,12 @@ schema не заменяет их. До общей приёмки T29 и M23 о�
 ### Durable heartbeat и gap state
 
 Следующий increment добавляет `security_event_health` в тот же atomic Store.
-Проверка Linux пока ожидается. Journal schema v2 хранит время начала наблюдения
+Проверка окончательного профиля Linux пока ожидается. Journal schema v3 хранит время начала наблюдения
 и ровно один control record на зарегистрированный producer: последний signed
 heartbeat с исходным admission time, открытые sequence/heartbeat episodes и
-монотонные generation counters. State v1 не получает автоматически пустую
+монотонные generation counters. State v1/v2 не получает автоматически пустую
 telemetry: несовместимый журнал отклоняется. Исторические v1 evidence сохраняют
-свой source; для живого v1 volume требуется отдельная проверенная миграция,
+свой source; для живого старого volume требуется отдельная проверенная миграция,
 её этот increment не заявляет.
 
 Heartbeat counter независим от event counter. Exact retry возвращает исходное
@@ -131,13 +131,16 @@ Heartbeat counter независим от event counter. Exact retry возвр�
 обратный counter/time/last-event claim и слишком далёкий claim отвергаются.
 Время heartbeat expiry отсчитывается от меньшего observed/ingested timestamp,
 поэтому разрешённый clock skew не добавляет времени. До первого обязательного
-heartbeat состояние unhealthy. Initial deadline: время начала наблюдения+120 s.
+heartbeat состояние unhealthy. Максимальный deadline: время начала наблюдения+120 s.
+Обнаружение запускается после90s (три фиксированных heartbeat periods), оставляя
+30s на работу scheduler/IO. Это запас до обязательного предела, а не увеличение
+M23 deadline. Профиль зафиксирован до живой campaign.
 
 Missing sequence определяется из уже принятых event positions и signed
 last-event claim, без цикла по потенциально огромному числу из сообщения.
 Новый claim ограничен received high+64. Первое время незакрытого пропуска
 сохраняется, пока continuity не восстановлена; новые claims и частичное заполнение
-не перезапускают120s timer. Запоздавшее событие сохраняет исходный late flag.
+не перезапускают90s detection timer или120s hard deadline. Запоздавшее событие сохраняет исходный late flag.
 
 `Store.poll(clock_ms=...)` является изменяющей операцией: атомарно сохраняет
 clock checkpoint и открытие/закрытие episodes, затем возвращает bounded health
@@ -156,6 +159,12 @@ heartbeat, pending delivery или полной ёмкости журнала. P
 Он ещё не запускает periodic scheduler, не формирует signed telemetry.gap event
 и не подтверждает реальную доставку<=60s/наблюдение<=120s. Эти свойства проверяются
 следом на живом runtime вместе с HTTP, source adapters и audit admission.
+
+Промежуточный source `a08c3f1` использовал v2 и объявлял episode непосредственно
+на120s. Его controlled/Linux проверки прошли, но это не оставляло времени для
+задержки реального scheduler. Новый negative test на90s сначала воспроизвёл
+отсутствующий сигнал. Профиль изменён до live measurements, schema поднята доv3,
+чтобы старые сохранённые timestamps не интерпретировались по новым правилам.
 
 ### Постоянный журнал: решение следующего increment
 
