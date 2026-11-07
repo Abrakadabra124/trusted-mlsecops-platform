@@ -100,5 +100,27 @@ Prometheus пока показывает существующие HTTP metrics; 
 не реализует построение reference от actual candidate и durable restart;
 полный M15/R1 остаётся непринятым. Raw subprocess outputs и ключи не публикуются.
 
+## Builder от подписанной validation-выборки
+
+Commit `68df79ac493c3a55bc6bf7d12a5a4a10dfb707f7`,
+[CI42319304865](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42319304865)
+**success**:94 monitoring tests за21.042s,77 HTTP/audit/lifecycle за7.030s и52
+candidate/material/release regression tests за2.046s, без пропусков. Девять
+monitoring modules770 statements/270 branches100%; новый builder36/10.
+Локальный builder и три смежных suites:61/0 за18.510s.
+
+Builder проверяет весь release package, отдельные validation bytes по signed
+split descriptor, уникальность строк и достаточность выборки. Отдельный signer
+подписывает вычисленные histograms/recall только после проверки ответа worker,
+model/request/row bindings и повторной проверки срока package. Mutation входного
+package во время callback не меняет уже проверенные pins. Подмена split/response,
+неверная подпись, дубли, недостаточные positives, clock rollback и expiry
+проверены отрицательными сценариями.
+
+Fixture имеет1000 уникальных строк и настоящие подписи, но контролируемый worker
+response. Это доказательство контракта builder, не выполнения actual ONNX model
+в native isolation. Native composition с actual candidate, collector/labels,
+retained primary evidence и cleanup остаётся обязательной; full M15/R1 не принят.
+
 Решения: [ADR0057](../decisions/0057-fixed-monitoring-contract.md).
 Диагностика и восстановление: [model-monitoring](../operations/model-monitoring.md).

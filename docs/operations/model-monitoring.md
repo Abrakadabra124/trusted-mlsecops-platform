@@ -156,8 +156,8 @@ label payload теперь даёт contract rejection; отмена shutdown о
 окно не теряется при штатной остановке. Failure-first tests сохранены в suites.
 Это не записи production-инцидентов.
 
-Ещё отсутствуют trusted candidate reference builder, durable restart,
-feedback quarantine composition и полный native M15.
+Ещё не подтверждена native сборка reference от actual candidate; остаются
+durable restart, feedback quarantine composition и полный native M15.
 Новый HTTP hook требует свежих M13/M14 на общем candidate; старые результаты
 не переносятся автоматически. Этот компонент не имеет promotion API.
 
