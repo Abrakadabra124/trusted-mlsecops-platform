@@ -163,8 +163,10 @@ promotion при недоступном sink. До подключения эти
 
 ## Проверка нового collector runtime
 
-Реализация и тесты добавлены; native результат этого revision публикуется отдельно
-после завершения CI. Проверка из checkout с locked environment:
+Runtime `1a234fe` проверен настоящим Linux процессом:
+[104 tests/0skips, measured delivery/restart/cleanup](../evidence/security-event-collector-2026-11-07.md).
+Fixture cleanup исправлена в `fb8a5e1`; clean Windows104tests/22skips без
+ResourceWarning. Проверка из checkout с locked environment:
 
 ```text
 uv sync --locked --no-build --python 3.12.15

@@ -198,6 +198,8 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
+Checkpoint collector: [runtime1a234fe /42351757662](../docs/evidence/security-event-collector-2026-11-07.md) success104Linux tests/0skips, actual heartbeat90.692s и max HTTP0.0189s, restart/cleanup pass. Fixture cleanup исправлена в fb8a5e1 и воспроизведена из clean Windows104tests/22skips без warnings. Далее actual source adapters, sequence elapsed campaign, promotion audit boundary и общий M23. Local incident routes не означают внешнюю SIEM.
+
 Checkpoint telemetry: [d7ccb42 /42349487413](../docs/evidence/security-event-health-2026-11-07.md) success84Linux tests/0skips; persistent heartbeat/gap episodes и90s detection/120s hard deadline с controlled clock. Clean Windows84tests/18skips. Следом actual periodic scheduler + authenticated HTTP/routes и signed gap events, затем source adapters/promotion boundary/full M23. Ручной poll не закрывает timing acceptance.
 
 Checkpoint journal: [d17434b /42347317046](../docs/evidence/security-event-journal-2026-11-07.md) success70Linux tests/0skips, actual Linux crash/restart и I/O faults, оба новых модуля>=95% statements/branches; clean Windows70tests/17skips. Далее heartbeat/sequence-gap scheduler и durable control history, HTTP/routing, source adapters и promotion boundary. T29/M23 остаются открытыми.

@@ -68,8 +68,20 @@ Production collector на Windows не стартовал.
 Исправление использует synchronous fixture и async cleanup текущего test case.
 `asyncTearDown` проверяет отсутствие принадлежащей fixture директории. Локальные
 10 lifecycle/HTTP tests с warnings-as-errors прошли. Runtime bytes не изменены.
-Последующая clean проверка должна подтвердить отсутствие stderr warnings,
-а не только exit code0.
+Повтор выполнен из отдельного clean checkout
+`fb8a5e1536fe1197faf903630400e0e4973a36c7` с новой `.venv`, locked
+Python3.12.15:104 tests за5.375s,22 Linux-only skips. Проверено отсутствие
+ResourceWarning, RuntimeWarning, unraisable exceptions/tracebacks в сохранённом
+выводе, working tree чистый. Это подтверждает исправление fixture; пропуски
+не выданы за native pass. Сравнение двух commits не меняет `mlsecops/` runtime.
+
+Повторный Linux CI для `fb8a5e1536fe1197faf903630400e0e4973a36c7`:
+[42352220486](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42352220486),
+job128342598795, success104tests/0skips. Actual subprocess test95.910s,
+heartbeat notice91.041499802s, max HTTP delivery0.011711601s. Restart и
+owned PID/port cleanup подтверждены повторно. ResourceWarning в сохранённом
+Linux output отсутствует. Это окончательная проверка исправленной fixture,
+а не общий M23/M18 pass.
 
 ## Оставшаяся обязательная работа
 
