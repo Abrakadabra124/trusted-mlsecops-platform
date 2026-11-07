@@ -312,7 +312,7 @@ HTTP статусы. Не увеличивать counters вручную. При
 
 Локальные controlled tests проверяют настоящий HTTP/подписи, но используют
 контрольный predictor. Hosted результат нужно подтвердить отдельно. Полный M15
-остаётся inconclusive до общей приёмки, feedback quarantine, recovery/restart и
+остаётся inconclusive до общей приёмки, recovery/restart и
 смежных regression checks. Alert не запускает обучение или promotion автоматически.
 
 При отказе startup проверить prerequisite retained audit: его directory должен
