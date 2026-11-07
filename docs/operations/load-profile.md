@@ -1,8 +1,10 @@
 # Диагностика нагрузочного профиля M14
 
-Статус 2026-11-07: [fresh M14 на bbff69e](../evidence/m14-load-acceptance-bbff69e.md)
-прошёл профиль до подключения monitoring. Новый опыт с включённым collector,
-evaluator и receipt sink требует отдельного подтверждения CI.
+Статус 2026-11-07: [M14 с monitoring на cab2cad](../evidence/m14-monitored-load-cab2cad.md)
+прошёл 153 criteria/cases,12958 correct,p95=128.355589ms,p99=139.386008ms.
+Collector/evaluator/signed sink,shutdown,cleanup и post-cleanup verification проверены.
+Предыдущий [fresh M14 на bbff69e](../evidence/m14-load-acceptance-bbff69e.md)
+измерял профиль до подключения monitoring.
 Первый [baseline 3861d8a](../evidence/m14-load-baseline-2026-11-06.md) и отказы
 ниже сохраняются как история диагностики; они не являются текущим pass.
 Ответственный: platform operator. Метод: [ADR 0056](../decisions/0056-load-measurement-profile.md).
@@ -96,8 +98,11 @@ SHA-256, inventory/lease и fsync manifest. При закрытии исключ
 разбор уже проверенных неизменных bytes. Restore по-прежнему разбирает все
 sequences, включая cross-segment continuity. Timeout закрытия остаётся одной
 секундой. Negative tests проверяют подмену bytes/size/identity/digest, сохранение
-lease при отказе и отсутствие ложного clean manifest. Native подтверждение
-исправления требуется отдельно; прежний R1-B08 не закрывается по одному pass.
+lease при отказе и отсутствие ложного clean manifest. Следующий `cab2cad`
+/42331530833 прошёл полный M14 с shutdown и повторной сверкой после cleanup;
+прежний R1-B08 не закрывается по одному pass.
+
+### История ранних запусков
 
 Первый общий запуск [7abacda / 42287711273](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/42287711273)
 отказал до нового baseline. Он не является повторным успешным замером latency.

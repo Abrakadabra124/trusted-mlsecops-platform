@@ -199,6 +199,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T18
 
+- 2026-11-07: [M14 с работающим monitoring](../docs/evidence/m14-monitored-load-cab2cad.md) pass, `cab2cad` /42331530833:153cases,12958correct,p95=128.355589ms,p99=139.386008ms,14082observations/14windows/26receipts,shutdown+cleanup+offline primary verification. M15 regression42331530755+42331530771 success. Далее fresh M13 с monitoring и общая M15 acceptance; T18/R1 не закрыты, independent M22 0/2.
+
 - Component 2026-11-07: [epoch registry и cold restart](../docs/evidence/monitoring-restart-2026-11-07.md), `361b7dd` /42327687983+42327687810 success. Reuse запрещён после process crash, новый epoch явно сообщает history loss; full history restore не заявлен. 142+77+52Linux tests/0skips, native12000observations/3receipts,quarantine+cleanup+offline replay. [Плейбук](../docs/operations/monitoring-restart.md). Далее M13/M14 с включённым monitoring и полная M15 acceptance.
 
 - Component 2026-11-07: [feedback quarantine](../docs/evidence/feedback-quarantine-2026-11-07.md), `9162a2f` /42325145874 success. Actual HTTP IDs -> SQL quarantine10claims/1row, retry/curator readback,15 direct permission denials, защищённые tables/promotion unchanged. Cleanup и offline primary replay success. Contracts129+77+52Linux tests/0skips. [Ранбук](../docs/operations/feedback-quarantine.md). Full M15 ещё требует restart/recovery, fresh M13/M14 и общей acceptance.
