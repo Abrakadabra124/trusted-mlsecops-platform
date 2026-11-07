@@ -198,6 +198,8 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
+Checkpoint telemetry: [d7ccb42 /42349487413](../docs/evidence/security-event-health-2026-11-07.md) success84Linux tests/0skips; persistent heartbeat/gap episodes и90s detection/120s hard deadline с controlled clock. Clean Windows84tests/18skips. Следом actual periodic scheduler + authenticated HTTP/routes и signed gap events, затем source adapters/promotion boundary/full M23. Ручной poll не закрывает timing acceptance.
+
 Checkpoint journal: [d17434b /42347317046](../docs/evidence/security-event-journal-2026-11-07.md) success70Linux tests/0skips, actual Linux crash/restart и I/O faults, оба новых модуля>=95% statements/branches; clean Windows70tests/17skips. Далее heartbeat/sequence-gap scheduler и durable control history, HTTP/routing, source adapters и promotion boundary. T29/M23 остаются открытыми.
 
 Checkpoint 2026-11-07: [подписанный контракт v1 проверен](../docs/evidence/security-event-contract-2026-11-07.md), `c2f7bf9` /42345739729 success:21 новый +25 смежных Linux tests без пропусков, 206 statements/74 branches, 100% двух новых модулей; чистый Windows checkout46tests/3POSIX skips. [ADR 0058](../docs/decisions/0058-security-event-contract.md) задаёт следующие этапы: постоянный collector -> порядок/heartbeat -> доставка -> source adapters -> promotion boundary -> общая M23 acceptance. Контракт сам по себе не закрывает T29.

@@ -102,7 +102,8 @@ integration пока остаются отдельной обязательно�
 
 ## Heartbeat, gap episodes и journal v3
 
-Добавлен persistent control state; Linux проверка нового increment пока ожидается.
+Persistent control state [проверен в Linux](../evidence/security-event-health-2026-11-07.md):
+`d7ccb42` /42349487413 success84tests/0skips, clean Windows84tests/18skips.
 Воспроизведение проверок:
 
 ```text
@@ -134,6 +135,12 @@ late recovery и новый ID при повторном outage после во�
 остаются обязательными следующими этапами.
 
 ## История проблем реализации
+
+На промежуточном a08c3f1 детекция выполнялась на120s без запаса для scheduler.
+До live campaign добавлен failure-first test на90s и выбран профиль90s detection
+с120s hard deadline. Schemav3 отвергает старые сохранённые timestamps вместо
+их неявного толкования по новым правилам. Новый CI d7ccb42 подтвердил controlled
+границы; actual scheduler latency по-прежнему требует отдельной проверки.
 
 Первый journal CI на `b6d0365` /42347131488 выполнил19tests без пропусков,
 но завершился failure на coverage gate: store имел30/36покрытых branches.

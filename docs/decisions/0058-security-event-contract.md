@@ -118,7 +118,8 @@ schema не заменяет их. До общей приёмки T29 и M23 о�
 ### Durable heartbeat и gap state
 
 Следующий increment добавляет `security_event_health` в тот же atomic Store.
-Проверка окончательного профиля Linux пока ожидается. Journal schema v3 хранит время начала наблюдения
+Окончательный профиль [проверен в Linux](../evidence/security-event-health-2026-11-07.md) на `d7ccb42`.
+Journal schema v3 хранит время начала наблюдения
 и ровно один control record на зарегистрированный producer: последний signed
 heartbeat с исходным admission time, открытые sequence/heartbeat episodes и
 монотонные generation counters. State v1/v2 не получает автоматически пустую
