@@ -229,6 +229,85 @@ Store(sys.argv[1], sys.argv[2], registry).ingest(decode(Path(sys.argv[6]).read_b
         self.assertEqual(self.reopen().ingest(self.fx.envelope(), clock_ms=2200), original)
         self.assertFalse((self.root / ".pending").exists())
 
+    def test_invalid_path_pin_and_symlink_root_do_not_open_another_journal(self):
+        for root, pin in (("relative", self.pin), (None, self.pin), (str(self.root), "invalid")):
+            with self.subTest(root=root), self.assertRaises(Rejected):
+                storage.Store(root, pin, self.fx.registry)
+        alias = self.root.parent / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaises(Rejected):
+            storage.Store(str(alias), self.pin, self.fx.registry).snapshot()
+
+    def test_file_growth_and_metadata_change_during_read_are_rejected(self):
+        state_file = self.root / "state"
+        before = state_file.read_bytes()
+        actual_read = storage.os.read
+        for fault in ("growth", "metadata"):
+            state_file.write_bytes(before)
+            inode = state_file.stat().st_ino
+            changed = False
+
+            def change_during_read(descriptor, size):
+                nonlocal changed
+                if not changed and os.fstat(descriptor).st_ino == inode:
+                    changed = True
+                    if fault == "growth":
+                        with state_file.open("ab") as output:
+                            output.write(b"x")
+                    else:
+                        metadata = state_file.stat()
+                        os.utime(
+                            state_file, ns=(metadata.st_atime_ns, metadata.st_mtime_ns + 1000000)
+                        )
+                return actual_read(descriptor, size)
+
+            with storage.locked(str(self.root)) as directory:
+                with patch.object(storage.os, "read", side_effect=change_during_read):
+                    with self.subTest(fault=fault), self.assertRaises(Rejected):
+                        storage.read(directory, "state", limit=len(before))
+            self.assertTrue(changed)
+
+    def test_short_writes_finish_but_zero_write_never_acknowledges_commit(self):
+        actual_write = storage.os.write
+        with patch.object(
+            storage.os, "write", side_effect=lambda fd, data: actual_write(fd, data[:7])
+        ):
+            first = self.store.ingest(self.fx.envelope(), clock_ms=2100)
+        self.assertEqual(self.reopen().snapshot()["records"], [first])
+        with patch.object(storage.os, "write", return_value=0):
+            with self.assertRaises(Rejected):
+                self.store.ingest(self.fx.envelope(2), clock_ms=2200)
+        self.assertEqual(self.reopen().snapshot()["records"], [first])
+
+    def test_bad_readback_has_unknown_outcome_resolved_by_exact_retry(self):
+        actual_read = storage.read
+        count = 0
+
+        def corrupted_readback(descriptor, name, limit=storage.MAX_BYTES):
+            nonlocal count
+            content = actual_read(descriptor, name, limit)
+            if name == "state":
+                count += 1
+                if count == 2:
+                    return b"{}"
+            return content
+
+        envelope = self.fx.envelope()
+        with patch.object(storage, "read", side_effect=corrupted_readback):
+            with self.assertRaises(Rejected):
+                self.store.ingest(envelope, clock_ms=2100)
+        original = self.reopen().snapshot()["records"]
+        self.assertEqual(len(original), 1)
+        self.assertEqual(self.reopen().ingest(envelope, clock_ms=2200), original[0])
+
+    def test_snapshot_size_guard_preserves_previous_state_before_writing(self):
+        original = (self.root / "state").read_bytes()
+        with storage.locked(str(self.root)) as directory:
+            with self.assertRaises(Rejected):
+                storage.replace(directory, {"oversize": "x" * storage.MAX_BYTES})
+        self.assertEqual((self.root / "state").read_bytes(), original)
+        self.assertFalse((self.root / ".pending").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
