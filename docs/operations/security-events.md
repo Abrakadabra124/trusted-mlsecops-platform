@@ -100,7 +100,39 @@ slot, новые события отвергаются. `security_sequence_windo
 Постоянный volume, внешний backup, routing scheduler и promotion fail-closed
 integration пока остаются отдельной обязательной работой.
 
-## Обнаруженные при реализации проблемы
+## Heartbeat, gap episodes и journal v2
+
+Добавлен persistent control state; Linux проверка нового increment пока ожидается.
+Воспроизведение проверок:
+
+```text
+uv run --locked python -m unittest scripts.security_event_health_qualification scripts.security_event_ledger_qualification scripts.security_event_store_qualification
+```
+
+`Store.heartbeat` проверяет подпись и counter, сохраняет исходный admission time;
+повтор не является новой активностью. `Store.poll` записывает clock checkpoint
+и gap episodes, поэтому это не read-only diagnostic. Runtime должен сам брать
+clock из доверенного источника; HTTP client не задаёт момент poll.
+
+При `security_heartbeat_conflict` или `security_heartbeat_regressed` сохранить
+producer/config/epoch reference и конечный reason code, проверить источник
+повторных сообщений. Не переподписывать старый heartbeat с новым counter ради
+healthy. При `security_heartbeat_claim_window` расследовать расхождение event
+stream с claim; не расширять окно после получения failed case.
+
+При `security_telemetry_episode`, `security_telemetry_identity` или
+`security_telemetry_time` admission должен оставаться запрещённым до проверки
+state и producer ownership. Нельзя очищать episode, менять deadline вручную или
+заменять потерянный control state пустым словарём. Journal v1 отвергается schema
+v2; автоматическая миграция с обнулением telemetry отсутствует. Сохранить старый
+volume и его source/config pins; не запускать initialize поверх него.
+
+Controlled тесты сверяют inclusive120s boundary, сохранение notice ID при restart,
+late recovery и новый ID при повторном outage после восстановления. Это ещё не
+измерение scheduler latency: периодический runtime, доставка и promotion gate
+остаются обязательными следующими этапами.
+
+## История проблем реализации
 
 Первый journal CI на `b6d0365` /42347131488 выполнил19tests без пропусков,
 но завершился failure на coverage gate: store имел30/36покрытых branches.

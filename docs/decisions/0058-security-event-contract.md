@@ -115,6 +115,48 @@ schema не заменяет их. До общей приёмки T29 и M23 о�
 
 ## Проверка и альтернативы
 
+### Durable heartbeat и gap state
+
+Следующий increment добавляет `security_event_health` в тот же atomic Store.
+Проверка Linux пока ожидается. Journal schema v2 хранит время начала наблюдения
+и ровно один control record на зарегистрированный producer: последний signed
+heartbeat с исходным admission time, открытые sequence/heartbeat episodes и
+монотонные generation counters. State v1 не получает автоматически пустую
+telemetry: несовместимый журнал отклоняется. Исторические v1 evidence сохраняют
+свой source; для живого v1 volume требуется отдельная проверенная миграция,
+её этот increment не заявляет.
+
+Heartbeat counter независим от event counter. Exact retry возвращает исходное
+подтверждение и не продлевает deadline; другой payload с тем же counter,
+обратный counter/time/last-event claim и слишком далёкий claim отвергаются.
+Время heartbeat expiry отсчитывается от меньшего observed/ingested timestamp,
+поэтому разрешённый clock skew не добавляет времени. До первого обязательного
+heartbeat состояние unhealthy. Initial deadline: время начала наблюдения+120 s.
+
+Missing sequence определяется из уже принятых event positions и signed
+last-event claim, без цикла по потенциально огромному числу из сообщения.
+Новый claim ограничен received high+64. Первое время незакрытого пропуска
+сохраняется, пока continuity не восстановлена; новые claims и частичное заполнение
+не перезапускают120s timer. Запоздавшее событие сохраняет исходный late flag.
+
+`Store.poll(clock_ms=...)` является изменяющей операцией: атомарно сохраняет
+clock checkpoint и открытие/закрытие episodes, затем возвращает bounded health
+projection. Истёкший heartbeat остаётся тем же outage episode при получении
+другого уже старого heartbeat. После свежего heartbeat следующий outage получает
+новый notice ID. Snapshot/повтор не должны терять незакрытый episode при restart.
+Сохранённые counters/timestamps и привязка heartbeat к stream вновь проверяются.
+
+Health unhealthy при любом незакрытом sequence gap, отсутствии/expiry обязательного
+heartbeat, pending delivery или полной ёмкости журнала. Projection всегда содержит
+`release_ready=false`: она не заменяет release authorization. Signature/clock/file
+ошибка не преобразуется в healthy. Переполнение generation counter не коммитит
+часть события или квитанции.
+
+Контракт вычисляет deadline при вызове poll с доверенным временем процесса.
+Он ещё не запускает periodic scheduler, не формирует signed telemetry.gap event
+и не подтверждает реальную доставку<=60s/наблюдение<=120s. Эти свойства проверяются
+следом на живом runtime вместе с HTTP, source adapters и audit admission.
+
 ### Постоянный журнал: решение следующего increment
 
 Добавлены `security_event_ledger` и Linux `security_event_store`; [native filesystem

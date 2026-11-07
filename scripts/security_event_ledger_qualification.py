@@ -81,6 +81,10 @@ class LedgerContracts(unittest.TestCase):
             self.book.ingest(self.envelope(ledger.MAX_RECORDS + 1), clock_ms=5000)
         self.assertEqual(self.book.document(), before)
         self.assertEqual(self.book.ingest(self.envelope(1), clock_ms=5000), before["records"][0])
+        state = self.book.poll(clock_ms=6000)
+        self.assertTrue(state["storage_full"])
+        self.assertEqual(state["pending_deliveries"], ledger.MAX_RECORDS)
+        self.assertFalse(state["healthy"])
 
     def test_historical_retry_after_age_limit_uses_original_verified_admission(self):
         envelope = self.envelope()

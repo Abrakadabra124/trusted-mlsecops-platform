@@ -183,7 +183,11 @@ class Store:
         with locked(self.root) as descriptor:
             book = self._load(descriptor)
             before = book.document()
-            result = getattr(book, operation)(envelope, clock_ms=clock_ms)
+            result = (
+                book.poll(clock_ms=clock_ms)
+                if operation == "poll"
+                else getattr(book, operation)(envelope, clock_ms=clock_ms)
+            )
             after = book.document()
             if before != after:
                 replace(descriptor, after)
@@ -194,3 +198,9 @@ class Store:
 
     def acknowledge(self, envelope, *, clock_ms):
         return self._update("acknowledge", envelope, clock_ms)
+
+    def heartbeat(self, envelope, *, clock_ms):
+        return self._update("heartbeat", envelope, clock_ms)
+
+    def poll(self, *, clock_ms):
+        return self._update("poll", None, clock_ms)

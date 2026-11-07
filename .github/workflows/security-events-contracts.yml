@@ -49,16 +49,16 @@ jobs:
         run: uv run --locked python -m unittest scripts.key_files_qualification scripts.monitoring_alerts_qualification scripts.release_policy_qualification
       - name: Durable journal, actual filesystem faults and restart
         run: |
-          uv run --locked ruff check mlsecops/security_event_ledger.py mlsecops/security_event_store.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py
-          uv run --locked ruff format --check mlsecops/security_event_ledger.py mlsecops/security_event_store.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-store.coverage" --source=mlsecops.security_event_ledger,mlsecops.security_event_store -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification
+          uv run --locked ruff check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py
+          uv run --locked ruff format --check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-store.coverage" --source=mlsecops.security_event_ledger,mlsecops.security_event_store,mlsecops.security_event_health -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification scripts.security_event_health_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-store.coverage" -o "$RUNNER_TEMP/security-store-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'security-store-coverage.json').read_text())['files']
-          if set(files) != {'mlsecops/security_event_ledger.py', 'mlsecops/security_event_store.py'}:
+          if set(files) != {'mlsecops/security_event_ledger.py', 'mlsecops/security_event_store.py', 'mlsecops/security_event_health.py'}:
               raise SystemExit('security_store_coverage_inventory')
           for name, report in sorted(files.items()):
               stats = report['summary']
