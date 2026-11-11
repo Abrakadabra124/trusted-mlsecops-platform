@@ -29,6 +29,27 @@ def collector_reader(settings, registry):
     )
 
 
+def failure_state(private_log, outbox, collector):
+    # Finite counts only; unknown readback stays unknown, never a successful zero.
+    result = {"observer_failed_checks": None, "outbox": None, "collector": None}
+    try:
+        result["observer_failed_checks"] = (
+            bounded_read(private_log, 65536).splitlines().count(b"trust_observer_check_failed")
+        )
+    except Exception:
+        pass
+    for name, reader in (("outbox", outbox), ("collector", collector)):
+        try:
+            records = reader()["records"]
+            result[name] = {
+                "records": len(records),
+                "receipts": sum(record["receipt"] is not None for record in records),
+            }
+        except Exception:
+            pass
+    return result
+
+
 def qualify():
     if (
         sys.platform != "linux"
@@ -308,6 +329,18 @@ def qualify():
                     fx.ingress.encode() not in bounded_read(private_log, 65536)
                     and b"PRIVATE-CANARY" not in bounded_read(private_log, 65536),
                 )
+            except Exception:
+                print(
+                    canonical(
+                        {
+                            "observer_diagnostic": failure_state(
+                                private_log, snapshot, lambda: readback(collector.snapshot)
+                            )
+                        }
+                    ).decode(),
+                    flush=True,
+                )
+                raise
             finally:
                 stop()
         check("collector-private-state-cleaned", fx.process is None and not fx.directory.exists())

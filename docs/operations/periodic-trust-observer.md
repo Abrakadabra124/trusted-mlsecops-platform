@@ -79,3 +79,19 @@ readback передал `expected_sha256` конструктору Store, кот
 реальным конструктором, исправлено только соединение тестового reader. Защиты
 runtime не ослаблены. Повторный native25371bf прошёл отдельно; исходный
 неуспех сохраняется в [evidence](../evidence/periodic-trust-observer-2026-11-11.md).
+
+## Таймаут доставки в повторной регрессии
+
+Run43102811593 на4aeece4: contracts691Linux executions/0skips pass; native
+promotion25 и trust history37 pass. Continuous observer завершился
+`trust_observer_case:observation_deadline` при ожидании первого committed
+revocation с receipt (45s). Первый heartbeat был получен, supervisor не завершился.
+Это отказ проверки, а не успешная доставка; причина из прежнего отчёта не установлена.
+
+Native harness теперь перед cleanup печатает только число неудачных проверок
+supervisor и количества записей/receipts в outbox и collector. Ошибка чтения
+остаётся null, а не нулём. Raw log, envelopes, keys и tokens не публикуются.
+Эти поля помогают отличить отсутствие enqueue от незавершённой доставки, но сами
+не доказывают причину. Сохранены исходные45s ожидания,30s period,60s delivery bound
+и120s detection bound. Не увеличивать пороги и не объявлять случайный повтор pass
+исправлением. Конкуренция диагностического reader с writer пока лишь гипотеза.

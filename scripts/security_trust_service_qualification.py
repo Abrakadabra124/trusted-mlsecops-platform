@@ -130,6 +130,25 @@ class SourceHeartbeat(unittest.TestCase):
             with self.assertRaises(Rejected):
                 native.collector_reader({**settings, "state_sha256": "invalid"}, self.fx.registry)
 
+    def test_native_failure_diagnostics_exclude_private_state_and_keep_unknowns(self):
+        from scripts import security_trust_service_native as native
+
+        log = self.path.parent / "private-observer.log"
+        log.write_bytes(b"PRIVATE-CANARY\ntrust_observer_check_failed\n")
+        document = {"records": [{"receipt": None}, {"receipt": {"private": "value"}}]}
+        result = native.failure_state(log, lambda: document, lambda: document)
+        self.assertEqual(result["observer_failed_checks"], 1)
+        self.assertEqual(result["outbox"], {"records": 2, "receipts": 1})
+        self.assertNotIn(b"PRIVATE", canonical(result))
+        self.assertNotIn(b"value", canonical(result))
+        with patch.object(native, "bounded_read", side_effect=Rejected("private path")):
+            result = native.failure_state(
+                log, MagicMock(side_effect=Rejected("private")), lambda: document
+            )
+        self.assertIsNone(result["observer_failed_checks"])
+        self.assertIsNone(result["outbox"])
+        self.assertEqual(result["collector"], {"records": 2, "receipts": 1})
+
     def test_optional_heartbeat_registry_cannot_launch_continuous_source(self):
         other = fixtures.SourceContracts("runTest")
         other.setUp()
