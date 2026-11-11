@@ -9,6 +9,8 @@ from pathlib import Path
 from mlsecops import (
     controller_bootstrap,
     kube_promotion,
+    kube_security_events,
+    kube_security_resources,
     kube_serving_probe,
     kube_storage,
     kube_trust,
@@ -41,6 +43,18 @@ from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
 
 NAMESPACE = "ml-serving"
+
+
+def serving_configuration(promotion):
+    kube_promotion.validate_config(promotion)
+    return {
+        **{
+            key: copy.deepcopy(value)
+            for key, value in promotion.items()
+            if key not in ("schema_version", "security_audit_config")
+        },
+        "identity_audit_file": "/security/identity-audit.json",
+    }
 
 
 def invoke(
@@ -99,6 +113,18 @@ def invoke(
         config.get("trust_target", Target.PRIMARY.value)
     ) is not trust_target:
         raise Rejected("candidate_authority_target")
+    if not candidate_probe:
+        if (
+            config.get("identity_audit_file") != "/security/identity-audit.json"
+            or "security_audit_config" in config
+        ):
+            raise Rejected("kube_serving_audit_configuration")
+        kube_security_events.validate(
+            state,
+            profile=profile,
+            environment=config["context"]["policy"]["environment"],
+            initial_root=config["trust_root"],
+        )
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [
         kube_promotion.configuration_map(state, name + "-" + field, field, value)
@@ -110,6 +136,8 @@ def invoke(
         profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"], trust_target=trust_target
     )
     spec["serviceAccountName"] = "serving"
+    if not candidate_probe:
+        spec = kube_security_resources.serving_spec(spec)
     spec["containers"][0]["command"][2] = (
         "mlsecops.monitoring_probe"
         if monitoring_operator is not None
@@ -400,7 +428,7 @@ def qualify(
             backend=kube_trust.binding,
         )
         kube_promotion.configure(state, promotion)
-        config = {key: value for key, value in promotion.items() if key != "schema_version"}
+        config = serving_configuration(promotion)
         config.update(
             minimum_sequence=1,
             audit_directory="/tmp/audit",

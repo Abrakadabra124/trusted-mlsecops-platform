@@ -75,14 +75,31 @@ PROMOTER = READ.replace(
     "SETUP",
     "from mlsecops.security_event_admission import emitter\nstore = emitter('/security/audit.json').store",
 )
+SERVING = READ.replace(
+    "SETUP",
+    "from mlsecops.security_event_delivery import configured\n"
+    "store = configured('/security/producer.json').store\n"
+    "if store.registry.producer(store.producer_id).role != 'serving':\n"
+    "    raise SystemExit(1)",
+)
 
 
-def job(state, profile, code, *, worker=False):
+def job(state, profile, code, *, worker=False, serving=False):
     hosted()
-    namespace, account = ("ml-train", "trainer") if worker else ("ml-promoter", "promoter")
+    if type(worker) is not bool or type(serving) is not bool or worker and serving:
+        raise Rejected("audit_native_role_conflict")
+    namespace, account = (
+        ("ml-train", "trainer")
+        if worker
+        else ("ml-serving", "serving")
+        if serving
+        else ("ml-promoter", "promoter")
+    )
     spec = pod_spec(profile["image"], account, [], memory="256Mi")
     spec["containers"][0]["command"] = ["python", "-c", code]
-    if not worker:
+    if serving:
+        spec = resources.serving_spec(spec)
+    elif not worker:
         spec = resources.promoter_spec(spec)
     name = "audit-proof-" + uuid.uuid4().hex
     document = job_document(name, namespace, spec, 90)
@@ -216,6 +233,20 @@ def qualify(root, state, config, request, image):
 
     health(state, profile)
     confirmed("fresh-signed-audit-over-kubernetes-mtls", True)
+    serving = job(state, profile, SERVING, serving=True)
+    confirmed(
+        "serving-outbox-is-distinct-from-trust-observer",
+        serving["pin"] == marker["pins"]["serving"]
+        and marker["pins"]["serving"] != marker["pins"]["trust"]
+        and marker["volumes"]["serving"] != marker["volumes"]["trust"]
+        and serving["records"] == [],
+    )
+    replacement = job(state, profile, SERVING, serving=True)
+    confirmed(
+        "serving-probe-replacement-retains-private-outbox",
+        replacement == serving
+        and serving["permissions"] == {"directory": "0o700", "identity": "0o600", "state": "0o600"},
+    )
     worker = """
 import os, socket
 from mlsecops.contracts import canonical

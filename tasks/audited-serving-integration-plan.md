@@ -121,3 +121,28 @@ security43107221066success753Linux0skips+25/37/15/46native. Freshlocked checkout
 Two added caller regressions verify incomplete audit stops serving/candidate before
 actual refusal. Added native repeated initialize_campaign compares root/version/
 signed envelope after a working policy exists; its next run must confirm no reset.
+
+The d4e1e86 run now confirms this idempotence assertion: Kubernetes43108656911
+success14promotion+10audit, owned SQL/cluster cleanup success. Security43108621949
+success755Linux0skips and25/37/15/46native. Fresh checkout79tests0skips was verified.
+
+Serving integration increment: fourth role now has dedicated TLS/signing files,
+identity-audit.json and security-serving PVC. Operator selects by namespace+claim
+name and rejects swapped/missing volumes without repair. ml-serving quota permits
+exactly two PVCs/five Secrets, with no CPU/memory increase. No duplicate network
+policy is created for the shared namespace/service account. Service digest binds
+workspace/environment/role, independently of model and image replacement.
+
+Ordinary serving/privacy configuration now validates promotion schema2, drops its
+schema/admission fields, adds only the serving identity config, and deep-copies
+context. Ordinary serving Jobs require the identity config and validated audit
+profile before creation, mount only serving audit credentials, and leave candidate
+qualification Jobs unchanged. Real serving_http.configured is exercised by unit
+tests with the converted config. Local127tests-Werror pass with one Linux-only skip.
+New native checks read actual serving outbox from two owned Jobs, compare pins,
+separate volume identity and0700/0600 permissions; hosted verification is pending.
+
+Still required: uninterrupted actual HTTP lifecycle before/after release, mandatory
+registry heartbeat, independent collector receipts for deployed HTTP denial,
+candidate/load/monitoring integration, observer rotation transition, fresh M13/M14
+and the original full R1 gates. No checkbox claiming those outcomes is closed here.

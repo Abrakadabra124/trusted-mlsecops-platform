@@ -153,3 +153,20 @@ observer после root rotation ещё открыты. Подготовлен�
 checks для остановки serving/candidate при incomplete audit и native проверка
 повторной подготовки после установки рабочей SQL policy; её отдельный результат
 нужно получить до утверждения о native идемпотентности этого helper.
+
+## Подтверждение повторной подготовки d4e1e86
+
+[Kubernetes43108656911](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43108656911)
+завершился success на `d4e1e86ed7e1174f3497aa5b46bf30be2f5a8dd0`:
+14promotion+10audit assertions. Включена фактическая проверка
+campaign-repeat-keeps-authority-policy-and-history после установки рабочей policy.
+Stop owned source SQL и remove owned disposable cluster завершились success.
+Source dirty=false, full_M10=inconclusive, release_ready=false.
+
+[Security43108621949](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43108621949)
+завершился success:755Linux tests/0skips,25+37+15+46native assertions.
+Период observer30.017s, operation-start->receipt29.842491103s,
+stopped-source90.154024915s. Identity period30.112s, stopped notice91.235523946s.
+Fresh locked checkout d4e1e86:79tests3.441s-Werror0skips, interpreter/imports/git clean
+проверены. Это подтверждение идемпотентности, не новый full R1 или устранение
+причины исторического intermittent observer timeout.

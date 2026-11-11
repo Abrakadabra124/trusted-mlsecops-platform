@@ -17,7 +17,7 @@ from scripts.kube_cli_privacy_probe import verify_snapshot
 from scripts.kube_privacy_services import Windows
 from scripts.kube_promotion_native import configuration, initialize_campaign, stage
 from scripts.kube_promotion_snapshot import read as snapshot
-from scripts.kube_serving_native import invoke
+from scripts.kube_serving_native import invoke, serving_configuration
 from scripts.kube_trust_native import hosted
 
 CLI_CASES = {
@@ -105,7 +105,7 @@ def controlled(root, state, image, profile):
             raise Rejected("cli_privacy_controlled_approval")
         receipt = accepted["receipt"]
         context = primary(state, arguments, receipt)
-        config = {k: v for k, v in promotion.items() if k != "schema_version"}
+        config = serving_configuration(promotion)
         config.update(
             minimum_sequence=1,
             audit_directory="/tmp/audit",

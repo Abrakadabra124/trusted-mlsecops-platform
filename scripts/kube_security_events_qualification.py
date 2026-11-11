@@ -197,7 +197,12 @@ class AuditBootstrap(unittest.TestCase):
                         clusterIP="10.96.0.10", clusterIPs=["10.96.0.10"], ipFamilies=["IPv4"]
                     )
                 if document["kind"] == "PersistentVolumeClaim":
-                    name = "pv-" + document["metadata"]["namespace"]
+                    name = (
+                        "pv-"
+                        + document["metadata"]["namespace"]
+                        + "-"
+                        + document["metadata"]["name"]
+                    )
                     observed["spec"]["volumeName"] = name
                     observed["status"] = {"phase": "Bound"}
                     self.objects["PersistentVolume/_/" + name] = {
@@ -274,7 +279,9 @@ class AuditBootstrap(unittest.TestCase):
                 key: value[key]
                 for key in ("schema_version", "role", "producer_id", "registry_sha256")
             }
-            self.report.update(state_sha256=digest(namespace.encode()), release_ready=False)
+            self.report.update(
+                state_sha256=digest(value["producer_id"].encode()), release_ready=False
+            )
             if self.bad_report:
                 self.report["role"] = "foreign"
             pod = {
@@ -321,7 +328,7 @@ class AuditBootstrap(unittest.TestCase):
         marker = self.bootstrap()
         self.assertTrue(marker["ready"])
         self.assertEqual(set(marker["pins"]), set(resources.ROLES))
-        self.assertEqual(len(self.deletes), 6)
+        self.assertEqual(len(self.deletes), 8)
         self.assertFalse(any(k.startswith(("Job/", "ConfigMap/")) for k in marker["resources"]))
         before = canonical(marker), list(self.creates)
         self.assertEqual(self.bootstrap(), marker)
@@ -329,6 +336,24 @@ class AuditBootstrap(unittest.TestCase):
         for changed in ({"profile": {}}, {"environment": "other"}, {"initial_root": "foreign"}):
             with self.assertRaises(Rejected):
                 self.subject.validate(self.directory, **changed)
+
+    def test_same_namespace_serving_and_observer_volumes_cannot_be_swapped_or_recreated(self):
+        self.world()
+        marker = self.bootstrap()
+        self.assertNotEqual(marker["pins"]["trust"], marker["pins"]["serving"])
+        self.assertNotEqual(marker["volumes"]["trust"], marker["volumes"]["serving"])
+        created = list(self.creates)
+        original = self.state_marker()
+        self.state_marker(lambda m: m["volumes"].update(serving=m["volumes"]["trust"]))
+        with self.assertRaisesRegex(Rejected, "volume_changed"):
+            self.subject.validate(self.directory)
+        write_json(self.subject.directory(self.directory) / "resources.json", original)
+        key = "PersistentVolumeClaim/ml-serving/security-serving"
+        del self.objects[key]
+        with self.assertRaises(Rejected):
+            self.bootstrap()
+        self.assertEqual(created, self.creates)
+        self.assertNotIn(key, self.objects)
 
     def test_foreign_profile_or_existing_incomplete_directory_never_creates_or_rekeys(self):
         self.world()

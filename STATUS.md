@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+CP4/T29 serving role/config increment: отдельные signing/TLS credentials, четвёртый
+PVC с проверкой namespace+claim, bounded quotas и обязательный identity config
+для ordinary serving Jobs реализованы. Local127tests-Werror pass/1Linux-only skip;
+hosted proof нового состояния pending. Непрерывный HTTP lifecycle, обязательный
+serving heartbeat, observer rotation и fresh M13/M14 остаются открытыми.
+[План и границы](tasks/audited-serving-integration-plan.md),
+[ранбук](docs/operations/kubernetes-security-state.md).
+
 CP4/T29 2026-11-12: campaign authority preparation00b7c39 проверена:
 [evidence](docs/evidence/kubernetes-audit-2026-11-12.md), Kubernetes43107249594
 success13+10assertions, security43107221066success753Linux0skips+25+37+15+46native.

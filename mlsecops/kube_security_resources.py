@@ -20,12 +20,14 @@ ROLES = {
     "collector": (NAMESPACE, "collector"),
     "trust": ("ml-serving", "serving"),
     "promoter": ("ml-promoter", "promoter"),
+    "serving": ("ml-serving", "serving"),
 }
 COMMON = ("registry.json", "ca.crt", "tls.crt", "tls.key", "ingress.token")
 FILES = {
     "collector": (*COMMON, "collector.json", "receipt.pem", "collector.pem", "operator.token"),
     "trust": (*COMMON, "producer.json", "observer.json", "producer.pem"),
     "promoter": (*COMMON, "audit.json", "producer.pem"),
+    "serving": (*COMMON, "producer.json", "identity-audit.json", "producer.pem"),
 }
 
 
@@ -33,6 +35,11 @@ def identity(role):
     if type(role) is not str or role not in ROLES:
         raise Rejected("kube_security_role")
     return ROLES[role]
+
+
+def claim_name(role):
+    identity(role)
+    return "security-serving" if role == "serving" else "security-events"
 
 
 def secret(workspace, role, files):
@@ -94,14 +101,14 @@ def private_files(spec, name, names, *, public=False):
     )
 
 
-def persistent(spec):
+def persistent(spec, role):
     # Do not recursively grant group access to existing 0700/0600 journal contents.
     # Actual PVC/root permissions and preservation must be checked in hosted native tests.
     spec["securityContext"]["fsGroupChangePolicy"] = "OnRootMismatch"
     spec["volumes"].append(
         {
             "name": "security-state",
-            "persistentVolumeClaim": {"claimName": "security-events"},
+            "persistentVolumeClaim": {"claimName": claim_name(role)},
         }
     )
     spec["containers"][0]["volumeMounts"].append({"name": "security-state", "mountPath": "/audit"})
@@ -117,7 +124,7 @@ def provision_spec(image, role, config_name):
         memory="256Mi",
     )
     private_files(spec, config_name, ("provision.json",), public=True)
-    return persistent(spec)
+    return persistent(spec, role)
 
 
 def promoter_spec(spec):
@@ -125,7 +132,15 @@ def promoter_spec(spec):
         raise Rejected("kube_security_promoter_identity")
     result = copy.deepcopy(spec)
     private_files(result, "security-promoter", FILES["promoter"])
-    return persistent(result)
+    return persistent(result, "promoter")
+
+
+def serving_spec(spec):
+    if spec.get("serviceAccountName") != "serving":
+        raise Rejected("kube_security_serving_identity")
+    result = copy.deepcopy(spec)
+    private_files(result, "security-serving", FILES["serving"])
+    return persistent(result, "serving")
 
 
 def runtime_spec(image, role):
@@ -150,7 +165,7 @@ def runtime_spec(image, role):
     for container in (*spec.get("initContainers", []), *spec["containers"]):
         container["resources"]["limits"].update(cpu="1", memory="256Mi")
     private_files(spec, "security-" + role, FILES[role])
-    return persistent(spec)
+    return persistent(spec, role)
 
 
 def deployment(workspace, image, role):
@@ -177,8 +192,9 @@ def base_resources(workspace):
     collector = {POD_NAMESPACE: NAMESPACE, ACCOUNT: "collector", "k8s:app": "collector"}
     clients = [
         {POD_NAMESPACE: namespace, ACCOUNT: account}
-        for role, (namespace, account) in ROLES.items()
-        if role != "collector"
+        for namespace, account in dict.fromkeys(
+            value for key, value in ROLES.items() if key != "collector"
+        )
     ]
     documents.extend(
         [
@@ -213,11 +229,12 @@ def base_resources(workspace):
             ),
         ]
     )
+    network_identities = set()
     for role, (namespace, account) in ROLES.items():
         documents.append(
             resource(
                 "PersistentVolumeClaim",
-                "security-events",
+                claim_name(role),
                 workspace,
                 namespace,
                 spec={
@@ -227,7 +244,8 @@ def base_resources(workspace):
                 },
             )
         )
-        if role != "collector":
+        if role != "collector" and (namespace, account) not in network_identities:
+            network_identities.add((namespace, account))
             documents.append(
                 resource(
                     "CiliumNetworkPolicy",

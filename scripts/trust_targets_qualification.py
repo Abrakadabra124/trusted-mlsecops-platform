@@ -45,7 +45,15 @@ class TrustTargetContracts(unittest.TestCase):
             limit = int(quota["spec"]["hard"]["count/secrets"])
             with self.subTest(namespace=namespace):
                 self.assertLessEqual(count, limit)
-                self.assertEqual(limit, 4 if namespace in ("ml-serving", "ml-promoter") else 2)
+                self.assertEqual(
+                    limit,
+                    5 if namespace == "ml-serving" else 4 if namespace == "ml-promoter" else 2,
+                )
+                claims = sum(
+                    d["kind"] == "PersistentVolumeClaim" and d["metadata"]["namespace"] == namespace
+                    for d in documents
+                )
+                self.assertLessEqual(claims, int(quota["spec"]["hard"]["persistentvolumeclaims"]))
 
     def test_alternate_fault_coordinator_only_allows_irreversible_model_revoke(self):
         for fault in ("outage", "key-revocation", "policy-change", "blackhole"):

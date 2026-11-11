@@ -14,8 +14,14 @@ Kubernetes на4aeece4 /43102906649: [evidence](../evidence/kubernetes-audit-202
 | Collector | ml-audit / collector | Server TLS, receipt key, collector key, ingress/operator tokens | Собственный journal |
 | Trust observer | ml-serving / serving | Client TLS, собственный producer key, ingress token; существующий SELECT-only trust client | Собственный outbox |
 | Promoter | ml-promoter / promoter | Client TLS, собственный producer key, ingress token; отдельные существующие model/trust clients | Собственный outbox |
+| HTTP serving | ml-serving / serving | Отдельные client TLS и producer key, identity-audit.json; без promoter/observer signing keys | Отдельный outbox на security-serving |
 
-Все три PVC имеют имя `security-events`, но принадлежат разным namespaces.
+Три прежних PVC имеют имя `security-events` в разных namespaces. Четвёртый,
+`ml-serving/security-serving`, принадлежит HTTP role. Operator выбирает PVC
+по namespace **и имени роли**, затем проверяет UID, PV и claimRef. Совпадение
+namespace с trust observer не разрешает использование его тома.
+В ml-serving бюджет явно ограничен двумя PVC и пятью Secrets: model client,
+два trust clients, observer audit и HTTP audit. CPU/memory бюджет не увеличен.
 Используется существующий storage class с Retain policy. Runtime не получает
 CA private key; worker не получает audit profile. Network resources открывают
 только TCP8443 между обозначенными namespace/service account и collector.
@@ -87,6 +93,30 @@ model client, два trust clients и один audit role. ml-serving также
 cluster, без изменений локальной инфраструктуры и без удаления старых данных.
 
 ## RB: существующий или повреждённый журнал
+
+Для нового четырёхролевого профиля недопустимо дописывать файлы в старый
+трёхролевой marker, пересоздавать identity или выдавать другой PVC за прежний.
+Повтор bootstrap проверяет полный набор закреплённых файлов и ресурсов; потеря
+serving PVC либо подмена его PV на observer PV приводят к отказу без repair.
+Сохранить приватные marker/UID/pins, установить причину и эскалировать оператору.
+В этом disposable стенде новую проверку проводят в новом принадлежащем задаче
+окружении. Эта процедура не является миграцией действующего постоянного журнала.
+
+Обычные serving/privacy Jobs используют `identity_audit_file` с фиксированным
+значением `/security/identity-audit.json`. Поле `security_audit_config` принадлежит
+promoter и отвергается до создания serving Job. Конвертация сначала валидирует
+полную promotion schema2, затем формирует отдельную HTTP-конфигурацию; вложенные
+объекты копируются, чтобы настройки HTTP не меняли исходный promotion context.
+До создания Job operator проверяет существующий audit profile, image, environment
+и initial root. После root rotation эта проверка остаётся закрытой до реализации
+проверяемого обновления observer; удалять сравнение root нельзя.
+
+`service_sha256` закрепляет workspace, environment и роль HTTP-сервиса. Это
+стабильная идентичность сервиса между заменами Pod, не digest модели или образа.
+Обычный HTTP lifespan запускает существующий identity child с этим файлом.
+Непрерывный serving до/между promotion и обязательный serving heartbeat в registry
+пока не соединены. Candidate qualification paths также ещё не интегрированы с
+этой идентичностью. Provisioning и mount tests не являются свежими M13/M14/M23.
 
 Симптом: `security_provision_rejected`, либо runtime отказ чтения identity/state.
 Не удалять каталог и не повторять init. Сначала проверить ожидаемые namespace,

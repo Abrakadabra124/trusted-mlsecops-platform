@@ -13,12 +13,13 @@ class NativeAuditContracts(unittest.TestCase):
     def setUp(self):
         self.profile = {"image": "image@sha256:" + "a" * 64, "image_id": "sha256:" + "a" * 64}
 
-    def test_all_four_remote_programs_compile_and_use_fixed_private_paths(self):
+    def test_all_remote_programs_compile_and_use_fixed_private_paths(self):
         for code in (
             subject.HEALTH.replace("EXPECTED", "True"),
             subject.HEALTH.replace("EXPECTED", "False"),
             subject.COLLECTOR,
             subject.PROMOTER,
+            subject.SERVING,
         ):
             compile(code, "<owned-audit-proof>", "exec")
             self.assertNotIn("initialize(", code)
@@ -43,6 +44,7 @@ class NativeAuditContracts(unittest.TestCase):
         self,
         *,
         worker=False,
+        serving=False,
         code=0,
         owner="owned",
         content=b'{"verified":true}',
@@ -81,12 +83,13 @@ class NativeAuditContracts(unittest.TestCase):
             patch.object(subject.kube_promotion, "cleanup") as cleanup,
         ):
             try:
-                result = subject.job("state", self.profile, "pass", worker=worker)
+                result = subject.job("state", self.profile, "pass", worker=worker, serving=serving)
             finally:
                 cleanup.assert_called_once()
                 self.assertEqual(cleanup.call_args.args[1][0][1], "owned")
                 self.assertEqual(
-                    cleanup.call_args.kwargs["namespace"], "ml-train" if worker else "ml-promoter"
+                    cleanup.call_args.kwargs["namespace"],
+                    "ml-train" if worker else "ml-serving" if serving else "ml-promoter",
                 )
         return result, record["document"]
 
@@ -98,6 +101,28 @@ class NativeAuditContracts(unittest.TestCase):
             secrets = [v["secret"]["secretName"] for v in spec["volumes"] if "secret" in v]
             self.assertEqual(secrets, [] if worker else ["security-promoter"])
             self.assertFalse(spec["automountServiceAccountToken"])
+
+    def test_serving_probe_uses_only_serving_credentials_and_conflicting_roles_refuse(self):
+        _, document = self.job(serving=True)
+        spec = document["spec"]["template"]["spec"]
+        self.assertEqual(spec["serviceAccountName"], "serving")
+        self.assertEqual(
+            [v["secret"]["secretName"] for v in spec["volumes"] if "secret" in v],
+            ["security-serving"],
+        )
+        self.assertEqual(
+            [
+                v["persistentVolumeClaim"]["claimName"]
+                for v in spec["volumes"]
+                if "persistentVolumeClaim" in v
+            ],
+            ["security-serving"],
+        )
+        with patch.object(subject, "hosted"), patch.object(subject, "kubectl") as api:
+            for flags in ({"serving": True, "worker": True}, {"serving": 1}, {"worker": "yes"}):
+                with self.assertRaises(Rejected):
+                    subject.job("state", self.profile, "pass", **flags)
+            api.assert_not_called()
 
     def test_failed_replaced_ambiguous_or_malformed_probe_is_never_a_pass(self):
         for change in (

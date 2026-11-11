@@ -385,6 +385,15 @@ class CLIPrivacyContracts(unittest.TestCase):
         }
         fixture.trust_fixture.key = Path("unused-fixture-key")
         fixture.trust_fixture.public = "public"
+        fixture.arguments.update(
+            context={"policy": {"environment": "local-cpu"}},
+            trusted_root="public",
+            expected_policy="a" * 64,
+            expected_serving_image="image",
+        )
+        promotion_config = native.configuration(
+            "/client", "/trust-client", fixture.arguments, "public"
+        )
         fixtures = Mock(return_value=fixture)
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -397,7 +406,7 @@ class CLIPrivacyContracts(unittest.TestCase):
             patch.object(
                 native,
                 "configuration",
-                return_value={"schema_version": 1, "expected_policy": "policy"},
+                return_value=promotion_config,
             ),
             patch.object(native.kube_promotion, "configure"),
             patch.object(native.trust_authority, "install"),
@@ -451,6 +460,10 @@ class CLIPrivacyContracts(unittest.TestCase):
                 self.assertEqual(primary.call_count, 2)
                 campaign.assert_called_once_with(Path(directory), Path(directory), "image")
                 self.assertTrue(invoke.call_args.kwargs["cli_privacy"])
+                self.assertEqual(
+                    invoke.call_args.args[2]["identity_audit_file"], "/security/identity-audit.json"
+                )
+                self.assertNotIn("security_audit_config", invoke.call_args.args[2])
                 windows.return_value.close.assert_called_once()
                 self.assertNotIn("_privacy_needles", result["native"])
                 store.assert_called_once()

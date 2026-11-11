@@ -143,6 +143,7 @@ class AuditMaterials(unittest.TestCase):
                 "collector": "collector.json",
                 "trust": "producer.json",
                 "promoter": "audit.json",
+                "serving": "producer.json",
             }[role]
             value = decode(files[config_name])
             self.assertEqual(value["schema_version"], 3 if role == "promoter" else 2)
@@ -170,11 +171,31 @@ class AuditMaterials(unittest.TestCase):
                 materials.runtime_files("promoter", "c" * 64, address)
         with self.assertRaises(Rejected):
             materials.runtime_files("promoter", "bad", "10.0.0.1")
-        for role in ("worker", "serving", [], None):
+        for role in ("worker", [], None):
             with self.assertRaises(Rejected):
                 materials.runtime_files(role, "c" * 64, "10.0.0.1")
             with self.assertRaises(Rejected):
                 materials.provision(role)
+
+    def test_serving_identity_is_bound_to_service_not_promoter_or_trust_key(self):
+        materials = self.created()
+        files = materials.runtime_files("serving", "c" * 64, "10.96.0.10")
+        identity = decode(files["identity-audit.json"])
+        self.assertEqual(set(identity), {"schema_version", "producer_config", "service_sha256"})
+        self.assertEqual(identity["producer_config"], "/security/producer.json")
+        self.assertEqual(len(identity["service_sha256"]), 64)
+        self.assertEqual(files["producer.pem"], materials.read("keys/serving.pem"))
+        for role in ("promoter", "trust", "collector", "root", "receipt"):
+            self.assertNotEqual(files["producer.pem"], materials.read(f"keys/{role}.pem"))
+        repeated = materials.runtime_files("serving", "d" * 64, "10.96.0.11")
+        self.assertEqual(decode(repeated["identity-audit.json"]), identity)
+        other = self.subject.create(
+            self.directory / "other", **{**self.options, "workspace": "d" * 32}
+        )
+        other_files = other.runtime_files("serving", "c" * 64, "10.96.0.10")
+        self.assertNotEqual(
+            decode(other_files["identity-audit.json"])["service_sha256"], identity["service_sha256"]
+        )
 
     def test_saved_policy_cannot_relabel_registry_and_expiry_never_generates_new_keys(self):
         materials = self.created()

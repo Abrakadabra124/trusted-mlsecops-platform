@@ -14,6 +14,55 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeContracts(unittest.TestCase):
+    def test_serving_configuration_is_separate_from_promotion_and_requires_exact_input(self):
+        from scripts.kube_promotion_native import configuration
+
+        arguments = dict(
+            context={"policy": {"environment": "local-cpu"}},
+            trusted_root="root",
+            expected_policy="a" * 64,
+            expected_serving_image=PROFILE["image_id"],
+        )
+        promotion = configuration("/client", "/trust-client", arguments, "authority")
+        before = canonical(promotion)
+        config = native.serving_configuration(promotion)
+        self.assertEqual(config["identity_audit_file"], "/security/identity-audit.json")
+        self.assertNotIn("security_audit_config", config)
+        self.assertNotIn("schema_version", config)
+        self.assertEqual(config["expected_serving_image"], PROFILE["image_id"])
+        config["context"]["policy"]["environment"] = "changed"
+        self.assertEqual(canonical(promotion), before)
+        for changed in (
+            {**promotion, "schema_version": 1},
+            {**promotion, "foreign": True},
+            {**promotion, "security_audit_config": "/other/audit.json"},
+        ):
+            with self.assertRaises(Rejected):
+                native.serving_configuration(changed)
+
+    def test_missing_or_promoter_identity_and_unverified_audit_never_create_serving_jobs(self):
+        config = {
+            "identity_audit_file": "/security/identity-audit.json",
+            "context": {"policy": {"environment": "local-cpu"}},
+            "trust_root": "root",
+        }
+        with (
+            patch.object(native, "kubectl") as api,
+            patch.object(native.kube_security_events, "validate") as validate,
+        ):
+            for bad in (
+                {},
+                {**config, "identity_audit_file": "/security/audit.json"},
+                {**config, "security_audit_config": "/security/audit.json"},
+            ):
+                with self.assertRaisesRegex(Rejected, "serving_audit_configuration"):
+                    native.invoke(Path("unused"), PROFILE, bad, {})
+            validate.assert_not_called()
+            validate.side_effect = Rejected("missing_owned_state")
+            with self.assertRaisesRegex(Rejected, "missing_owned_state"):
+                native.invoke(Path("unused"), PROFILE, config, {})
+            api.assert_not_called()
+
     def test_prepare_requires_campaign_before_actual_refusal_and_does_not_continue_on_failure(self):
         for failure in (False, True):
             order = []
@@ -511,6 +560,11 @@ class NativeContracts(unittest.TestCase):
                 privacy_operator.start.side_effect = lambda: self.assertEqual(created, [])
                 privacy_operator.finish.side_effect = lambda report, raw: report
                 markers = []
+                config = {
+                    "identity_audit_file": "/security/identity-audit.json",
+                    "context": {"policy": {"environment": "local-cpu"}},
+                    "trust_root": "root",
+                }
 
                 def mapping(state, name, field, value):
                     return {
@@ -574,6 +628,7 @@ class NativeContracts(unittest.TestCase):
                     return {"type": "Complete" if success else "Failed"}, pod, 2.5
 
                 with (
+                    patch.object(native.kube_security_events, "validate") as audit_profile,
                     patch.object(native.kube_promotion, "configuration_map", side_effect=mapping),
                     patch.object(
                         native.kube_promotion, "pod_spec", return_value=copy.deepcopy(spec)
@@ -594,7 +649,7 @@ class NativeContracts(unittest.TestCase):
                             native.invoke(
                                 state,
                                 PROFILE,
-                                {},
+                                config,
                                 {"ready": True} if cli else {"fault": "outage"},
                                 coordinator=coordinator if coordinated else None,
                                 candidate_probe=privacy,
@@ -609,7 +664,7 @@ class NativeContracts(unittest.TestCase):
                             native.invoke(
                                 state,
                                 PROFILE,
-                                {},
+                                config,
                                 {"ready": True}
                                 if cli
                                 else {"fault": "outage"}
@@ -636,10 +691,21 @@ class NativeContracts(unittest.TestCase):
                             receiver.return_value.finish.assert_called_once()
                     else:
                         with self.assertRaisesRegex(Rejected, "job_failed"):
-                            native.invoke(state, PROFILE, {}, {})
+                            native.invoke(state, PROFILE, config, {})
                     self.assertEqual(cleanup.call_args.kwargs, {"namespace": "ml-serving"})
                 pod = created[-1]["spec"]["template"]["spec"]
                 self.assertEqual(pod["serviceAccountName"], "serving")
+                secrets = [v["secret"]["secretName"] for v in pod["volumes"] if "secret" in v]
+                self.assertNotIn("security-promoter", secrets)
+                self.assertNotIn("security-trust", secrets)
+                if privacy:
+                    self.assertNotIn("security-serving", secrets)
+                    audit_profile.assert_not_called()
+                else:
+                    self.assertIn("security-serving", secrets)
+                    audit_profile.assert_called_once_with(
+                        state, profile=PROFILE, environment="local-cpu", initial_root="root"
+                    )
                 self.assertEqual(
                     pod["containers"][0]["command"][2],
                     "scripts.kube_cli_privacy_probe"
@@ -665,21 +731,24 @@ class NativeContracts(unittest.TestCase):
             api.assert_not_called()
 
     def test_normal_config_selects_kubernetes_only_with_valid_matching_profile(self):
+        from scripts.kube_promotion_native import configuration
+
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary).resolve()
             token = directory / "token"
             token.write_text("b" * 64)
             token.chmod(0o600)
-            config = {
-                "storage_client": "/client",
-                "trust_client": "/trust-client",
+            arguments = {
                 "context": {"policy": {"environment": "local-cpu"}},
                 "trusted_root": "root",
                 "expected_policy": "a" * 64,
                 "expected_serving_image": PROFILE["image_id"],
+            }
+            config = {
+                **native.serving_configuration(
+                    configuration("/client", "/trust-client", arguments, "root")
+                ),
                 "minimum_sequence": 1,
-                "trust_root": "root",
-                "minimum_trust_version": 1,
                 "audit_directory": str(directory / "audit"),
                 "token_file": str(token),
                 "kubernetes_worker": PROFILE,
@@ -690,9 +759,12 @@ class NativeContracts(unittest.TestCase):
                 patch.object(serving_http.trust, "Lease"),
                 patch.object(serving_http.release_reader, "Reader"),
                 patch.object(serving_http.serving, "Engine") as engine,
-                patch.object(serving_http, "create_app"),
+                patch.object(serving_http, "create_app") as app,
+                patch.object(serving_http.security_identity_http, "configured") as identity,
             ):
                 serving_http.configured(path)
+                identity.assert_called_once_with("/security/identity-audit.json")
+                self.assertIs(app.call_args.kwargs["identity_audit"], identity.return_value)
                 factory = engine.call_args.kwargs["worker_factory"]
                 self.assertEqual(factory.func.__module__, "mlsecops.kube_serving_runtime")
                 self.assertEqual(factory.keywords["profile"], PROFILE)

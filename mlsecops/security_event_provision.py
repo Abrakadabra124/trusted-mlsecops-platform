@@ -19,7 +19,7 @@ def provision(value):
     events.shape(value, FIELDS)
     events.version(value["schema_version"])
     role = value["role"]
-    if type(role) is not str or role not in ("collector", "trust", "promoter"):
+    if type(role) is not str or role not in ("collector", "trust", "promoter", "serving"):
         raise Rejected("security_provision_role")
     clock = time.time_ns() // 1_000_000
     registry = config.Registry(

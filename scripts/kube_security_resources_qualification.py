@@ -17,12 +17,12 @@ class AuditResources(unittest.TestCase):
         self.image = "trusted-mlsecops:sha-" + "b" * 64
 
     def test_unknown_roles_or_secret_inventory_cannot_receive_privileged_files(self):
-        for role in ("worker", "trainer", "evaluator", "serving", "operator", "", None, []):
+        for role in ("worker", "trainer", "evaluator", "operator", "", None, []):
             with self.assertRaises(Rejected):
                 self.subject.provision_spec(self.image, role, "owned-config")
             with self.assertRaises(Rejected):
                 self.subject.secret(self.workspace, role, {})
-        for role in ("promoter", "trust", "collector"):
+        for role in ("promoter", "trust", "collector", "serving"):
             files = {name: b"fixture" for name in self.subject.FILES[role]}
             for invalid in (
                 {},
@@ -43,7 +43,7 @@ class AuditResources(unittest.TestCase):
                 self.assertFalse({"receipt.pem", "collector.pem", "operator.token"} & set(files))
 
     def test_provision_job_has_only_public_config_and_one_role_persistent_volume(self):
-        for role in ("promoter", "trust", "collector"):
+        for role in ("promoter", "trust", "collector", "serving"):
             spec = self.subject.provision_spec(self.image, role, "owned-config")
             self.assertFalse(spec["automountServiceAccountToken"])
             self.assertEqual(spec["securityContext"]["runAsUser"], 65532)
@@ -67,7 +67,9 @@ class AuditResources(unittest.TestCase):
                 for v in spec["volumes"]
                 if "persistentVolumeClaim" in v
             ]
-            self.assertEqual(claims, ["security-events"])
+            self.assertEqual(
+                claims, ["security-serving" if role == "serving" else "security-events"]
+            )
             self.assertEqual(spec["restartPolicy"], "Never")
 
     def test_runtime_has_no_initializer_for_missing_persistent_state(self):
@@ -132,13 +134,60 @@ class AuditResources(unittest.TestCase):
         self.assertNotIn(b"trainer", canonical(policies))
         self.assertNotIn(b"evaluator", canonical(policies))
 
-    def test_three_separate_claims_and_single_replica_recreate_runtime(self):
+    def test_serving_mounts_only_its_identity_and_distinct_persistent_state(self):
+        initial = kube_worker.pod_spec(self.image, "serving", ["mlsecops.serving_http"])
+        before = canonical(initial)
+        spec = self.subject.serving_spec(initial)
+        self.assertEqual(canonical(initial), before)
+        self.assertEqual(spec["containers"][0]["command"], initial["containers"][0]["command"])
+        self.assertEqual(
+            [v["secret"]["secretName"] for v in spec["volumes"] if "secret" in v],
+            ["security-serving"],
+        )
+        self.assertEqual(
+            [
+                v["persistentVolumeClaim"]["claimName"]
+                for v in spec["volumes"]
+                if "persistentVolumeClaim" in v
+            ],
+            ["security-serving"],
+        )
+        self.assertNotIn(b"security-promoter", canonical(spec))
+        self.assertNotIn(b"security-trust", canonical(spec))
+        self.assertNotIn(b"security_event_provision", canonical(spec))
+        for account in ("trainer", "evaluator", "controller", "promoter", "collector"):
+            worker = kube_worker.pod_spec(self.image, account, ["mlsecops.worker"])
+            with self.assertRaises(Rejected):
+                self.subject.serving_spec(worker)
+            self.assertNotIn(b"security-serving", canonical(worker))
+
+    def test_same_namespace_claims_and_network_resources_are_unique(self):
+        documents = self.subject.base_resources(self.workspace)
+        references = [
+            (d["kind"], d["metadata"].get("namespace"), d["metadata"]["name"]) for d in documents
+        ]
+        self.assertEqual(len(references), len(set(references)))
+        claims = [
+            d
+            for d in documents
+            if d["kind"] == "PersistentVolumeClaim" and d["metadata"]["namespace"] == "ml-serving"
+        ]
+        self.assertEqual(
+            {d["metadata"]["name"] for d in claims}, {"security-events", "security-serving"}
+        )
+        quota = self.subject.namespace_resources("ml-serving", "serving", self.workspace)[3][
+            "spec"
+        ]["hard"]
+        self.assertEqual(quota["persistentvolumeclaims"], "2")
+        self.assertEqual(quota["count/secrets"], "5")
+
+    def test_four_separate_claims_and_single_replica_recreate_runtime(self):
         documents = self.subject.base_resources(self.workspace)
         claims = [d for d in documents if d["kind"] == "PersistentVolumeClaim"]
         self.assertEqual(
             {d["metadata"]["namespace"] for d in claims}, {"ml-audit", "ml-serving", "ml-promoter"}
         )
-        self.assertEqual(len(claims), 3)
+        self.assertEqual(len(claims), 4)
         for claim in claims:
             self.assertEqual(claim["spec"]["storageClassName"], "trusted-mlsecops-storage")
             self.assertEqual(claim["spec"]["accessModes"], ["ReadWriteOnce"])

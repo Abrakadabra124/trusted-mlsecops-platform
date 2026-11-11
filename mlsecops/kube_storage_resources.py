@@ -96,9 +96,13 @@ def namespace_resources(namespace, account, workspace):
                     # Existing serving workload plus the 1CPU/256Mi trust observer.
                     "limits.memory": "1280Mi" if namespace == "ml-serving" else "1Gi",
                     "requests.storage": "2Gi",
-                    "persistentvolumeclaims": "1",
-                    # Model storage, two pinned trust clients and one audit role.
-                    "count/secrets": "4" if namespace in ("ml-promoter", "ml-serving") else "2",
+                    "persistentvolumeclaims": "2" if namespace == "ml-serving" else "1",
+                    # Model storage, two trust clients, separate observer/HTTP audit identities.
+                    "count/secrets": "5"
+                    if namespace == "ml-serving"
+                    else "4"
+                    if namespace == "ml-promoter"
+                    else "2",
                     "count/configmaps": "4",
                     "count/jobs.batch": "3",
                 }

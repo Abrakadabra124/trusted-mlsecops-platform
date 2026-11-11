@@ -257,6 +257,23 @@ class Materials:
                         rotations=[],
                     )
                 )
+            elif role == "serving":
+                # Stable service identity across Pod/image replacement, not a model digest.
+                files["identity-audit.json"] = canonical(
+                    dict(
+                        schema_version=1,
+                        producer_config="/security/producer.json",
+                        service_sha256=digest(
+                            canonical(
+                                {
+                                    "workspace": self.identity["workspace"],
+                                    "environment": self.identity["environment"],
+                                    "role": "serving",
+                                }
+                            )
+                        ),
+                    )
+                )
         files[config_name] = canonical(profile)
         return files
 

@@ -76,7 +76,7 @@ class ProvisionContracts(unittest.TestCase):
         initialize.assert_not_called()
 
     def test_role_selects_only_its_existing_journal_and_verifies_readback(self):
-        for role in ("collector", "trust", "promoter"):
+        for role in ("collector", "trust", "promoter", "serving"):
             store = Mock()
             with (
                 patch.object(journal, "initialize", return_value="a" * 64) as collector,
@@ -162,7 +162,7 @@ class ProvisionContracts(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "linux", "real private journals require Linux")
     def test_existing_or_incomplete_state_cannot_be_silently_reinitialized(self):
-        for role in ("collector", "trust", "promoter"):
+        for role in ("collector", "trust", "promoter", "serving"):
             root = self.fx.directory / role
             with patch.object(self.subject, "ROOT", str(root)):
                 config = self.config(role)

@@ -199,7 +199,9 @@ def provision(state, local, marker, owned, role):
         claim = next(
             d
             for d in resources.base_resources(marker["workspace_id"])
-            if d["kind"] == "PersistentVolumeClaim" and d["metadata"]["namespace"] == namespace
+            if d["kind"] == "PersistentVolumeClaim"
+            and d["metadata"]["namespace"] == namespace
+            and d["metadata"]["name"] == resources.claim_name(role)
         )
         marker["volumes"][role] = volume(
             state, claim, marker["resources"][kube_storage.reference(claim)]
@@ -306,7 +308,9 @@ def validate(state, *, profile=None, environment=None, initial_root=None):
         claim = next(
             d
             for d in documents
-            if d["kind"] == "PersistentVolumeClaim" and d["metadata"]["namespace"] == namespace
+            if d["kind"] == "PersistentVolumeClaim"
+            and d["metadata"]["namespace"] == namespace
+            and d["metadata"]["name"] == resources.claim_name(role)
         )
         if (
             volume(state, claim, marker["resources"][kube_storage.reference(claim)])
