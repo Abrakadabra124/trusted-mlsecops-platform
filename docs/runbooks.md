@@ -1,5 +1,9 @@
 # Эксплуатационные процедуры
 
+- [T29: producer outbox и intake](operations/security-events.md#producer-outbox-и-отказ-intake):
+  operator config, private provisioning, unknown-result retry, readback и
+  эскалация без reset. [Native evidence](evidence/security-event-sources-2026-11-11.md).
+
 - [T18/M15: monitoring](operations/model-monitoring.md): frozen reference, достаточность
   окон, drift/recall, replay/gaps и безопасная диагностика. Collector/delivery,
   quarantine и cold restart проверены компонентно; full M15 открыт.

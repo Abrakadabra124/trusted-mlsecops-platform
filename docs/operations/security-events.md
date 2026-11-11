@@ -224,7 +224,8 @@ event ID/receipt и incident page. Внешняя SIEM, подключение �
 
 Новый путь описан в [ADR0059](../decisions/0059-security-event-producer-outbox.md).
 Ответственный за provisioning - оператор controller, не trainer/worker.
-Native результат этого increment ещё проверяется; команды ниже разделяют
+Native source `a205646` [проверен в CI43057291164](../evidence/security-event-sources-2026-11-11.md):
+213tests/0skips, actual source/outbox/HTTP и outage retry. Команды ниже разделяют
 controlled tests и настоящий Linux collector.
 
 ```text

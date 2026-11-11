@@ -285,6 +285,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 - [ ] Security event contracts и replay. Зависимости: T14, T18. Gate: M23.
+- Source2026-11-11 [a205646 /43057291164](../docs/evidence/security-event-sources-2026-11-11.md):213Linux tests/0skips, actual intake/controller projection,outbox/HTTP, outage/retry/cleanup; clean Windows72tests/17skips. Audited profile остаётся explicit optional; remaining sources/heartbeat/promotion/sequence campaign/full M23 нужны.
 - [Реальный collector `1a234fe` /42351757662](../docs/evidence/security-event-collector-2026-11-07.md):104Linux tests/0skips, heartbeat90.692s, HTTP max0.0189s, restart/owned cleanup pass. Local incident routes, не внешняя SIEM. Windows fixture cleanup исправлена: clean fb8a5e1,104tests/22skips без warnings. Нужны actual adapters, sequence elapsed campaign и promotion outage. M23 открыт.
 - Durable heartbeat/gaps [d7ccb42 /42349487413](../docs/evidence/security-event-health-2026-11-07.md) success84Linux tests/0skips, newhealth134/54 100%, clean Windows84tests/18skips. Далее periodic scheduler/HTTP/routes/signed notices/actual adapters/promotion; controlled90/120s не равны измеренному SLA. M23 открыт.
 - Journal component [d17434b /42347317046](../docs/evidence/security-event-journal-2026-11-07.md) success:70Linux tests/0skips, atomic recovery, retries, capacity и I/O faults; clean Windows70tests/17skips. Далее durable heartbeat/gaps и real routing/adapters/promotion; полный M23 не принят.

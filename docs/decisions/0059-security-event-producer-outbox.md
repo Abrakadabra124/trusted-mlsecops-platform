@@ -1,6 +1,8 @@
 # ADR 0059: очередь событий на стороне контроллера
 
-Дата:2026-11-11. Статус: implemented, native validation pending.
+Дата:2026-11-11. Статус: implemented and component-verified on Linux.
+Source `a205646` /43057291164 success213tests/0skips;
+[evidence и границы](../evidence/security-event-sources-2026-11-11.md).
 Неделя11, T29, обязательный M23. Продолжение [ADR0058](0058-security-event-contract.md).
 
 ## Требование и решение
