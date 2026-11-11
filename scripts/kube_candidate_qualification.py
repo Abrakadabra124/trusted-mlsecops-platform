@@ -18,6 +18,21 @@ from scripts import kube_candidate_native as native
 
 
 class CandidateInferenceContracts(unittest.TestCase):
+    def test_standalone_candidate_cannot_reach_refusal_without_campaign_audit(self):
+        with (
+            patch.object(native, "hosted"),
+            patch.object(native, "command", return_value=""),
+            patch.object(native, "source_fingerprint", return_value="a" * 64),
+            patch.object(native.kube_storage, "validate"),
+            patch.object(native.kube_trust, "bootstrap"),
+            patch.object(native.controller_bootstrap, "bootstrap", return_value={"profile": {}}),
+            patch.object(native, "initialize_campaign", side_effect=Rejected("audit_incomplete")),
+            patch.object(native, "actual") as actual,
+            self.assertRaisesRegex(Rejected, "audit_incomplete"),
+        ):
+            native.qualify(Path.cwd(), Path.cwd() / ".runtime", "image")
+        actual.assert_not_called()
+
     def test_root_recovery_uses_explicit_new_pin_same_permit_and_fresh_engine(self):
         config = {
             "trust_root": encode64(b"r" * 32),

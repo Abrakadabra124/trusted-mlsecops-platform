@@ -212,6 +212,15 @@ def controlled(root, state, image, *, check_actual=False):
         trust_authority.update(
             state, config["expected_policy"], authority_key, backend=kube_trust.binding
         )
+        _, campaign_before = trust_authority.current(state, backend=kube_trust.binding)
+        repeated_authority = initialize_campaign(root, state, image)
+        _, campaign_after = trust_authority.current(state, backend=kube_trust.binding)
+        campaign_unchanged = repeated_authority == (authority_key, authority_public) and all(
+            campaign_before[field] == campaign_after[field]
+            for field in ("environment", "root_public", "version", "sha256", "envelope")
+        )
+        if not campaign_unchanged:
+            raise Rejected("kube_campaign_repeat_changed_trust")
         kube_promotion.configure(state, config)
         actual_result = (
             actual(root, state, image, authority_root=authority_public) if check_actual else None
@@ -233,6 +242,7 @@ def controlled(root, state, image, *, check_actual=False):
             print(canonical({"case": label, "status": "pass"}).decode(), flush=True)
 
         before = ledger(state)
+        confirmed("campaign-repeat-keeps-authority-policy-and-history", campaign_unchanged)
         confirmed("controlled-initial-head-zero", head(state) == "0:")
         denied = kube_promotion.invoke(
             root, state, config, {**request, "approval_reference": None}, image

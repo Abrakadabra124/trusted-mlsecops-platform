@@ -123,3 +123,33 @@ trust rotation update, свежие M13/M14, real elapsed sequence-gap campaign 
 и обновление material/observer config требуют явной operator procedure, не reset.
 Независимые M22 challenges0/2, полный M10/M19/M16/M17, image findings, shutdown debt
 и M18 на одном candidate также сохраняются. Этот increment не заменяет рабочий R1.
+
+## Продолжение: единая authority кампании
+
+`00b7c39a6cfae6f6fb2a1e3b82a26501e990b7e9` использует существующий pinned
+operator trust key до actual refusal и передаёт его controlled/serving/privacy/
+candidate этапам. Qualification permit остаётся отдельным разрешением другого
+назначения. Потеря ключа и чужая authority приводят к отказу, существующая signed
+policy не сбрасывается. [План](../../tasks/audited-serving-integration-plan.md).
+
+[Kubernetes43107249594](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43107249594)
+success:13promotion+10audit assertions, image
+`sha256:406e2c0e33e4534c45f9a90892803c114bcdd2c11ba0516751dffc13b4c5d883`,
+runtime fingerprint прежнийaac7400979f8616c57040fcc9586be7ece898e10fce5ef51402b52acafaf5e45.
+Heartbeat после observer replacement6->7. Source SQL stop/readback и cluster
+delete/readback success. Actual candidate
+`2122fe3b6de4fbe20be66e08345cf06cb75a86cece35fea2ebc8b5d38873182c`
+корректно отклонён с parent release_assurance_required, Kubernetes rejected.
+
+[Security43107221066](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43107221066)
+success:753Linux executions/0skips и25+37+15+46native assertions. Observer
+period30.019s, operation-start->receipt29.800075426s, stopped-source90.958373612s.
+Это новый успешный запуск, не доказательство причины старого observer timeout.
+Clean checkout00b7c39 с отдельной locked Python3.12.15 environment:
+77tests3.194s с-Werror,0skips; interpreter/imports и Git clean подтверждены.
+
+HTTP exact-field conversion, mandatory serving identity/outbox и operator update
+observer после root rotation ещё открыты. Подготовлены дополнительные regression
+checks для остановки serving/candidate при incomplete audit и native проверка
+повторной подготовки после установки рабочей SQL policy; её отдельный результат
+нужно получить до утверждения о native идемпотентности этого helper.

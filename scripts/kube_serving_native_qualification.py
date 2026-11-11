@@ -14,6 +14,45 @@ from scripts.kube_serving_runtime_qualification import PROFILE
 
 
 class NativeContracts(unittest.TestCase):
+    def test_prepare_requires_campaign_before_actual_refusal_and_does_not_continue_on_failure(self):
+        for failure in (False, True):
+            order = []
+
+            def campaign(*args):
+                order.append("campaign")
+                if failure:
+                    raise Rejected("campaign_incomplete")
+
+            def actual(*args):
+                order.append("actual")
+                return {"candidate": "verified-refusal"}
+
+            with (
+                patch.object(native, "hosted"),
+                patch.object(
+                    native,
+                    "command",
+                    side_effect=lambda args: "a" * 40 if args[-1] == "HEAD" else "",
+                ),
+                patch.object(native, "source_fingerprint", return_value="b" * 64),
+                patch.object(native.kube_storage, "validate"),
+                patch.object(native.kube_trust, "bootstrap"),
+                patch.object(
+                    native.controller_bootstrap, "bootstrap", return_value={"profile": PROFILE}
+                ),
+                patch.object(native, "initialize_campaign", side_effect=campaign),
+                patch.object(native, "actual", side_effect=actual),
+                patch("sys.stdout", io.StringIO()),
+            ):
+                if failure:
+                    with self.assertRaisesRegex(Rejected, "campaign_incomplete"):
+                        native.prepare(Path.cwd(), Path.cwd() / ".runtime", "image")
+                    self.assertEqual(order, ["campaign"])
+                else:
+                    result = native.prepare(Path.cwd(), Path.cwd() / ".runtime", "image")
+                    self.assertEqual(order, ["campaign", "actual"])
+                    self.assertEqual(result["actual"], {"candidate": "verified-refusal"})
+
     def test_failed_readiness_diagnostic_is_read_only_and_does_not_echo_private_errors(self):
         config = {
             key: "unused"

@@ -114,3 +114,10 @@ handoff key. Local38promotion/serving tests plus39privacy/load/candidate tests p
 An initial Windows short/full-path assertion was corrected using canonical paths.
 The HTTP exact-field/mandatory identity integration and observer root-rotation update
 remain open; this authority wiring alone cannot make those native paths accepted.
+
+00b7c39 hosted proof: Kubernetes43107249594success13promotion+10audit assertions;
+security43107221066success753Linux0skips+25/37/15/46native. Freshlocked checkout
+77tests/0skips. Same runtime fingerprint; actual candidate refused, full R1 open.
+Two added caller regressions verify incomplete audit stops serving/candidate before
+actual refusal. Added native repeated initialize_campaign compares root/version/
+signed envelope after a working policy exists; its next run must confirm no reset.

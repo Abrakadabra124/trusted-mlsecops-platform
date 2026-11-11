@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+CP4/T29 2026-11-12: campaign authority preparation00b7c39 проверена:
+[evidence](docs/evidence/kubernetes-audit-2026-11-12.md), Kubernetes43107249594
+success13+10assertions, security43107221066success753Linux0skips+25+37+15+46native.
+Clean77/0. Existing pinned trust key и audit создают согласованную подготовку до
+actual refusal; serving identity/config/rotation и свежие M13/M14 остаются открытыми.
+
 CP4/T29 2026-11-12: [Kubernetes audit integration](docs/evidence/kubernetes-audit-2026-11-12.md)
 на4aeece4 /43102906649 success:13promotion+10audit assertions, actual refusal,
 outage без изменения combined SQL snapshot, original-event recovery, collector/
