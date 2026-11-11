@@ -383,12 +383,15 @@ class CLIPrivacyContracts(unittest.TestCase):
                 "reports",
             )
         }
-        fixture.trust_fixture.key = Path("authority-key")
+        fixture.trust_fixture.key = Path("unused-fixture-key")
         fixture.trust_fixture.public = "public"
         fixtures = Mock(return_value=fixture)
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(native, "hosted"),
+            patch.object(
+                native, "initialize_campaign", return_value=(Path("authority-key"), "public")
+            ) as campaign,
             patch.object(native.promotion_qualification, "PromotionAdmissionContracts", fixtures),
             patch.object(native.serving_native, "bind_real_runtime", return_value=([[0.5]], [0.7])),
             patch.object(
@@ -446,6 +449,7 @@ class CLIPrivacyContracts(unittest.TestCase):
                     self.assertFalse(result["independent_admission_observed"])
                     self.assertEqual(key, Path("authority-key"))
                 self.assertEqual(primary.call_count, 2)
+                campaign.assert_called_once_with(Path(directory), Path(directory), "image")
                 self.assertTrue(invoke.call_args.kwargs["cli_privacy"])
                 windows.return_value.close.assert_called_once()
                 self.assertNotIn("_privacy_needles", result["native"])

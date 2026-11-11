@@ -12,6 +12,7 @@ from mlsecops import (
     promotion_controller,
     release_bundle,
     release_policy,
+    signing,
     storage,
     storage_bootstrap,
     trust_authority,
@@ -69,6 +70,28 @@ def initialize_audit(root, state, image, initial_root):
         ),
         image=image,
     )
+
+
+def campaign_authority(state):
+    # The operator workspace already owns this role; never replace a missing key.
+    key = safe_child(state, "keys/trust.pem")
+    public = signing.encode64(signing.load_key(key).public_key().public_bytes_raw())
+    if read_json(safe_child(state, "trusted-keys.json"))["trust"] != public:
+        raise Rejected("kube_campaign_authority_pin")
+    return key, public
+
+
+def initialize_campaign(root, state, image):
+    hosted()
+    key, public = campaign_authority(state)
+    trust_authority.install(state, "local-cpu", public, backend=kube_trust.binding)
+    _, current = trust_authority.current(state, backend=kube_trust.binding)
+    if current["envelope"] is None:
+        # An explicit empty campaign identity, not a model approval or permit.
+        seed = digest(canonical({"phase": "unapproved-campaign", "workspace": workspace_id(state)}))
+        trust_authority.update(state, seed, key, backend=kube_trust.binding)
+    initialize_audit(root, state, image, public)
+    return key, public
 
 
 def stage(state, package, policy, assurance=None, approval=None, reports=None):
@@ -180,23 +203,18 @@ def controlled(root, state, image, *, check_actual=False):
         fixture.setUp()
         serving_native.bind_real_runtime(fixture, resolve_image(image))
         arguments = fixture.arguments
+        authority_key, authority_public = initialize_campaign(root, state, image)
         config = {
-            **configuration("/client", "/trust-client", arguments, fixture.trust_fixture.public),
+            **configuration("/client", "/trust-client", arguments, authority_public),
             "storage_client": "/client",
             "trust_client": "/trust-client",
         }
-        trust_authority.install(
-            state, "local-cpu", fixture.trust_fixture.public, backend=kube_trust.binding
-        )
         trust_authority.update(
-            state, config["expected_policy"], fixture.trust_fixture.key, backend=kube_trust.binding
+            state, config["expected_policy"], authority_key, backend=kube_trust.binding
         )
-        initialize_audit(root, state, image, fixture.trust_fixture.public)
         kube_promotion.configure(state, config)
         actual_result = (
-            actual(root, state, image, authority_root=fixture.trust_fixture.public)
-            if check_actual
-            else None
+            actual(root, state, image, authority_root=authority_public) if check_actual else None
         )
         request = stage(
             state,
@@ -245,7 +263,7 @@ def controlled(root, state, image, *, check_actual=False):
         trust_authority.update(
             state,
             config["expected_policy"],
-            fixture.trust_fixture.key,
+            authority_key,
             revoked_artifacts=[model],
             backend=kube_trust.binding,
         )

@@ -15,7 +15,7 @@ from mlsecops.contracts import Rejected, canonical, decode, digest, safe_child, 
 from scripts import audit_correlation_probe, promotion_qualification, serving_native
 from scripts.kube_cli_privacy_probe import verify_snapshot
 from scripts.kube_privacy_services import Windows
-from scripts.kube_promotion_native import configuration, initialize_audit, stage
+from scripts.kube_promotion_native import configuration, initialize_campaign, stage
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
@@ -83,19 +83,14 @@ def controlled(root, state, image, profile):
         fixture.setUp()
         features, scores = serving_native.bind_real_runtime(fixture, profile["image_id"])
         arguments = fixture.arguments
-        promotion = configuration(
-            "/client", "/trust-client", arguments, fixture.trust_fixture.public
-        )
-        trust_authority.install(
-            state, "local-cpu", fixture.trust_fixture.public, backend=kube_trust.binding
-        )
+        authority_key, authority_public = initialize_campaign(root, state, image)
+        promotion = configuration("/client", "/trust-client", arguments, authority_public)
         trust_authority.update(
             state,
             promotion["expected_policy"],
-            fixture.trust_fixture.key,
+            authority_key,
             backend=kube_trust.binding,
         )
-        initialize_audit(root, state, image, fixture.trust_fixture.public)
         kube_promotion.configure(state, promotion)
         request = stage(
             state,
@@ -161,7 +156,7 @@ def controlled(root, state, image, profile):
             "privacy_campaign_id": destination.name,
         }
         write_json(destination / "report.json", report)
-        yield report, fixture.trust_fixture.key
+        yield report, authority_key
     finally:
         fixture.doCleanups()
         fixtures.tearDownClass()

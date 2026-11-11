@@ -5,11 +5,86 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from mlsecops import signing
 from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from scripts import kube_promotion_native as target
 
 
 class KubernetesPromotionNativeContracts(unittest.TestCase):
+    def test_campaign_uses_existing_pinned_workspace_authority_without_generating_keys(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            key = state / "keys/trust.pem"
+            public = signing.create_key(key)
+            write_json(state / "trusted-keys.json", {"trust": public})
+            with patch.object(signing, "create_key", side_effect=AssertionError("implicit rekey")):
+                self.assertEqual(target.campaign_authority(state), (key.resolve(), public))
+                write_json(state / "trusted-keys.json", {"trust": "changed"})
+                with self.assertRaisesRegex(Rejected, "campaign_authority_pin"):
+                    target.campaign_authority(state)
+                key.unlink()
+                with self.assertRaises(Rejected):
+                    target.campaign_authority(state)
+
+    def test_campaign_bootstrap_orders_authority_before_audit_and_preserves_current_policy(self):
+        order = []
+        for existing in (False, True):
+            order.clear()
+            with (
+                patch.object(target, "hosted"),
+                patch.object(target, "campaign_authority", return_value=(Path("key"), "root")),
+                patch.object(
+                    target.trust_authority,
+                    "install",
+                    side_effect=lambda *a, **k: order.append("install"),
+                ),
+                patch.object(
+                    target.trust_authority,
+                    "current",
+                    side_effect=lambda *a, **k: (None, {"envelope": {} if existing else None}),
+                ),
+                patch.object(
+                    target.trust_authority,
+                    "update",
+                    side_effect=lambda *a, **k: order.append("seed"),
+                ) as update,
+                patch.object(target, "workspace_id", return_value="a" * 32),
+                patch.object(
+                    target, "initialize_audit", side_effect=lambda *a, **k: order.append("audit")
+                ),
+            ):
+                self.assertEqual(
+                    target.initialize_campaign("root", "state", "image"), (Path("key"), "root")
+                )
+                self.assertEqual(
+                    order, ["install", "audit"] if existing else ["install", "seed", "audit"]
+                )
+                self.assertEqual(update.call_count, 0 if existing else 1)
+        with (
+            patch.object(target, "hosted", side_effect=Rejected("hosted_only")),
+            patch.object(target, "campaign_authority") as authority,
+            self.assertRaisesRegex(Rejected, "hosted_only"),
+        ):
+            target.initialize_campaign("root", "state", "image")
+        authority.assert_not_called()
+
+    def test_foreign_authority_stops_campaign_before_policy_or_audit_mutation(self):
+        with (
+            patch.object(target, "hosted"),
+            patch.object(target, "campaign_authority", return_value=(Path("key"), "root")),
+            patch.object(
+                target.trust_authority,
+                "install",
+                side_effect=Rejected("trust_configuration_conflict"),
+            ),
+            patch.object(target.trust_authority, "update") as update,
+            patch.object(target, "initialize_audit") as audit,
+            self.assertRaisesRegex(Rejected, "trust_configuration_conflict"),
+        ):
+            target.initialize_campaign("root", "state", "image")
+        update.assert_not_called()
+        audit.assert_not_called()
+
     def package(self):
         return {
             "capsule": {

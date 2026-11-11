@@ -45,7 +45,7 @@ from scripts.kube_candidate_faults import NONTERMINAL
 from scripts.kube_candidate_faults import exercise as exercise_faults
 from scripts.kube_candidate_root import exercise as exercise_root
 from scripts.kube_candidate_terminals import exercise as exercise_terminals
-from scripts.kube_promotion_native import actual
+from scripts.kube_promotion_native import actual, campaign_authority, initialize_campaign
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
@@ -91,6 +91,7 @@ def qualify(
         kube_storage.validate(state)
         kube_trust.bootstrap(state)
         profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
+        initialize_campaign(root, state, image)
         print(canonical({"stage": "actual-proposal-refusal"}).decode(), flush=True)
         refusal = actual(root, state, image)
     else:
@@ -120,11 +121,11 @@ def qualify(
     campaign = uuid.uuid4().hex
     destination = safe_child(state, "candidate-inference/" + campaign)
     key = destination / "qualification.pem"
-    authority_key = (
-        destination / "authority.pem" if qualification_key is None else qualification_key
-    )
+    authority_key = campaign_authority(state)[0] if qualification_key is None else qualification_key
     qualification_public = signing.create_key(key)
-    authority_public = signing.create_key(authority_key)
+    authority_public = signing.encode64(
+        signing.load_key(authority_key).public_key().public_bytes_raw()
+    )
     independent = include_trust_lifecycle and include_key_revocation
     if independent:
         # Provision the second independent authority BEFORE issuing the one permit.

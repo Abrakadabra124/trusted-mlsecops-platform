@@ -31,7 +31,7 @@ from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
 from scripts.kube_privacy_bundle import manifest as privacy_bundle
 from scripts.kube_privacy_diagnostic import validated as privacy_location
-from scripts.kube_promotion_native import actual, configuration, initialize_audit, stage
+from scripts.kube_promotion_native import actual, configuration, initialize_campaign, stage
 from scripts.kube_promotion_replay import exercise as exercise_replay
 from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_rollback_native import exercise as exercise_rollback
@@ -349,6 +349,7 @@ def prepare(root, state, image):
     fingerprint, started = source_fingerprint(root), now()
     print(canonical({"stage": "serving-api-bootstrap"}).decode(), flush=True)
     profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
+    initialize_campaign(root, state, image)
     print(canonical({"stage": "actual-candidate-refusal"}).decode(), flush=True)
     actual_result = actual(root, state, image)
     return {
@@ -390,19 +391,14 @@ def qualify(
         features, scores = serving_native.bind_real_runtime(fixture, profile["image_id"])
         arguments = fixture.arguments
         previous = copy.deepcopy(arguments)
-        promotion = configuration(
-            "/client", "/trust-client", arguments, fixture.trust_fixture.public
-        )
-        trust_authority.install(
-            state, "local-cpu", fixture.trust_fixture.public, backend=kube_trust.binding
-        )
+        authority_key, authority_public = initialize_campaign(root, state, image)
+        promotion = configuration("/client", "/trust-client", arguments, authority_public)
         trust_authority.update(
             state,
             promotion["expected_policy"],
-            fixture.trust_fixture.key,
+            authority_key,
             backend=kube_trust.binding,
         )
-        initialize_audit(root, state, image, fixture.trust_fixture.public)
         kube_promotion.configure(state, promotion)
         config = {key: value for key, value in promotion.items() if key != "schema_version"}
         config.update(
@@ -492,16 +488,15 @@ def qualify(
         rollback.update(target_model=model, from_model=renewed_model)
         after = ledger(state)
         print(canonical({"stage": "planned-authority-root-rotation"}).decode(), flush=True)
-        next_key = fixture.trust_fixture.key.with_name("rotated-authority.pem")
-        rotation = exercise_root_rotation(state, fixture.trust_fixture.key, next_key)
+        next_key = authority_key.with_name("rotated-authority.pem")
+        rotation = exercise_root_rotation(state, authority_key, next_key)
         rotation["old_config_refusal"] = invoke(
             state,
             profile,
             config,
             {**expected, "ready": False, "reader_refusal": "trust_authority_missing_or_foreign"},
         )
-        fixture.trust_fixture.key = next_key
-        fixture.trust_fixture.public = rotation["next_public"]
+        authority_key = next_key
         for operator_config in (config, rollback_config):
             operator_config.update(
                 trust_root=rotation["next_public"],
@@ -512,7 +507,7 @@ def qualify(
         for fault in ("outage", "blackhole", "policy-change", "revocation"):
             print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
             with Coordinator(
-                state, fault, promotion["expected_policy"], fixture.trust_fixture.key, model
+                state, fault, promotion["expected_policy"], authority_key, model
             ) as coordinator:
                 lifecycle[fault] = invoke(
                     state, profile, config, {**expected, "fault": fault}, coordinator=coordinator
@@ -543,7 +538,7 @@ def qualify(
                 state,
                 image,
                 prepared=(profile, actual_result),
-                qualification_key=fixture.trust_fixture.key,
+                qualification_key=authority_key,
                 include_key_revocation=include_key_revocation,
                 include_trust_lifecycle=include_trust_lifecycle,
             )

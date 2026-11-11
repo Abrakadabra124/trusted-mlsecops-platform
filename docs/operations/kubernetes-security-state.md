@@ -61,6 +61,20 @@ heartbeat: каждый promotion сам проверяет свежий под�
 Незавершённый профиль, отсутствующие pins или несоответствие image/context запрещают
 автоматическое продолжение. Не запускать provisioning вручную для восстановления.
 
+В hosted campaign подготовка authority теперь использует закреплённый operator key
+`keys/trust.pem` и сверяет его public key с trusted-keys.json. Ключ не создаётся при
+его потере. Если trust schema уже принадлежит другой authority, подготовка
+останавливается до изменения policy и audit profile. Для пустой signed history
+создаётся seed `unapproved-campaign`; он не является model approval или qualification
+permit. Существующая signed policy сохраняется при повторном prepare. Так actual
+refusal выполняется после audit bootstrap, а следующий controlled/candidate этап
+не выбирает несвязанный новый authority key. Это один lab operator, не независимые
+администраторы. Ротация требует отдельного signed transition и observer update;
+повтор prepare после неизвестной смены корня не должен принимать её автоматически.
+
+Продолжение интеграции serving, его отдельного event identity/outbox и необходимых
+fresh M13/M14 описано в [плане](../../tasks/audited-serving-integration-plan.md).
+
 Registry живёт24часа; TLS leaf certificates90дней, CA365дней. Продление registry и
 обновление observer rotation packages не выполняются автоматически этой версией.
 Expiry вызывает отказ. Полная эксплуатационная миграция и fresh M13/M14 ещё нужны.
