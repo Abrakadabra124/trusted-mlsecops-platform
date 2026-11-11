@@ -85,30 +85,58 @@ class PersistentServing(unittest.TestCase):
         initializer = next(c for c in spec["initContainers"] if c["name"] == "http-audit-directory")
         self.assertEqual(initializer["volumeMounts"], [{"name": "scratch", "mountPath": "/tmp"}])
 
-    def test_restart_has_atomic_uid_precondition_and_verifies_old_pod_absence(self):
-        for remains in (False, True):
-            with (
-                patch.object(self.subject, "validate", return_value={}),
-                patch.object(
-                    self.subject,
-                    "pod",
-                    return_value={"metadata": {"uid": "owned", "name": "service-pod"}},
-                ),
-                patch.object(self.subject, "kubectl") as api,
-                patch.object(self.subject, "wait_live", return_value="replacement") as wait,
-                patch.object(
-                    self.subject.kube_storage, "get", return_value={} if remains else None
-                ),
-            ):
-                if remains:
-                    with self.assertRaisesRegex(Rejected, "old_pod_present"):
-                        self.subject.restart("state")
-                else:
-                    self.assertEqual(
-                        self.subject.restart("state"), {"before": "owned", "after": "replacement"}
-                    )
-                self.assertEqual(api.call_args.args[2]["preconditions"], {"uid": "owned"})
-                wait.assert_called_once_with("state", {}, previous="owned")
+    def test_restart_never_starts_replacement_before_owned_processes_are_gone(self):
+        config = self.subject.configuration(self.promotion, PROFILE)
+        document = self.subject.documents("a" * 32, PROFILE, config)[1]
+        key = self.subject.kube_storage.reference(document)
+        marker = dict(
+            workspace_id="a" * 32,
+            profile=PROFILE,
+            config=config,
+            resources={key: "deployment-owned"},
+            ready=True,
+        )
+        events = []
+
+        def scale(state, current, previous, desired):
+            self.assertIs(current, marker)
+            events.append((previous, desired))
+
+        def empty(state):
+            self.assertEqual(events, [(1, 0)])
+            events.append("empty")
+
+        with (
+            patch.object(self.subject, "validate", return_value=marker),
+            patch.object(
+                self.subject, "pod", return_value={"metadata": {"uid": "old", "name": "pod"}}
+            ),
+            patch.object(self.subject, "set_replicas", side_effect=scale),
+            patch.object(self.subject, "wait_empty", side_effect=empty),
+            patch.object(self.subject, "wait_live", return_value="new"),
+            patch.object(self.subject.kube_security_events, "save"),
+        ):
+            self.assertEqual(self.subject.restart("state"), {"before": "old", "after": "new"})
+        self.assertEqual(events, [(1, 0), "empty", (0, 1)])
+        self.assertTrue(marker["ready"])
+
+    def test_stuck_shutdown_keeps_marker_incomplete_and_never_starts_another_replica(self):
+        marker = {"ready": True}
+        with (
+            patch.object(self.subject, "validate", return_value=marker),
+            patch.object(
+                self.subject, "pod", return_value={"metadata": {"uid": "old", "name": "pod"}}
+            ),
+            patch.object(self.subject, "set_replicas") as scale,
+            patch.object(self.subject, "wait_empty", side_effect=Rejected("cleanup_deadline")),
+            patch.object(self.subject, "wait_live") as wait,
+            patch.object(self.subject.kube_security_events, "save"),
+            self.assertRaisesRegex(Rejected, "cleanup_deadline"),
+        ):
+            self.subject.restart("state")
+        scale.assert_called_once_with("state", marker, 1, 0)
+        wait.assert_not_called()
+        self.assertFalse(marker["ready"])
 
     def test_readback_refuses_a_replacement_during_execution(self):
         for after in ("owned", "foreign"):
@@ -130,6 +158,63 @@ class PersistentServing(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(Rejected, "pod_changed"):
                         self.subject.execute("state", "code")
+
+    def test_scale_uses_uid_and_resource_version_but_accepts_next_server_version(self):
+        config = self.subject.configuration(self.promotion, PROFILE)
+        document = self.subject.documents("a" * 32, PROFILE, config)[1]
+        key = self.subject.kube_storage.reference(document)
+        marker = dict(
+            workspace_id="a" * 32, profile=PROFILE, config=config, resources={key: "owned"}
+        )
+        observed = copy.deepcopy(document)
+        observed["metadata"].update(uid="owned", resourceVersion="17")
+
+        def replace(state, arguments, value):
+            self.assertEqual(arguments, ["replace", "-f", "-", "-o", "json"])
+            self.assertEqual(value["metadata"]["uid"], "owned")
+            self.assertEqual(value["metadata"]["resourceVersion"], "17")
+            self.assertEqual(value["spec"]["replicas"], 0)
+            result = copy.deepcopy(value)
+            result["metadata"]["resourceVersion"] = "18"
+            return SimpleNamespace(stdout=canonical(result))
+
+        with (
+            patch.object(self.subject.kube_storage, "get", return_value=observed),
+            patch.object(self.subject, "kubectl", side_effect=replace),
+        ):
+            self.subject.set_replicas("state", marker, 1, 0)
+        for changed in (
+            {**observed, "metadata": {**observed["metadata"], "uid": "foreign"}},
+            {**observed, "metadata": {**observed["metadata"], "resourceVersion": None}},
+            {**observed, "spec": {**observed["spec"], "replicas": 2}},
+        ):
+            with (
+                patch.object(self.subject.kube_storage, "get", return_value=changed),
+                patch.object(self.subject, "kubectl") as api,
+                self.assertRaises(Rejected),
+            ):
+                self.subject.set_replicas("state", marker, 1, 0)
+            api.assert_not_called()
+
+    def test_live_old_pod_or_worker_blocks_replacement_until_deadline(self):
+        for pods, jobs in (([{}], []), ([], [{}])):
+            with (
+                patch.object(
+                    self.subject,
+                    "kubectl",
+                    side_effect=[
+                        SimpleNamespace(stdout=canonical({"items": pods})),
+                        SimpleNamespace(stdout=canonical({"items": jobs})),
+                    ],
+                ),
+                patch.object(self.subject.time, "monotonic", side_effect=[0, 46]),
+                self.assertRaisesRegex(Rejected, "cleanup_deadline"),
+            ):
+                self.subject.wait_empty("state")
+        with patch.object(
+            self.subject, "kubectl", return_value=SimpleNamespace(stdout=b'{"items":[]}')
+        ):
+            self.subject.wait_empty("state")
 
     def test_corrupt_marker_or_audit_identity_never_reaches_cluster_mutation(self):
         config = self.subject.configuration(self.promotion, PROFILE)

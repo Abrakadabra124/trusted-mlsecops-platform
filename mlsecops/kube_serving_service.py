@@ -268,29 +268,60 @@ def bootstrap(state, profile, promotion):
     return validate(state)
 
 
+def set_replicas(state, marker, previous, desired):
+    if (
+        type(previous) is not int
+        or type(desired) is not int
+        or (previous, desired) not in ((1, 0), (0, 1))
+    ):
+        raise Rejected("kube_serving_service_replica_transition")
+    document = documents(marker["workspace_id"], marker["profile"], marker["config"])[1]
+    document["spec"]["replicas"] = previous
+    uid = marker["resources"][kube_storage.reference(document)]
+    observed = kube_storage.get(state, document)
+    kube_storage.verify_resource(document, observed, uid)
+    version = observed["metadata"].get("resourceVersion")
+    if type(version) is not str or not version:
+        raise Rejected("kube_serving_service_resource_version")
+    updated = copy.deepcopy(document)
+    updated["metadata"].update(uid=uid, resourceVersion=version)
+    updated["spec"]["replicas"] = desired
+    result = decode(kubectl(state, ["replace", "-f", "-", "-o", "json"], updated).stdout)
+    document["spec"]["replicas"] = desired
+    kube_storage.verify_resource(document, result, uid)
+
+
+def wait_empty(state):
+    deadline = time.monotonic() + 45
+    while True:
+        pods = decode(
+            kubectl(
+                state, ["get", "pods", "-n", NAMESPACE, "-l", "app=" + NAME, "-o", "json"]
+            ).stdout
+        )["items"]
+        jobs = decode(kubectl(state, ["get", "jobs", "-n", "ml-serve", "-o", "json"]).stdout)[
+            "items"
+        ]
+        if not pods and not jobs:
+            return
+        if time.monotonic() >= deadline:
+            raise Rejected("kube_serving_service_cleanup_deadline")
+        time.sleep(0.5)
+
+
 def restart(state):
     marker = validate(state)
     before = pod(state, marker)["metadata"]
-    endpoint = f"/api/v1/namespaces/{NAMESPACE}/pods/{before['name']}"
-    kubectl(
-        state,
-        ["delete", "--raw=" + endpoint, "-f", "-"],
-        {
-            "apiVersion": "v1",
-            "kind": "DeleteOptions",
-            "preconditions": {"uid": before["uid"]},
-            "gracePeriodSeconds": 30,
-            "propagationPolicy": "Foreground",
-        },
-    )
+    marker["ready"] = False
+    kube_security_events.save(directory(state), marker)
+    # Recreate does not serialize manual Pod deletion. Scale to zero, confirm old
+    # HTTP and its worker are gone, then scale up with UID/resourceVersion guards.
+    set_replicas(state, marker, 1, 0)
+    wait_empty(state)
+    set_replicas(state, marker, 0, 1)
     after = wait_live(state, marker, previous=before["uid"])
-    if (
-        kube_storage.get(
-            state, {"kind": "Pod", "metadata": {"name": before["name"], "namespace": NAMESPACE}}
-        )
-        is not None
-    ):
-        raise Rejected("kube_serving_service_old_pod_present")
+    marker["ready"] = True
+    kube_security_events.save(directory(state), marker)
     validate(state)
     return {"before": before["uid"], "after": after}
 

@@ -39,9 +39,12 @@ HTTP request journal пока находится в приватном tmpfs и 
    Отказ требует выяснения UID/config/pin mismatch, а не reset состояния.
 2. Подтвердить целевой bundle/policy и новую SQL selection существующим verifier.
    Уже запущенный без модели процесс не получает автоматической активации.
-3. Вызвать `kube_serving_service.restart(state)`. DELETE имеет UID precondition,
-   ждёт новый живой Pod и проверяет исчезновение старого; credentials и outbox
-   не меняются. Timeout означает незавершённое восстановление, не успешный rollout.
+3. Вызвать `kube_serving_service.restart(state)`. Operator записывает incomplete
+   marker, заменяет Deployment с replicas0, проверяя UID/resourceVersion, и ждёт
+   отсутствия прежнего HTTP Pod и worker Jobs. Только затем разрешает replicas1
+   с повторной проверкой UID/resourceVersion. Credentials и outbox не меняются.
+   Timeout или конфликт оставляет incomplete marker и запрещает новый запуск;
+   не исправлять marker вручную. Это незавершённое восстановление, не успешный rollout.
 4. Проверить authenticated readiness, фактические model/bundle hashes, ONNX scores,
    сохранённые outbox pin/records и увеличение signed heartbeat в collector.
    При отрицательном результате не направлять трафик и не повторять promotion
@@ -60,6 +63,13 @@ Readiness/startup/liveness probes разрешены только основно
 Registry пока требует heartbeat только trust. Этот increment проверяет фактический
 serving heartbeat и его счётчик, но потеря serving ещё не является обязательным
 условием отказа promotion. Это открытая работа M23, не разрешение полного R1.
+
+Причина сериализованной замены: Recreate управляет обновлением Deployment, но
+ручной DELETE Pod позволяет ReplicaSet создать замену до завершения старого.
+Для единственной identity/outbox такая гонка недопустима. Контракт проверяет
+отсутствие HTTP Pod и worker Jobs перед запуском новой реплики, отказ при чужом UID,
+конфликте состояния и зависшем shutdown. resourceVersion используется как условие
+записи; при проверке ответа принимается новая версия, присвоенная API server.
 
 ## Границы ролей
 

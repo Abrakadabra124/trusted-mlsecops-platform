@@ -99,7 +99,8 @@ M18 remains LAST and must accept every required gate on one candidate.
 
 ## Implementation ledger
 
-Persistent Deployment increment: service configuration, UID-preconditioned Pod
+Persistent Deployment increment: service configuration, UID/resourceVersion-bound
+scale-to-zero, verified old process cleanup, then single-replica
 replacement, separate service.token, exec readiness/liveness probes and in-place
 HTTP readback are implemented. Native verification is pending. No quota increase,
 second HTTP server, new public listener or registry heartbeat bypass is added.
