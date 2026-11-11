@@ -3,7 +3,56 @@
 Неделя11, Security events и потеря telemetry. ЗадачаT29, Security event contracts
 и replay. Принят компонент audit admission; полный M23/R1 не принят.
 
-## Реализация и граница результата
+## Актуальное дополнение: durable promotion.denied
+
+Runtime `b9843045316905136c1f81c8d0180f2d60823397` подключает реальное решение
+release_authorization/fresh trust/audit к producer outbox. Фиксированные reasons:
+authorization/trust/audit_unavailable; asset и bundle равны proposal envelope
+digest. Событие не содержит exception text, model bytes, credentials или input
+rows. Перед network IO оно сохраняется; новая promotion сначала доставляет
+pending outbox, затем получает свежий challenge. Повтор доставки сохраняет
+event ID/sequence; новая отказавшая попытка promotion получает новую correlation.
+
+Вложенный audit config теперь schema2 и требует state_directory/state_sha256.
+Главный promotion config остаётся schema2. Legacy audit config без outbox
+отвергается; [миграция и retry](../operations/security-events.md#аудит-на-границе-promotion)
+описаны вместе с кодом. Missing assurance по-прежнему не пишет release CAS/SQL,
+но теперь сохраняет событие отказа. Если доставка не подтверждена, наружу выходит
+постоянный `promotion_denial_audit_unconfirmed`, не разрешение на выпуск.
+
+[Run43064414379](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43064414379)
+success на `b984304`: contracts job130675379769 **287Linux executions/0skips**,
+группы21+25+47+10+1+24+85+65+9. Admission79/79statements,12/12branches.
+Дополнительное локальное измерение promotion:97/97statements,27/28branches,
+42tests success; это отдельная группа, не прибавляется к CI total.
+
+Native job130675380338: **25cases pass** с настоящими SQL/collector/HTTP.
+Четыре реальных отказа дали четыре durable события: один authorization и три
+audit_unavailable. Проверены offline enqueue, flush перед новым challenge,
+SQL rollback, точные route/subject/receipt, idempotent selection retry,
+восстановление и конечная доставка всех четырёх событий. Collector PID/port/state
+и owned SQL/network/volume очищены с проверкой. Fingerprint
+`7816293810759a98699c8eb453f8e1cab860ec2f737b1b3bd46d04bc6a508f1e`.
+
+[Run43064414458](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43064414458),
+job130675392839: **success**,54unit executions(41+13) и45native cases. Настоящий
+candidate отклонён с release_assurance_required в parent и отдельном CLI;
+оба refusal event получены collector, проверены подписи и привязка к реальному
+proposal. Отдельная controlled fixture прошла прежний положительный путь
+CLI -> Reader -> HTTP. Положительной приёмки настоящей модели нет.
+
+Чистый detached `b984304`, новая locked .venv Python3.12.15: **88tests/0skips**,
+12.414s, `-W error`, import/interpreter из нового checkout, git clean. Повторить
+команду ниже, добавив scripts.security_event_delivery_qualification и
+scripts.security_event_wire_qualification. Локальная инфраструктура не запускалась.
+
+Границы: trust.revoked/identity.denied/inventory.mismatch ещё требуют своих
+actual sources. Этот increment не превращает trust check denial в событие
+успешного изменения authority. Ранние malformed/config/SQL operational отказы
+не выдаются за authorization findings. Crash до enqueue, producer heartbeat,
+deployed audit enforcement, sequence elapsed и full M23 остаются открытыми.
+
+## Исходная реализация audit admission и граница результата
 
 Runtime: `1cd246655dfc696d7472874b455958098e9df2bd`.
 Исправление изоляции CLI test: `d803b1c76f0aeec60c7578fb98ee6e318d41951f`.
@@ -16,7 +65,8 @@ durable health poll. Проверяются role/epoch/config pin, подпис�
 Проверки идут до SQL statement и после него перед transaction commit. При
 втором отказе незавершённый selection откатывается. Конфигурация promotion CLI
 теперь schema2 с обязательным absolute `security_audit_config`; request остаётся
-schema1. Отсутствующее ML assurance по-прежнему даёт отдельный отказ до audit IO.
+schema1. На этом историческом revision отсутствующее ML assurance даёт отказ до
+audit IO; дополнение b984304 выше добавило событие отказа.
 
 Это не распределённый commit между SQL и collector. Сбой после последнего
 подтверждения возможен; есть bounded freshness5s с общей wall-clock доверенной

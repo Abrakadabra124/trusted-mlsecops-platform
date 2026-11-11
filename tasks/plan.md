@@ -198,6 +198,8 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
+Checkpoint denials2026-11-11: [b984304](../docs/evidence/promotion-audit-2026-11-11.md),43064414379success287Linux/0skips+25native;43064414458success54unit+45native. Promotion refusal -> outbox -> signed receipt, offline/retry/SQL rollback/cleanup; actual candidate parent/CLI отказал и доставил два события. Clean88/0-Werror. Далее trust/identity/inventory actual sources, producer heartbeat, deployment enforcement и полная M23 acceptance.
+
 Checkpoint audit2026-11-11: [1cd2466 /43061060230](../docs/evidence/promotion-audit-2026-11-11.md) success282Linux tests/0skips+14native cases. Fresh signed audit обязателен до/после SQL statement, collector outage откатывает transaction, retry idempotent; clean d803b1c74/0. Полный T29/M23 ещё требует remaining sources/heartbeat/deployment, measured sequence-gap и outage с healthy ML dashboard.
 
 Checkpoint source2026-11-11: [a205646 /43057291164](../docs/evidence/security-event-sources-2026-11-11.md) success213Linux tests/0skips. Intake/controller decisions подключены к outbox/HTTP с retry/outage/restart, clean Windows72tests/17skips. Далее remaining sources/producer heartbeat, audited deployment profile, promotion admission, sequence elapsed и full M23; T29 открыт.

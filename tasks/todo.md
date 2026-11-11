@@ -285,6 +285,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 
+- Denials2026-11-11: [b984304](../docs/evidence/promotion-audit-2026-11-11.md),43064414379success287Linux/0+25native и43064414458success54unit+45native. Actual promotion.denied с durable outbox/pending flush, доставка двух отказов настоящего candidate, SQL rollback/cleanup. Clean88/0. Trust/identity/inventory sources, heartbeat/deployment и полный M23 ещё нужны.
+
 - Audit2026-11-11: [fresh promotion admission](../docs/evidence/promotion-audit-2026-11-11.md),1cd2466/43061060230success282Linux tests/0skips+14realSQL/HTTPcases, clean d803b1c74/0. Реальный rollback при collector loss после SQL statement, exact retry/cleanup. Full source/heartbeat/deployment/dashboard outage/M23 остаются обязательными; T29 не закрыта.
 - [ ] Security event contracts и replay. Зависимости: T14, T18. Gate: M23.
 - Source2026-11-11 [a205646 /43057291164](../docs/evidence/security-event-sources-2026-11-11.md):213Linux tests/0skips, actual intake/controller projection,outbox/HTTP, outage/retry/cleanup; clean Windows72tests/17skips. Audited profile остаётся explicit optional; remaining sources/heartbeat/promotion/sequence campaign/full M23 нужны.
