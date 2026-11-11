@@ -259,4 +259,9 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 role boundary, bounded submission, idempotent retry, curator readback и запрет
 превращения claim в approved dataset.
 
+Для доставки отзыва из committed trust history использовать
+[наблюдение и восстановление событий доверия](operations/trust-security-events.md):
+read-only диагностика, stable replay, operator-pinned rotation и эскалация при
+утрате истории, повреждённом outbox или истёкшем registry.
+
 Время, тип инцидента, затронутые dataset/model/bundle digest, исполнители и права, выполненные действия, разрешённый следующий state, влияние на пользователей, ссылки на redacted evidence, остаточный риск и owner follow-up. Пароли, signing keys и исходные payloads сюда не включаются.
