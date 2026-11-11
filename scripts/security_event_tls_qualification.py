@@ -56,14 +56,16 @@ def listener(context, *, stalled=False, aborted=False):
                         part = connection.recv(4096)
                         if not part:
                             return
+                        received.append(part)  # Retain partial HTTP too, even before EOF.
                         data.extend(part)
-                    received.append(bytes(data))
                     connection.sendall(
                         b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
                     )
         except ssl.SSLError:
             pass  # Expected certificate refusal before any HTTP bytes.
-        except (ConnectionAbortedError, ConnectionResetError) as error:
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError) as error:
+            # Closing after handshake without HTTP may abort TLS 1.3 ticket writes.
+            # Accept only the explicitly expected refusal/deadline cases below.
             if not aborted:
                 failures.append(type(error).__name__)
         except OSError as error:
