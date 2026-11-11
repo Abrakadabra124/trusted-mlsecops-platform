@@ -84,13 +84,15 @@ class App:
         try:
             if scope.get("query_string", b""):
                 return 400, {"status": "rejected"}
-            if method == "POST" and path in ("/events", "/heartbeat"):
+            if method == "POST" and path in ("/events", "/heartbeat", "/admission"):
                 try:
                     envelope = await self.read(scope, receive)
                 except (Rejected, TimeoutError):
                     return 400, {"status": "rejected"}
                 if path == "/events":
                     return 200, self.collector.ingest(envelope)
+                if path == "/admission":
+                    return 200, self.collector.admission(envelope)
                 record = self.collector.heartbeat(envelope)
                 return 200, {"heartbeat": record, "release_ready": False}
             if method == "GET":

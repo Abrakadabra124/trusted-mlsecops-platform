@@ -33,7 +33,8 @@ class SubmissionContracts(unittest.TestCase):
         f = self.fixture
         self.values = f.values
         self.config = {
-            "schema_version": 1,
+            "schema_version": 2,
+            "security_audit_config": str(Path.cwd() / "controlled-audit.json"),
             "storage_client": str(Path.cwd() / "controlled-model-promoter"),
             "trust_client": str(Path.cwd() / "controlled-trust-promoter"),
             **{
@@ -61,6 +62,11 @@ class SubmissionContracts(unittest.TestCase):
             self.values[digest(content)] = content
         self.initial = dict(self.values)
         self.reads, self.writes = [], []
+        self.enterContext(
+            patch.object(
+                controller.security_event_admission.Configured, "check", side_effect=f.audit.check
+            )
+        )
         self.enterContext(
             patch.object(storage, "connection_parameters", return_value={"user": "ml_promoter"})
         )
@@ -132,7 +138,8 @@ class SubmissionContracts(unittest.TestCase):
             ("expected_serving_image", "sha256:" + "0" * 64),
             ("minimum_trust_version", True),
             ("storage_client", "relative"),
-            ("schema_version", 2),
+            ("schema_version", 1),
+            ("security_audit_config", "relative.json"),
         ]:
             with self.subTest(config_key=key), self.assertRaises(Rejected):
                 self.submit(config={**self.config, key: value})

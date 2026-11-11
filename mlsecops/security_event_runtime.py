@@ -7,10 +7,11 @@ commit after cancellation. Filesystem stalls are not a bounded-I/O guarantee.
 import asyncio
 import time
 
+from mlsecops import security_event_admission as admission
 from mlsecops import security_event_ledger as ledger
 from mlsecops import security_events as events
 from mlsecops import signing
-from mlsecops.contracts import Rejected, digest
+from mlsecops.contracts import Rejected, canonical, digest
 
 INTERVAL_SECONDS = 1
 PAGE_SIZE = 4
@@ -109,6 +110,28 @@ class Collector:
         report["collector_available"] = not (self.fault or delayed)
         report["healthy"] = report["healthy"] and report["collector_available"]
         return report
+
+    def admission(self, envelope):
+        self.available()
+        value = admission.request(self.store.registry, envelope, clock_ms=self.now())
+        report = self.health()  # Store.poll commits and reads back before returning.
+        if report["healthy"] is not True:
+            raise Rejected("security_audit_unhealthy")
+        clock = self.now()
+        admission.request(self.store.registry, envelope, clock_ms=clock)
+        return signing.sign(
+            dict(
+                schema_version=1,
+                config_sha256=self.store.registry.sha256,
+                request_sha256=digest(canonical(value)),
+                observed_at_ms=clock,
+                health_sha256=digest(canonical(report)),
+                healthy=True,
+                release_ready=False,
+            ),
+            "security-audit-observation",
+            self.receipt_key,
+        )
 
     def incidents(self, offset):
         self.available()

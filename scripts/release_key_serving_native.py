@@ -11,7 +11,6 @@ from pathlib import Path
 import psycopg
 
 from mlsecops import (
-    promotion,
     promotion_state,
     release_key_rotation,
     release_key_store,
@@ -29,6 +28,7 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.sandbox import resolve_image
 from scripts import promotion_qualification as fixtures
 from scripts import release_signer_fixture, release_signer_probe, serving_native
+from scripts import security_event_audit_fixture as promotion
 from scripts.release_reader_native import disposable
 
 

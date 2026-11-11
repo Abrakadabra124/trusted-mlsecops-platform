@@ -60,7 +60,7 @@ def trust_scope(arguments, decision, authority):
     return {"policy_sha256": decision["policy_sha256"], "artifacts": artifacts, "keys": keys}
 
 
-def promote(client, *, trust_lease=None, **arguments):
+def promote(client, *, trust_lease=None, audit=None, **arguments):
     if "clock" in arguments:
         raise Rejected("promotion_clock_override_forbidden")
     if storage.connection_parameters(client)["user"] != "ml_promoter":
@@ -82,6 +82,8 @@ def promote(client, *, trust_lease=None, **arguments):
     scope = trust_scope(arguments, decision, authority)
     trust_lease.refresh()
     trust_lease.check(**scope)
+    if audit is None:
+        raise Rejected("promotion_online_audit_required")
     approval = checked(
         arguments["approval_envelope"],
         "release-approval",
@@ -133,11 +135,15 @@ def promote(client, *, trust_lease=None, **arguments):
     trust_lease.check(**scope)
     try:
         with storage.connect(client) as connection:
+            audit.check(reference)
             receipt = connection.execute(
                 "SELECT ml_promotion.record_selection(%s)", (reference,)
             ).fetchone()
             if receipt != (reference,):
                 raise Rejected("promotion_state_receipt_mismatch")
+            # The SQL call may wait for a row lock. Recheck before context exit
+            # commits; a refusal here must roll back the uncommitted selection.
+            audit.check(reference)
         with storage.connect(client) as connection:
             observed = connection.execute(
                 "SELECT request_sha256 FROM ml_promotion.events WHERE environment = %s AND sequence = %s",

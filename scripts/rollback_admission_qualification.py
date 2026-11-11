@@ -110,6 +110,7 @@ class RollbackAdmission(unittest.TestCase):
                 "promoter",
                 **{**self.fixture.arguments, "approval_envelope": envelope},
                 trust_lease=self.fixture.lease,
+                audit=self.fixture.audit,
             )
 
     def reader(self):

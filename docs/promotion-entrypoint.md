@@ -6,14 +6,14 @@ CAS, content-addressed storage, хранит объект по SHA-256 его б
 
 ## Контракт и порядок работы
 
-Config schema v1: `storage_client`, `trust_client`, `context`, `trusted_root`, `expected_policy`, `expected_serving_image`, `trust_root`, `minimum_trust_version`. Оба пути абсолютные; обе SQL identities обязаны быть `ml_promoter`. Model storage и независимая trust authority остаются разными сервисами. Приватные client keys находятся в credential directories, не в request/config JSON и не в Git.
+Config schema v2: `storage_client`, `trust_client`, `context`, `trusted_root`, `expected_policy`, `expected_serving_image`, `trust_root`, `minimum_trust_version`, `security_audit_config`. Пути SQL clients и audit config абсолютные; обе SQL identities обязаны быть `ml_promoter`. Model storage и независимая trust authority остаются разными сервисами. Приватные client keys находятся в credential directories, не в request/config JSON и не в Git. Schema v1 больше не допускает запись выпуска; миграция требует отдельной конфигурации [аудита](operations/security-events.md#аудит-на-границе-promotion).
 
 Request schema v1: `proposal_reference`, `policy_reference`, `assurance_reference`, `approval_reference`. Все ссылки - SHA-256 CAS objects. Для последней пары допустим null только как явно отсутствующий документ; он приводит к штатному отказу, не к обходу verifier. Unknown fields/schema и попытки передать `clock`, credentials или другие roots отвергаются. Config <=1 MiB, request <=64 KiB, один report <=1 MiB, весь report transport <=8 MiB.
 
 1. Проверить формы документов и identities до чтения CAS. Взять время из SQL, а не из request.
 2. Прочитать canonical signed policy, сверить внешний root, digest, environment, разделение roles и неизменный набор M01-M23.
 3. Загрузить полный proposal по digest, подписанные assurance/approval. Список reports берётся из подписанной assessor assurance; каждый report проверяется по hash и size.
-4. Вызвать прежний `promotion.promote`: повторная полная авторизация, fresh online trust, публикация immutable proof, транзакционная запись selection, SQL/CAS readback и ещё одна проверка trust. Ключей publisher/assessor/approver команда не получает и ничего не подписывает.
+4. Вызвать `promotion.promote`: полная авторизация, fresh online trust, публикация immutable proof, свежий подписанный audit challenge, транзакционная запись selection и второй audit challenge перед commit. Затем SQL/CAS readback и ещё одна проверка trust. Команда не получает ключи publisher/assessor/approver; отдельный promoter key подписывает только audit challenge, не разрешение ML-выпуска.
 5. Успех означает **recorded-not-activated, release_ready=false**. Штатный production Reader отдельно проверяет current selection, signatures и trust перед verified load; сама запись journal не означает готовность HTTP.
 
 ```bash

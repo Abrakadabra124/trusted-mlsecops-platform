@@ -284,3 +284,47 @@ timestamp. Сохранить private evidence и эскалировать оп�
 могла засчитаться как текущая доставка. Negative test воспроизвёл ошибку;
 Emitter теперь проверяет receipt именно относительно отправленного event до
 изменения outbox. Случай зафиксирован как ошибка разработки, не production incident.
+
+## Аудит на границе promotion
+
+Ответственный: оператор collector и доверенного promotion controller. Условия:
+разрешённый Linux стенд, существующий private journal, pinned registry, отдельный
+promoter key и ingress token. На текущей Windows локальные SQL/Docker/WSL не
+запускать. Воспроизведение SQL fault campaign выполняется job
+`audit-promotion-sql` в [workflow](../../.github/workflows/security-events-contracts.yml).
+
+Operator promotion config теперь schema_version=2 и требует абсолютный
+`security_audit_config`. Audit config schema1 имеет ровно: schema_version,
+registry_file, registry_root, registry_sha256, producer_key_file,
+ingress_token_file, port. Registry/token/key paths абсолютные; key принадлежит
+producer роли promoter, root/receipt key ему не передаются. Значения tokens и
+private keys не помещать в JSON/Git/командную строку. Этот профиль предполагает
+общий loopback namespace с collector, не remote HTTP без TLS.
+
+Симптом: CLI возвращает `promotion_rejected`; внутренний безопасный код
+`promotion_online_audit_required` либо `promotion_audit_unavailable`. Возможные
+причины: отсутствующая конфигурация, недоступный процесс, неверный pin/роль,
+истёкший registry, пропуск heartbeat, pending/gap, заполненный или повреждённый
+journal, ошибка I/O, задержанный scheduler, слишком медленный/повторный ответ.
+Здоровая ML dashboard эти причины не отменяет.
+
+Плейбук восстановления:
+
+1. Сначала без изменений сверить принадлежность PID/port, пути и внешние pins,
+   наличие файлов, права и срок registry. Не выводить содержимое credentials.
+2. Через существующий operator endpoint проверить bounded `/health` и inbox.
+   Health poll обновляет checkpoint, поэтому это не строго read-only операция.
+   Не очищать журнал, counters или pending и не отключать freshness.
+3. По конкретной причине восстановить тот же owned collector/state и доставку
+   producer heartbeat/pending; для corruption/expiry использовать описанную
+   выше эскалацию. Автоматической rotation или reset здесь нет.
+4. Сверить SQL head/events и CAS для прежнего request SHA256. Ошибка до/во время
+   commit не доказывает отсутствие записи; не выдавать новый sequence вслепую.
+5. Повторить исходную promotion CLI команду с теми же signed references.
+   Это изменяющий шаг. Проверить точный request digest, одну запись events и
+   состояние recorded-not-activated; Reader/serving readiness проверяется отдельно.
+
+Новая проверка перед commit откатывает незавершённый selection при потере
+collector. Она не отзывает уже существующий release и не гарантирует атомарность
+с collector после последней проверки. [ADR0060](../decisions/0060-promotion-audit-admission.md)
+фиксирует эту границу. Полная интеграция семи источников/M23 ещё не завершена.

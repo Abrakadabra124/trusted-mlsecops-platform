@@ -56,6 +56,9 @@ class PromotionAdmissionContracts(unittest.TestCase):
         self.connection = MagicMock()
         self.connection.__enter__.return_value = self.connection
         self.connection.execute.side_effect = self.execute
+        # Controlled transport only. Actual collector/SQL composition is qualified
+        # separately; this double cannot establish delivery or rollback evidence.
+        self.audit = MagicMock()
 
     def execute(self, query, parameters=None):
         self.calls.append(query)
@@ -81,7 +84,8 @@ class PromotionAdmissionContracts(unittest.TestCase):
             patch.object(storage, "connect", return_value=self.connection),
         ):
             return promotion.promote(
-                "promoter", **{**self.arguments, "trust_lease": self.lease, **changes}
+                "promoter",
+                **{**self.arguments, "trust_lease": self.lease, "audit": self.audit, **changes},
             )
 
     def test_missing_online_trust_or_revoked_model_denies_before_writes(self):
@@ -96,6 +100,37 @@ class PromotionAdmissionContracts(unittest.TestCase):
             self.run_admission()
         self.assertEqual(self.values, {})
         self.assertIsNone(self.head)
+
+    def test_missing_audit_denies_authorized_release_before_any_write(self):
+        with self.assertRaisesRegex(Rejected, "promotion_online_audit_required"):
+            self.run_admission(audit=None)
+        self.assertEqual(self.values, {})
+        self.assertIsNone(self.head)
+
+    def test_audit_outage_blocks_selection_and_retry_uses_fresh_checks(self):
+        self.audit.check.side_effect = Rejected("promotion_audit_unavailable")
+        with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
+            self.run_admission()
+        self.assertFalse(any("record_selection" in query for query in self.calls))
+        self.assertIsNone(self.head)
+        self.audit.check.side_effect = None
+        self.audit.check.reset_mock()
+        result = self.run_admission()
+        self.assertEqual(self.audit.check.call_count, 2)
+        self.assertEqual(self.run_admission(), result)
+        self.assertEqual(self.audit.check.call_count, 4)
+        self.assertEqual(
+            {call.args for call in self.audit.check.call_args_list}, {(result["request_sha256"],)}
+        )
+
+    def test_audit_loss_during_sql_exits_transaction_with_exception(self):
+        self.audit.check.side_effect = [None, Rejected("promotion_audit_unavailable")]
+        with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
+            self.run_admission()
+        self.assertTrue(any("record_selection" in query for query in self.calls))
+        # This is an exception-boundary check, not proof of actual SQL rollback.
+        self.assertIs(self.connection.__exit__.call_args.args[0], Rejected)
+        self.assertFalse(any("FROM ml_promotion.events" in query for query in self.calls))
 
     def test_trust_loss_after_journal_commit_does_not_return_activation(self):
         original = self.execute

@@ -9,7 +9,6 @@ import psycopg
 
 from mlsecops import (
     bootstrap,
-    promotion,
     promotion_state,
     release_reader,
     storage,
@@ -22,6 +21,7 @@ from mlsecops.contracts import Rejected, canonical, decode, digest, now, safe_ch
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.sandbox import resolve_image
 from scripts import audit_correlation_probe, serving_native
+from scripts import security_event_audit_fixture as promotion
 
 
 @contextmanager

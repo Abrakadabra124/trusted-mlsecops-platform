@@ -10,6 +10,7 @@ from mlsecops import (
     release_bundle,
     release_policy,
     release_rollback,
+    security_event_admission,
     storage,
     trust,
     trust_authority,
@@ -29,6 +30,7 @@ CONFIG_FIELDS = (
     "expected_serving_image",
     "trust_root",
     "minimum_trust_version",
+    "security_audit_config",
 )
 REQUEST_FIELDS = (
     "schema_version",
@@ -54,11 +56,14 @@ def submit(config, request):
 def _submit(config, request):
     require_fields(config, CONFIG_FIELDS)
     require_fields(request, REQUEST_FIELDS)
-    if any(
-        type(value["schema_version"]) is not int or value["schema_version"] != 1
-        for value in (config, request)
+    if (
+        type(config["schema_version"]) is not int
+        or config["schema_version"] != 2
+        or type(request["schema_version"]) is not int
+        or request["schema_version"] != 1
     ):
         raise Rejected("promotion_controller_schema")
+    audit = security_event_admission.Configured(config["security_audit_config"])
     for field in ("storage_client", "trust_client"):
         if type(config[field]) is not str or not Path(config[field]).is_absolute():
             raise Rejected("promotion_controller_client_path")
@@ -125,6 +130,7 @@ def _submit(config, request):
     return promotion.promote(
         client,
         trust_lease=lease,
+        audit=audit,
         package=package,
         policy_envelope=policy_envelope,
         **envelopes,

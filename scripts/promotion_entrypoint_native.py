@@ -22,14 +22,15 @@ from mlsecops.contracts import (
 )
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.storage_bootstrap import validate
-from scripts import release_native, release_reader_native
+from scripts import release_native, release_reader_native, security_event_audit_fixture
 from scripts.candidate_lineage_native import KNOWN_OWNERS, OWNERS
 from scripts.material_bundle_native import release_snapshot
 
 
-def configuration(client, trust_client, arguments, trust_root):
+def configuration(client, trust_client, arguments, trust_root, audit_config):
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "security_audit_config": str(Path(audit_config).resolve()),
         "storage_client": str(Path(client).resolve()),
         "trust_client": str(Path(trust_client).resolve()),
         **{
@@ -101,10 +102,17 @@ def controlled(root, models, authority, arguments, trust_root):
         )
     for content in arguments["reports"].values():
         storage.put(client, "releases", content)
-    config = configuration(client, authority / "storage-clients/promoter", arguments, trust_root)
     campaign = safe_child(models, "evidence/promotion-cli-" + uuid.uuid4().hex)
-    first = invoke(root, campaign / "first", config, request)
-    repeated = invoke(root, campaign / "repeat", config, request)
+    with security_event_audit_fixture.live() as audit:
+        config = configuration(
+            client,
+            authority / "storage-clients/promoter",
+            arguments,
+            trust_root,
+            audit.audit_config,
+        )
+        first = invoke(root, campaign / "first", config, request)
+        repeated = invoke(root, campaign / "repeat", config, request)
     if first != repeated or first["proposal_reference"] != reference:
         raise Rejected("promotion_cli_repeat_mismatch")
     return first
@@ -149,7 +157,8 @@ def qualify(root, state, image):
         "expected_policy": proposal["policy_sha256"],
         "expected_serving_image": proposal["source"]["image_id"],
     }
-    config = configuration(client, client, arguments, public["trust"])
+    # Deliberately absent: missing assurance must refuse before consulting audit.
+    config = configuration(client, client, arguments, public["trust"], state / "absent-audit.json")
     request = {
         "schema_version": 1,
         "proposal_reference": proposal["proposal_reference"],

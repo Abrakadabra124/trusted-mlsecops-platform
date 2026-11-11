@@ -78,3 +78,35 @@ jobs:
           uv run --locked ruff format --check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
           uv run --locked python -W error -m unittest scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification scripts.security_event_source_live_qualification
           uv run --locked python -m unittest scripts.artifact_intake_qualification scripts.intake_denial_qualification scripts.evaluation_quality_qualification scripts.holdout_budget_qualification
+      - name: Fresh authenticated audit and mandatory promotion boundary
+        run: |
+          uv run --locked ruff check mlsecops scripts
+          uv run --locked ruff format --check mlsecops scripts
+          uv run --locked python -m unittest scripts.promotion_qualification scripts.promotion_controller_qualification scripts.rollback_admission_qualification scripts.promotion_entrypoint_qualification scripts.release_reader_native_qualification scripts.release_native_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-admission.coverage" --source=mlsecops.security_event_admission -m unittest scripts.security_event_admission_qualification
+          uv run --locked coverage report --data-file="$RUNNER_TEMP/security-admission.coverage" --fail-under=95
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/security-admission.coverage" -o "$RUNNER_TEMP/security-admission.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          t = json.loads((Path(os.environ['RUNNER_TEMP']) / 'security-admission.json').read_text())['totals']
+          if not t['num_branches'] or t['covered_branches'] / t['num_branches'] < .95:
+              raise SystemExit('security_admission_branch_coverage')
+          print(json.dumps(t, sort_keys=True))
+          PY
+  audit-promotion-sql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked native audit admission and real SQL rollback
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked python -W error -m scripts.security_event_promotion_native

@@ -28,7 +28,9 @@ CONFIG_FIELDS = (
 )
 
 
-def exchange(port, token, envelope):
+def exchange(port, token, envelope, *, path="/events"):
+    if path not in ("/events", "/admission"):
+        raise Rejected("security_delivery_path")
     events.integer(port, 1024)
     if port > 65535:
         raise Rejected("security_delivery_port")
@@ -47,7 +49,7 @@ def exchange(port, token, envelope):
         with socket.create_connection(("127.0.0.1", port), timeout=remaining()) as connection:
             connection.settimeout(remaining())
             connection.sendall(
-                b"POST /events HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                b"POST " + path.encode("ascii") + b" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
                 b"Content-Type: application/json\r\nConnection: close\r\nAuthorization: Bearer "
                 + token.encode("ascii")
                 + b"\r\nContent-Length: "
