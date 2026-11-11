@@ -80,6 +80,38 @@ class IntegrationBoundary(unittest.TestCase):
                         output.getvalue(), "identity_fixture_cleanup_pass\n" if closed else ""
                     )
 
+    def test_actual_uvicorn_startup_refusal_is_normalized_after_cleanup(self):
+        from scripts import security_identity_events_native as native
+
+        identity = source.Observer.__new__(source.Observer)
+        identity.closed, identity.child, identity.pending = False, None, None
+        identity.start = AsyncMock(side_effect=Rejected("controlled_probe_failure"))
+        identity.close = AsyncMock(side_effect=lambda: setattr(identity, "closed", True))
+        with (
+            patch.object(native, "hosted"),
+            patch.object(native, "enforce"),
+            patch.object(
+                native,
+                "bounded_read",
+                side_effect=[
+                    canonical(
+                        dict(identity_file="identity", token_file="token", operator_file="operator")
+                    ),
+                    b"a" * 64,
+                    b"b" * 64,
+                ],
+            ),
+            patch.object(native.security_identity_http, "configured", return_value=identity),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            try:
+                with self.assertRaisesRegex(Rejected, "identity_fixture_startup_failed"):
+                    native.serve("private-config", 0)
+            except SystemExit as failure:
+                self.fail(f"unhandled pinned Uvicorn startup exit: {failure.code}")
+            identity.close.assert_awaited_once()
+            self.assertEqual(output.getvalue(), "identity_fixture_cleanup_pass\n")
+
 
 class Process:
     def __init__(self, code=0, *, ignore_terminate=False, ignore_kill=False):

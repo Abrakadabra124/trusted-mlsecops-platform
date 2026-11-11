@@ -14,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 
+from uvicorn.config import STARTUP_FAILURE
+
 from mlsecops import (
     security_event_delivery,
     security_event_outbox,
@@ -75,6 +77,10 @@ def serve(path, port):
             # Uvicorn reraises SIGINT after lifespan shutdown. The fixture
             # still verifies lifecycle status and child cleanup below.
             pass
+        except SystemExit as failure:
+            if failure.code != STARTUP_FAILURE:
+                raise
+            raise Rejected("identity_fixture_startup_failed") from None
         if app.lifecycle_failed:
             raise Rejected("identity_fixture_lifecycle_failed")
     finally:
