@@ -1,5 +1,13 @@
 # Реализация R1
 
+CP4/T29 2026-11-12: [owned Kubernetes audit](evidence/kubernetes-audit-2026-11-12.md)
+проверен на4aeece4 /43102906649 success. Dedicated mTLS/registry, три role PVC,
+bootstrap Jobs с pin/UID readback, collector/observer и schema2 promoter соединены.
+13promotion+10audit assertions подтверждают outage/no-write/recovery/Pod replacement.
+Исправлена публикация CAS до первого audit challenge; pre/post-SQL checks сохранены.
+Clean71/0skips. Отдельная observer regression43102811593 failed по45s deadline,
+причина открыта и наблюдается ограниченной диагностикой. Полные M23/M18/R1 не приняты.
+
 CP4/T29 2026-11-11: [постоянный trust observer](evidence/periodic-trust-observer-2026-11-11.md), `25371bf` /43087532653 success593Linux/0skips и15native assertions. Один bounded child каждые30s, pinned config, SELECT/TLS history -> receipts -> heartbeat; при source loss heartbeat отсутствует. Actual period30.022s, commit delivery29.775085516s, stopped notice90.930804055s; recovery/restart/owned cleanup проверены. Clean83/3Linux skips. Mandatory deployed integration/schema2 Kubernetes transport/worker isolation/full M23 и все R1 gates сохраняются.
 
 CP4/T29 2026-11-11: [durable producer heartbeat](evidence/producer-heartbeat-2026-11-11.md), `8b04684` /43083688017 success571Linux/0skips. Outbox schema2 хранит latest signed heartbeat/counter и event head атомарно; serving владеет30s scheduler и прекращает отправку при shutdown. Native46 assertions: период30.096s, stopped-producer signed gap90.412271147s, fresh audit refusal и cleanup. Per-module branches>=95%, clean final74/4Linux skips, earlier same-runtime201/6, CLI regressionsuccess. [ADR0064](decisions/0064-producer-heartbeat.md), [ранбук](operations/producer-heartbeat.md). Mandatory profile/periodic trust observer/sequence campaign/healthy ML dashboard outage и общие M23/R1 остаются обязательными.

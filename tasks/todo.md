@@ -1,5 +1,10 @@
 # Backlog реализации
 
+CP4/T29 2026-11-12: [Kubernetes audit increment](../docs/evidence/kubernetes-audit-2026-11-12.md)
+4aeece4 /43102906649 success: durable audit и refusal/recovery соединены с promoter.
+Full T29 остаётся открытым, включая observer deadline regression, остальные actual
+sources, mandatory serving profile и свежие M13/M14. M18/R1 не объявлены завершёнными.
+
 CP4/T17 2026-11-07 МСК: **[M14 fresh load acceptance](../docs/evidence/m14-load-acceptance-bbff69e.md) pass**, `bbff69e` / 42297023903 success. 143 cases (137 contracts + 6 aggregate), 15672/15672 correct, 130.6 RPS, p95=103.052346 ms, p99=117.668110 ms, 0 normal errors/429; overload/recovery и cleanup подтверждены. Source/policy/methods/primary bindings сверены. T17 lab profile принят; далее T18/M15. Исторический shutdown failure остаётся reliability debt R1-B08, не объявлен исправленным. M10/M19, independent M22 0/2, image findings, оставшиеся CP4/CP5 и общий M18/R1 открыты. Записи ниже - история конкретных commits.
 
 CP3/T16 2026-11-06: **[M13 synthetic serving acceptance](../docs/evidence/m13-privacy-acceptance-2026-11-06.md) pass**, `b03a5d9` / 42248499786 success. 438 cases (430 contracts + 8 aggregate criteria), 1116 Linux method executions с повторами / 0 skips; новая gate logic 144 statements / 22 branches 100%. Primary source/policy/methods и cleanup сверены; clean Windows subset85/0. T16 принят в этом профиле. Далее неделя10/T17/M14; M10/M19, independent M22 0/2, image findings, CP4/CP5 и весь R1 остаются открытыми. Более ранние записи ниже описывают состояние на соответствующих commits.

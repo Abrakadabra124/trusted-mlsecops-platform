@@ -95,3 +95,9 @@ supervisor и количества записей/receipts в outbox и collecto
 не доказывают причину. Сохранены исходные45s ожидания,30s period,60s delivery bound
 и120s detection bound. Не увеличивать пороги и не объявлять случайный повтор pass
 исправлением. Конкуренция диагностического reader с writer пока лишь гипотеза.
+
+Повтор4156d41 /43104110909 завершился success:15continuous assertions,
+period30.019s, operation-start->receipt29.85712158s, stopped-source90.759104269s.
+Runtime fingerprint не изменился. В этом запуске timeout не повторился, поэтому
+новые failure counters не дали сведений о причине первого отказа. Сохранять его
+как открытую нестабильность до воспроизведения и проверки причинного исправления.

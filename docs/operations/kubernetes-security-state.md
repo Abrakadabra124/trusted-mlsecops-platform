@@ -1,7 +1,8 @@
 # Первичное состояние аудита Kubernetes
 
-Статус: operator bootstrap и обязательный аудит promoter реализованы и проверены
-локальными contract tests. Native Kubernetes acceptance ещё не подтверждена.
+Статус: operator bootstrap и обязательный аудит promoter проверены в hosted
+Kubernetes на4aeece4 /43102906649: [evidence](../evidence/kubernetes-audit-2026-11-12.md).
+Отдельная periodic observer regression остаётся открытой; полный M23 не принят.
 Этот документ не является инструкцией запуска всей платформы или доказательством R1.
 [План](../../tasks/audited-kubernetes-promotion-plan.md),
 [ADR0066](../decisions/0066-audited-kubernetes-promotion.md).
@@ -18,7 +19,7 @@
 Используется существующий storage class с Retain policy. Runtime не получает
 CA private key; worker не получает audit profile. Network resources открывают
 только TCP8443 между обозначенными namespace/service account и collector.
-Проверка манифеста не доказывает фактическую сетевую изоляцию - нужен native test.
+Кроме manifest checks, native test подтвердил отсутствие audit mounts и TCP-доступа trainer.
 
 ## PB: создание нового состояния
 
@@ -40,7 +41,7 @@ CA private key; worker не получает audit profile. Network resources о
    Один exit0 не доказывает PVC identity.
 5. Collector, observer и promoter запускаются с существующими pins. Их runtime
    specifications не содержат init журнала. Замена Pod должна сохранять файлы,
-   счётчики и envelopes; этот сценарий ещё подлежит native проверке.
+   счётчики и envelopes; collector/observer replacement подтверждён в evidence.
 
 Для disposable hosted окружения после успешных storage/trust bootstrap и явной
 настройки trust authority предусмотрен entrypoint:
@@ -84,7 +85,7 @@ workspace, PVC/PV UID, binding, Retain policy и Job UID по приватном
 - Утерян PVC/marker или неизвестен результат provisioning Job: восстановление
   требует решения оператора с прежними pins; автоматической новой эпохи нет.
 - Изменились права0700/0600: проверить volume driver и fsGroup, не отключать reader
-  и не выполнять рекурсивный chmod без установленной причины и проверенной копии.
+   и не выполнять рекурсивный chmod без установленной причины и проверенной копии.
 
 `OnRootMismatch` выбран, чтобы при подходящем корне тома Kubernetes не менял
 права вложенных файлов повторно. Указанный storage driver должен подтвердить это

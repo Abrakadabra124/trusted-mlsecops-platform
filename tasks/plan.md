@@ -1,5 +1,11 @@
 # План перехода DevSecOps -> MLSecOps
 
+CP4/T29 2026-11-12: [audited Kubernetes promotion](../docs/evidence/kubernetes-audit-2026-11-12.md)
+на4aeece4 /43102906649 success,13promotion+10audit assertions. Full M23 ещё открыт:
+все sources, serving identity/rotation, свежие M13/M14, sequence gap и healthy ML
+dashboard outage. Отдельный observer deadline в43102811593 не устранён успешной
+кластерной проверкой; диагностика и обязательные gates продолжаются.
+
 CP4/T29 2026-11-11: [periodic trust observer](../docs/evidence/periodic-trust-observer-2026-11-11.md) проверен на25371bf /43087532653:593Linux/0skips,15native assertions, реальные30.022s/29.775085516s delivery/90.930804055s stopped notice; clean83/3Linux skips. Следующее обязательное соединение: schema2 promoter/Kubernetes profile, защищённый транспорт и раздельные mounts/network, actual sequence gap/healthy dashboard outage, fresh M13/M14/full M23. Общий R1/M18 не закрыты.
 
 CP4/T17 2026-11-07 МСК: **[M14 fresh load acceptance](../docs/evidence/m14-load-acceptance-bbff69e.md) pass**, `bbff69e` / 42297023903 success. 143 cases (137 contracts + 6 aggregate), 15672/15672 correct, 130.6 RPS, p95=103.052346 ms, p99=117.668110 ms, 0 normal errors/429; overload/recovery и cleanup подтверждены. Source/policy/methods/primary bindings сверены. T17 lab profile принят; далее T18/M15. Исторический shutdown failure остаётся reliability debt R1-B08, не объявлен исправленным. M10/M19, independent M22 0/2, image findings, оставшиеся CP4/CP5 и общий M18/R1 открыты. Записи ниже - история конкретных commits.

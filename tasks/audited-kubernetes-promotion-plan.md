@@ -51,8 +51,9 @@ durable audited promoter mounts/config, correct schema2 validation.
   collector+trust observer lifecycle, narrow Cilium rules, separate role state.
   Code and pure contracts pass; native deployment is not yet accepted.
 - [ ] Connect existing promoter bootstrap/CLI and update caller fixtures coherently.
-- [ ] Native actual refusal, controlled positive, collector outage/no-write, recovery,
+- [x] Native actual refusal, controlled positive, collector outage/no-write, recovery,
   Pod restart durability, wrong worker access and owned cleanup.
+  Verified4aeece4 /43102906649 success; separate observer regression remains open.
 
 ## Task 3: evidence, operations and publication
 
@@ -141,3 +142,17 @@ publication before the first audit check. First challenge now precedes publicati
 with pre/post-SQL checks retained;46scoped tests pass. Native proof additionally
 reads the combined object+promotion ledger. Full corrected native replay pending;
 see the failure history in the Kubernetes audit runbook. No M23/R1 acceptance.
+
+Corrected Kubernetes replay4aeece4 /43102906649 SUCCESS:98Linux unit executions,
+13promotion+10audit assertions, combined objects+promotion journal unchanged during
+outage, original-event recovery, collector+observer replacement and private state.
+Trust counter5->6, source/image pins and cleanup verified. Freshlocked71/0skips.
+See [scoped evidence](../docs/evidence/kubernetes-audit-2026-11-12.md).
+SecurityCI43102811593 remains FAILED on continuous observer45s deadline after
+691contracts+25promotion+37history passes. Diagnostic-only4156d41 must be observed;
+no rootcause or general recovery claim follows from another run passing.
+
+Diagnostic4156d41 /43104110909 now terminalSUCCESS:692Linux0skips and
+25+37+15+46native assertions; continuous period30.019s, operation-start->receipt
+29.85712158s, stoppedsource90.759104269s. Same runtime fingerprint. The original
+deadline failure remains unexplained, not fixed by this diagnostic-only pass.

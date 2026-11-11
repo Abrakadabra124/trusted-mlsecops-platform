@@ -1,5 +1,15 @@
 # Статус и границы доказательств
 
+CP4/T29 2026-11-12: [Kubernetes audit integration](docs/evidence/kubernetes-audit-2026-11-12.md)
+на4aeece4 /43102906649 success:13promotion+10audit assertions, actual refusal,
+outage без изменения combined SQL snapshot, original-event recovery, collector/
+observer Pod replacement, private permissions и owned cleanup. Clean71/0skips.
+Это scoped result, не R1. Общий security CI43102811593 FAILED на observer deadline
+после691Linux tests/0skips и25+37native passes; причина открыта, диагностика4156d41.
+Повтор4156d41 /43104110909 success692Linux/0skips и25+37+15+46native assertions
+с тем же runtime fingerprint; причина прежнего таймаута всё ещё не установлена.
+Оставшиеся M23/M13/M14 и все M18 dependencies сохраняются.
+
 CP4/T29 2026-11-12: [TLS transport принят](docs/evidence/audit-tls-2026-11-12.md),
 ae7b687 /43095023099success,624Linux executions/0skips; TLS/server coverage100%,
 delivery/outbox>=95% отдельно. Подготовлены operator bootstrap, отдельные audit
