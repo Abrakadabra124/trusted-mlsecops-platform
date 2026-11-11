@@ -162,3 +162,11 @@ or altered receipt fail. No fake Engine or directly fabricated producer event is
 used in this deployed path. The three Jobs are sequential; continuous_lifecycle
 remains explicitly false. Mandatory persistent HTTP/heartbeat, observer rotation,
 candidate/privacy/load/monitoring, M13/M14 and full R1 remain open.
+
+d86d3de hosted composition accepted: Kubernetes43113676523success18promotion+
+12audit plus13before/22active/14revoked HTTP checks. Golden error7.583384781240099e-08,
+one fresh identity.denied matched to independent collector receipt; each owned CLI,
+worker and final SQL/cluster cleanup verified. Actual candidate remains refused
+release_assurance_required. Security43113651515success763Linux0skip+25/37/15/46native;
+clean locked128tests1Windows skip. Continuous lifecycle and all remaining requirements
+above are unchanged, no M18 or full R1 acceptance follows from this composition.

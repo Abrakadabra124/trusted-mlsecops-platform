@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+CP4/T29 d86d3de ordinary HTTP composition проверена:
+[Kubernetes43113676523](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43113676523)
+success18promotion+12audit и13/22/14HTTP checks до допуска/после выбора/после отзыва.
+ONNX error7.583384781240099e-08, одно новое identity.denied с независимым receipt,
+owned CLI/worker/SQL/cluster cleanup verified. Security43113651515success763Linux0skips,
+clean128tests/1Windows skip. [Evidence](docs/evidence/kubernetes-audit-2026-11-12.md).
+Actual candidate отказан без assurance; continuous_lifecycle=false.
+Обязательный serving heartbeat, rotation, fresh M13/M14 и полный R1 остаются открытыми.
+
 CP4/T29 6f04191 serving role/storage приняты в scoped hosted proof:
 Kubernetes43111654007success14+12assertions, security43111626192success762Linux0skips.
 Fresh127tests/1Windows skip, owned cleanup verified.

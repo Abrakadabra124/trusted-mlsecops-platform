@@ -140,8 +140,8 @@ event ID, digest подписанного envelope и receipt в обоих жу
 Фиксированные phase/code в serving result помогают отличить startup, HTTP и shutdown.
 Недоступный collector, неверные права ключа или потеря serving state требуют
 восстановления исходной идентичности; отключение identity audit не является recovery.
-Обновлённый hosted сценарий ещё ожидает первый результат. Три последовательных
-Job не доказывают работу HTTP между фазами: continuous_lifecycle=false сохраняется
+Сценарий проверен на d86d3de /43113676523: [evidence](../evidence/kubernetes-audit-2026-11-12.md).
+Три последовательных Job не доказывают работу HTTP между фазами: continuous_lifecycle=false сохраняется
 в отчёте. Полный R1 требует непрерывного serving и всех исходных gates.
 
 Симптом: `security_provision_rejected`, либо runtime отказ чтения identity/state.

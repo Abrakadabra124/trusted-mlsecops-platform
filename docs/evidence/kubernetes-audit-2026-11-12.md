@@ -194,3 +194,42 @@ materials122/122+28/28, operator201/203+68/70, provision43/43+8/8.
 Новая интеграция ordinary HTTP с тремя состояниями и collector readback готовится
 следующим increment; этот результат не доказывает непрерывный HTTP lifecycle,
 обязательный serving heartbeat, fresh M13/M14 или полный M23/R1.
+
+## Ordinary HTTP и независимый receipt: d86d3de
+
+[Kubernetes43113676523](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43113676523)
+завершился success на `d86d3de5257bdc68b027a5bf2b6f7d47095d585a`:
+18promotion+12audit assertions и три реальные HTTP-фазы:
+
+| Фаза | Проверки | Результат |
+| --- | --- | --- |
+| До controlled approval | 13 | ready/predict503, inference worker не создан, model/promotion SQL не изменён |
+| После выбора модели | 22 | ordinary CLI ready, три prediction, model/bundle binding, один worker UID, ONNX error7.583384781240099e-08, auth401 |
+| После отзыва | 14 | ready/predict503, exact trust_artifact_revoked, отказ до worker, model/promotion SQL не изменён |
+
+Во всех трёх фазах подтверждены завершение обычного CLI и очистка собственного
+worker. Новое identity.denied после неавторизованного HTTP-запроса имеет одинаковые
+event ID, envelope digest и подписанный receipt в serving outbox и независимом
+collector journal; подтверждено одно новое событие. Native proof не создаёт
+это событие вручную и не использует fake Engine.
+
+Image `sha256:6db03d8f92369a6c0908fdbf3e486b7d47297e2e211c910399d627fd79a02021`;
+runtime fingerprint остаётся `662d6c8fd136e32ad2df500a86e99e41e8bb8e1844b8abd4f0cfcdbcc17ecbdb`.
+Source dirty=false. Source SQL stop/readback и cluster removal/readback success.
+Actual candidate `cbb6cc085a06f1f8c210845aba93833795068fff3f6d6239784bfb7bf6a54af9`
+отказан с release_assurance_required и Kubernetes rejected. Положительный HTTP
+сценарий использует controlled authorization; full_M10=inconclusive,
+continuous_lifecycle=false и release_ready=false остаются в итоговом отчёте.
+
+[Security43113651515](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43113651515)
+success:763Linux tests/0skips и25+37+15+46native assertions. Observer period30.011s,
+operation-start->receipt29.849794677s, stopped-source90.596819615s.
+Identity period30.108s, stopped-producer90.53188125s.
+Fresh locked checkout d86d3de:128tests14.347s-Werror, один Linux-only skip на Windows;
+отдельные interpreter/import paths и Git clean проверены.
+
+Это связывает ordinary HTTP с selection, revocation и настоящим audit collector.
+Три HTTP Job последовательны; непрерывный serving между фазами и обязательный
+heartbeat ещё не доказаны. Root rotation integration, fresh M13/M14, полный M23
+и остальные исходные R1 gates сохраняются. Успех этого запуска также не объясняет
+причину исторического intermittent observer timeout.
