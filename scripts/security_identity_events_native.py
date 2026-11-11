@@ -181,7 +181,10 @@ def qualify():
                 process.kill()
                 process.wait(timeout=5)
                 raise Rejected("identity_http_graceful_cleanup_failed") from None
-            check("owned-http-exit-and-port-closed", code == 0 and closed_port())
+            port_closed = closed_port()
+            if code != 0 or not port_closed:
+                print(canonical(dict(identity_http_exit=code, port_closed=port_closed)).decode())
+            check("owned-http-exit-and-port-closed", code == 0 and port_closed)
             process = None
 
         private_log = fx.directory / "identity-http-private.log"
@@ -297,6 +300,28 @@ def qualify():
                     and token.encode() not in canonical(records())
                     and operator.encode() not in canonical(records()),
                 )
+            except Exception as failure:
+                reason = str(failure)
+                safe_reason = (
+                    reason
+                    if isinstance(failure, Rejected)
+                    and reason.startswith(("identity_source_case:", "identity_http_"))
+                    else "identity_native_rejected"
+                )
+                log = bounded_read(private_log, 65536)
+                print(
+                    canonical(
+                        dict(
+                            identity_failure=safe_reason,
+                            completed_assertions=len(cases),
+                            cleanup_markers=log.count(b"identity_fixture_cleanup_pass"),
+                            startup_rejected=b"Application startup failed" in log,
+                            lifecycle_rejected=b"identity_fixture_lifecycle_failed" in log,
+                            cleanup_rejected=b"identity_fixture_cleanup_unconfirmed" in log,
+                        )
+                    ).decode()
+                )
+                raise
             finally:
                 stop()
         log = bounded_read(private_log, 65536)
