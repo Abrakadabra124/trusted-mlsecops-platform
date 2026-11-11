@@ -39,7 +39,7 @@ class IntegrationBoundary(unittest.TestCase):
             (True, True, "identity_fixture_lifecycle_failed"),
         ):
             with self.subTest(closed=closed, failed=failed):
-                identity = Mock(closed=closed, child=None, pending=None)
+                identity = Mock(closed=closed, child=None, pending=None, ticker=None)
                 app = Mock(lifecycle_failed=failed)
                 with (
                     patch.object(native, "hosted"),
@@ -85,6 +85,7 @@ class IntegrationBoundary(unittest.TestCase):
 
         identity = source.Observer.__new__(source.Observer)
         identity.closed, identity.child, identity.pending = False, None, None
+        identity.ticker = None
         identity.start = AsyncMock(side_effect=Rejected("controlled_probe_failure"))
         identity.close = AsyncMock(side_effect=lambda: setattr(identity, "closed", True))
         with (
@@ -350,6 +351,97 @@ class OwnedChild(unittest.IsolatedAsyncioTestCase):
         self.observer.finished(done)
         self.assertIs(self.observer.pending, other)
         self.observer.pending = None
+
+    async def test_periodic_heartbeat_fault_recovers_and_stops_with_owner(self):
+        await self.observer.start()
+        self.assertIsNotNone(self.observer.ticker)
+        initial = self.observer.last_success
+        with (
+            patch.object(source, "TICK_SECONDS", 0.001),
+            patch.object(source, "HEARTBEAT_SECONDS", 0),
+        ):
+            self.spawn.return_value = Process(1)
+            # Wake the initially sleeping scheduler without cancelling its owner.
+            self.observer.ticker.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await self.observer.ticker
+            self.observer.ticker = asyncio.create_task(self.observer.heartbeat_loop())
+            async with asyncio.timeout(1):
+                while not self.observer.tick_fault:
+                    await asyncio.sleep(0.002)
+            self.assertEqual(self.observer.last_success, initial)
+            self.spawn.return_value = Process()
+            async with asyncio.timeout(1):
+                while self.observer.tick_fault:
+                    await asyncio.sleep(0.002)
+            self.assertGreater(self.observer.last_success, initial)
+            self.assertIn("heartbeat", self.spawn.call_args.args)
+        await self.observer.close()
+        before = self.spawn.call_count
+        await asyncio.sleep(0.01)
+        self.assertIsNone(self.observer.ticker)
+        self.assertEqual(self.spawn.call_count, before)
+
+    async def test_scheduler_is_idle_before_due_and_never_queues_behind_busy_child(self):
+        with patch.object(source, "TICK_SECONDS", 0.001):
+            await self.observer.start()
+            await asyncio.sleep(0.01)
+            self.assertEqual(self.spawn.call_count, 1)
+            self.spawn.return_value = Process(None)
+            operation = asyncio.create_task(self.observer.report("b" * 32, "credential"))
+            while self.observer.child is None:
+                await asyncio.sleep(0)
+            with patch.object(source, "HEARTBEAT_SECONDS", 0):
+                await asyncio.sleep(0.01)
+                self.assertEqual(self.spawn.call_count, 2)
+            await self.observer.close()
+            with self.assertRaises(asyncio.CancelledError):
+                await operation
+
+    async def test_scheduler_spawn_failure_closes_coroutine_and_keeps_cleanup_available(self):
+        real = source.asyncio.create_task
+
+        def create(coroutine, **options):
+            if options.get("name") == "mlsecops-identity-heartbeat":
+                raise RuntimeError("controlled_task_failure")
+            return real(coroutine, **options)
+
+        with patch.object(source.asyncio, "create_task", side_effect=create):
+            with self.assertRaisesRegex(RuntimeError, "controlled_task_failure"):
+                await self.observer.start()
+        await self.observer.close()
+        self.assertIsNone(self.observer.ticker)
+        self.assertIsNone(self.observer.child)
+
+    async def test_cancelled_close_retains_slow_scheduler_but_still_reaps_owned_child(self):
+        entered, cancelled, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        async def slow_scheduler():
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                await release.wait()
+
+        task = asyncio.create_task(slow_scheduler())
+        self.observer.ticker = task
+        child = Process(None)
+        self.observer.child = child
+        await entered.wait()
+        closer = asyncio.create_task(self.observer.close())
+        try:
+            await cancelled.wait()
+            closer.cancel()
+            with self.assertRaisesRegex(Rejected, "scheduler_cleanup_unconfirmed"):
+                await closer
+            self.assertIs(self.observer.ticker, task)
+            self.assertEqual(child.returncode, -15)
+        finally:
+            release.set()
+            await task
+            await self.observer.close()
+        self.assertIsNone(self.observer.ticker)
 
 
 class HttpIdentity(unittest.IsolatedAsyncioTestCase):

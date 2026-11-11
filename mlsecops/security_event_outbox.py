@@ -22,8 +22,13 @@ def key_identity(key_path):
 
 class Outbox:
     def __init__(self, registry, producer_id, document):
-        events.shape(document, FIELDS)
-        events.version(document["schema_version"])
+        if (
+            type(document) is not dict
+            or type(document.get("schema_version")) is not int
+            or document["schema_version"] not in (1, 2)
+        ):
+            raise Rejected("security_outbox_schema")
+        events.shape(document, FIELDS + (("heartbeat",) if document["schema_version"] == 2 else ()))
         self.registry, self.producer = registry, registry.producer(producer_id)
         if (
             document["config_sha256"] != registry.sha256
@@ -62,6 +67,17 @@ class Outbox:
             previous = queued
         if len(self.pending()) > MAX_PENDING:
             raise Rejected("security_outbox_backlog")
+        heartbeat = self._document.get("heartbeat")
+        if heartbeat is not None:
+            raw = events.signed(heartbeat, "security-heartbeat", self.producer.public_key)
+            events.shape(raw, events.HEARTBEAT_FIELDS)
+            value = registry.heartbeat(heartbeat, clock_ms=raw["observed_at_ms"])
+            if (
+                value["producer_id"] != producer_id
+                or value["last_event_sequence"] > len(records)
+                or value["observed_at_ms"] > document["updated_at_ms"]
+            ):
+                raise Rejected("security_outbox_heartbeat_binding")
 
     @classmethod
     def empty(cls, registry, producer_id, *, clock_ms):
@@ -69,11 +85,12 @@ class Outbox:
             registry,
             producer_id,
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "config_sha256": registry.sha256,
                 "producer_id": producer_id,
                 "updated_at_ms": clock_ms,
                 "records": [],
+                "heartbeat": None,
             },
         )
 
@@ -87,6 +104,34 @@ class Outbox:
         self.registry.valid(clock_ms)
         if clock_ms < self._document["updated_at_ms"]:
             raise Rejected("security_outbox_clock")
+
+    def heartbeat(self, key_path, *, clock_ms):
+        self._clock(clock_ms)
+        if self._document["schema_version"] != 2:
+            raise Rejected("security_outbox_heartbeat_migration")
+        if key_identity(key_path) != self.producer.identity:
+            raise Rejected("security_outbox_key")
+        previous = self._document["heartbeat"]
+        sequence = 1
+        if previous is not None:
+            sequence = (
+                events.signed(previous, "security-heartbeat", self.producer.public_key)["sequence"]
+                + 1
+            )
+        value = dict(
+            schema_version=1,
+            producer_id=self.producer.identity,
+            epoch=self.producer.epoch,
+            sequence=events.integer(sequence),
+            last_event_sequence=len(self._ids),
+            observed_at_ms=clock_ms,
+            policy_sha256=self.registry.policy_sha256,
+        )
+        envelope = signing.sign(value, "security-heartbeat", key_path)
+        self.registry.heartbeat(envelope, clock_ms=clock_ms)
+        self._document["heartbeat"] = envelope
+        self._document["updated_at_ms"] = clock_ms
+        return decode(canonical(envelope))
 
     def enqueue(self, request, *, clock_ms):
         self._clock(clock_ms)
@@ -171,3 +216,6 @@ class Store(storage.Store):
 
     def enqueue(self, request, *, clock_ms):
         return self._update("enqueue", request, clock_ms)
+
+    def heartbeat(self, key_path, *, clock_ms):
+        return self._update("heartbeat", key_path, clock_ms)

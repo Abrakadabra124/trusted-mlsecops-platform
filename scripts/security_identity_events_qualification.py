@@ -40,6 +40,7 @@ class IdentityEvents(unittest.TestCase):
         self.assertEqual(source.configuration(str(self.path)), (self.config, self.pin))
         result = self.execute("probe")
         self.audit.retry.assert_called_once()
+        self.audit.heartbeat.assert_called_once()
         self.audit.emit.assert_not_called()
         self.assertEqual(
             result,
@@ -108,6 +109,16 @@ class IdentityEvents(unittest.TestCase):
         self.audit.retry.side_effect = Rejected("PRIVATE-CANARY")
         with self.assertRaises(Rejected):
             self.execute("probe")
+
+    def test_heartbeat_has_no_identity_event_and_failure_never_claims_success(self):
+        result = self.execute("heartbeat")
+        self.assertEqual(result["state"], "ready")
+        self.audit.emit.assert_not_called()
+        self.audit.retry.assert_called_once()
+        self.audit.heartbeat.assert_called_once()
+        self.audit.heartbeat.side_effect = Rejected("PRIVATE-CANARY")
+        with self.assertRaises(Rejected):
+            self.execute("role")
 
     def test_cli_constant_errors_and_finite_success(self):
         arguments = [

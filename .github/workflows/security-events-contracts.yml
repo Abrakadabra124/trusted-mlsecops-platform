@@ -76,7 +76,19 @@ jobs:
         run: |
           uv run --locked ruff check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
           uv run --locked ruff format --check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
-          uv run --locked python -W error -m unittest scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification scripts.security_event_source_live_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/producer-heartbeat.coverage" --source=mlsecops.security_event_outbox,mlsecops.security_event_delivery -m unittest scripts.security_producer_heartbeat_qualification scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification scripts.security_event_source_live_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/producer-heartbeat.coverage" -o "$RUNNER_TEMP/producer-heartbeat.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'producer-heartbeat.json').read_text())['files']
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              print(json.dumps({'module': name, **stats}, sort_keys=True))
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not stats[total] or stats[covered] / stats[total] < .95:
+                      raise SystemExit('producer_heartbeat_coverage:' + name)
+          PY
           uv run --locked python -m unittest scripts.artifact_intake_qualification scripts.intake_denial_qualification scripts.evaluation_quality_qualification scripts.holdout_budget_qualification
       - name: Fresh authenticated audit and mandatory promotion boundary
         run: |

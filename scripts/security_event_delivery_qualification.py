@@ -88,6 +88,14 @@ class DeliveryContracts(unittest.TestCase):
         self.assertEqual(self.box.document(), before)
         self.client.send.assert_called_once()
 
+    def test_retry_skips_acked_records_and_rejects_regressed_clock(self):
+        self.emitter.emit(self.fx.fields)
+        self.assertEqual(self.emitter.retry(), 0)
+        self.clock = 2000
+        with self.assertRaisesRegex(Rejected, "security_outbox_clock"):
+            self.emitter.retry()
+        self.client.send.assert_called_once()
+
     def test_receipt_for_another_pending_event_cannot_settle_the_current_send(self):
         self.box.enqueue((self.fx.fields, self.fx.fx.keys["controller"]), clock_ms=2100)
         other = self.box.enqueue(

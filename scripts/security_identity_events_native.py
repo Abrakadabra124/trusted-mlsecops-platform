@@ -19,6 +19,7 @@ from uvicorn.config import STARTUP_FAILURE
 from mlsecops import (
     security_event_delivery,
     security_event_outbox,
+    security_event_store,
     security_identity_http,
     serving_http,
 )
@@ -84,7 +85,12 @@ def serve(path, port):
         if app.lifecycle_failed:
             raise Rejected("identity_fixture_lifecycle_failed")
     finally:
-        if not identity.closed or identity.child is not None or identity.pending is not None:
+        if (
+            not identity.closed
+            or identity.child is not None
+            or identity.pending is not None
+            or identity.ticker is not None
+        ):
             raise Rejected("identity_fixture_cleanup_unconfirmed")
         print("identity_fixture_cleanup_pass", flush=True)
 
@@ -103,7 +109,7 @@ def qualify():
             raise Rejected("identity_source_case:" + name)
         cases.append(name)
 
-    with security_event_audit_fixture.live() as fx:
+    with security_event_audit_fixture.live(initial_heartbeat=False) as fx:
         producer = decode(fx.audit_config.read_bytes())
         key = fx.fx.keys["serving"]
         producer.update(
@@ -119,6 +125,10 @@ def qualify():
         )
         fx.write("identity-producer.json", canonical(producer))
         producer_path = str(fx.directory / "identity-producer.json")
+        collector_config = decode((fx.directory / "collector.json").read_bytes())
+        collector_store = security_event_store.Store(
+            collector_config["state_directory"], collector_config["state_sha256"], fx.registry
+        )
         service = digest(b"controlled-unready-http-service-for-identity-audit")
         fx.write(
             "identity-source.json",
@@ -146,6 +156,19 @@ def qualify():
 
         def records():
             return security_event_delivery.configured(producer_path).store.snapshot()["records"]
+
+        def heartbeat():
+            document = security_event_delivery.configured(producer_path).store.snapshot()
+            envelope = document["heartbeat"]
+            return envelope, fx.registry.heartbeat(envelope, clock_ms=fx.now())
+
+        def collector_heartbeat():
+            streams = collector_store.snapshot()["telemetry"]["streams"]
+            return next(
+                stream["heartbeat"]
+                for stream in streams
+                if stream["producer_id"] == security_event_outbox.key_identity(key)
+            )
 
         def request(path, credential=None):
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=8)
@@ -237,6 +260,17 @@ def qualify():
             try:
                 start()
                 check("startup-probe-creates-no-denial", records() == [])
+                first_envelope, first_heartbeat = heartbeat()
+                check(
+                    "startup-actual-producer-heartbeat",
+                    first_heartbeat["sequence"] == 1
+                    and first_heartbeat["last_event_sequence"] == 0
+                    and collector_heartbeat()["envelope"] == first_envelope,
+                )
+                check(
+                    "live-producer-allows-fresh-audit-challenge",
+                    fx.audit.check("a" * 64)["healthy"] is True,
+                )
                 expected_reasons, correlations = [], []
                 for path, supplied, reason in (
                     ("/v1/predict", None, "credential"),
@@ -264,6 +298,7 @@ def qualify():
                 correlations.append(decode(content)["request_id"])
                 expected_reasons.append("credential")
                 pending = records()[-1]
+                before_restart = heartbeat()[1]
                 check(
                     "offline-event-retained-before-child-exit",
                     len(records()) == 6 and pending["receipt"] is None,
@@ -282,6 +317,12 @@ def qualify():
                     len(records()) == 6
                     and records()[-1]["envelope"] == pending["envelope"]
                     and records()[-1]["receipt"] is not None,
+                )
+                after_restart = heartbeat()[1]
+                check(
+                    "restart-retains-heartbeat-counter-and-complete-head",
+                    after_restart["sequence"] > before_restart["sequence"]
+                    and after_restart["last_event_sequence"] == 6,
                 )
                 check(
                     "operator-retry-is-idempotent",
@@ -305,6 +346,48 @@ def qualify():
                     b"PRIVATE-CANARY" not in canonical(records())
                     and token.encode() not in canonical(records())
                     and operator.encode() not in canonical(records()),
+                )
+                first_envelope, first_heartbeat = heartbeat()
+                deadline = time.monotonic() + 40
+                periodic = first_heartbeat
+                while (
+                    time.monotonic() < deadline
+                    and periodic["sequence"] == first_heartbeat["sequence"]
+                ):
+                    time.sleep(0.2)
+                    try:
+                        _, periodic = heartbeat()
+                    except Rejected as failure:
+                        if str(failure) != "security_store_unavailable":
+                            raise
+                heartbeat_interval = (
+                    periodic["observed_at_ms"] - first_heartbeat["observed_at_ms"]
+                ) / 1000
+                check(
+                    "actual-thirty-second-owned-scheduler",
+                    periodic["sequence"] == first_heartbeat["sequence"] + 1
+                    and 30 <= heartbeat_interval <= 40,
+                )
+                # Producer persists before send; wait for independent collector
+                # readback, never mistake the allocated counter for delivery.
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    try:
+                        received = collector_heartbeat()
+                        if (
+                            fx.registry.heartbeat(
+                                received["envelope"], clock_ms=received["ingested_at_ms"]
+                            )["sequence"]
+                            == first_heartbeat["sequence"] + 1
+                        ):
+                            break
+                    except Rejected as failure:
+                        if str(failure) != "security_store_unavailable":
+                            raise
+                    time.sleep(0.05)
+                check(
+                    "periodic-heartbeat-reached-collector",
+                    collector_heartbeat()["envelope"] == heartbeat()[0],
                 )
             except Exception as failure:
                 reason = str(failure)
@@ -330,6 +413,44 @@ def qualify():
                 raise
             finally:
                 stop()
+        last_envelope, last_heartbeat = heartbeat()
+        gap_began = time.monotonic() - (fx.now() - last_heartbeat["observed_at_ms"]) / 1000
+        notice = None
+        while time.monotonic() - gap_began <= 120:
+            offset = 0
+            while offset is not None:
+                status, page = fx.exchange("GET", "/incidents/" + str(offset))
+                if status != 200:
+                    raise Rejected("identity_source_case:incident_readback_unavailable")
+                for record in page["incidents"]:
+                    event = fx.registry.verify(
+                        record["envelope"], clock_ms=record["ingested_at_ms"]
+                    )
+                    if (
+                        event.document()["kind"] == "telemetry.gap"
+                        and event.document()["reason"] == "heartbeat"
+                    ):
+                        fx.registry.receipt(record["receipt"], event)
+                        notice = record
+                offset = page["next_offset"]
+            if notice is not None:
+                break
+            time.sleep(0.5)
+        stopped_notice_seconds = time.monotonic() - gap_began
+        check(
+            "actual-stopped-producer-gap-within-120s",
+            notice is not None and 90 <= stopped_notice_seconds <= 120,
+        )
+        check(
+            "stopped-owner-cannot-keep-sending-heartbeats",
+            heartbeat()[0] == last_envelope and fx.exchange("GET", "/health")[0] == 503,
+        )
+        try:
+            fx.audit.check("a" * 64)
+        except Rejected:
+            check("missing-producer-denies-fresh-promotion-audit", True)
+        else:
+            raise Rejected("identity_source_case:missing_producer_allowed_audit")
         log = bounded_read(private_log, 65536)
         check(
             "all-three-server-lifecycles-reaped-their-children",
@@ -354,6 +475,8 @@ def qualify():
         fingerprint=fingerprint,
         cases=cases,
         max_http_seconds=max(durations),
+        heartbeat_interval_seconds=heartbeat_interval,
+        stopped_producer_notice_seconds=stopped_notice_seconds,
         release_ready=False,
         scope="actual-http-and-identity-child-with-controlled-unready-engine-not-M13-M14-M23",
     )

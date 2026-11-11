@@ -14,6 +14,8 @@ from mlsecops.contracts import Rejected
 CHILD_SECONDS = 3
 WAIT_SECONDS = 6
 STOP_SECONDS = 1
+HEARTBEAT_SECONDS = 30
+TICK_SECONDS = 1
 
 
 async def stop(process):
@@ -38,6 +40,8 @@ class Observer:
         self.pending = self.child = self.loop = None
         self.started = self.closed = False
         self.stop_requested = False
+        self.ticker = self.last_success = None
+        self.tick_fault = False
 
     def finished(self, task):
         with suppress(Exception, asyncio.CancelledError):
@@ -84,6 +88,8 @@ class Observer:
             if process is not None:
                 await stop(process)
                 self.child = None
+        self.last_success = self.loop.time()
+        self.tick_fault = False
 
     async def invoke(self, action, correlation):
         if self.closed or self.loop is not asyncio.get_running_loop():
@@ -103,7 +109,41 @@ class Observer:
             raise Rejected("identity_security_lifecycle")
         self.loop = asyncio.get_running_loop()
         await self.invoke("probe", secrets.token_hex(16))
+        coroutine = self.heartbeat_loop()
+        try:
+            self.ticker = asyncio.create_task(coroutine, name="mlsecops-identity-heartbeat")
+        except BaseException:
+            coroutine.close()
+            raise
         self.started = True
+
+    async def heartbeat_loop(self):
+        while True:
+            await asyncio.sleep(TICK_SECONDS)
+            if (
+                self.loop.time() - self.last_success < HEARTBEAT_SECONDS
+                or self.pending is not None
+                or self.child is not None
+            ):
+                continue
+            try:
+                await self.invoke("heartbeat", secrets.token_hex(16))
+            except Exception:
+                self.tick_fault = True
+
+    async def stop_ticker(self):
+        task = self.ticker
+        if task is not None:
+            if not task.cancelling():
+                task.cancel()
+            try:
+                await asyncio.wait_for(asyncio.shield(task), WAIT_SECONDS)
+            except asyncio.CancelledError:
+                if not task.done():
+                    raise Rejected("identity_security_scheduler_cleanup_unconfirmed") from None
+            finally:
+                if task.done():
+                    self.ticker = None
 
     async def report(self, correlation, reason):
         if not self.started or reason not in ("credential", "role"):
@@ -115,6 +155,12 @@ class Observer:
         if self.loop is not None and self.loop is not asyncio.get_running_loop():
             raise Rejected("identity_security_lifecycle")
         self.closed = True
+        try:
+            await self.stop_ticker()
+        finally:
+            await self.close_operation()
+
+    async def close_operation(self):
         task = self.pending
         if task is not None:
             if not self.stop_requested:

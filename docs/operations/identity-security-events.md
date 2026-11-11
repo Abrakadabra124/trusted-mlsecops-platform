@@ -32,9 +32,10 @@ uv run --locked python -m mlsecops.serving_http --config /absolute/private/servi
 ```
 
 Lifespan запускает probe до активации engine. Probe проверяет source config,
-registry/serving role и повторяет pending delivery. При пустой очереди probe
-может не обращаться к collector и не доказывает его health. Fresh promotion
-audit остаётся обязательным отдельно.
+registry/serving role, повторяет pending delivery и отправляет heartbeat.
+Текущий профиль требует outbox schema2; пустая очередь также обращается к
+collector. Ответ heartbeat не доказывает fresh signed health. Fresh promotion
+audit остаётся обязательным отдельно. [Heartbeat и recovery](producer-heartbeat.md).
 
 ## Поведение HTTP
 
@@ -44,6 +45,8 @@ Ready/predict/operator routes сначала проверяют bearer. При �
 тот же внешний401, что неизвестный credential, после подтверждения события.
 
 В audited profile401 означает, что child подтвердил запись/доставку события.
+После события child отправляет heartbeat; его отказ может дать503 при уже
+доставленном событии. Не трактовать503 как доказательство отсутствия receipt.
 В одной app instance работает максимум один child; очередь ожидания не создаётся.
 Busy source, timeout или неподтверждённая доставка дают503
 security_audit_unavailable, модель при этом не вызывается. Authenticated requests
@@ -57,6 +60,8 @@ receipt. Это граница управления ресурсами, не и�
 HTTP waiter имеет лимит6s; child wait3s, затем terminate/reap1s и kill/reap1s.
 Отмена waiter сохраняет ownership фоновой операции. Неизвестный cleanup outcome
 не считается успешно завершённым shutdown.
+Owned scheduler отправляет heartbeat каждые30s при отсутствии более свежей
+успешной операции. Он использует тот же слот и останавливается вместе с serving.
 
 ## Диагностика и плейбук
 

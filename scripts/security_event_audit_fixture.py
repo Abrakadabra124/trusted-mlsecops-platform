@@ -22,7 +22,7 @@ def heartbeat(fx, sequence=1):
 
 
 @contextmanager
-def live():
+def live(*, initial_heartbeat=True):
     if (
         sys.platform != "linux"
         or os.environ.get("GITHUB_ACTIONS") != "true"
@@ -56,7 +56,8 @@ def live():
         fx.audit_config = fx.directory / "audit.json"
         fx.write("audit.json", canonical(config))
         fx.start()
-        heartbeat(fx)
+        if initial_heartbeat:
+            heartbeat(fx)
         fx.audit = security_event_admission.Configured(str(fx.audit_config))
         yield fx
     finally:

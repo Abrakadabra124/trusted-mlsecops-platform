@@ -71,6 +71,8 @@ class WireContracts(unittest.TestCase):
 
     def test_redirect_encoding_duplicate_lengths_and_oversized_or_partial_responses_fail(self):
         responses = [
+            b"",
+            b"HTTP/1.1 200 OK\r\ninvalid-header\r\nContent-Length: 2\r\n\r\n{}",
             b"HTTP/1.1 302 Found\r\nLocation: https://example.invalid\r\nContent-Length: 2\r\n\r\n{}",
             b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4097\r\n\r\n",
             b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n{}",
@@ -80,6 +82,7 @@ class WireContracts(unittest.TestCase):
             b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}extra",
             b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1\r\n\r\n{",
             b"HTTP/1.1 200 OK\r\nX:" + b"x" * 8300,
+            b"HTTP/1.1 200 OK\r\nX:" + b"x" * 8200 + b"\r\nContent-Length: 2\r\n\r\n{}",
         ]
         for index, content in enumerate(responses):
             with self.subTest(case=index), reply(content) as port, self.assertRaises(Rejected):
@@ -91,6 +94,27 @@ class WireContracts(unittest.TestCase):
             with patch.object(delivery, "TIMEOUT", 0.15), self.assertRaises(Rejected):
                 delivery.exchange(port, "a" * 64, self.envelope)
         self.assertLess(time.monotonic() - began, 2)
+
+    def test_large_valid_body_crosses_socket_read_boundary(self):
+        body = b'"' + b"x" * 1500 + b'"'
+        with reply(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1502\r\n\r\n"
+            + body
+        ) as port:
+            self.assertEqual(delivery.exchange(port, "a" * 64, self.envelope), "x" * 1500)
+
+    def test_only_fixed_routes_and_port_are_allowed_and_expired_deadline_never_connects(self):
+        with patch.object(delivery.socket, "create_connection") as connect:
+            with self.assertRaises(Rejected):
+                delivery.exchange(8080, "a" * 64, self.envelope, path="/private")
+            with self.assertRaises(Rejected):
+                delivery.Client(self.fx.registry, 65536, str(self.fx.directory / "token"))
+            with (
+                patch.object(delivery.time, "monotonic", side_effect=[0, 3]),
+                self.assertRaisesRegex(Rejected, "security_delivery_timeout"),
+            ):
+                delivery.exchange(8080, "a" * 64, self.envelope)
+            connect.assert_not_called()
 
     def test_invalid_endpoint_token_and_envelope_fail_before_network(self):
         with patch.object(delivery.socket, "create_connection") as connect:

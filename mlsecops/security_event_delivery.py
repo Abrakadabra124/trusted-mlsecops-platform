@@ -29,7 +29,7 @@ CONFIG_FIELDS = (
 
 
 def exchange(port, token, envelope, *, path="/events"):
-    if path not in ("/events", "/admission"):
+    if path not in ("/events", "/admission", "/heartbeat"):
         raise Rejected("security_delivery_path")
     events.integer(port, 1024)
     if port > 65535:
@@ -128,6 +128,36 @@ class Emitter:
         document = store.snapshot()
         if document["producer_id"] != security_event_outbox.key_identity(producer_key):
             raise Rejected("security_outbox_key")
+
+    def heartbeat(self):
+        # Allocation commits before any network call; unknown send outcome must
+        # never reset this durable sequence. This echo is not a signed receipt.
+        envelope = self.store.heartbeat(self.key, clock_ms=self.clock())
+        try:
+            result = self.client.send(envelope, path="/heartbeat")
+            events.shape(result, ("heartbeat", "release_ready"))
+            record = result["heartbeat"]
+            events.shape(record, ("envelope", "ingested_at_ms"))
+            now = self.clock()
+            value = self.store.registry.heartbeat(envelope, clock_ms=now)
+            ingested = events.integer(record["ingested_at_ms"])
+            if (
+                result["release_ready"] is not False
+                or canonical(record["envelope"]) != canonical(envelope)
+                or not value["observed_at_ms"] - events.CLOCK_SKEW_MS
+                <= ingested
+                <= now + events.CLOCK_SKEW_MS
+                or now < value["observed_at_ms"]
+            ):
+                raise Rejected("security_heartbeat_echo")
+        except Exception:
+            raise Rejected("security_heartbeat_delivery_unconfirmed") from None
+        return dict(
+            state="sent",
+            sequence=value["sequence"],
+            last_event_sequence=value["last_event_sequence"],
+            release_ready=False,
+        )
 
     def retry(self):
         count = 0

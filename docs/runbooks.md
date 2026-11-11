@@ -1,5 +1,8 @@
 # Эксплуатационные процедуры
 
+- [T29: producer heartbeat](operations/producer-heartbeat.md): durable counter,
+  lifecycle scheduler, collector readback, schema1 refusal и recovery без reset.
+
 - T29 [Аудит перед promotion](operations/security-events.md#аудит-на-границе-promotion): schema2 migration, диагностика fresh signed audit, SQL readback до retry, отсутствие reset и collector recovery. [Evidence](evidence/promotion-audit-2026-11-11.md): реальный outage/transaction rollback/cleanup, controlled authorization; полный M23 открыт.
 
 - [T29: producer outbox и intake](operations/security-events.md#producer-outbox-и-отказ-intake):

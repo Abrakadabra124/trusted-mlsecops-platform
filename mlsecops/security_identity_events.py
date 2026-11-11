@@ -10,7 +10,7 @@ from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce
 
 FIELDS = ("schema_version", "producer_config", "service_sha256")
-ACTIONS = ("probe", "credential", "role")
+ACTIONS = ("probe", "heartbeat", "credential", "role")
 
 
 def configuration(path, expected=None):
@@ -37,7 +37,7 @@ def execute(path, expected, action, correlation):
     audit.store.registry.valid(audit.clock())
     if audit.store.registry.producer(document["producer_id"]).role != "serving":
         raise Rejected("identity_security_producer_role")
-    if action == "probe":
+    if action in ("probe", "heartbeat"):
         audit.retry()
     else:
         audit.emit(
@@ -49,8 +49,9 @@ def execute(path, expected, action, correlation):
                 bundle_sha256=None,
             )
         )
+    audit.heartbeat()
     return dict(
-        state="ready" if action == "probe" else "delivered",
+        state="ready" if action in ("probe", "heartbeat") else "delivered",
         config_sha256=pin,
         service_sha256=config["service_sha256"],
         correlation_id=correlation,
