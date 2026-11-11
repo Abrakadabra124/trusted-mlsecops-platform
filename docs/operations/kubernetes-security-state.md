@@ -9,7 +9,10 @@ Kubernetes на4aeece4 /43102906649: [evidence](../evidence/kubernetes-audit-202
 
 ## Постоянный HTTP Deployment
 
-Реализовано, hosted проверка ожидается. Operator API:
+Проверено на88e7c0a/Kubernetes43119250736: сериализованная замена28.737285s,
+heartbeat2->3, retained outbox, действующий inference и отказ после отзыва в том
+же Pod; service/worker/SQL/cluster cleanup подтверждены.
+[Evidence и ограничения](../evidence/persistent-http-2026-11-12.md). Operator API:
 `mlsecops.kube_serving_service.bootstrap(state, profile, promotion_config)`.
 Вызывать после audit bootstrap и `controller_bootstrap.bootstrap(..., serving=True)`
 на разрешённом hosted стенде. Профиль берётся из этого bootstrap, promotion config

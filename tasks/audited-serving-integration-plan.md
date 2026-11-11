@@ -102,7 +102,11 @@ M18 remains LAST and must accept every required gate on one candidate.
 Persistent Deployment increment: service configuration, UID/resourceVersion-bound
 scale-to-zero, verified old process cleanup, then single-replica
 replacement, separate service.token, exec readiness/liveness probes and in-place
-HTTP readback are implemented. Native verification is pending. No quota increase,
+HTTP readback are implemented and verified on88e7c0a/Kubernetes43119250736:
+19promotion+12audit+4/4/10/4HTTP checks, replacement28.737285s, heartbeat2->3,
+retained outbox and independently matched identity receipt, all owned cleanup.
+Security43119182873success774Linux0skips; clean153tests/1Windows skip.
+[Evidence](../docs/evidence/persistent-http-2026-11-12.md). No quota increase,
 second HTTP server, new public listener or registry heartbeat bypass is added.
 Registry still requires trust only until all campaign/caller paths own the actual
 HTTP lifecycle. Do not close mandatory serving heartbeat or full M23 on this proof.

@@ -1,11 +1,16 @@
 # Статус и границы доказательств
 
-CP4/T29 persistent HTTP Deployment реализован, native proof pending. Один процесс
-до/во время выбора release, явная UID-bound замена Pod после выбора, retained
-security outbox и отдельный bearer token; новая native composition проверяет
-отзыв без замены активного Pod. Локальные operator/resource contracts проходят.
-Обязательный heartbeat serving во всех campaign/caller paths ещё не включён;
-full M23/R1 остаются открыты. [Runbook](docs/operations/kubernetes-security-state.md#постоянный-http-deployment).
+CP4/T29 persistent HTTP Deployment проверен на88e7c0a:
+[Kubernetes43119250736](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43119250736)
+success19promotion+12audit+4/4/10/4HTTP checks. Один процесс до/во время выбора,
+UID/resourceVersion-bound scale0/confirmed cleanup/scale1 после выбора; отзыв
+отказывает в том же активном Pod. Замена28.737285s, heartbeat2->3, retained outbox,
+ONNX error7.583384781240099e-08, независимый receipt нового identity.denied.
+Service/worker/SQL/cluster cleanup verified. Security43119182873success774Linux0skips;
+clean153tests/1Windows skip. [Evidence](docs/evidence/persistent-http-2026-11-12.md),
+[runbook](docs/operations/kubernetes-security-state.md#постоянный-http-deployment).
+Обязательный serving heartbeat во всех caller paths ещё не включён;
+actual candidate отказан без assurance. Full M10/M23/R1 остаются открыты.
 
 CP4/T29 d86d3de ordinary HTTP composition проверена:
 [Kubernetes43113676523](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43113676523)
