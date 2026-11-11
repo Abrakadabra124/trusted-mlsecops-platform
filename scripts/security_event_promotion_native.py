@@ -104,7 +104,7 @@ def qualify():
 
                     def check(self, reference):
                         self.calls += 1
-                        if self.calls == 2:
+                        if self.calls == 3:
                             # A second SQL connection must not see uncommitted data.
                             check("uncommitted-selection-invisible", snapshot() == initial)
                             fx.stop()
@@ -123,7 +123,7 @@ def qualify():
                     )
                 else:
                     raise Rejected("security_promotion_commit_bypass")
-                check("both-audit-boundaries-reached", drop.calls == 2)
+                check("all-three-audit-boundaries-reached", drop.calls == 3)
                 check("real-sql-transaction-rolled-back", snapshot() == initial)
                 records = outbox()["records"]
                 check(

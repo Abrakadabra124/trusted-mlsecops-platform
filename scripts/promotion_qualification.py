@@ -111,20 +111,21 @@ class PromotionAdmissionContracts(unittest.TestCase):
         self.audit.check.side_effect = Rejected("promotion_audit_unavailable")
         with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
             self.run_admission()
+        self.assertEqual(self.values, {}, "audit loss must precede every artifact publication")
         self.assertFalse(any("record_selection" in query for query in self.calls))
         self.assertIsNone(self.head)
         self.audit.check.side_effect = None
         self.audit.check.reset_mock()
         result = self.run_admission()
-        self.assertEqual(self.audit.check.call_count, 2)
+        self.assertEqual(self.audit.check.call_count, 3)
         self.assertEqual(self.run_admission(), result)
-        self.assertEqual(self.audit.check.call_count, 4)
+        self.assertEqual(self.audit.check.call_count, 6)
         self.assertEqual(
             {call.args for call in self.audit.check.call_args_list}, {(result["request_sha256"],)}
         )
 
     def test_audit_loss_during_sql_exits_transaction_with_exception(self):
-        self.audit.check.side_effect = [None, Rejected("promotion_audit_unavailable")]
+        self.audit.check.side_effect = [None, None, Rejected("promotion_audit_unavailable")]
         with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
             self.run_admission()
         self.assertTrue(any("record_selection" in query for query in self.calls))

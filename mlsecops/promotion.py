@@ -134,6 +134,10 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
     reference = digest(content)
     if "rollback" in decision:
         release_rollback.history(client, decision["rollback"], selection, reference)
+    # Refuse an already unavailable audit service before any artifact publication.
+    # Later checks still protect the selection transaction if audit fails mid-flight.
+    with denial(audit, "audit_unavailable", proposal):
+        audit.check(reference)
     observed_proposal = release_bundle.publish(
         client,
         arguments["package"],

@@ -8,9 +8,9 @@ from mlsecops import kube_promotion, kube_security_events, kube_storage
 from mlsecops import kube_security_resources as resources
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, canonical, decode
-from mlsecops.kube_storage_migration import ledger
 from mlsecops.kube_worker import job_document, pod_spec, verify_running_image, wait_job
 from mlsecops.storage_pki import workspace_id
+from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_trust_native import hosted
 
 HEALTH = """
@@ -209,6 +209,7 @@ def qualify(root, state, config, request, image):
 
     def confirmed(name, condition):
         if not condition:
+            print(canonical({"case": name, "status": "fail"}).decode(), flush=True)
             raise Rejected("audit_native_case:" + name)
         cases.append(name)
         print(canonical({"case": name, "status": "pass"}).decode(), flush=True)

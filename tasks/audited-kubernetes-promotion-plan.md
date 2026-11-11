@@ -132,3 +132,12 @@ Windows; 13 promotion adapter tests pass separately. An existing CLI test used
 mode. It now uses `run_path` against the actual module file; argument rejection
 and private stderr assertions remain unchanged. Ruff and local documentation
 links pass. This does not replace the required hosted filesystem/cluster proof.
+
+Published1ec2222: clean locked checkout98tests/1POSIXskip; security contracts
+43101391749 success,691Linux executions/0skips and mandatory per-module coverage.
+Native43101562581 failed after actual audit-outage refusal, before confirming no
+storage change; owned SQL/cluster cleanup success. A new RED test reproduced
+publication before the first audit check. First challenge now precedes publication,
+with pre/post-SQL checks retained;46scoped tests pass. Native proof additionally
+reads the combined object+promotion ledger. Full corrected native replay pending;
+see the failure history in the Kubernetes audit runbook. No M23/R1 acceptance.
