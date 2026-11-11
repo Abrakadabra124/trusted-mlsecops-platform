@@ -294,12 +294,29 @@ promoter key и ingress token. На текущей Windows локальные SQ
 `audit-promotion-sql` в [workflow](../../.github/workflows/security-events-contracts.yml).
 
 Operator promotion config теперь schema_version=2 и требует абсолютный
-`security_audit_config`. Audit config schema1 имеет ровно: schema_version,
+`security_audit_config`. Audit config schema2 имеет ровно: schema_version,
 registry_file, registry_root, registry_sha256, producer_key_file,
-ingress_token_file, port. Registry/token/key paths абсолютные; key принадлежит
+ingress_token_file, port, state_directory, state_sha256. Registry/token/key/state
+paths абсолютные; key принадлежит
 producer роли promoter, root/receipt key ему не передаются. Значения tokens и
 private keys не помещать в JSON/Git/командную строку. Этот профиль предполагает
 общий loopback namespace с collector, не remote HTTP без TLS.
+
+Миграция прежнего audit config schema1: создать новый producer outbox один раз
+по процедуре выше с тем же registry и promoter key, сохранить возвращённый
+state pin, добавить два state поля и выставить schema_version=2. Existing
+outbox не инициализировать заново. Пример provisioning и cleanup проверяется
+`scripts/security_event_audit_fixture.py` только на disposable hosted стенде.
+
+Отказ авторизации, trust check или audit check сначала сохраняет
+`promotion.denied`, затем доставляет его. `promotion_denial_audit_unconfirmed`
+означает, что отказ сохранился, но доставка не подтверждена; при ошибке записи
+само наличие outbox record также нужно проверить. Не заявлять доставку по одному
+коду ошибки. Перед следующим challenge Configured.check доставляет pending того
+же outbox. Для отдельного retry в разрешённом Linux процессе использовать
+`security_event_admission.emitter(absolute_config).retry()`; это изменяющий шаг.
+Проверить сохранённые event ID, sequence, bundle digest и подписанные receipts
+через snapshot/inbox. Не печатать исходные envelopes и credentials в общий лог.
 
 Симптом: CLI возвращает `promotion_rejected`; внутренний безопасный код
 `promotion_online_audit_required` либо `promotion_audit_unavailable`. Возможные

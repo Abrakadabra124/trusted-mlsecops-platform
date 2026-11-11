@@ -229,6 +229,7 @@ class AdmissionContracts(unittest.IsolatedAsyncioTestCase):
 
     async def test_operator_configuration_pins_role_and_reload_without_cached_health(self):
         from mlsecops import security_event_admission as admission
+        from mlsecops import security_event_outbox as outbox
 
         await self.healthy()
         fx = self.fx.fx.fixture
@@ -240,27 +241,75 @@ class AdmissionContracts(unittest.IsolatedAsyncioTestCase):
         token_path.write_bytes(b"a" * 64)
         token_path.chmod(0o600)
         value = dict(
-            schema_version=1,
+            schema_version=2,
             registry_file=str(registry_path),
             registry_root=fx.publics["root"],
             registry_sha256=self.registry.sha256,
             producer_key_file=str(self.keys["promoter"]),
             ingress_token_file=str(token_path),
             port=15499,
+            state_directory=str(fx.directory / "outbox"),
+            state_sha256="d" * 64,
         )
         path = fx.directory / "audit.json"
         path.write_bytes(canonical(value))
 
+        box = outbox.Outbox.empty(
+            self.registry, outbox.key_identity(self.keys["promoter"]), clock_ms=self.clock
+        )
+        box.snapshot = box.document
+        calls = []
+        offline = [False]
+
         def exchange(port, token, envelope, *, path):
-            self.assertEqual((port, token, path), (15499, "a" * 64, "/admission"))
-            return self.collector.admission(envelope)
+            self.assertEqual((port, token), (15499, "a" * 64))
+            calls.append(path)
+            if offline[0]:
+                raise OSError("PRIVATE-CANARY")
+            return (
+                self.collector.admission(envelope)
+                if path == "/admission"
+                else self.collector.ingest(envelope)
+            )
 
         with (
             patch.object(admission.time, "time_ns", return_value=self.clock * 1_000_000),
             patch.object(admission.security_event_delivery, "exchange", side_effect=exchange),
+            patch.object(outbox, "Store", return_value=box),
         ):
             client = admission.Configured(str(path))
             self.assertTrue(client.check("d" * 64)["healthy"])
+            calls.clear()
+            client.denied(reason="authorization", bundle_sha256="d" * 64)
+            self.assertEqual(calls, ["/events"])
+            self.assertEqual(len(box.snapshot()["records"]), 1)
+            offline[0] = True
+            with self.assertRaises(Rejected):
+                client.denied(reason="trust", bundle_sha256="d" * 64)
+            pending = box.snapshot()["records"][-1]
+            self.assertIsNone(pending["receipt"])
+            calls.clear()
+            with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
+                client.check("d" * 64)
+            self.assertEqual(calls, ["/events"])
+            offline[0] = False
+            calls.clear()
+            client.check("d" * 64)
+            self.assertEqual(calls, ["/events", "/admission"])
+            self.assertEqual(box.snapshot()["records"][-1]["envelope"], pending["envelope"])
+            self.assertIsNotNone(box.snapshot()["records"][-1]["receipt"])
+            value["schema_version"] = 1
+            path.write_bytes(canonical(value))
+            with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
+                client.check("d" * 64)
+            value["schema_version"] = 2
+            value["producer_key_file"] = str(self.keys["serving"])
+            box._document["producer_id"] = outbox.key_identity(self.keys["serving"])
+            path.write_bytes(canonical(value))
+            with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):
+                client.check("d" * 64)
+            value["producer_key_file"] = str(self.keys["promoter"])
+            box._document["producer_id"] = outbox.key_identity(self.keys["promoter"])
             value["registry_sha256"] = "f" * 64
             path.write_bytes(canonical(value))
             with self.assertRaisesRegex(Rejected, "promotion_audit_unavailable"):

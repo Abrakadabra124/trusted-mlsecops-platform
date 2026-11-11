@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import psycopg
 
 from mlsecops import (
@@ -60,6 +62,19 @@ def trust_scope(arguments, decision, authority):
     return {"policy_sha256": decision["policy_sha256"], "artifacts": artifacts, "keys": keys}
 
 
+@contextmanager
+def denial(audit, reason, proposal):
+    try:
+        yield
+    except Rejected:
+        if audit is not None:
+            try:
+                audit.denied(reason=reason, bundle_sha256=proposal)
+            except Exception:
+                raise Rejected("promotion_denial_audit_unconfirmed") from None
+        raise
+
+
 def promote(client, *, trust_lease=None, audit=None, **arguments):
     if "clock" in arguments:
         raise Rejected("promotion_clock_override_forbidden")
@@ -72,7 +87,9 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
             ).fetchone()[0]
     except psycopg.Error as error:
         raise Rejected(f"promotion_clock_unavailable:{error.sqlstate or 'unavailable'}") from None
-    decision = release_authorization.verify(**arguments, clock=clock)
+    proposal = digest(canonical(arguments["package"]["envelope"]))
+    with denial(audit, "authorization", proposal):
+        decision = release_authorization.verify(**arguments, clock=clock)
     policy = arguments["policy_envelope"]
     authority = checked(policy, "promotion-policy", arguments["trusted_root"])
     if trust_lease is None:
@@ -80,8 +97,9 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
     if trust_lease.environment != decision["environment"]:
         raise Rejected("promotion_trust_environment_mismatch")
     scope = trust_scope(arguments, decision, authority)
-    trust_lease.refresh()
-    trust_lease.check(**scope)
+    with denial(audit, "trust", proposal):
+        trust_lease.refresh()
+        trust_lease.check(**scope)
     if audit is None:
         raise Rejected("promotion_online_audit_required")
     approval = checked(
@@ -89,7 +107,6 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
         "release-approval",
         authority["identities"]["approver"]["public_key"],
     )
-    proposal = digest(canonical(arguments["package"]["envelope"]))
     report_references = {gate: digest(content) for gate, content in arguments["reports"].items()}
     authorization = {
         "schema_version": 1,
@@ -131,11 +148,13 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
         publish(client, report)
     publish(client, canonical(authorization))
     reference = publish(client, content)
-    trust_lease.refresh()
-    trust_lease.check(**scope)
+    with denial(audit, "trust", proposal):
+        trust_lease.refresh()
+        trust_lease.check(**scope)
     try:
         with storage.connect(client) as connection:
-            audit.check(reference)
+            with denial(audit, "audit_unavailable", proposal):
+                audit.check(reference)
             receipt = connection.execute(
                 "SELECT ml_promotion.record_selection(%s)", (reference,)
             ).fetchone()
@@ -143,7 +162,8 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
                 raise Rejected("promotion_state_receipt_mismatch")
             # The SQL call may wait for a row lock. Recheck before context exit
             # commits; a refusal here must roll back the uncommitted selection.
-            audit.check(reference)
+            with denial(audit, "audit_unavailable", proposal):
+                audit.check(reference)
         with storage.connect(client) as connection:
             observed = connection.execute(
                 "SELECT request_sha256 FROM ml_promotion.events WHERE environment = %s AND sequence = %s",
@@ -155,8 +175,9 @@ def promote(client, *, trust_lease=None, audit=None, **arguments):
         raise Rejected("promotion_state_readback_mismatch")
     if "rollback" in decision:
         release_rollback.history(client, decision["rollback"], selection, reference, selected=True)
-    trust_lease.refresh()
-    trust_observation = trust_lease.check(**scope)
+    with denial(audit, "trust", proposal):
+        trust_lease.refresh()
+        trust_observation = trust_lease.check(**scope)
     return {
         "state": "recorded-not-activated",
         "environment": selection["environment"],

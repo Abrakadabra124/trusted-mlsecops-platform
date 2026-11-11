@@ -115,10 +115,10 @@ class Client:
             raise Rejected("security_delivery_port")
         self.registry, self.port, self.token_file = registry, port, storage.path(token_file)
 
-    def send(self, envelope):
+    def send(self, envelope, *, path="/events"):
         token = events.hexadecimal(key_files.read(self.token_file).decode("ascii"))
         # Store revalidates receipt signature, exact event binding and receiver times.
-        return exchange(self.port, token, envelope)
+        return exchange(self.port, token, envelope, path=path)
 
 
 class Emitter:
@@ -164,6 +164,10 @@ class Emitter:
 
 def configured(path):
     value = decode(bounded_read(storage.path(path), 16384), 16384)
+    return configuration(value)
+
+
+def configuration(value):
     events.shape(value, CONFIG_FIELDS)
     events.version(value["schema_version"])
     registry = security_event_config.Registry(

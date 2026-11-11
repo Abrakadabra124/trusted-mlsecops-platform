@@ -69,6 +69,11 @@ class SubmissionContracts(unittest.TestCase):
             )
         )
         self.enterContext(
+            patch.object(
+                controller.security_event_admission.Configured, "denied", side_effect=f.audit.denied
+            )
+        )
+        self.enterContext(
             patch.object(storage, "connection_parameters", return_value={"user": "ml_promoter"})
         )
         self.enterContext(patch.object(storage, "connect", return_value=f.connection))

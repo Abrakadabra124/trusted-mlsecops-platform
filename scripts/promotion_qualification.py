@@ -221,6 +221,41 @@ class PromotionAdmissionContracts(unittest.TestCase):
         self.assertEqual(self.values, {})
         self.assertIsNone(self.head)
 
+    def test_authorization_refusal_emits_bounded_promotion_event(self):
+        with self.assertRaisesRegex(Rejected, "release_assurance_required"):
+            self.run_admission(assurance_envelope=None)
+        self.audit.denied.assert_called_once()
+        self.assertEqual(self.audit.denied.call_args.kwargs["reason"], "authorization")
+        self.assertEqual(self.values, {})
+
+    def test_denial_delivery_failure_is_constant_and_never_allows_selection(self):
+        self.audit.denied.side_effect = OSError("PRIVATE-CANARY")
+        with self.assertRaisesRegex(Rejected, "^promotion_denial_audit_unconfirmed$"):
+            self.run_admission(assurance_envelope=None)
+        self.assertEqual(self.values, {})
+        self.assertIsNone(self.head)
+
+    def test_trust_and_audit_refusals_emit_only_their_verified_stage(self):
+        self.trust_fixture.payload["revoked_artifacts"] = [
+            next(iter(self.fixture.package["capsule"]["objects"]))[1]
+        ]
+        with self.assertRaisesRegex(Rejected, "trust_artifact_revoked"):
+            self.run_admission()
+        self.assertEqual(self.audit.denied.call_args.kwargs["reason"], "trust")
+        self.assertIsNone(self.head)
+
+    def test_programming_failure_is_not_reported_as_an_authorization_finding(self):
+        with (
+            patch.object(promotion.release_authorization, "verify", side_effect=RuntimeError()),
+            self.assertRaises(RuntimeError),
+        ):
+            self.run_admission()
+        self.audit.denied.assert_not_called()
+
+    def test_success_does_not_invent_a_denial_event(self):
+        self.run_admission()
+        self.audit.denied.assert_not_called()
+
     def test_caller_cannot_override_server_clock_or_use_serving_credentials(self):
         with self.assertRaisesRegex(Rejected, "clock_override_forbidden"):
             self.run_admission(clock=self.clock)

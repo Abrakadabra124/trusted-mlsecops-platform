@@ -157,8 +157,6 @@ def qualify(root, state, image):
         "expected_policy": proposal["policy_sha256"],
         "expected_serving_image": proposal["source"]["image_id"],
     }
-    # Deliberately absent: missing assurance must refuse before consulting audit.
-    config = configuration(client, client, arguments, public["trust"], state / "absent-audit.json")
     request = {
         "schema_version": 1,
         "proposal_reference": proposal["proposal_reference"],
@@ -167,14 +165,29 @@ def qualify(root, state, image):
         "approval_reference": None,
     }
     before = release_snapshot(state / "storage-clients/serving")
-    try:
-        promotion_controller.submit(config, request)
-    except Rejected as error:
-        if str(error) != "release_assurance_required":
-            raise Rejected("promotion_actual_denial_reason") from None
-    else:
-        raise Rejected("promotion_actual_denial_bypass")
-    invoke(root, campaign / "promotion-cli-refusal", config, request, denied=True)
+    with security_event_audit_fixture.live() as audit:
+        config = configuration(client, client, arguments, public["trust"], audit.audit_config)
+        try:
+            promotion_controller.submit(config, request)
+        except Rejected as error:
+            if str(error) != "release_assurance_required":
+                raise Rejected("promotion_actual_denial_reason") from None
+        else:
+            raise Rejected("promotion_actual_denial_bypass")
+        invoke(root, campaign / "promotion-cli-refusal", config, request, denied=True)
+        status, page = audit.exchange("GET", "/incidents/0")
+        if status != 200 or len(page["incidents"]) != 2:
+            raise Rejected("promotion_actual_denial_audit_missing")
+        for record in page["incidents"]:
+            event = audit.registry.verify(record["envelope"], clock_ms=record["ingested_at_ms"])
+            audit.registry.receipt(record["receipt"], event)
+            value = event.document()
+            if (value["kind"], value["reason"], value["bundle_sha256"]) != (
+                "promotion.denied",
+                "authorization",
+                proposal["proposal_reference"],
+            ):
+                raise Rejected("promotion_actual_denial_audit_binding")
     if release_snapshot(state / "storage-clients/serving") != before:
         raise Rejected("promotion_refusal_wrote_objects")
     reader = release_reader_native.qualify(root, state, image, promotion_entrypoint=True)
@@ -210,6 +223,7 @@ def qualify(root, state, image):
         "cases": [
             "actual-candidate-parent-denial",
             "actual-candidate-CLI-denial",
+            "actual-candidate-parent-and-CLI-denials-delivered",
             "refusal-no-write",
         ]
         + reader["cases"],

@@ -7,7 +7,7 @@ the release selection was stored in the collector or provide distributed commit.
 import secrets
 import time
 
-from mlsecops import key_files, security_event_config, security_event_delivery, signing
+from mlsecops import security_event_delivery, signing
 from mlsecops import security_event_store as storage
 from mlsecops import security_events as events
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest
@@ -31,15 +31,7 @@ OBSERVATION_FIELDS = (
     "healthy",
     "release_ready",
 )
-CONFIG_FIELDS = (
-    "schema_version",
-    "registry_file",
-    "registry_root",
-    "registry_sha256",
-    "producer_key_file",
-    "ingress_token_file",
-    "port",
-)
+CONFIG_FIELDS = security_event_delivery.CONFIG_FIELDS
 
 
 def request(registry, envelope, *, clock_ms):
@@ -121,34 +113,39 @@ class Client:
             raise Rejected("promotion_audit_unavailable") from None
 
 
-def configured(path):
+def emitter(path):
     value = decode(bounded_read(storage.path(path), 16384), 16384)
     events.shape(value, CONFIG_FIELDS)
-    events.version(value["schema_version"])
-    registry = security_event_config.Registry(
-        decode(bounded_read(storage.path(value["registry_file"]), 32768), 32768),
-        trusted_root=value["registry_root"],
-        expected_sha256=value["registry_sha256"],
-        clock_ms=time.time_ns() // 1_000_000,
-    )
-    key = storage.path(value["producer_key_file"])
-    token = events.hexadecimal(
-        key_files.read(storage.path(value["ingress_token_file"])).decode("ascii")
-    )
+    if type(value["schema_version"]) is not int or value["schema_version"] != 2:
+        raise Rejected("security_audit_config_schema")
+    result = security_event_delivery.configuration({**value, "schema_version": 1})
+    if (
+        result.store.registry.producer(
+            digest(signing.load_key(result.key).public_key().public_bytes_raw())
+        ).role
+        != "promoter"
+    ):
+        raise Rejected("security_audit_role")
+    return result
+
+
+def configured(path):
+    source = emitter(path)
+    # An unseen local denial must not be hidden by a healthy collector snapshot.
+    # Retry is bounded by the outbox cap, separately from the fresh challenge.
+    source.retry()
     return Client(
-        registry,
-        key,
-        lambda envelope: security_event_delivery.exchange(
-            value["port"], token, envelope, path="/admission"
-        ),
+        source.store.registry,
+        source.key,
+        lambda envelope: source.client.send(envelope, path="/admission"),
     )
 
 
 class Configured:
     """Load operator configuration at the boundary, after ML authorization.
 
-    No missing-assurance request opens keys or reaches the collector. Each
-    check reloads configuration, so there is no cached successful observation.
+    Authorization denials may emit a bounded security event, but do not issue
+    a challenge or change the release journal. Each check reloads configuration.
     """
 
     def __init__(self, path):
@@ -159,3 +156,14 @@ class Configured:
             return configured(self.path).check(selection_sha256)
         except Exception:
             raise Rejected("promotion_audit_unavailable") from None
+
+    def denied(self, *, reason, bundle_sha256):
+        return emitter(self.path).emit(
+            {
+                "kind": "promotion.denied",
+                "reason": reason,
+                "correlation_id": secrets.token_hex(16),
+                "asset_sha256": bundle_sha256,
+                "bundle_sha256": bundle_sha256,
+            }
+        )

@@ -4,7 +4,7 @@ import os
 import sys
 from contextlib import contextmanager
 
-from mlsecops import promotion, security_event_admission, signing
+from mlsecops import promotion, security_event_admission, security_event_outbox, signing
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from scripts import security_event_live_qualification as fixtures
 
@@ -45,6 +45,14 @@ def live():
             )
         }
         config["producer_key_file"] = str(fx.fx.keys["promoter"])
+        config["schema_version"] = 2
+        config["state_directory"] = str(fx.directory / "promoter-outbox")
+        config["state_sha256"] = security_event_outbox.initialize(
+            config["state_directory"],
+            fx.registry,
+            security_event_outbox.key_identity(fx.fx.keys["promoter"]),
+            clock_ms=fx.now(),
+        )
         fx.audit_config = fx.directory / "audit.json"
         fx.write("audit.json", canonical(config))
         fx.start()
