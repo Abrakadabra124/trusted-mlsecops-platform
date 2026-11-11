@@ -269,4 +269,9 @@ read-only диагностика, stable replay, operator-pinned rotation и э�
 graph inputs, одна очередь на producer/epoch, original-event retry и запрет
 подмены expected baseline ради успешной проверки.
 
+Для credential/role denials HTTP использовать
+[identity source](operations/identity-security-events.md): private source config,
+bounded owned child,503 при недоступном аудите, pending retry и проверка reap
+перед перезапуском serving.
+
 Время, тип инцидента, затронутые dataset/model/bundle digest, исполнители и права, выполненные действия, разрешённый следующий state, влияние на пользователей, ссылки на redacted evidence, остаточный риск и owner follow-up. Пароли, signing keys и исходные payloads сюда не включаются.

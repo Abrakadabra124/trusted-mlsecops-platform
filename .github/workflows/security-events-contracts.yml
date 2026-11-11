@@ -124,6 +124,22 @@ jobs:
                       raise SystemExit('inventory_security_coverage:' + name)
           PY
           uv run --locked python -W error -m unittest scripts.material_bundle_qualification scripts.release_bundle_qualification
+      - name: Identity source, bounded child lifecycle and HTTP privacy regressions
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/identity-events.coverage" --source=mlsecops.security_identity_events,mlsecops.security_identity_http -m unittest scripts.security_identity_events_qualification scripts.security_identity_http_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/identity-events.coverage" -o "$RUNNER_TEMP/identity-events.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'identity-events.json').read_text())['files']
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              print(json.dumps({'module': name, **stats}, sort_keys=True))
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not stats[total] or stats[covered] / stats[total] < .95:
+                      raise SystemExit('identity_security_coverage:' + name)
+          PY
+          uv run --locked python -m unittest scripts.serving_http_qualification scripts.serving_access_qualification scripts.serving_lifecycle_qualification scripts.serving_http_audit_qualification scripts.serving_metrics_qualification scripts.monitoring_http_qualification scripts.monitoring_dashboard_qualification scripts.serving_privacy_qualification
   audit-promotion-sql:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -142,3 +158,5 @@ jobs:
           uv run --locked python -W error -m scripts.security_event_promotion_native
       - name: Committed trust SQL history, separate observer CLI and actual collector recovery
         run: uv run --locked python -W error -m scripts.security_trust_events_native
+      - name: Actual HTTP identity denial, owned child and collector outage recovery
+        run: uv run --locked python -W error -m scripts.security_identity_events_native

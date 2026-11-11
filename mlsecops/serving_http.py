@@ -20,6 +20,7 @@ from mlsecops import (
     monitoring_ingress,
     monitoring_runtime,
     release_reader,
+    security_identity_http,
     serving,
     serving_access,
     serving_audit,
@@ -90,7 +91,12 @@ def create_app(
     metrics_token=None,
     monitor=None,
     startup_diagnostics=False,
+    identity_audit=None,
 ):
+    if identity_audit is not None and not isinstance(
+        identity_audit, security_identity_http.Observer
+    ):
+        raise Rejected("http_identity_audit_configuration")
     if clients is None:
         clients = serving_access.Access.single(token)
     elif token is not None or not isinstance(clients, serving_access.Access):
@@ -127,6 +133,8 @@ def create_app(
                 )
                 managed.start()
                 app.state.audit = managed
+            if identity_audit is not None:
+                await identity_audit.start()
             try:
                 await asyncio.to_thread(engine.activate)
             except Rejected:
@@ -141,10 +149,14 @@ def create_app(
                     await monitor.close()
             finally:
                 try:
-                    await asyncio.to_thread(engine.close)
+                    if identity_audit is not None:
+                        await identity_audit.close()
                 finally:
-                    if managed is not None:
-                        await asyncio.to_thread(managed.close)
+                    try:
+                        await asyncio.to_thread(engine.close)
+                    finally:
+                        if managed is not None:
+                            await asyncio.to_thread(managed.close)
 
     app = FastAPI(
         lifespan=lifespan,
@@ -167,6 +179,20 @@ def create_app(
     app.state.slots = asyncio.Semaphore(MAX_IN_FLIGHT)
     app.state.execution = asyncio.Lock()
     app.state.pending = set()
+    app.state.identity_audit = identity_audit
+
+    async def unauthorized(values, request_id, other):
+        if identity_audit is not None:
+            reason = (
+                "role"
+                if other is not None and other.authenticate(values) is not None
+                else "credential"
+            )
+            try:
+                await identity_audit.report(request_id, reason)
+            except Exception:
+                return error(503, "security_audit_unavailable", request_id)
+        return error(401, "unauthorized", request_id)
 
     def remaining(budget):
         try:
@@ -310,7 +336,11 @@ def create_app(
             request_id = secrets.token_hex(16)
             principal = operator.authenticate(request.headers.getlist("authorization"))
             if principal is None:
-                return serving_metrics.ScrapeResponse(error(401, "unauthorized", request_id))
+                return serving_metrics.ScrapeResponse(
+                    await unauthorized(
+                        request.headers.getlist("authorization"), request_id, clients
+                    )
+                )
             try:
                 ticket = operator.acquire(principal)
             except serving_access.Limited:
@@ -362,7 +392,9 @@ def create_app(
         request_id = secrets.token_hex(16)
         principal = clients.authenticate(request.headers.getlist("authorization"))
         if principal is None:
-            return error(401, "unauthorized", request_id)
+            return await unauthorized(
+                request.headers.getlist("authorization"), request_id, operator
+            )
         try:
             budget = engine.response_budget()
             remaining(budget)
@@ -401,7 +433,9 @@ def create_app(
         request_id = secrets.token_hex(16)
         principal = clients.authenticate(request.headers.getlist("authorization"))
         if principal is None:
-            return error(401, "unauthorized", request_id)
+            return await unauthorized(
+                request.headers.getlist("authorization"), request_id, operator
+            )
         try:
             budget = engine.response_budget()
             remaining(budget)
@@ -479,6 +513,7 @@ def configured(path, *, startup_diagnostics=False):
         )
         + (("metrics_token_file",) if "metrics_token_file" in config else ())
         + (("monitor_file",) if "monitor_file" in config else ())
+        + (("identity_audit_file",) if "identity_audit_file" in config else ())
         + (("kubernetes_worker",) if "kubernetes_worker" in config else ()),
     )
     worker_factory = None
@@ -519,6 +554,11 @@ def configured(path, *, startup_diagnostics=False):
             raise Rejected("http_monitor_configuration")
         monitor = monitoring_config.producer(config["monitor_file"])
     session = trust_session.Session()
+    identity_audit = (
+        security_identity_http.configured(config["identity_audit_file"])
+        if "identity_audit_file" in config
+        else None
+    )
     lease = trust.Lease(
         lambda: trust_authority.read(
             config["trust_client"],
@@ -551,6 +591,7 @@ def configured(path, *, startup_diagnostics=False):
         metrics_token=metrics_token,
         monitor=monitor,
         startup_diagnostics=startup_diagnostics,
+        **({"identity_audit": identity_audit} if identity_audit is not None else {}),
     )
 
 
