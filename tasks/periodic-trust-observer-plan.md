@@ -26,11 +26,11 @@ Consumes existing configured/sync/Emitter. Produces pinned configured heartbeat
 and standalone service CLI. Files: mlsecops/security_trust_events.py,
 mlsecops/security_trust_service.py, scripts/security_trust_service_qualification.py.
 
-- [ ] RED: configured(..., expected=pin, heartbeat=True), no heartbeat after source failure;
+- [x] RED: configured(..., expected=pin, heartbeat=True), no heartbeat after source failure;
   changed config denied before source; serial ticks, timeout, signal and child reap.
-- [ ] GREEN: source pin validation and post-sync heartbeat; supervisor lifecycle/lock.
-- [ ] Run targeted unittest -W error and per-module coverage; review failure branches.
-- [ ] Commit scoped implementation and plan.
+- [x] GREEN: source pin validation and post-sync heartbeat; supervisor lifecycle/lock.
+- [x] Run targeted unittest -W error and per-module coverage; review failure branches.
+- [x] Commit scoped implementation and plan.
 
 ## Task 2: real SQL/collector qualification and handoff
 
@@ -38,10 +38,10 @@ Consumes service CLI, current native fixtures. Produces measured hosted evidence
 Files: scripts/security_trust_service_native.py, security-events-contracts workflow,
 operations/evidence documents and current STATUS/tasks links.
 
-- [ ] Hosted-only guard test before infrastructure. Native actual periodic read,
+- [x] Hosted-only guard test before infrastructure. Native actual periodic read,
   receipts/routes, unchanged event IDs on outage/recovery, stopped observer gap.
-- [ ] Observe terminal CI, cleanup and unchanged source; preserve any failed attempts.
-- [ ] Clean checkout with fresh locked environment, only allowed local tests.
+- [x] Observe terminal CI, cleanup and unchanged source; preserve any failed attempts.
+- [x] Clean checkout with fresh locked environment, only allowed local tests.
 - [ ] Publish runbook/evidence, verify final CI and remote HEAD. Full M23/R1 stays open.
 
 ## Ledger
@@ -49,3 +49,18 @@ operations/evidence documents and current STATUS/tasks links.
 Preflight: source child and supervisor share exact config SHA; heartbeat only after
 sync; lock uses a dedicated config parent, not outbox directory (child needs its lock).
 Reuse current feature branch; protected owner edits excluded from staging.
+
+Task1 complete: df8ce0d. Tests exposed absent pinned heartbeat and absent supervisor
+before implementation; separate RED caught optional heartbeat registry. Native
+first attempt43087026043 failed at Store constructor in harness before source
+launch; deterministic regression -> correction25371bf. Runtime unchanged by fix.
+Task2 in progress: clean25371bf freshlockedPython3.12.15,83tests2.890s-Werror,
+3Linux-only skips, interpreter/import paths and clean git verified. No local infra.
+Self-review checked config pin, source failure, child ownership/signal/finally,
+required registry heartbeat and no-state-reset. This is not independent M22 review.
+
+Task2 qualification complete:25371bf,43087532653 both jobs success.593Linux/0skips,
+15native assertions (includes repeated cleanup), measured30.022s period,
+29.77508551599999s commit delivery,90.93080405500004s stopped-source notice.
+Source/owned group/collector/SQL network+volume cleanup verified. Public evidence
+and runbook ready; final documentation publication verification remains.

@@ -2,7 +2,9 @@
 
 T29/M23, Linux reference. [Решение](../decisions/0065-periodic-trust-observer.md),
 [исходный SQL observer](trust-security-events.md), [durable heartbeat](producer-heartbeat.md).
-Реализация готова к hosted qualification; native результат пока не подтверждён.
+[Native25371bf](../evidence/periodic-trust-observer-2026-11-11.md) подтверждён:
+CI43087532653success,15assertions, period30.022s, commit delivery29.775085516s,
+stopped-source notice90.930804055s, cleanup pass. Full M23/R1 остаются открытыми.
 
 ## Запуск и проверка
 
@@ -75,5 +77,5 @@ Run43087026043 на df8ce0d остановился с TypeError до запус�
 readback передал `expected_sha256` конструктору Store, который принимает
 `root, identity_sha256, registry`. Ошибка воспроизведена отдельным тестом с
 реальным конструктором, исправлено только соединение тестового reader. Защиты
-runtime не ослаблены. Повторный native результат требуется отдельно; исходный
-неуспех сохраняется в evidence. Нельзя выдавать его за работающий observer.
+runtime не ослаблены. Повторный native25371bf прошёл отдельно; исходный
+неуспех сохраняется в [evidence](../evidence/periodic-trust-observer-2026-11-11.md).

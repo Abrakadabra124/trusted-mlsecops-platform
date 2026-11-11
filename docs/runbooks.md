@@ -272,6 +272,11 @@ read-only диагностика, stable replay, operator-pinned rotation и э�
 graph inputs, одна очередь на producer/epoch, original-event retry и запрет
 подмены expected baseline ради успешной проверки.
 
+Для постоянного наблюдения за trust history использовать
+[periodic trust observer](operations/periodic-trust-observer.md): один bounded child,
+heartbeat только после подтверждённой проверки, потеря SQL/collector, restart
+без reset и проверка очистки собственного процесса.
+
 Для credential/role denials HTTP использовать
 [identity source](operations/identity-security-events.md): private source config,
 bounded owned child,503 при недоступном аудите, pending retry и проверка reap

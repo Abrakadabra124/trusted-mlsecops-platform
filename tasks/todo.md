@@ -285,6 +285,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 
+- Periodic trust2026-11-11: [25371bf](../docs/evidence/periodic-trust-observer-2026-11-11.md),43087532653success593Linux/0skips,15native assertions. Реальный период30.022s, commit delivery29.775085516s, stopped notice90.930804055s; source loss без heartbeat, sink recovery/restart original events, cleanup verified. Clean83/3Linux skips. Mandatory deployed profile/schema2 Kubernetes adapter/transport/worker isolation, full M23 и свежие M13/M14 остаются.
+
 - Heartbeat2026-11-11: [8b04684](../docs/evidence/producer-heartbeat-2026-11-11.md),43083688017success571Linux/0skips,46native assertions. Durable counter/head,30.096s periodic send,90.412271147s stopped-producer gap/fresh audit refusal, owned cleanup. Clean74/4Linux skips и prior same-runtime201/6; CLI43082185574success. Mandatory deployment/periodic trust observer/sequence campaign/healthy ML dashboard outage/fresh M13M14/full M23 остаются.
 
 - Identity2026-11-11: [b12ae89](../docs/evidence/identity-security-events-2026-11-11.md),43078796931success551Linux/0skips,38native assertions/6signed events/3server cleanup;43078796872success54unit+37inventory+45promotion. Auth -> owned bounded child -> durable receipt, outage503/startup refusal/original retry; clean159/3Linux skips,148statements40branches100%. Mandatory profile/heartbeat/periodic observer, fresh M13/M14 и full M23/R1 открыты.
