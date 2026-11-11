@@ -108,6 +108,22 @@ jobs:
                   raise SystemExit('trust_security_coverage')
           print(json.dumps(t, sort_keys=True))
           PY
+      - name: Actual inventory predicates, pinned observer CLI and lineage regressions
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/inventory-events.coverage" --source=mlsecops.security_inventory_events,mlsecops.asset_graph,mlsecops.candidate_lineage -m unittest scripts.security_inventory_events_qualification scripts.asset_graph_qualification scripts.candidate_lineage_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/inventory-events.coverage" -o "$RUNNER_TEMP/inventory-events.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'inventory-events.json').read_text())['files']
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              print(json.dumps({'module': name, **stats}, sort_keys=True))
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not stats[total] or stats[covered] / stats[total] < .95:
+                      raise SystemExit('inventory_security_coverage:' + name)
+          PY
+          uv run --locked python -W error -m unittest scripts.material_bundle_qualification scripts.release_bundle_qualification
   audit-promotion-sql:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

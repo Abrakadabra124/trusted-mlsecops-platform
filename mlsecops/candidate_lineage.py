@@ -45,23 +45,23 @@ def reconcile(
         reader=read,
     )
     if any(metadata[name] != statement[name] for name in ("dataset_id", "lineage_id")):
-        raise Rejected("inventory_candidate_dataset_binding")
+        raise asset_graph.InventoryMismatch("inventory_candidate_dataset_binding", "digest")
     if metadata["materials"] != manifest["objects"]:
-        raise Rejected("inventory_candidate_materials_binding")
+        raise asset_graph.InventoryMismatch("inventory_candidate_materials_binding", "digest")
     if any(metadata[name] != value for name, value in expected.items()):
-        raise Rejected("inventory_candidate_build_binding")
+        raise asset_graph.InventoryMismatch("inventory_candidate_build_binding", "digest")
     if (
         not isinstance(metadata["execution"], dict)
         or metadata["execution"].get("image_id") != expected["image_id"]
     ):
-        raise Rejected("inventory_candidate_execution_binding")
+        raise asset_graph.InventoryMismatch("inventory_candidate_execution_binding", "digest")
     evaluation = storage_pipeline.read_evaluation(
         "review", evaluation_reference, candidate_reference, policy, trust, reader=read
     )
     report = evaluation["report"]
     holdout = manifest["objects"]["holdout.json"]
     if report["holdout_digest"] != holdout["sha256"] or report["rows"] != holdout["rows"]:
-        raise Rejected("inventory_evaluation_holdout_binding")
+        raise asset_graph.InventoryMismatch("inventory_evaluation_holdout_binding", "digest")
     try:
         trained_at = datetime.fromisoformat(metadata["created_at"])
         evaluated_at = datetime.fromisoformat(report["created_at"])
@@ -130,7 +130,9 @@ def reconcile(
     }
 
 
-def collect(metadata_client, review_client, *, material_sink=None, **context):
+def collect(metadata_client, review_client, *, material_sink=None, audit=None, **context):
+    from mlsecops.security_inventory_events import capture
+
     clients = {"metadata": metadata_client, "review": review_client}
     allowed = {"metadata": {"manifests", "lineage"}, "review": {"candidates", "evaluations"}}
     for client, role in ((metadata_client, "ml_publisher"), (review_client, "ml_promoter")):
@@ -145,4 +147,8 @@ def collect(metadata_client, review_client, *, material_sink=None, **context):
             material_sink(table, reference, content)
         return content
 
-    return reconcile(read, **context)
+    return capture(
+        lambda: reconcile(read, **context),
+        audit=audit,
+        subject=lambda: context["candidate_reference"],
+    )

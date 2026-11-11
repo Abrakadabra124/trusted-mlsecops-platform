@@ -9,6 +9,14 @@ MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
 KINDS = {"dataset", "runtime", "policy", "run", "model", "release", "deployment"}
 
 
+class InventoryMismatch(Rejected):
+    """Decision at an explicit inventory predicate; never inferred from text."""
+
+    def __init__(self, code, reason):
+        super().__init__(code)
+        self.reason = reason
+
+
 def _name(value):
     if not isinstance(value, str) or re.fullmatch(r"[a-z][a-z0-9._-]{0,95}", value) is None:
         raise Rejected("inventory_invalid_name")
@@ -44,7 +52,10 @@ def _reference(reference, assets):
     asset_id = _name(reference["asset_id"])
     expected = _sha256(reference["sha256"])
     if asset_id not in assets or assets[asset_id]["sha256"] != expected:
-        raise Rejected("inventory_unknown_or_mismatched_reference")
+        raise InventoryMismatch(
+            "inventory_unknown_or_mismatched_reference",
+            "dangling" if asset_id not in assets else "digest",
+        )
     return asset_id
 
 
@@ -66,7 +77,7 @@ def _graph(document, owners, environment):
             raise Rejected("inventory_unknown_kind")
         _sha256(asset["sha256"])
         if _name(asset["owner"]) not in trusted_owners:
-            raise Rejected("inventory_unknown_owner")
+            raise InventoryMismatch("inventory_unknown_owner", "owner")
         if _name(asset["environment"]) != environment:
             raise Rejected("inventory_environment_mismatch")
         assets[asset_id] = asset
@@ -91,7 +102,7 @@ def _graph(document, owners, environment):
             if remaining[descendant] == 0:
                 queue.append(descendant)
     if visited != len(assets):
-        raise Rejected("inventory_cycle")
+        raise InventoryMismatch("inventory_cycle", "cycle")
     required = {
         "dataset": {},
         "runtime": {},
@@ -118,7 +129,7 @@ def _graph(document, owners, environment):
             release = by_kind[asset_id]
             run = by_kind[by_kind[release["model"]]["run"]]
             if any(run[kind] != release[kind] for kind in ("runtime", "policy")):
-                raise Rejected("inventory_release_material_mismatch")
+                raise InventoryMismatch("inventory_release_material_mismatch", "digest")
     return assets, descendants, by_kind
 
 
@@ -127,7 +138,7 @@ def _reconcile(snapshot, document, assets, by_kind, environment):
     if _name(snapshot["environment"]) != environment or _sha256(snapshot["graph_sha256"]) != digest(
         canonical(document)
     ):
-        raise Rejected("inventory_snapshot_binding_mismatch")
+        raise InventoryMismatch("inventory_snapshot_binding_mismatch", "digest")
     observed = set()
     for record in _sequence(snapshot["deployments"], MAX_ASSETS):
         fields = (
@@ -157,10 +168,10 @@ def _reconcile(snapshot, document, assets, by_kind, environment):
             },
         }
         if any(_sha256(record[field]) != value for field, value in expected.items()):
-            raise Rejected("inventory_observed_digest_mismatch")
+            raise InventoryMismatch("inventory_observed_digest_mismatch", "digest")
     deployments = {asset_id for asset_id, asset in assets.items() if asset["kind"] == "deployment"}
     if observed != deployments:
-        raise Rejected("inventory_incomplete_observations")
+        raise InventoryMismatch("inventory_incomplete_observations", "dangling")
     return deployments
 
 

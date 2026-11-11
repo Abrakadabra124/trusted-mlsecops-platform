@@ -38,6 +38,8 @@ jobs:
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
+      - name: Actual candidate inventory events, observer CLI and collector recovery
+        run: uv run --locked python -W error -m scripts.security_inventory_events_native --state .runtime
       - name: Actual candidate refusal and controlled CLI to Reader to HTTP
         run: uv run --locked python -m scripts.promotion_entrypoint_native --state .runtime
       - name: Sanitized outcome with explicit acceptance boundary

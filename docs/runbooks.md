@@ -264,4 +264,9 @@ role boundary, bounded submission, idempotent retry, curator readback и зап�
 read-only диагностика, stable replay, operator-pinned rotation и эскалация при
 утрате истории, повреждённом outbox или истёкшем registry.
 
+Для actual inventory rejection и восстановления его доставки использовать
+[inventory observer](operations/inventory-security-events.md): pinned candidate/
+graph inputs, одна очередь на producer/epoch, original-event retry и запрет
+подмены expected baseline ради успешной проверки.
+
 Время, тип инцидента, затронутые dataset/model/bundle digest, исполнители и права, выполненные действия, разрешённый следующий state, влияние на пользователей, ссылки на redacted evidence, остаточный риск и owner follow-up. Пароли, signing keys и исходные payloads сюда не включаются.
