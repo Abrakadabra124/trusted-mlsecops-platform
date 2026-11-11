@@ -27,7 +27,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -m unittest scripts.kube_promotion_native_qualification scripts.promotion_state_qualification scripts.kube_trust_qualification scripts.promotion_controller_qualification
+          uv run --locked python -m unittest scripts.kube_promotion_native_qualification scripts.kube_security_native_qualification scripts.security_event_provision_qualification scripts.kube_security_resources_qualification scripts.kube_security_materials_qualification scripts.kube_security_events_qualification scripts.trust_targets_qualification scripts.promotion_state_qualification scripts.kube_trust_qualification scripts.promotion_controller_qualification
           uv run --locked coverage run --branch --data-file=.coverage-kube-promotion --source=mlsecops.kube_promotion -m unittest scripts.kube_promotion_qualification
           uv run --locked coverage report --data-file=.coverage-kube-promotion --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-promotion -o .coverage-kube-promotion.json
@@ -46,7 +46,7 @@ jobs:
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
           uv run --locked python -m mlsecops.storage_pipeline
-      - name: Actual refusal and separate controlled promotion and revocation
+      - name: Audited Kubernetes promotion, actual refusal, network outage and durable recovery
         run: uv run --locked python -m scripts.kube_promotion_native --state .runtime
       - name: Sanitized promotion outcome
         if: always()

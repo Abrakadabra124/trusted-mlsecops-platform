@@ -8,14 +8,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlsecops import kube_promotion, kube_storage, promotion_state
+from mlsecops import kube_promotion, kube_security_events, kube_storage, promotion_state
 from mlsecops.contracts import Rejected, canonical, digest, write_json
 
 
 class KubernetesPromotionContracts(unittest.TestCase):
     def config(self):
         return {
-            "schema_version": 1,
+            "schema_version": 2,
+            "security_audit_config": "/security/audit.json",
             "storage_client": "/client",
             "trust_client": "/trust-client",
             "context": {"policy": {"environment": "local-cpu"}},
@@ -35,22 +36,38 @@ class KubernetesPromotionContracts(unittest.TestCase):
             "approval_reference": None,
         }
 
-    def test_only_two_separate_credentials_and_pinned_command_are_mounted(self):
+    def test_separate_storage_trust_and_audit_materials_with_persistent_outbox(self):
         profile = {"image": "image@sha256:" + "b" * 64, "image_id": "sha256:" + "b" * 64}
         spec = kube_promotion.pod_spec(profile, "owned-config", "owned-request")
         self.assertEqual(spec["serviceAccountName"], "promoter")
         self.assertFalse(spec["automountServiceAccountToken"])
         self.assertEqual(
             [v["secret"]["secretName"] for v in spec["volumes"] if "secret" in v],
-            ["storage-client", "trust-client"],
+            ["storage-client", "trust-client", "security-promoter"],
         )
-        self.assertEqual(len(spec["initContainers"]), 2)
+        self.assertEqual(len(spec["initContainers"]), 3)
         mounts = spec["containers"][0]["volumeMounts"]
         self.assertEqual(
             {v["mountPath"] for v in mounts},
-            {"/tmp", "/client", "/trust-client", "/config.json", "/request.json"},
+            {
+                "/tmp",
+                "/client",
+                "/trust-client",
+                "/config.json",
+                "/request.json",
+                "/security",
+                "/audit",
+            },
         )
-        self.assertTrue(all(v["readOnly"] for v in mounts if v["mountPath"] != "/tmp"))
+        self.assertTrue(
+            all(v["readOnly"] for v in mounts if v["mountPath"] not in ("/tmp", "/audit"))
+        )
+        self.assertEqual(
+            next(v for v in spec["volumes"] if v["name"] == "security-state")[
+                "persistentVolumeClaim"
+            ]["claimName"],
+            "security-events",
+        )
         self.assertFalse(any("hostPath" in v or "projected" in v for v in spec["volumes"]))
         self.assertEqual(
             spec["containers"][0]["command"],
@@ -75,6 +92,9 @@ class KubernetesPromotionContracts(unittest.TestCase):
             ("storage_client", "/private"),
             ("trust_client", "/client"),
             ("schema_version", True),
+            ("schema_version", 1),
+            ("security_audit_config", "/other/audit.json"),
+            ("security_audit_config", None),
         ):
             with self.assertRaises(Rejected):
                 kube_promotion.validate_inputs({**config, field: value}, request)
@@ -90,6 +110,19 @@ class KubernetesPromotionContracts(unittest.TestCase):
             kube_promotion.validate_inputs(
                 {**config, "context": {"padding": "x" * (512 * 1024)}}, request
             )
+
+    def test_shared_sql_credential_builder_does_not_leak_promoter_signer_to_serving(self):
+        profile = {"image": "image@sha256:" + "b" * 64}
+        sql_only = kube_promotion.credential_spec(profile, "config", "request")
+        self.assertEqual(
+            [v["secret"]["secretName"] for v in sql_only["volumes"] if "secret" in v],
+            ["storage-client", "trust-client"],
+        )
+        self.assertFalse(any("persistentVolumeClaim" in v for v in sql_only["volumes"]))
+        self.assertNotIn(b"security-promoter", canonical(sql_only))
+        self.assertIn(
+            b"security-promoter", canonical(kube_promotion.pod_spec(profile, "config", "request"))
+        )
 
     def test_model_ledger_operator_uses_verified_kubernetes_backend(self):
         checksum = digest(promotion_state.migration_sql().encode())
@@ -182,6 +215,7 @@ class KubernetesPromotionContracts(unittest.TestCase):
         for module, field, replacement in (
             (kube_storage, "validate", lambda state: {}),
             (kube_promotion.kube_trust, "validate", lambda state: {}),
+            (kube_security_events, "validate", lambda *args, **kwargs: {"profile": self.profile}),
             (kube_promotion, "image_profile", lambda *args: self.profile),
             (kube_promotion, "workspace_id", lambda state: "a" * 32),
             (kube_promotion, "source_fingerprint", lambda root: "frozen-source"),
@@ -301,6 +335,11 @@ class KubernetesPromotionContracts(unittest.TestCase):
     def test_configure_validates_before_operator_changes_and_never_runs_for_submit(self):
         with (
             patch.object(kube_promotion.kube_trust, "validate"),
+            patch.object(
+                kube_security_events,
+                "validate",
+                return_value={"profile": {"image_id": self.config()["expected_serving_image"]}},
+            ),
             patch.object(promotion_state, "install") as install,
             patch.object(promotion_state, "configure") as configure,
         ):
@@ -313,6 +352,11 @@ class KubernetesPromotionContracts(unittest.TestCase):
             with self.assertRaises(Rejected):
                 kube_promotion.configure("state", {**self.config(), "trust_client": "/other"})
             install.assert_not_called()
+            with self.assertRaises(Rejected):
+                kube_promotion.configure(
+                    "state", {**self.config(), "expected_serving_image": "sha256:" + "c" * 64}
+                )
+            install.assert_not_called()
         self.cluster()
         with (
             patch.object(promotion_state, "install") as install,
@@ -321,6 +365,24 @@ class KubernetesPromotionContracts(unittest.TestCase):
             self.invoke()
             install.assert_not_called()
             configure.assert_not_called()
+
+    def test_unavailable_audit_profile_prevents_job_and_operator_sql_initialization(self):
+        self.cluster()
+        with (
+            patch.object(kube_security_events, "validate", side_effect=Rejected("audit_missing")),
+            patch.object(promotion_state, "install") as install,
+            self.assertRaisesRegex(Rejected, "audit_missing"),
+        ):
+            self.invoke()
+        self.assertEqual(self.objects, {})
+        install.assert_not_called()
+        with (
+            patch.object(kube_security_events, "validate", side_effect=Rejected("audit_missing")),
+            patch.object(promotion_state, "install") as install,
+            self.assertRaisesRegex(Rejected, "audit_missing"),
+        ):
+            kube_promotion.configure("state", self.config())
+        install.assert_not_called()
 
     def test_cli_exit_codes_and_diagnostics_do_not_leak_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -359,7 +421,7 @@ class KubernetesPromotionContracts(unittest.TestCase):
             redirect_stderr(io.StringIO()),
             self.assertRaises(SystemExit) as outcome,
         ):
-            runpy.run_module("mlsecops.kube_promotion", run_name="__main__")
+            runpy.run_path(kube_promotion.__file__, run_name="__main__")
         self.assertEqual(outcome.exception.code, 1)
 
 

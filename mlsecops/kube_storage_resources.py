@@ -91,13 +91,14 @@ def namespace_resources(namespace, account, workspace):
                 "hard": {
                     "pods": "3",
                     "requests.cpu": "1",
-                    "limits.cpu": "2",
+                    "limits.cpu": "3" if namespace == "ml-serving" else "2",
                     "requests.memory": "512Mi",
-                    "limits.memory": "1Gi",
+                    # Existing serving workload plus the 1CPU/256Mi trust observer.
+                    "limits.memory": "1280Mi" if namespace == "ml-serving" else "1Gi",
                     "requests.storage": "2Gi",
                     "persistentvolumeclaims": "1",
-                    # Model storage plus two independently pinned trust clients.
-                    "count/secrets": "3" if namespace in ("ml-promoter", "ml-serving") else "2",
+                    # Model storage, two pinned trust clients and one audit role.
+                    "count/secrets": "4" if namespace in ("ml-promoter", "ml-serving") else "2",
                     "count/configmaps": "4",
                     "count/jobs.batch": "3",
                 }

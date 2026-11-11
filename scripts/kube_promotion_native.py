@@ -6,6 +6,7 @@ from pathlib import Path
 
 from mlsecops import (
     kube_promotion,
+    kube_security_events,
     kube_storage,
     kube_trust,
     promotion_controller,
@@ -20,12 +21,54 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_storage_migration import ledger
 from mlsecops.private_cli import Arguments
 from mlsecops.sandbox import resolve_image
+from mlsecops.storage_pki import workspace_id
 from mlsecops.storage_schema import MAX_BYTES
+from scripts import (
+    kube_security_native,
+    release_native,
+    security_event_audit_fixture,
+    serving_native,
+)
 from scripts import promotion_qualification as fixtures
-from scripts import release_native, serving_native
 from scripts.candidate_lineage_native import KNOWN_OWNERS, OWNERS
 from scripts.kube_trust_native import hosted
-from scripts.promotion_entrypoint_native import configuration
+from scripts.promotion_entrypoint_native import configuration as host_configuration
+
+
+def configuration(client, trust_client, arguments, trust_root):
+    if client != "/client" or trust_client != "/trust-client":
+        raise Rejected("kube_promotion_fixture_paths")
+    return {
+        "schema_version": 2,
+        "storage_client": client,
+        "trust_client": trust_client,
+        "security_audit_config": "/security/audit.json",
+        "trust_root": trust_root,
+        "minimum_trust_version": 1,
+        **{
+            key: arguments[key]
+            for key in ("context", "trusted_root", "expected_policy", "expected_serving_image")
+        },
+    }
+
+
+def initialize_audit(root, state, image, initial_root):
+    return kube_security_events.bootstrap(
+        root,
+        state,
+        environment="local-cpu",
+        initial_root=initial_root,
+        policy=digest(
+            canonical(
+                {
+                    "schema_version": 1,
+                    "profile": "kubernetes-security-events",
+                    "workspace": workspace_id(state),
+                }
+            )
+        ),
+        image=image,
+    )
 
 
 def stage(state, package, policy, assurance=None, approval=None, reports=None):
@@ -60,7 +103,7 @@ def stage(state, package, policy, assurance=None, approval=None, reports=None):
     }
 
 
-def actual(root, state, image):
+def actual(root, state, image, *, authority_root=None):
     proposal = release_native.qualify(root, state, image)
     campaign = safe_child(state, "release-proposals/" + proposal["campaign_id"])
     envelope = read_json(campaign / "policy-envelope.json")
@@ -87,7 +130,6 @@ def actual(root, state, image):
         "expected_policy": proposal["policy_sha256"],
         "expected_serving_image": proposal["source"]["image_id"],
     }
-    local = configuration(client, client, arguments, public["trust"])
     reference = storage.put(client, "releases", canonical(envelope))
     request = {
         "schema_version": 1,
@@ -96,16 +138,20 @@ def actual(root, state, image):
         "assurance_reference": None,
         "approval_reference": None,
     }
-    try:
-        promotion_controller.submit(local, request)
-    except Rejected as error:
-        if str(error) != "release_assurance_required":
-            raise Rejected("kube_promotion_actual_wrong_refusal") from None
-    else:
-        raise Rejected("kube_promotion_actual_bypass")
+    with security_event_audit_fixture.live() as audit:
+        local = host_configuration(client, client, arguments, public["trust"], audit.audit_config)
+        try:
+            promotion_controller.submit(local, request)
+        except Rejected as error:
+            if str(error) != "release_assurance_required":
+                raise Rejected("kube_promotion_actual_wrong_refusal") from None
+        else:
+            raise Rejected("kube_promotion_actual_bypass")
     if stage(state, package, envelope) != request:
         raise Rejected("kube_promotion_actual_reference_changed")
-    config = {**local, "storage_client": "/client", "trust_client": "/trust-client"}
+    if authority_root is None:
+        authority_root = kube_security_events.validate(state)["context"]["initial_root"]
+    config = configuration("/client", "/trust-client", arguments, authority_root)
     before = ledger(state)
     result = kube_promotion.invoke(root, state, config, request, image)
     if result["status"] != "rejected" or ledger(state) != before:
@@ -127,7 +173,7 @@ def head(state):
     )
 
 
-def controlled(root, state, image):
+def controlled(root, state, image, *, check_actual=False):
     fixtures.PromotionAdmissionContracts.setUpClass()
     fixture = fixtures.PromotionAdmissionContracts()
     try:
@@ -139,12 +185,18 @@ def controlled(root, state, image):
             "storage_client": "/client",
             "trust_client": "/trust-client",
         }
-        kube_promotion.configure(state, config)
         trust_authority.install(
             state, "local-cpu", fixture.trust_fixture.public, backend=kube_trust.binding
         )
         trust_authority.update(
             state, config["expected_policy"], fixture.trust_fixture.key, backend=kube_trust.binding
+        )
+        initialize_audit(root, state, image, fixture.trust_fixture.public)
+        kube_promotion.configure(state, config)
+        actual_result = (
+            actual(root, state, image, authority_root=fixture.trust_fixture.public)
+            if check_actual
+            else None
         )
         request = stage(
             state,
@@ -171,6 +223,7 @@ def controlled(root, state, image):
         confirmed(
             "controlled-missing-approval-no-write", ledger(state) == before and head(state) == "0:"
         )
+        audit_proof = kube_security_native.qualify(root, state, config, request, image)
         accepted = kube_promotion.invoke(root, state, config, request, image)
         receipt = accepted["receipt"]
         confirmed(
@@ -203,6 +256,8 @@ def controlled(root, state, image):
             ledger(state) == after and head(state) == "1:" + receipt["request_sha256"],
         )
         return {
+            "actual": actual_result,
+            "audit": audit_proof,
             "cases": cases,
             "model": model,
             "request_sha256": receipt["request_sha256"],
@@ -223,8 +278,8 @@ def qualify(root, state, image):
         raise Rejected("kube_promotion_native_dirty_source")
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     fingerprint, started = source_fingerprint(root), now()
-    actual_outcome = actual(root, state, image)
-    checked = controlled(root, state, image)
+    checked = controlled(root, state, image, check_actual=True)
+    actual_outcome = checked.pop("actual")
     if (
         storage_bootstrap.validate(state)["container_id"] != source["container_id"]
         or source_fingerprint(root) != fingerprint

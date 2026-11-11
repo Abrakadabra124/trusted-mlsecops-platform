@@ -1,8 +1,8 @@
 # Первичное состояние аудита Kubernetes
 
-Статус: подготовлены resource builders и явный provisioning entrypoint.
-Operator bootstrap, подключение promoter и native Kubernetes acceptance ещё
-не завершены. Этот документ не является инструкцией запуска всей платформы.
+Статус: operator bootstrap и обязательный аудит promoter реализованы и проверены
+локальными contract tests. Native Kubernetes acceptance ещё не подтверждена.
+Этот документ не является инструкцией запуска всей платформы или доказательством R1.
 [План](../../tasks/audited-kubernetes-promotion-plan.md),
 [ADR0066](../decisions/0066-audited-kubernetes-promotion.md).
 
@@ -25,7 +25,7 @@ CA private key; worker не получает audit profile. Network resources о
 Выполняет доверенный operator только на разрешённом disposable hosted runner.
 Локальные Docker/WSL/Kubernetes/SQL по условиям задачи не запускаются.
 
-1. Будущий bootstrap должен проверить workspace/UID/spec и свежий PVC, сохранить
+1. Bootstrap проверяет workspace/UID/spec и свежий PVC, сохраняет
    UID создаваемого Job до принятия результата. Обнаруженные чужие ресурсы или
    утерянный marker не разрешают adoption или повторный init.
 2. Отдельный Job запускает `python -m mlsecops.security_event_provision --config /security/provision.json`.
@@ -35,14 +35,41 @@ CA private key; worker не получает audit profile. Network resources о
    heartbeat обязателен. Создаётся только фиксированный `/audit/state`, затем
    журнал повторно открывается с проверкой private permissions и identity pin.
 4. Успех отдаёт конечный JSON с role, producer_id, registry_sha256,
-   state_sha256 и release_ready=false. Operator должен сохранить pin и сверить
-   его независимо перед выдачей runtime config. Один exit0 не доказывает PVC identity.
+   state_sha256 и release_ready=false. Bootstrap сохраняет pin и сверяет PVC/PV
+   UID, claimRef, Retain class и spec digest перед выдачей runtime config.
+   Один exit0 не доказывает PVC identity.
 5. Collector, observer и promoter запускаются с существующими pins. Их runtime
    specifications не содержат init журнала. Замена Pod должна сохранять файлы,
    счётчики и envelopes; этот сценарий ещё подлежит native проверке.
 
-Шаги1,4 и runtime deployment остаются частью незавершённого operator bootstrap.
-Не запускать provisioning вручную как способ восстановления после сбоя.
+Для disposable hosted окружения после успешных storage/trust bootstrap и явной
+настройки trust authority предусмотрен entrypoint:
+
+```text
+python -m mlsecops.kube_security_events --state .runtime --environment local-cpu --initial-root PUBLIC_TRUST_ROOT --policy SECURITY_POLICY_SHA256 --image trusted-mlsecops:dev
+```
+
+Параметры в верхнем регистре - публичные значения согласованного профиля.
+Security policy pin обозначает политику аудита, отдельно от ML promotion policy.
+Runtime configuration promoter schema2 обязана содержать
+`security_audit_config: /security/audit.json`. API возвращает только конечный статус,
+registry pin и release_ready=false. Это не успешный release и не проверка healthy
+heartbeat: каждый promotion сам проверяет свежий подписанный audit challenge.
+
+Повтор bootstrap на полностью созданном профиле выполняет validate без новых ключей.
+Незавершённый профиль, отсутствующие pins или несоответствие image/context запрещают
+автоматическое продолжение. Не запускать provisioning вручную для восстановления.
+
+Registry живёт24часа; TLS leaf certificates90дней, CA365дней. Продление registry и
+обновление observer rotation packages не выполняются автоматически этой версией.
+Expiry вызывает отказ. Полная эксплуатационная миграция и fresh M13/M14 ещё нужны.
+
+Для fresh профиля bounded quota ml-promoter/ml-serving допускает4Secrets:
+model client, два trust clients и один audit role. ml-serving также учитывает
+дополнительный observer1CPU/256Mi: общий limits.cpu3 и limits.memory1280Mi.
+Существующий кластер со старым spec digest требует явной миграции; bootstrap не
+расширяет его бюджет незаметно. Для проверки используется новый owned disposable
+cluster, без изменений локальной инфраструктуры и без удаления старых данных.
 
 ## RB: существующий или повреждённый журнал
 

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from mlsecops import (
     kube_promotion,
+    kube_security_resources,
     kube_storage,
     kube_storage_resources,
     kube_trust,
@@ -29,6 +30,13 @@ class TrustTargetContracts(unittest.TestCase):
                     "a" * 32, {}, {role: {} for role in kube_trust.READERS}, target=target
                 )
             )
+        documents.extend(kube_security_resources.base_resources("a" * 32))
+        documents.extend(
+            kube_security_resources.secret(
+                "a" * 32, role, {name: b"fixture" for name in kube_security_resources.FILES[role]}
+            )
+            for role in kube_security_resources.ROLES
+        )
         for quota in (d for d in documents if d["kind"] == "ResourceQuota"):
             namespace = quota["metadata"]["namespace"]
             count = sum(
@@ -37,7 +45,7 @@ class TrustTargetContracts(unittest.TestCase):
             limit = int(quota["spec"]["hard"]["count/secrets"])
             with self.subTest(namespace=namespace):
                 self.assertLessEqual(count, limit)
-                self.assertEqual(limit, 3 if namespace in ("ml-serving", "ml-promoter") else 2)
+                self.assertEqual(limit, 4 if namespace in ("ml-serving", "ml-promoter") else 2)
 
     def test_alternate_fault_coordinator_only_allows_irreversible_model_revoke(self):
         for fault in ("outage", "key-revocation", "policy-change", "blackhole"):

@@ -70,18 +70,19 @@ jobs:
           PY
       - name: Collector lifecycle and bounded HTTP contracts
         run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
-      - name: Audit role resources and explicit fresh volume provisioning
+      - name: Audit operator ownership, role resources and explicit fresh volume provisioning
         run: |
-          uv run --locked ruff check mlsecops/kube_security_resources.py scripts/kube_security_resources_qualification.py
-          uv run --locked ruff format --check mlsecops/kube_security_resources.py scripts/kube_security_resources_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-provision.coverage" --source=mlsecops.security_event_provision,mlsecops.kube_security_resources -m unittest scripts.security_event_provision_qualification scripts.kube_security_resources_qualification
+          uv run --locked ruff check mlsecops/kube_security*.py scripts/kube_security*.py
+          uv run --locked ruff format --check mlsecops/kube_security*.py scripts/kube_security*.py
+          uv run --locked python -m unittest scripts.kube_security_native_qualification scripts.kube_promotion_qualification scripts.kube_promotion_native_qualification scripts.trust_targets_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-provision.coverage" --source=mlsecops.security_event_provision,mlsecops.kube_security_resources,mlsecops.kube_security_materials,mlsecops.kube_security_events -m unittest scripts.security_event_provision_qualification scripts.kube_security_resources_qualification scripts.kube_security_materials_qualification scripts.kube_security_events_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-provision.coverage" -o "$RUNNER_TEMP/security-provision-coverage.json"
           uv run --locked python - <<'PY'
           import json
           import os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'security-provision-coverage.json').read_text())['files']
-          if set(files) != {'mlsecops/security_event_provision.py', 'mlsecops/kube_security_resources.py'}:
+          if set(files) != {'mlsecops/security_event_provision.py', 'mlsecops/kube_security_resources.py', 'mlsecops/kube_security_materials.py', 'mlsecops/kube_security_events.py'}:
               raise SystemExit('security_provision_coverage_inventory')
           for name, report in sorted(files.items()):
               stats = report['summary']
@@ -89,7 +90,7 @@ jobs:
                   if stats[total] <= 0 or stats[covered] / stats[total] < 0.95:
                       raise SystemExit('security_provision_coverage_incomplete:' + name)
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
-          print('Resource plans and real Linux journal provisioning only. Kubernetes deployment is not accepted by these tests.')
+          print('Operator contracts and real Linux journal provisioning only. Kubernetes deployment is not accepted by these tests.')
           PY
       - name: Actual loopback delivery, elapsed heartbeat deadline, restart and cleanup
         run: uv run --locked python -m unittest scripts.security_event_live_qualification

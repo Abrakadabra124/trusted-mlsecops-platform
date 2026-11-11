@@ -351,7 +351,7 @@ class KubernetesTrustContracts(unittest.TestCase):
             redirect_stderr(io.StringIO()),
             self.assertRaises(SystemExit) as error,
         ):
-            runpy.run_module("mlsecops.kube_trust", run_name="__main__")
+            runpy.run_path(kube_trust.__file__, run_name="__main__")
         self.assertEqual(error.exception.code, 1)
         with (
             patch.object(

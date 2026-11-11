@@ -6,6 +6,8 @@ import uuid
 from pathlib import Path
 
 from mlsecops import (
+    kube_security_events,
+    kube_security_resources,
     kube_storage,
     kube_trust,
     promotion_controller,
@@ -34,9 +36,10 @@ def validate_config(config):
     decode(canonical(config), MAX_CONFIG)
     if (
         type(config["schema_version"]) is not int
-        or config["schema_version"] != 1
+        or config["schema_version"] != 2
         or config["storage_client"] != "/client"
         or config["trust_client"] != "/trust-client"
+        or config["security_audit_config"] != "/security/audit.json"
     ):
         raise Rejected("kube_promotion_configuration")
     release_policy.name(config["context"]["policy"]["environment"])
@@ -54,7 +57,7 @@ def validate_inputs(config, request):
             storage.object_id(request[name])
 
 
-def pod_spec(profile, config_name, request_name, *, trust_target=Target.PRIMARY):
+def credential_spec(profile, config_name, request_name, *, trust_target=Target.PRIMARY):
     trust_target = select(trust_target)
     spec = client_pod_spec(
         profile["image"],
@@ -99,6 +102,12 @@ def pod_spec(profile, config_name, request_name, *, trust_target=Target.PRIMARY)
             }
         )
     return spec
+
+
+def pod_spec(profile, config_name, request_name, *, trust_target=Target.PRIMARY):
+    return kube_security_resources.promoter_spec(
+        credential_spec(profile, config_name, request_name, trust_target=trust_target)
+    )
 
 
 def configuration_map(state, name, field, value):
@@ -186,6 +195,12 @@ def invoke(root, state, config, request, image="trusted-mlsecops:dev"):
     profile = image_profile(root, state, image)
     if config["expected_serving_image"] != profile["image_id"]:
         raise Rejected("kube_promotion_image_pin_mismatch")
+    kube_security_events.validate(
+        state,
+        profile=profile,
+        environment=config["context"]["policy"]["environment"],
+        initial_root=config["trust_root"],
+    )
     name = "promotion-" + uuid.uuid4().hex
     maps = [
         configuration_map(state, name + "-" + field, field, value)
@@ -203,6 +218,7 @@ def invoke(root, state, config, request, image="trusted-mlsecops:dev"):
             kube_storage.verify_resource(document, observed, uid)
         terminal, pod, elapsed = wait_job(state, NAMESPACE, name, 180)
         verify_running_image(pod, profile["image_id"])
+        kube_security_events.pod_spec(spec, pod["spec"])
         if (
             not kube_storage.matches(spec, pod["spec"])
             or pod["spec"].get("ephemeralContainers")
@@ -242,6 +258,13 @@ def configure(state, config):
     # Only an explicit operator action can initialize the journal, never a submission.
     validate_config(config)
     kube_trust.validate(state)
+    audit = kube_security_events.validate(
+        state,
+        environment=config["context"]["policy"]["environment"],
+        initial_root=config["trust_root"],
+    )
+    if audit["profile"]["image_id"] != config["expected_serving_image"]:
+        raise Rejected("kube_promotion_image_pin_mismatch")
     promotion_state.install(state, backend=kube_storage.binding)
     promotion_state.configure(
         state,

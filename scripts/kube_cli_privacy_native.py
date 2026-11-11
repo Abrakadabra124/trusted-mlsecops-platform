@@ -15,11 +15,10 @@ from mlsecops.contracts import Rejected, canonical, decode, digest, safe_child, 
 from scripts import audit_correlation_probe, promotion_qualification, serving_native
 from scripts.kube_cli_privacy_probe import verify_snapshot
 from scripts.kube_privacy_services import Windows
-from scripts.kube_promotion_native import stage
+from scripts.kube_promotion_native import configuration, initialize_audit, stage
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
-from scripts.promotion_entrypoint_native import configuration
 
 CLI_CASES = {
     "initial-worker-absence",
@@ -87,7 +86,6 @@ def controlled(root, state, image, profile):
         promotion = configuration(
             "/client", "/trust-client", arguments, fixture.trust_fixture.public
         )
-        kube_promotion.configure(state, promotion)
         trust_authority.install(
             state, "local-cpu", fixture.trust_fixture.public, backend=kube_trust.binding
         )
@@ -97,6 +95,8 @@ def controlled(root, state, image, profile):
             fixture.trust_fixture.key,
             backend=kube_trust.binding,
         )
+        initialize_audit(root, state, image, fixture.trust_fixture.public)
+        kube_promotion.configure(state, promotion)
         request = stage(
             state,
             arguments["package"],

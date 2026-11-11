@@ -65,8 +65,9 @@ child. Сохранить существующие outbox, registry pin и epoch
 plaintext endpoint, зависший handshake и запрет bearer до server authentication.
 `scripts.security_event_tls_live_qualification` проверяет Linux collector process,
 durable receipts, свежий audit challenge, outage/restart и original-event retry.
-Результат hosted проверки пока не подтверждён; Kubernetes deployment - следующая
-обязательная часть плана, не выполненная этим runbook.
+[Hosted проверка](../evidence/audit-tls-2026-11-12.md) принята на ae7b687:
+run43095023099 success,624Linux executions/0skips и четыре модуля>=95% coverage.
+Kubernetes deployment остаётся отдельной обязательной частью плана.
 
 При разработке Windows вернул ConnectionAbortedError/ConnectionResetError после
 ожидаемого отказа TLS-клиента. Тестовый listener учитывает это только в явно

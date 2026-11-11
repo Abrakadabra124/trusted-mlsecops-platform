@@ -31,7 +31,7 @@ from scripts import serving_native
 from scripts.kube_approval_fixture import renew, shorten
 from scripts.kube_privacy_bundle import manifest as privacy_bundle
 from scripts.kube_privacy_diagnostic import validated as privacy_location
-from scripts.kube_promotion_native import actual, stage
+from scripts.kube_promotion_native import actual, configuration, initialize_audit, stage
 from scripts.kube_promotion_replay import exercise as exercise_replay
 from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_rollback_native import exercise as exercise_rollback
@@ -39,7 +39,6 @@ from scripts.kube_rollback_native import variant as rollback_variant
 from scripts.kube_root_rotation import exercise as exercise_root_rotation
 from scripts.kube_serving_faults import Coordinator, acknowledge, progress
 from scripts.kube_trust_native import hosted
-from scripts.promotion_entrypoint_native import configuration
 
 NAMESPACE = "ml-serving"
 
@@ -107,7 +106,7 @@ def invoke(
     ]
     for document in maps:
         document["metadata"]["namespace"] = NAMESPACE
-    spec = kube_promotion.pod_spec(
+    spec = kube_promotion.credential_spec(
         profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"], trust_target=trust_target
     )
     spec["serviceAccountName"] = "serving"
@@ -394,7 +393,6 @@ def qualify(
         promotion = configuration(
             "/client", "/trust-client", arguments, fixture.trust_fixture.public
         )
-        kube_promotion.configure(state, promotion)
         trust_authority.install(
             state, "local-cpu", fixture.trust_fixture.public, backend=kube_trust.binding
         )
@@ -404,6 +402,8 @@ def qualify(
             fixture.trust_fixture.key,
             backend=kube_trust.binding,
         )
+        initialize_audit(root, state, image, fixture.trust_fixture.public)
+        kube_promotion.configure(state, promotion)
         config = {key: value for key, value in promotion.items() if key != "schema_version"}
         config.update(
             minimum_sequence=1,

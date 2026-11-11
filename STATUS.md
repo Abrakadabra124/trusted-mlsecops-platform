@@ -1,5 +1,12 @@
 # Статус и границы доказательств
 
+CP4/T29 2026-11-12: [TLS transport принят](docs/evidence/audit-tls-2026-11-12.md),
+ae7b687 /43095023099success,624Linux executions/0skips; TLS/server coverage100%,
+delivery/outbox>=95% отдельно. Подготовлены operator bootstrap, отдельные audit
+PV/Secrets и обязательный schema2 Kubernetes promoter. Их native проверка ещё
+не подтверждена; [план интеграции](tasks/audited-kubernetes-promotion-plan.md)
+сохраняет все оставшиеся M23/M13/M14 и R1 criteria.
+
 CP4/T29 2026-11-11: **постоянный trust observer проверен**, qualification `25371bf` /43087532653 success. [Evidence](docs/evidence/periodic-trust-observer-2026-11-11.md):593Linux tests/0skips,15native assertions, period30.022s, commit->receipt29.775085516s, stopped-source notice90.930804055s. Source loss не маскируется heartbeat, collector recovery/restart сохраняют исходные события/counter, owned cleanup verified. Clean83tests/3Linux skips; branches65/66 и21/22. Первый TypeError в harness сохранён и исправлен regression test. Далее mandatory deployment: schema2 promoter/Kubernetes adapter, защищённый транспорт, worker isolation, actual sequence gap/healthy ML dashboard outage/full M23/fresh M13M14. Это не полный R1; остальные CP3-CP5 gates обязательны.
 
 CP4/T29 2026-11-11: **producer heartbeat связан с durable state и serving lifecycle**, runtime `c313a86`, qualification `8b04684` /43083688017 success571 Linux tests/0skips. [Evidence](docs/evidence/producer-heartbeat-2026-11-11.md):46 native assertions, реальный период30.096s, signed gap после остановки90.412271147s, fresh audit отказан; counter/restart/head/cleanup проверены. Четыре модуля>=95% branch coverage. Clean checkout: c313a86 - 201 tests / 6 Linux skips; 8b04684 - 74 tests / 4 Linux skips; CLI regression43082185574success. [Ранбук](docs/operations/producer-heartbeat.md) описывает schema2, отказ v1 без reset и границы readback. Исходный failed qualification сохранён; точная причина первого отказа не доказана. Mandatory deployment/periodic trust observer, sequence campaign/healthy ML dashboard outage, fresh M13/M14, полный M23 и R1 открыты.
