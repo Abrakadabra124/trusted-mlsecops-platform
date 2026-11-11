@@ -1,4 +1,4 @@
-"""Linux loopback collector. Explicit provisioning; never initializes missing state."""
+"""Explicit Linux collector: loopback v1 or mandatory mTLS v2; no implicit state init."""
 
 import sys
 import time
@@ -10,6 +10,7 @@ from mlsecops import (
     security_event_http,
     security_event_runtime,
     security_event_store,
+    security_event_tls,
     security_events,
 )
 from mlsecops.contracts import Rejected, bounded_read, decode
@@ -40,8 +41,11 @@ def absolute(value):
 
 def configured(path):
     value = decode(bounded_read(absolute(path), 16384), 16384)
-    security_events.shape(value, FIELDS)
-    security_events.version(value["schema_version"])
+    version = value.get("schema_version") if type(value) is dict else None
+    security_events.shape(value, (*FIELDS, "tls") if version == 2 else FIELDS)
+    if type(version) is not int or version not in (1, 2):
+        raise Rejected("security_server_schema")
+    tls = security_event_tls.server_context(value["tls"]) if version == 2 else None
     port = security_events.integer(value["port"], 1024)
     if port > 65535:
         raise Rejected("security_server_port")
@@ -61,7 +65,9 @@ def configured(path):
         security_events.hexadecimal(key_files.read(absolute(value[name])).decode("ascii"))
         for name in ("ingress_token_file", "operator_token_file")
     ]
-    return security_event_http.App(collector, *tokens), port
+    app = security_event_http.App(collector, *tokens)
+    app.tls_context = tls
+    return app, port
 
 
 def main():
@@ -71,9 +77,10 @@ def main():
         parser.add_argument("--config", required=True)
         options = parser.parse_args()
         app, port = configured(options.config)
+        tls = app.tls_context
         run_server(
             app,
-            host="127.0.0.1",
+            host="127.0.0.1" if tls is None else "0.0.0.0",
             port=port,
             access_log=False,
             proxy_headers=False,
@@ -81,6 +88,7 @@ def main():
             timeout_keep_alive=2,
             limit_concurrency=16,
             log_level="warning",
+            **({"ssl_context_factory": lambda *_: tls} if tls is not None else {}),
         )
         if app.startup_failed:
             raise Rejected("security_server_startup")

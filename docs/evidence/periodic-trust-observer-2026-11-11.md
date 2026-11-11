@@ -56,6 +56,10 @@ collector. Synthetic keys/revocations остаются приватными; wor
 | Потеря heartbeat | Новый подписанный `telemetry.gap` с receipt через **90.93080405500004s**, health503 и fresh promotion audit refusal |
 | Очистка | Collector/private files удалены; ownership-bound SQL container/network/volume удалены с readback; source/fingerprint неизменны |
 
+Точность измерения доставки: timer запускается перед `trust_authority.update`,
+поэтому29.77508551599999s включает подготовку/commit операции отзыва. Это верхняя
+граница задержки после commit, не отдельно измеренная отметка SQL commit time.
+
 **15native assertions**, включая повторную проверку cleanup двух lifecycle;
 это не15 независимых attack scenarios. Также прошли25promotion,37trust-history
 и46HTTP-identity/heartbeat assertions на том же source/fingerprint.

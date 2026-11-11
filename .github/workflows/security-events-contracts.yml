@@ -72,11 +72,11 @@ jobs:
         run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
       - name: Actual loopback delivery, elapsed heartbeat deadline, restart and cleanup
         run: uv run --locked python -m unittest scripts.security_event_live_qualification
-      - name: Producer outbox, bounded transport and actual intake sources
+      - name: Producer outbox, bounded mutual TLS and actual intake sources
         run: |
           uv run --locked ruff check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
           uv run --locked ruff format --check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/producer-heartbeat.coverage" --source=mlsecops.security_event_outbox,mlsecops.security_event_delivery -m unittest scripts.security_producer_heartbeat_qualification scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification scripts.security_event_source_live_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/producer-heartbeat.coverage" --source=mlsecops.security_event_outbox,mlsecops.security_event_delivery,mlsecops.security_event_tls,mlsecops.security_event_server -m unittest scripts.security_producer_heartbeat_qualification scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification scripts.security_event_source_live_qualification scripts.security_event_tls_qualification scripts.security_event_tls_live_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/producer-heartbeat.coverage" -o "$RUNNER_TEMP/producer-heartbeat.json"
           uv run --locked python - <<'PY'
           import json, os
@@ -95,7 +95,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python -m unittest scripts.promotion_qualification scripts.promotion_controller_qualification scripts.rollback_admission_qualification scripts.promotion_entrypoint_qualification scripts.release_reader_native_qualification scripts.release_native_qualification
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-admission.coverage" --source=mlsecops.security_event_admission -m unittest scripts.security_event_admission_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-admission.coverage" --source=mlsecops.security_event_admission -m unittest scripts.security_event_admission_qualification scripts.security_event_tls_qualification
           uv run --locked coverage report --data-file="$RUNNER_TEMP/security-admission.coverage" --fail-under=95
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-admission.coverage" -o "$RUNNER_TEMP/security-admission.json"
           uv run --locked python - <<'PY'

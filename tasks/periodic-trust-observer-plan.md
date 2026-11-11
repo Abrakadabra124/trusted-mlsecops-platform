@@ -42,7 +42,7 @@ operations/evidence documents and current STATUS/tasks links.
   receipts/routes, unchanged event IDs on outage/recovery, stopped observer gap.
 - [x] Observe terminal CI, cleanup and unchanged source; preserve any failed attempts.
 - [x] Clean checkout with fresh locked environment, only allowed local tests.
-- [ ] Publish runbook/evidence, verify final CI and remote HEAD. Full M23/R1 stays open.
+- [x] Publish runbook/evidence, verify final CI and remote HEAD. Full M23/R1 stays open.
 
 ## Ledger
 
@@ -64,3 +64,6 @@ Task2 qualification complete:25371bf,43087532653 both jobs success.593Linux/0ski
 29.77508551599999s commit delivery,90.93080405500004s stopped-source notice.
 Source/owned group/collector/SQL network+volume cleanup verified. Public evidence
 and runbook ready; final documentation publication verification remains.
+
+Final publication verified on db25bbb:CI43089077612 jobs130761049018/130761049300
+both success, remote HEAD matched. All owned processes/CI terminal. Full R1 open.

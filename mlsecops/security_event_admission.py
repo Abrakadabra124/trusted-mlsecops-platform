@@ -115,10 +115,11 @@ class Client:
 
 def emitter(path):
     value = decode(bounded_read(storage.path(path), 16384), 16384)
-    events.shape(value, CONFIG_FIELDS)
-    if type(value["schema_version"]) is not int or value["schema_version"] != 2:
+    version = value.get("schema_version") if type(value) is dict else None
+    events.shape(value, (*CONFIG_FIELDS, "tls") if version == 3 else CONFIG_FIELDS)
+    if type(version) is not int or version not in (2, 3):
         raise Rejected("security_audit_config_schema")
-    result = security_event_delivery.configuration({**value, "schema_version": 1})
+    result = security_event_delivery.configuration({**value, "schema_version": version - 1})
     if (
         result.store.registry.producer(
             digest(signing.load_key(result.key).public_key().public_bytes_raw())

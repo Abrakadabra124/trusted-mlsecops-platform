@@ -1,4 +1,4 @@
-"""Bounded loopback delivery from a durable producer outbox.
+"""Bounded loopback or explicit mutual TLS delivery from a durable producer outbox.
 
 No URL, DNS, redirects, proxies, detached tasks or implicit initialization.
 One wire attempt has a total deadline; an unknown result retains the envelope.
@@ -8,7 +8,7 @@ import re
 import socket
 import time
 
-from mlsecops import key_files, security_event_config, security_event_outbox
+from mlsecops import key_files, security_event_config, security_event_outbox, security_event_tls
 from mlsecops import security_event_store as storage
 from mlsecops import security_events as events
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode
@@ -28,7 +28,7 @@ CONFIG_FIELDS = (
 )
 
 
-def exchange(port, token, envelope, *, path="/events"):
+def exchange(port, token, envelope, *, path="/events", tls=None):
     if path not in ("/events", "/admission", "/heartbeat"):
         raise Rejected("security_delivery_path")
     events.integer(port, 1024)
@@ -46,10 +46,20 @@ def exchange(port, token, envelope, *, path="/events"):
         return value
 
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=remaining()) as connection:
+        target = (
+            tls.open(port, remaining)
+            if tls is not None
+            else socket.create_connection(("127.0.0.1", port), timeout=remaining())
+        )
+        host = tls.server_name if tls is not None else "127.0.0.1"
+        with target as connection:
             connection.settimeout(remaining())
             connection.sendall(
-                b"POST " + path.encode("ascii") + b" HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                b"POST "
+                + path.encode("ascii")
+                + b" HTTP/1.1\r\nHost: "
+                + host.encode("ascii")
+                + b"\r\n"
                 b"Content-Type: application/json\r\nConnection: close\r\nAuthorization: Bearer "
                 + token.encode("ascii")
                 + b"\r\nContent-Length: "
@@ -109,16 +119,23 @@ def exchange(port, token, envelope, *, path="/events"):
 
 
 class Client:
-    def __init__(self, registry, port, token_file):
+    def __init__(self, registry, port, token_file, *, tls=None):
         events.integer(port, 1024)
         if port > 65535:
             raise Rejected("security_delivery_port")
         self.registry, self.port, self.token_file = registry, port, storage.path(token_file)
+        self.tls = tls
 
     def send(self, envelope, *, path="/events"):
         token = events.hexadecimal(key_files.read(self.token_file).decode("ascii"))
         # Store revalidates receipt signature, exact event binding and receiver times.
-        return exchange(self.port, token, envelope, path=path)
+        return exchange(
+            self.port,
+            token,
+            envelope,
+            path=path,
+            **({"tls": self.tls} if self.tls is not None else {}),
+        )
 
 
 class Emitter:
@@ -198,8 +215,11 @@ def configured(path):
 
 
 def configuration(value):
-    events.shape(value, CONFIG_FIELDS)
-    events.version(value["schema_version"])
+    version = value.get("schema_version") if type(value) is dict else None
+    events.shape(value, (*CONFIG_FIELDS, "tls") if version == 2 else CONFIG_FIELDS)
+    if type(version) is not int or version not in (1, 2):
+        raise Rejected("security_delivery_config_schema")
+    tls = security_event_tls.Client(value["tls"]) if version == 2 else None
     registry = security_event_config.Registry(
         decode(bounded_read(storage.path(value["registry_file"]), 32768), 32768),
         trusted_root=value["registry_root"],
@@ -213,5 +233,5 @@ def configuration(value):
         registry,
         security_event_outbox.key_identity(key),
     )
-    client = Client(registry, value["port"], value["ingress_token_file"])
+    client = Client(registry, value["port"], value["ingress_token_file"], tls=tls)
     return Emitter(store, key, client)
