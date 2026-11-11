@@ -198,6 +198,8 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
+Checkpoint inventory2026-11-11: [78871de](../docs/evidence/inventory-security-events-2026-11-11.md),43072217340success392 Linux-теста/0skips;43072235491success54unit+37inventory assertions+45promotion cases. Actual candidate SQL mismatch и controlled graph events связаны с durable queue, recovery/cleanup проверены; clean99/0. Далее identity source, producer heartbeat/scheduler, обязательный deployment profile и full M23. Полный M19 остаётся отдельным требованием.
+
 Checkpoint trust2026-11-11: [0e59a92 /43069121670](../docs/evidence/trust-security-events-2026-11-11.md) success301 Linux-тест/0skips,37 native observer assertions+25 promotion checks. Committed history -> отдельный CLI -> signed receipt, outage/restart, rotation/gap/read-only права и cleanup проверены; clean52/0. Следом identity/inventory источники, периодическое наблюдение/heartbeat и обязательный deployment profile, затем полная M23 campaign. T29 остаётся открытой.
 
 Checkpoint denials2026-11-11: [b984304](../docs/evidence/promotion-audit-2026-11-11.md),43064414379success287Linux/0skips+25native;43064414458success54unit+45native. Promotion refusal -> outbox -> signed receipt, offline/retry/SQL rollback/cleanup; actual candidate parent/CLI отказал и доставил два события. Clean88/0-Werror. Далее trust/identity/inventory actual sources, producer heartbeat, deployment enforcement и полная M23 acceptance.

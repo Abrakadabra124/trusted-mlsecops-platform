@@ -1,5 +1,10 @@
 # Проверка inventory и восстановление доставки событий
 
+[Проверка78871de](../evidence/inventory-security-events-2026-11-11.md):
+392 Linux-теста/0skips,37 native inventory assertions на настоящем SQL candidate
+и controlled graph, actual observer CLI/collector outage/retry прошли.
+Clean checkout99/0; source SQL остановлен workflow, collector cleanup подтверждён.
+
 Ответственные: оператор inventory и оператор security collector.
 [ADR0062](../decisions/0062-inventory-security-source.md) описывает typed source.
 Новый observer не заменяет перечисление deployments и полную приёмку M19.

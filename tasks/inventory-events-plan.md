@@ -33,9 +33,13 @@ M18 последний, остальные gates не ослаблять; pause 
 
 ## 2. Фактическая доставка и публикация
 
-- [ ] Hosted actual collector/outbox/SQL candidate checks, negative fixtures
+- [x] Hosted actual collector/outbox/SQL candidate checks, negative fixtures
   обозначены отдельно, исходные event ID/receipt и cleanup подтверждены.
-- [ ] Clean checkout с новой locked venv, docs/ruff/diff checks.
+- [x] Clean checkout с новой locked venv, docs/ruff/diff checks.
 - [x] Ранбук/плейбук: diagnostics, existing-outbox retry, bounded CLI,
   unknown outcome, no reset и пределы восстановления.
-- [ ] Commit/push, CI terminal/evidence/source binding; M19/M23/R1 не закрывать.
+- [x] Commit/push, CI terminal/evidence/source binding; M19/M23/R1 не закрывать.
+
+Результат78871de: [evidence](../docs/evidence/inventory-security-events-2026-11-11.md).
+392 Linux-теста/0skips,37 native inventory assertions,clean99/0. Этот план
+закрывает source increment, остальные обязательства R1 сохраняются.
