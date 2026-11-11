@@ -72,6 +72,7 @@ jobs:
         run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
       - name: Audit operator ownership, role resources and explicit fresh volume provisioning
         run: |
+          uv run --locked python -W error -m unittest scripts.kube_serving_service_qualification
           uv run --locked ruff check mlsecops/kube_security*.py scripts/kube_security*.py
           uv run --locked ruff format --check mlsecops/kube_security*.py scripts/kube_security*.py
           uv run --locked python -m unittest scripts.kube_security_native_qualification scripts.kube_promotion_qualification scripts.kube_promotion_native_qualification scripts.trust_targets_qualification scripts.kube_serving_native_qualification scripts.kube_privacy_native_qualification scripts.kube_load_native_qualification scripts.kube_candidate_qualification scripts.kube_cli_privacy_qualification

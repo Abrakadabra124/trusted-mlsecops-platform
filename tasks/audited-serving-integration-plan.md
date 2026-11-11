@@ -99,6 +99,17 @@ M18 remains LAST and must accept every required gate on one candidate.
 
 ## Implementation ledger
 
+Persistent Deployment increment: service configuration, UID-preconditioned Pod
+replacement, separate service.token, exec readiness/liveness probes and in-place
+HTTP readback are implemented. Native verification is pending. No quota increase,
+second HTTP server, new public listener or registry heartbeat bypass is added.
+Registry still requires trust only until all campaign/caller paths own the actual
+HTTP lifecycle. Do not close mandatory serving heartbeat or full M23 on this proof.
+Security outbox persists on security-serving; ordinary HTTP request journal remains
+per-Pod in private tmpfs, an explicit retention limitation. Initializers never
+inherit application health probes. Replacement retains the same immutable config,
+Secret and durable outbox; expected selected release is verified by the reader.
+
 2026-11-12: initial campaign authority wiring implemented, native verification pending.
 Reuse existing pinned operator `keys/trust.pem` / trusted-keys.json, validate the
 key/public binding and never create a missing authority key. `initialize_campaign`

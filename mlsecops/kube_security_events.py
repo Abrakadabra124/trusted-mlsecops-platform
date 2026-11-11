@@ -226,7 +226,9 @@ def desired(marker, owned):
     ]
 
 
-def live(state, document, marker):
+def live(state, document, marker, *, require_ready=True):
+    if type(require_ready) is not bool:
+        raise Rejected("kube_security_readiness_mode")
     namespace = document["metadata"]["namespace"]
     selector = ",".join(
         f"{key}={value}" for key, value in document["spec"]["selector"]["matchLabels"].items()
@@ -258,7 +260,8 @@ def live(state, document, marker):
         or owners_above[0].get("uid") != marker["resources"][kube_storage.reference(document)]
         or owners_above[0].get("kind") != "Deployment"
         or owners_above[0].get("controller") is not True
-        or not any(
+        or require_ready
+        and not any(
             c.get("type") == "Ready" and c.get("status") == "True"
             for c in pod.get("status", {}).get("conditions", [])
         )

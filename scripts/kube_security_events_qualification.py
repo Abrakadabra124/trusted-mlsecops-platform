@@ -448,6 +448,11 @@ class AuditBootstrap(unittest.TestCase):
             return [pod]
 
         variants.append(not_ready)
+        self.pods_override = not_ready
+        self.assertTrue(self.subject.live(self.directory, document, marker, require_ready=False))
+        for invalid in (None, 0, "false"):
+            with self.assertRaisesRegex(Rejected, "readiness_mode"):
+                self.subject.live(self.directory, document, marker, require_ready=invalid)
         for variant in variants:
             self.pods_override = variant
             with self.assertRaises(Rejected):

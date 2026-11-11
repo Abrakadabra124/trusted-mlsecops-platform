@@ -27,7 +27,7 @@ FILES = {
     "collector": (*COMMON, "collector.json", "receipt.pem", "collector.pem", "operator.token"),
     "trust": (*COMMON, "producer.json", "observer.json", "producer.pem"),
     "promoter": (*COMMON, "audit.json", "producer.pem"),
-    "serving": (*COMMON, "producer.json", "identity-audit.json", "producer.pem"),
+    "serving": (*COMMON, "producer.json", "identity-audit.json", "producer.pem", "service.token"),
 }
 
 

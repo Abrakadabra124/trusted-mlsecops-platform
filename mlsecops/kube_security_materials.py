@@ -35,6 +35,7 @@ FILES = (
     "registry.json",
     "ingress.token",
     "operator.token",
+    "service.token",
 )
 IDENTITY_FIELDS = (
     "schema_version",
@@ -165,7 +166,7 @@ def create(directory, *, workspace, environment, initial_root, policy):
         directory / "registry.json",
         signing.sign(registry, "security-event-config", directory / "keys/root.pem"),
     )
-    for name in ("ingress", "operator"):
+    for name in ("ingress", "operator", "service"):
         write(directory / (name + ".token"), secrets.token_hex(32).encode("ascii"))
     write_json(
         directory / "identity.json",
@@ -258,6 +259,7 @@ class Materials:
                     )
                 )
             elif role == "serving":
+                files["service.token"] = self.read("service.token")
                 # Stable service identity across Pod/image replacement, not a model digest.
                 files["identity-audit.json"] = canonical(
                     dict(

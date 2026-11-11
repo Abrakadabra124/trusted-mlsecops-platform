@@ -199,10 +199,13 @@ def head(state):
 
 def controlled(root, state, image, *, check_actual=False):
     # Local import: the ordinary serving harness also uses preparation helpers here.
-    from scripts import kube_serving_native
+    from mlsecops import kube_serving_service
+    from scripts import kube_serving_service_native as serving_service
 
     fixtures.PromotionAdmissionContracts.setUpClass()
     fixture = fixtures.PromotionAdmissionContracts()
+    service_started = False
+    service_report = None
     try:
         fixture.setUp()
         features, scores = serving_native.bind_real_runtime(fixture, resolve_image(image))
@@ -259,17 +262,10 @@ def controlled(root, state, image, *, check_actual=False):
         serving_profile = controller_bootstrap.bootstrap(root, state, image, serving=True)[
             "profile"
         ]
-        serving_config = {
-            **kube_serving_native.serving_configuration(config),
-            "minimum_sequence": 1,
-            "audit_directory": "/tmp/audit",
-            "token_file": "/tmp/token",
-            "kubernetes_worker": serving_profile,
-        }
+        kube_serving_service.bootstrap(state, serving_profile, config)
+        service_started = True
         expected = {"ready": False, "features": features, "scores": scores}
-        serving_before = kube_serving_native.invoke(
-            state, serving_profile, serving_config, expected
-        )
+        serving_before = serving_service.observe(state, expected)
         confirmed("controlled-unapproved-http-refuses-without-write", ledger(state) == before)
         accepted = kube_promotion.invoke(root, state, config, request, image)
         receipt = accepted["receipt"]
@@ -282,20 +278,20 @@ def controlled(root, state, image, *, check_actual=False):
             head(state) == "1:" + receipt["request_sha256"],
         )
         after = ledger(state)
-        before_identity = kube_security_native.job(
-            state, serving_profile, kube_security_native.SERVING, serving=True
+        unactivated = serving_service.observe(state, expected)
+        confirmed(
+            "same-http-pod-remains-unready-until-explicit-replacement",
+            unactivated["pod_uid"] == serving_before["pod_uid"],
         )
+        replacement = serving_service.replace(state)
+        before_identity = serving_service.snapshot(state)
         model = digest(fixture.fixture.bundle.materials.fixture.model)
-        serving_active = kube_serving_native.invoke(
+        serving_active = serving_service.observe(
             state,
-            serving_profile,
-            serving_config,
             {**expected, "ready": True, "model": model, "bundle": receipt["subject_sha256"]},
         )
         confirmed("controlled-admitted-http-onnx-inference-without-write", ledger(state) == after)
-        after_identity = kube_security_native.job(
-            state, serving_profile, kube_security_native.SERVING, serving=True
-        )
+        after_identity = serving_service.snapshot(state)
         marker = kube_security_events.validate(state, profile=serving_profile)
         identity_count = kube_security_native.identity_receipts(
             before_identity,
@@ -322,15 +318,25 @@ def controlled(root, state, image, *, check_actual=False):
             "controlled-revoked-repeat-no-new-objects-or-sequence",
             ledger(state) == after and head(state) == "1:" + receipt["request_sha256"],
         )
-        serving_revoked = kube_serving_native.invoke(
+        serving_revoked = serving_service.observe(
             state,
-            serving_profile,
-            serving_config,
-            {**expected, "reader_refusal": "trust_artifact_revoked"},
+            {**expected, "reader_refusal": "trust_artifact_revoked", "worker_absent": False},
         )
         confirmed(
-            "controlled-revoked-http-refuses-before-worker-without-write", ledger(state) == after
+            "controlled-revoked-http-refuses-in-same-pod-without-write",
+            ledger(state) == after and serving_revoked["pod_uid"] == serving_active["pod_uid"],
         )
+        service_report = {
+            "before_admission": serving_before,
+            "after_selection_before_replacement": unactivated,
+            "after_admission": serving_active,
+            "after_revocation": serving_revoked,
+            "replacement": replacement,
+            "identity_events_delivered": identity_count,
+            "continuous_lifecycle": True,
+            "mandatory_serving_heartbeat": False,
+            "release_ready": False,
+        }
         return {
             "actual": actual_result,
             "audit": audit_proof,
@@ -338,18 +344,17 @@ def controlled(root, state, image, *, check_actual=False):
             "model": model,
             "request_sha256": receipt["request_sha256"],
             "image_id": accepted["execution"]["image_id"],
-            "serving": {
-                "before_admission": serving_before,
-                "after_admission": serving_active,
-                "after_revocation": serving_revoked,
-                "identity_events_delivered": identity_count,
-                "continuous_lifecycle": False,
-                "release_ready": False,
-            },
+            "serving": service_report,
         }
     finally:
-        fixture.doCleanups()
-        fixtures.PromotionAdmissionContracts.tearDownClass()
+        try:
+            if service_started:
+                cleanup = kube_serving_service.stop(state)
+                if service_report is not None:
+                    service_report["cleanup"] = cleanup
+        finally:
+            fixture.doCleanups()
+            fixtures.PromotionAdmissionContracts.tearDownClass()
 
 
 def qualify(root, state, image):
@@ -393,7 +398,7 @@ def qualify(root, state, image):
         ],
         "limitations": [
             "Controlled positive approvals are not actual candidate acceptance",
-            "HTTP phases use separate owned Jobs; continuous mandatory serving lifecycle remains required",
+            "Owned HTTP Deployment uses explicit Pod replacement; globally mandatory serving heartbeat remains required",
             "Actual candidate admission and full M10-M13/M19 remain required",
             "System image inventory/findings and M22 independent challenges remain blocking",
         ],

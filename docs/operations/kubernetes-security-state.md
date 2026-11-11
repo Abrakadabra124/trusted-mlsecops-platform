@@ -7,6 +7,60 @@ Kubernetes на4aeece4 /43102906649: [evidence](../evidence/kubernetes-audit-202
 [План](../../tasks/audited-kubernetes-promotion-plan.md),
 [ADR0066](../decisions/0066-audited-kubernetes-promotion.md).
 
+## Постоянный HTTP Deployment
+
+Реализовано, hosted проверка ожидается. Operator API:
+`mlsecops.kube_serving_service.bootstrap(state, profile, promotion_config)`.
+Вызывать после audit bootstrap и `controller_bootstrap.bootstrap(..., serving=True)`
+на разрешённом hosted стенде. Профиль берётся из этого bootstrap, promotion config
+из существующей campaign, без ручной подмены image/root/policy. Локальный запуск
+Docker/WSL/Kubernetes/SQL для этой задачи запрещён.
+
+`release-risk-advisor` имеет одну реплику, стратегию Recreate, неизменяемый
+ConfigMap и существующий Secret security-serving. Новый service.token отличается
+от collector ingress/operator tokens. Никакого нового Service или внешнего
+plaintext listener: HTTP доступен на loopback Pod, диагностический доступ идёт
+через уже авторизованный Kubernetes exec. Readiness обращается к реальному
+`/readyz` с собственным токеном; liveness обращается к `/livez`. Живой процесс
+без выбранной модели остаётся NotReady и возвращает503 на prediction.
+
+Состояние operator хранится в `.runtime/kubernetes-serving-service/resources.json`.
+Его ready подтверждает ресурсы и HTTP liveness, не допуск модели. Перед exec или
+заменой operator проверяет ConfigMap/Deployment UID, спецификацию Pod, image,
+цепочку Pod/ReplicaSet/Deployment и исходный audit pin. Missing/incomplete/foreign
+state запрещает автоматическое принятие ресурсов. Удалять marker для обхода
+отказа нельзя. Security outbox сохраняется на PVC security-serving. Обычный
+HTTP request journal пока находится в приватном tmpfs и не переживает замену Pod.
+
+Плейбук после выбора release:
+
+1. На том же trusted hosted operator выполнить
+   `python -c "from mlsecops.kube_serving_service import validate; validate('.runtime')"`.
+   Отказ требует выяснения UID/config/pin mismatch, а не reset состояния.
+2. Подтвердить целевой bundle/policy и новую SQL selection существующим verifier.
+   Уже запущенный без модели процесс не получает автоматической активации.
+3. Вызвать `kube_serving_service.restart(state)`. DELETE имеет UID precondition,
+   ждёт новый живой Pod и проверяет исчезновение старого; credentials и outbox
+   не меняются. Timeout означает незавершённое восстановление, не успешный rollout.
+4. Проверить authenticated readiness, фактические model/bundle hashes, ONNX scores,
+   сохранённые outbox pin/records и увеличение signed heartbeat в collector.
+   При отрицательном результате не направлять трафик и не повторять promotion
+   автоматически. Отозванный bundle нельзя возвращать в fallback.
+5. Для завершения disposable proof вызвать `kube_serving_service.stop(state)`:
+   удалить только записанные Deployment/ConfigMap по UID, дождаться отсутствия
+   service Pod и worker Jobs, сохранить PVC/Secret. Stop не является backup/restore.
+
+При startup failure проверить существование приватного каталога HTTP journal:
+его создаёт отдельный init-контейнер, без подписывающих ключей и без HTTP probes.
+Readiness/startup/liveness probes разрешены только основному контейнеру.
+Новый файл service.token меняет pinned inventory: существующее старое состояние
+не мигрирует автоматически. Не пересоздавать ключи или PVC ради успешного старта;
+для такого состояния требуется отдельная проверенная процедура миграции.
+
+Registry пока требует heartbeat только trust. Этот increment проверяет фактический
+serving heartbeat и его счётчик, но потеря serving ещё не является обязательным
+условием отказа promotion. Это открытая работа M23, не разрешение полного R1.
+
 ## Границы ролей
 
 | Роль | Namespace / service account | Приватные материалы | Persistent state |

@@ -1,5 +1,12 @@
 # Статус и границы доказательств
 
+CP4/T29 persistent HTTP Deployment реализован, native proof pending. Один процесс
+до/во время выбора release, явная UID-bound замена Pod после выбора, retained
+security outbox и отдельный bearer token; новая native composition проверяет
+отзыв без замены активного Pod. Локальные operator/resource contracts проходят.
+Обязательный heartbeat serving во всех campaign/caller paths ещё не включён;
+full M23/R1 остаются открыты. [Runbook](docs/operations/kubernetes-security-state.md#постоянный-http-deployment).
+
 CP4/T29 d86d3de ordinary HTTP composition проверена:
 [Kubernetes43113676523](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43113676523)
 success18promotion+12audit и13/22/14HTTP checks до допуска/после выбора/после отзыва.
