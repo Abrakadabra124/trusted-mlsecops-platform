@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from uvicorn.config import STARTUP_FAILURE
@@ -398,10 +399,17 @@ def qualify():
                     else "identity_native_rejected"
                 )
                 log = bounded_read(private_log, 65536)
+                sites = [
+                    frame.lineno
+                    for frame in traceback.extract_tb(failure.__traceback__)
+                    if Path(frame.filename).resolve() == Path(__file__).resolve()
+                ]
                 print(
                     canonical(
                         dict(
                             identity_failure=safe_reason,
+                            failure_type=type(failure).__name__,
+                            fixture_lines=sites[-4:],
                             completed_assertions=len(cases),
                             cleanup_markers=log.count(b"identity_fixture_cleanup_pass"),
                             startup_rejected=b"Application startup failed" in log,
