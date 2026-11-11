@@ -39,6 +39,19 @@ def hosted():
         raise Rejected("identity_source_hosted_required")
 
 
+def readback(reader):
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            return reader()
+        except Rejected as failure:
+            if str(failure) not in ("artifact_unavailable", "security_store_unavailable"):
+                raise
+            if time.monotonic() >= deadline:
+                raise Rejected("identity_readback_unavailable") from None
+            time.sleep(0.02)
+
+
 class UnreadyEngine:
     def activate(self):
         raise Rejected("controlled_unready_engine")
@@ -156,15 +169,19 @@ def qualify():
         process = None
 
         def records():
-            return security_event_delivery.configured(producer_path).store.snapshot()["records"]
+            return readback(
+                lambda: security_event_delivery.configured(producer_path).store.snapshot()
+            )["records"]
 
         def heartbeat():
-            document = security_event_delivery.configured(producer_path).store.snapshot()
+            document = readback(
+                lambda: security_event_delivery.configured(producer_path).store.snapshot()
+            )
             envelope = document["heartbeat"]
             return envelope, fx.registry.heartbeat(envelope, clock_ms=fx.now())
 
         def collector_heartbeat():
-            streams = collector_store.snapshot()["telemetry"]["streams"]
+            streams = readback(collector_store.snapshot)["telemetry"]["streams"]
             return next(
                 stream["heartbeat"]
                 for stream in streams

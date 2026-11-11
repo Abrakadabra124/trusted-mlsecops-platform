@@ -30,6 +30,35 @@ class IntegrationBoundary(unittest.TestCase):
                 native.qualify()
             resources.assert_not_called()
 
+    def test_native_readback_retries_only_bounded_transient_file_unavailability(self):
+        from mlsecops.contracts import _parent
+        from scripts import security_identity_events_native as native
+
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+
+            def read():
+                calls.append(True)
+                if len(calls) == 1:
+                    # The actual parent context translates an I/O error raised
+                    # inside flock's scope before the outer journal catches it.
+                    with _parent(Path(directory) / "owned-journal"):
+                        raise BlockingIOError("controlled_exclusive_lock")
+                return {"verified": True}
+
+            with self.assertRaisesRegex(Rejected, "^artifact_unavailable$"):
+                read()
+            calls.clear()
+            self.assertEqual(native.readback(read), {"verified": True})
+            self.assertEqual(len(calls), 2)
+        with patch.object(native.time, "monotonic", side_effect=[0, 3]):
+            with self.assertRaisesRegex(Rejected, "identity_readback_unavailable"):
+                native.readback(Mock(side_effect=Rejected("security_store_unavailable")))
+        reader = Mock(side_effect=Rejected("security_store_pin"))
+        with self.assertRaisesRegex(Rejected, "security_store_pin"):
+            native.readback(reader)
+        reader.assert_called_once()
+
     def test_native_interruption_requires_lifespan_cleanup(self):
         from scripts import security_identity_events_native as native
 

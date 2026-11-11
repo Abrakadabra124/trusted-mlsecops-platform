@@ -221,6 +221,24 @@ class DurableHeartbeat(unittest.TestCase):
     setUp = HeartbeatContracts.setUp
     value = HeartbeatContracts.value
 
+    def test_native_readback_survives_real_exclusive_journal_lock(self):
+        from scripts import security_identity_events_native as native
+
+        root = str(self.fx.directory / "readback-outbox")
+        pin = outbox.initialize(root, self.fx.registry, self.identity, clock_ms=2000)
+        store = outbox.Store(root, pin, self.fx.registry, self.identity)
+        first = True
+
+        def read():
+            nonlocal first
+            if first:
+                first = False
+                with storage.locked(root):
+                    return store.snapshot()
+            return store.snapshot()
+
+        self.assertEqual(native.readback(read)["schema_version"], 2)
+
     def test_reopen_and_unknown_commit_preserve_sequence_before_network(self):
         root = str(self.fx.directory / "heartbeat-outbox")
         pin = outbox.initialize(root, self.fx.registry, self.identity, clock_ms=2000)

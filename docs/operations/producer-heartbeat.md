@@ -66,3 +66,19 @@ qualification измеряет настоящий30s tick, restart counter и si
 остановки producer <=120s; искусственное ускорение clock это не заменяет.
 Mandatory deployment/periodic trust observer и fresh M13/M14/full M23 остаются
 обязательными; весь R1 этим компонентом не принимается.
+
+## Диагностика qualification readback
+
+Первый c313a86 native run остановился после36 assertions на периодическом
+readback; исходный диагностический код не сохранил тип/место исключения.
+Следующий6774fc7 с такой диагностикой прошёл без изменения runtime. Это само
+по себе не доказывает причину первого сбоя.
+
+При разборе найден и детерминированно воспроизведён отдельный дефект harness:
+ошибка nonblocking flock внутри общего parent context становится
+artifact_unavailable, тогда как прежний polling распознавал только
+security_store_unavailable. Readback теперь повторяет только эти два отказа
+не более2s; неправильные pins/signatures/state не повторяются и не принимаются.
+POSIX-тест удерживает настоящий exclusive lock. Persistent I/O refusal остаётся
+failure, успешный повтор требует полной прежней валидации snapshot. Это изменение
+проверочного сценария, не отключение locking или security checks в runtime.
