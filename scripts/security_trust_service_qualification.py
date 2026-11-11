@@ -119,6 +119,17 @@ class SourceHeartbeat(unittest.TestCase):
                 native.qualify()
             disposable.assert_not_called()
 
+    def test_native_readback_keeps_operator_state_pin_and_registry(self):
+        from scripts import security_trust_service_native as native
+
+        settings = dict(state_directory=str(self.path.parent / "collector"), state_sha256="a" * 64)
+        with patch.object(native.security_event_store, "platform"):
+            store = native.collector_reader(settings, self.fx.registry)
+            self.assertEqual(store.pin, settings["state_sha256"])
+            self.assertIs(store.registry, self.fx.registry)
+            with self.assertRaises(Rejected):
+                native.collector_reader({**settings, "state_sha256": "invalid"}, self.fx.registry)
+
     def test_optional_heartbeat_registry_cannot_launch_continuous_source(self):
         other = fixtures.SourceContracts("runTest")
         other.setUp()

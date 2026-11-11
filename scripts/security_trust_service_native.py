@@ -23,6 +23,12 @@ from scripts.release_reader_native import disposable
 from scripts.security_identity_events_native import readback
 
 
+def collector_reader(settings, registry):
+    return security_event_store.Store(
+        settings["state_directory"], settings["state_sha256"], registry
+    )
+
+
 def qualify():
     if (
         sys.platform != "linux"
@@ -78,9 +84,7 @@ def qualify():
             )
             config.chmod(0o600)
             settings = decode((fx.directory / "collector.json").read_bytes())
-            collector = security_event_store.Store(
-                settings["state_directory"], fx.registry, expected_sha256=settings["state_sha256"]
-            )
+            collector = collector_reader(settings, fx.registry)
             private_log = fx.directory / "observer-private.log"
             args = [
                 sys.executable,
@@ -130,12 +134,13 @@ def qualify():
                     return
                 if process.poll() is None:
                     process.terminate()
+                graceful = True
                 try:
                     code = process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=5)
-                    raise Rejected("trust_observer_case:graceful_stop_deadline") from None
+                    graceful = False
+                    os.killpg(process.pid, signal.SIGKILL)
+                    code = process.wait(timeout=5)
                 # The test created this isolated session/process group. Signal0
                 # independently verifies no child survived its supervisor.
                 try:
@@ -143,10 +148,19 @@ def qualify():
                 except ProcessLookupError:
                     pass
                 else:
+                    graceful = False
                     os.killpg(process.pid, signal.SIGKILL)
-                    raise Rejected("trust_observer_case:owned_group_cleanup_unconfirmed")
+                    deadline = time.monotonic() + 5
+                    while True:
+                        try:
+                            os.killpg(process.pid, 0)
+                        except ProcessLookupError:
+                            break
+                        if time.monotonic() >= deadline:
+                            raise Rejected("trust_observer_case:owned_group_cleanup_unconfirmed")
+                        time.sleep(0.05)
                 process = None
-                check("supervisor-stopped-with-confirmed-child-cleanup", code == 0)
+                check("supervisor-stopped-with-confirmed-child-cleanup", graceful and code == 0)
 
             def received_heartbeat():
                 return next(
@@ -221,6 +235,7 @@ def qualify():
                 finally:
                     unavailable.rename(client)
                 wait_for(lambda: heartbeat()["sequence"] > first["sequence"] + 1)
+                wait_for(lambda: received_heartbeat()["envelope"] == snapshot()["heartbeat"])
                 fx.stop()
                 trust_authority.update(state, "a" * 64, authority_key, revoked_artifacts=["c" * 64])
                 wait_for(
@@ -267,6 +282,7 @@ def qualify():
                         if (
                             value.document()["kind"] == "telemetry.gap"
                             and value.document()["reason"] == "heartbeat"
+                            and value.document()["observed_at_ms"] >= observed + 90000
                         ):
                             fx.registry.receipt(item["receipt"], value)
                             notice = item

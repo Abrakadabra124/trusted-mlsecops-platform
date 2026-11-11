@@ -68,3 +68,12 @@ outbox: счётчик heartbeat увеличивается, события не
 Unit tests проверяют источник/доставку/подмену config/таймаут/сигналы/cleanup и
 реальный собственный Python child. POSIX lock и реальный SQL/collector проверяются
 только hosted Linux. Полный M23, mandatory deployment и R1 эта процедура не заменяет.
+
+## Ошибка qualification при первом запуске
+
+Run43087026043 на df8ce0d остановился с TypeError до запуска supervisor: native
+readback передал `expected_sha256` конструктору Store, который принимает
+`root, identity_sha256, registry`. Ошибка воспроизведена отдельным тестом с
+реальным конструктором, исправлено только соединение тестового reader. Защиты
+runtime не ослаблены. Повторный native результат требуется отдельно; исходный
+неуспех сохраняется в evidence. Нельзя выдавать его за работающий observer.
