@@ -1,5 +1,10 @@
 # Эксплуатационные процедуры
 
+- [T29: защищённый TLS transport](operations/audit-tls.md): certificate/endpoint,
+  bounded deadline, original-event recovery и история qualification failures.
+- [T29: первичное состояние аудита Kubernetes](operations/kubernetes-security-state.md):
+  role mounts, explicit provisioning, отказ вместо reset и ещё обязательный native deployment.
+
 - [T29: producer heartbeat](operations/producer-heartbeat.md): durable counter,
   lifecycle scheduler, collector readback, schema1 refusal и recovery без reset.
 

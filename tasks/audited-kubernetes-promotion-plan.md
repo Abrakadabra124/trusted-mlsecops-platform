@@ -33,7 +33,7 @@ schema2, admission schema3 and collector schema2, with unchanged legacy loopback
 
 - [x] RED real TLS wrong CA/name/missing client certificate; no bearer before handshake.
 - [x] GREEN TLS material validation/context/connect, bounded exchange and collector bind.
-- [ ] Verify schemas, total deadline, private failure, fresh challenge/receipt over TLS.
+- [x] Verify schemas, total deadline, private failure, fresh challenge/receipt over TLS.
 - [ ] Hosted real collector/source restart/outage; per-module coverage and cleanup.
 
 ## Task 2: owned Kubernetes audit profile and schema2 promoter
@@ -44,6 +44,8 @@ Consumes task1 transport and security_trust_service. Produces bootstrap/validate
 durable audited promoter mounts/config, correct schema2 validation.
 
 - [ ] RED existing schema mismatch plus required fixed audit path/private mounts.
+- [x] RED/GREEN scoped role resources and explicit fresh-volume provisioning.
+  This is a building block; bootstrap and native deployment below remain required.
 - [ ] Implement owned CA/secret/journal provisioning and validated Service address;
   collector+trust observer lifecycle, narrow Cilium rules, separate role state.
 - [ ] Connect existing promoter bootstrap/CLI and update caller fixtures coherently.
@@ -72,3 +74,23 @@ coverage needs its existing Linux tests. Windows reset/aborted connection after
 expected client rejection was reproduced with finite exception type and stopped
 thread; only negative listener cases accept that transport termination.
 Actual Linux TLS collector test and hosted source regressions still pending.
+
+Task1 correction ae7b687: initial43093814194 contracts failed on Linux BrokenPipeError
+in negative test listener; native job succeeded. Failure and partial-HTTP assertion
+correction retained in [runbook](../docs/operations/audit-tls.md). Run43095023099
+has passed every contracts step including actual TLS collector and coverage;
+terminal run/native status must still be observed before accepting the increment.
+
+Task2 first building blocks: kube_security_resources creates fixed role Secrets,
+three namespace-separated Retain PVC requests, narrow Cilium TLS routes, private
+copied files and single-replica/Recreate runtime specifications. security_event_provision
+only initializes /audit/state as an explicit operator action, reopens committed state,
+rejects existing/incomplete directories and emits public pins, never credentials.
+Local13tests/1Linux skip, both modules100% statements/branches. Actual Linux filesystem
+and cluster deployment remain separate checks. No adapter schema change yet.
+
+Next integration order: owned audit PKI/registry -> reserve resource UIDs and ServiceIP
+-> fresh-PVC provisioning Jobs/readback/pins -> immutable role Secrets -> collector
+and SELECT-only observer -> validate ownership/PV identity -> schema2 promoter mount
+and all caller fixtures -> hosted restart/outage/worker boundary proof.
+Do not add bootstrap init to runtime pods or recover a lost marker by adopting resources.

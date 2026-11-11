@@ -36,7 +36,8 @@ schema1 остаётся строго127.0.0.1. Неполная конфигу�
 ## Развёртывание и роли
 
 Operator bootstrap проверяет ownership workspace/UID/spec существующих ресурсов,
-создаёт отдельный ml-audit namespace, Service, collector и trust-observer,
+создаёт отдельный ml-audit namespace, Service и collector; trust-observer
+использует существующий ml-serving namespace и его SELECT-only trust client,
 приватные TLS/config secrets и отдельное durable filesystem state. Применяются
 существующие patterns restricted Pods, Cilium identity policies и owned local
 storage. Не совмещать audit journal с модельной БД или worker scratch.
@@ -44,6 +45,24 @@ Promoter получает только собственный producer key/outbo
 Collector receipt key, operator token и CA private key ему не передаются.
 Trust observer использует существующий SELECT/TLS ml_serving доступ без новых
 SQL write grants. Его настоящий heartbeat обязателен для healthy audit.
+Namespace/service account observer остаются в существующем SQL network boundary;
+он получает собственный producer Secret и отдельный audit PVC, не model storage client.
+
+Начальное создание journal/outbox выполняет отдельный одноразовый Job с публичной
+подписанной конфигурацией, без signing/TLS keys. Runtime command не вызывает init.
+Bootstrap обязан сначала закрепить UID PVC/Job, сохранить полученный state pin и
+проверить readback. Потерянный marker/том или неоднозначный результат Job требует
+разбора оператором, не повторного создания пустой истории. У каждого из трёх
+компонентов отдельный PVC в своём namespace, Retain class и private child state.
+Runtime использует Recreate/одну реплику, file locks остаются дополнительной защитой.
+
+`fsGroupChangePolicy: OnRootMismatch` ограничивает повторное рекурсивное изменение
+прав уже подготовленного тома. Это не доказательство поведения конкретного storage
+driver: native проверка должна подтвердить сохранение0700/0600 после замены Pod.
+Семантика настройки: [официальная документация Kubernetes](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods).
+Secret сначала копируется непривилегированным init-container в собственный0700
+подкаталог tmpfs; runtime получает read-only subPath и файлы0600. Прямой projected
+Secret mount не подходит reader с nofollow/private-owner checks.
 
 Kubernetes config schema2 требует фиксированный `/security/audit.json`, проверяет
 развёрнутый audit profile до Job и монтирует только предназначенные роли файлы.
