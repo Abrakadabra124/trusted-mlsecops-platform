@@ -104,6 +104,12 @@ production incident. Timeout настоящего owned Python child также 
 
 ## Воспроизведение
 
+[Проверенное evidence](../evidence/identity-security-events-2026-11-11.md):
+sourceb12ae89, CI43078796931success551Linux tests/0skips;38native assertions,
+6signed events и3проверенных server lifecycles. Clean Windows checkout159tests,
+3Linux skips. Regression43078796872success. Это принятие source component,
+не полный M23/M13/M14/R1.
+
 ```text
 python -W error -m unittest scripts.security_identity_events_qualification scripts.security_identity_http_qualification
 ```

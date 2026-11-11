@@ -285,6 +285,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 
+- Identity2026-11-11: [b12ae89](../docs/evidence/identity-security-events-2026-11-11.md),43078796931success551Linux/0skips,38native assertions/6signed events/3server cleanup;43078796872success54unit+37inventory+45promotion. Auth -> owned bounded child -> durable receipt, outage503/startup refusal/original retry; clean159/3Linux skips,148statements40branches100%. Mandatory profile/heartbeat/periodic observer, fresh M13/M14 и full M23/R1 открыты.
+
 - Inventory2026-11-11: [78871de](../docs/evidence/inventory-security-events-2026-11-11.md),43072217340success392Linux/0;43072235491success54unit+37inventory assertions+45promotion cases. Typed predicates -> pinned observer ->6events/receipts; actual candidate SQL и controlled graph различены. Outage/retry/cleanup, clean99/0,275statements108branches100%. Full M19/identity/heartbeat/deployment/M23 остаются обязательными.
 
 - Trust2026-11-11: [0e59a92](../docs/evidence/trust-security-events-2026-11-11.md),43069121670success301 Linux-тест/0skips,37 observer assertions+25 promotion checks. SQL history replay закрывает commit-before-enqueue при сохранной bounded истории; native outage/restart/dual-signature rotation/5receipts/cleanup проверены. Clean52/0, branches57/58. Observer ещё явный; heartbeat/deployment, identity/inventory sources и полная M23 acceptance обязательны.
