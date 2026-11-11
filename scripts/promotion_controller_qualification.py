@@ -4,6 +4,7 @@ import contextlib
 import copy
 import io
 import runpy
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -251,7 +252,11 @@ class CliContracts(unittest.TestCase):
             patch("sys.argv", ["promotion"]),
             contextlib.redirect_stderr(io.StringIO()) as err,
             self.assertRaises(SystemExit) as stopped,
+            patch.dict(sys.modules),
         ):
+            # Emulate module execution without reusing the imported module entry;
+            # restore it after the probe instead of suppressing RuntimeWarning.
+            sys.modules.pop("mlsecops.promotion_controller", None)
             runpy.run_module("mlsecops.promotion_controller", run_name="__main__")
         self.assertEqual(stopped.exception.code, 1)
         self.assertTrue(err.getvalue().endswith("promotion_rejected\n"))
