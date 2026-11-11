@@ -35,7 +35,10 @@ Source config schema1 содержит producer_config и public service_sha256.
 Оператор задаёт digest не содержащего секретов service descriptor. Parent
 закрепляет bytes config, child проверяет pin при каждом запуске. Один
 producer/epoch использует прежнюю очередь; root/receipt keys ему не передают.
-Identity source сам не создаёт heartbeat и не заменяет promotion audit health.
+В исходном94e6d7c identity source не создавал heartbeat. Последующий
+[ADR0064](0064-producer-heartbeat.md) добавил durable counter и lifecycle
+scheduler; startup теперь обращается к collector даже с пустой очередью.
+Heartbeat HTTP echo не заменяет fresh signed promotion audit health.
 
 Проверки: real auth decisions, role misuse, missing/multiple/bad credentials,
 no body/engine access, busy/deadline/cancel/output isolation/spawn/shutdown failures,

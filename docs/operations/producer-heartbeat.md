@@ -1,7 +1,10 @@
 # Producer heartbeat: диагностика и восстановление
 
 Ответственные: serving operator и security collector operator.
-Статус: реализация T29, native qualification ещё не подтверждена.
+Статус: source component проверен на8b04684, /43083688017success571Linux/0skips.
+Native:46assertions,30.096s период,90.412271147s stopped-producer signed gap,
+fresh audit refusal/cleanup. [Evidence](../evidence/producer-heartbeat-2026-11-11.md).
+Полный M23/R1 открыт.
 [ADR0064](../decisions/0064-producer-heartbeat.md), [план](../../tasks/producer-heartbeat-plan.md).
 
 Heartbeat сообщает об активности trusted producer и последнем выделенном event
