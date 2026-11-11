@@ -218,6 +218,28 @@ def restart(state, marker, role):
     return {"before": before, "after": after}
 
 
+def identity_receipts(before, after, inbox):
+    previous = before["records"]
+    records = after["records"]
+    added = records[len(previous) :]
+    added_ids = {r["id"] for r in added}
+    received = {r["id"]: r for r in inbox["records"]}
+    if (
+        before["pin"] != after["pin"]
+        or records[: len(previous)] != previous
+        or not added
+        or len(added_ids) != len(added)
+        or added_ids.intersection(r["id"] for r in previous)
+        or len(received) != len(inbox["records"])
+        or any(
+            r["kind"] != "identity.denied" or r["receipt"] is None or received.get(r["id"]) != r
+            for r in added
+        )
+    ):
+        raise Rejected("audit_native_http_receipt")
+    return len(added)
+
+
 def qualify(root, state, config, request, image):
     hosted()
     marker = kube_security_events.validate(state)

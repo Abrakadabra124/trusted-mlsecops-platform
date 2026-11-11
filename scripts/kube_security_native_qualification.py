@@ -13,6 +13,36 @@ class NativeAuditContracts(unittest.TestCase):
     def setUp(self):
         self.profile = {"image": "image@sha256:" + "a" * 64, "image_id": "sha256:" + "a" * 64}
 
+    def test_http_receipt_requires_a_new_identity_event_same_outbox_and_independent_match(self):
+        record = {
+            "id": "b" * 64,
+            "kind": "identity.denied",
+            "envelope": "c" * 64,
+            "receipt": "d" * 64,
+        }
+        before = {"pin": "a" * 64, "records": []}
+        after = {"pin": "a" * 64, "records": [record]}
+        inbox = {"records": [record]}
+        self.assertEqual(subject.identity_receipts(before, after, inbox), 1)
+        for old, current, observed in (
+            (after, after, inbox),
+            (after, {**after, "records": [record, record]}, inbox),
+            (before, {**after, "records": [record, record]}, inbox),
+            (before, after, {"records": [record, record]}),
+            (before, before, inbox),
+            (before, {**after, "pin": "e" * 64}, inbox),
+            (before, {**after, "records": [{**record, "receipt": None}]}, inbox),
+            (before, after, {"records": []}),
+            (before, after, {"records": [{**record, "receipt": "e" * 64}]}),
+            (before, {**after, "records": [{**record, "kind": "promotion.denied"}]}, inbox),
+            ({**before, "records": [{**record, "id": "e" * 64}]}, after, inbox),
+        ):
+            with (
+                self.subTest(old=old["records"], current=current["records"]),
+                self.assertRaises(Rejected),
+            ):
+                subject.identity_receipts(old, current, observed)
+
     def test_all_remote_programs_compile_and_use_fixed_private_paths(self):
         for code in (
             subject.HEALTH.replace("EXPECTED", "True"),

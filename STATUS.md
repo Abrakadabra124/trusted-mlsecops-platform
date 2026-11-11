@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+CP4/T29 6f04191 serving role/storage приняты в scoped hosted proof:
+Kubernetes43111654007success14+12assertions, security43111626192success762Linux0skips.
+Fresh127tests/1Windows skip, owned cleanup verified.
+[Evidence](docs/evidence/kubernetes-audit-2026-11-12.md).
+Следующий code increment соединяет ordinary HTTP до/после approval и revocation
+с независимым collector readback; новый native результат pending.
+Непрерывный lifecycle, обязательный serving heartbeat, rotation и полный R1 открыты.
+
 CP4/T29 serving role/config increment: отдельные signing/TLS credentials, четвёртый
 PVC с проверкой namespace+claim, bounded quotas и обязательный identity config
 для ordinary serving Jobs реализованы. Local127tests-Werror pass/1Linux-only skip;

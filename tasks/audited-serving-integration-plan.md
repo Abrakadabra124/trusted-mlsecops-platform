@@ -146,3 +146,19 @@ Still required: uninterrupted actual HTTP lifecycle before/after release, mandat
 registry heartbeat, independent collector receipts for deployed HTTP denial,
 candidate/load/monitoring integration, observer rotation transition, fresh M13/M14
 and the original full R1 gates. No checkbox claiming those outcomes is closed here.
+
+6f04191 hosted proof is now verified: Kubernetes43111654007success14promotion+
+12audit assertions and owned cleanup; security43111626192success762Linux0skips+
+25/37/15/46native. Fresh checkout127tests/1Windows skip; Linux executes it.
+This proves the fourth role's actual persistent state, not HTTP lifecycle.
+
+Next implemented composition (native result pending): existing primary promotion
+campaign provisions serving API permissions and invokes the ordinary CLI before
+approval, after selection, and after artifact revocation. Same image/config/authority,
+separate inference worker, unchanged model/promotion snapshot, exact model/bundle
+binding and ONNX parity use the existing verifier. A fresh identity.denied is
+matched to the independent collector receipt; old events, changed pin and missing
+or altered receipt fail. No fake Engine or directly fabricated producer event is
+used in this deployed path. The three Jobs are sequential; continuous_lifecycle
+remains explicitly false. Mandatory persistent HTTP/heartbeat, observer rotation,
+candidate/privacy/load/monitoring, M13/M14 and full R1 remain open.

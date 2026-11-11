@@ -170,3 +170,27 @@ stopped-source90.154024915s. Identity period30.112s, stopped notice91.235523946s
 Fresh locked checkout d4e1e86:79tests3.441s-Werror0skips, interpreter/imports/git clean
 проверены. Это подтверждение идемпотентности, не новый full R1 или устранение
 причины исторического intermittent observer timeout.
+
+## Отдельное состояние HTTP role: 6f04191
+
+[Kubernetes43111654007](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43111654007)
+завершился success на `6f041913abedb053f2801c24bf9713f71ef6b43f`:
+14promotion+12audit assertions. Два новых assertions проверили отдельный serving
+outbox и его сохранность с правами0700/0600 после запуска другого принадлежащего
+задаче Pod. Они ещё не запускали HTTP-процесс. Observer counter7->8;
+source SQL stop/readback и cluster removal/readback success.
+
+Image `sha256:eb5d36462af5f6adba0c9fb494bef61ed534689d1e4d4a051eefd1093badcb02`,
+runtime fingerprint `662d6c8fd136e32ad2df500a86e99e41e8bb8e1844b8abd4f0cfcdbcc17ecbdb`.
+[Security43111626192](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43111626192)
+success:762Linux tests/0skips и25+37+15+46native. Observer period30.019s,
+operation-start->receipt29.836077826s, stopped-source90.74708436s.
+Identity period30.097s, stopped-producer90.22315324s.
+
+Fresh locked checkout6f04191:127tests14.330s-Werror, один Linux-only permission
+test пропущен на Windows и выполнен в CI. Interpreter/import paths/git clean
+проверены. Coverage: resources81/81statements18/18branches,
+materials122/122+28/28, operator201/203+68/70, provision43/43+8/8.
+Новая интеграция ordinary HTTP с тремя состояниями и collector readback готовится
+следующим increment; этот результат не доказывает непрерывный HTTP lifecycle,
+обязательный serving heartbeat, fresh M13/M14 или полный M23/R1.

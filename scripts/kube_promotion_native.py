@@ -5,6 +5,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from mlsecops import (
+    controller_bootstrap,
     kube_promotion,
     kube_security_events,
     kube_storage,
@@ -197,11 +198,14 @@ def head(state):
 
 
 def controlled(root, state, image, *, check_actual=False):
+    # Local import: the ordinary serving harness also uses preparation helpers here.
+    from scripts import kube_serving_native
+
     fixtures.PromotionAdmissionContracts.setUpClass()
     fixture = fixtures.PromotionAdmissionContracts()
     try:
         fixture.setUp()
-        serving_native.bind_real_runtime(fixture, resolve_image(image))
+        features, scores = serving_native.bind_real_runtime(fixture, resolve_image(image))
         arguments = fixture.arguments
         authority_key, authority_public = initialize_campaign(root, state, image)
         config = {
@@ -252,6 +256,21 @@ def controlled(root, state, image, *, check_actual=False):
             "controlled-missing-approval-no-write", ledger(state) == before and head(state) == "0:"
         )
         audit_proof = kube_security_native.qualify(root, state, config, request, image)
+        serving_profile = controller_bootstrap.bootstrap(root, state, image, serving=True)[
+            "profile"
+        ]
+        serving_config = {
+            **kube_serving_native.serving_configuration(config),
+            "minimum_sequence": 1,
+            "audit_directory": "/tmp/audit",
+            "token_file": "/tmp/token",
+            "kubernetes_worker": serving_profile,
+        }
+        expected = {"ready": False, "features": features, "scores": scores}
+        serving_before = kube_serving_native.invoke(
+            state, serving_profile, serving_config, expected
+        )
+        confirmed("controlled-unapproved-http-refuses-without-write", ledger(state) == before)
         accepted = kube_promotion.invoke(root, state, config, request, image)
         receipt = accepted["receipt"]
         confirmed(
@@ -263,13 +282,33 @@ def controlled(root, state, image, *, check_actual=False):
             head(state) == "1:" + receipt["request_sha256"],
         )
         after = ledger(state)
+        before_identity = kube_security_native.job(
+            state, serving_profile, kube_security_native.SERVING, serving=True
+        )
+        model = digest(fixture.fixture.bundle.materials.fixture.model)
+        serving_active = kube_serving_native.invoke(
+            state,
+            serving_profile,
+            serving_config,
+            {**expected, "ready": True, "model": model, "bundle": receipt["subject_sha256"]},
+        )
+        confirmed("controlled-admitted-http-onnx-inference-without-write", ledger(state) == after)
+        after_identity = kube_security_native.job(
+            state, serving_profile, kube_security_native.SERVING, serving=True
+        )
+        marker = kube_security_events.validate(state, profile=serving_profile)
+        identity_count = kube_security_native.identity_receipts(
+            before_identity,
+            after_identity,
+            kube_security_native.collector(state, marker),
+        )
+        confirmed("controlled-http-denial-has-independent-collector-receipt", identity_count > 0)
         repeated = kube_promotion.invoke(root, state, config, request, image)
         confirmed("controlled-exact-retry-same-receipt", repeated["receipt"] == receipt)
         confirmed(
             "controlled-exact-retry-no-new-objects-or-sequence",
             ledger(state) == after and head(state) == "1:" + receipt["request_sha256"],
         )
-        model = digest(fixture.fixture.bundle.materials.fixture.model)
         trust_authority.update(
             state,
             config["expected_policy"],
@@ -283,6 +322,15 @@ def controlled(root, state, image, *, check_actual=False):
             "controlled-revoked-repeat-no-new-objects-or-sequence",
             ledger(state) == after and head(state) == "1:" + receipt["request_sha256"],
         )
+        serving_revoked = kube_serving_native.invoke(
+            state,
+            serving_profile,
+            serving_config,
+            {**expected, "reader_refusal": "trust_artifact_revoked"},
+        )
+        confirmed(
+            "controlled-revoked-http-refuses-before-worker-without-write", ledger(state) == after
+        )
         return {
             "actual": actual_result,
             "audit": audit_proof,
@@ -290,6 +338,14 @@ def controlled(root, state, image, *, check_actual=False):
             "model": model,
             "request_sha256": receipt["request_sha256"],
             "image_id": accepted["execution"]["image_id"],
+            "serving": {
+                "before_admission": serving_before,
+                "after_admission": serving_active,
+                "after_revocation": serving_revoked,
+                "identity_events_delivered": identity_count,
+                "continuous_lifecycle": False,
+                "release_ready": False,
+            },
         }
     finally:
         fixture.doCleanups()
@@ -337,7 +393,8 @@ def qualify(root, state, image):
         ],
         "limitations": [
             "Controlled positive approvals are not actual candidate acceptance",
-            "Serving runtime/HTTP in Kubernetes and full M10-M13/M19 remain required",
+            "HTTP phases use separate owned Jobs; continuous mandatory serving lifecycle remains required",
+            "Actual candidate admission and full M10-M13/M19 remain required",
             "System image inventory/findings and M22 independent challenges remain blocking",
         ],
     }

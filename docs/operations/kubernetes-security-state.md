@@ -118,6 +118,32 @@ promoter и отвергается до создания serving Job. Конве
 пока не соединены. Candidate qualification paths также ещё не интегрированы с
 этой идентичностью. Provisioning и mount tests не являются свежими M13/M14/M23.
 
+### PB: HTTP и выбор модели в одном hosted сценарии
+
+В workflow `kubernetes-promotion.yml` добавлены последовательные ordinary HTTP
+Jobs вокруг существующего controlled approval. До выбора модели readiness и
+prediction должны отдавать503 без запуска inference worker. После выбора
+проверяются ONNX golden scores, неизменная identity worker, привязка model/bundle,
+HTTP401 для запроса без credentials, а также завершение собственного worker.
+После отзыва модели ожидается `trust_artifact_revoked` и отказ до создания worker.
+Команды CLI выполняются существующим `mlsecops.kube_serving_probe`, с проверкой
+фактического Pod image/spec/UID и обязательной очисткой, не подменённым Engine.
+
+До и после положительного HTTP-запуска считываются существующий serving outbox
+и независимый collector journal. Новый identity.denied должен иметь тот же
+event ID, digest подписанного envelope и receipt в обоих журналах. Старый event,
+замена outbox pin, отсутствующий receipt или чужое событие не подтверждают доставку.
+Каждая HTTP-фаза также проверяет неизменность model/promotion SQL snapshot.
+
+При ошибке не повторять approval и не очищать журнал. Сначала прочитать конечный
+статус того же workflow/job, сохранить приватные evidence и проверить owned cleanup.
+Фиксированные phase/code в serving result помогают отличить startup, HTTP и shutdown.
+Недоступный collector, неверные права ключа или потеря serving state требуют
+восстановления исходной идентичности; отключение identity audit не является recovery.
+Обновлённый hosted сценарий ещё ожидает первый результат. Три последовательных
+Job не доказывают работу HTTP между фазами: continuous_lifecycle=false сохраняется
+в отчёте. Полный R1 требует непрерывного serving и всех исходных gates.
+
 Симптом: `security_provision_rejected`, либо runtime отказ чтения identity/state.
 Не удалять каталог и не повторять init. Сначала проверить ожидаемые namespace,
 workspace, PVC/PV UID, binding, Retain policy и Job UID по приватному marker.
