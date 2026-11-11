@@ -1,5 +1,7 @@
 # Реализация R1
 
+CP4/T29 2026-11-11: [fresh audit admission](evidence/promotion-audit-2026-11-11.md), runtime `1cd2466` /43061060230 success282Linux tests/0skips+14native cases. Проверка collector перед/после SQL statement, реальный rollback на outage, exact retry и cleanup; schema2 promotion config обязателен. Clean `d803b1c`:74tests/0skips, исправлена изоляция runpy fixture, warnings не подавляются. [ADR0060](decisions/0060-promotion-audit-admission.md) и [ранбук](operations/security-events.md#аудит-на-границе-promotion). Остальные источники/heartbeat, deployed profile и полные M23/R1 остаются открытыми.
+
 CP4/T29 2026-11-11: [реальные intake события и producer outbox](evidence/security-event-sources-2026-11-11.md), `a205646` /43057291164 success213Linux tests/0skips. Intake/controller projection, stable sequence/retry, actual HTTP/outage/restart/receipt и owned cleanup; clean Windows72tests/17Linux skips. Исправлен wrong-event receipt settlement, сохранены исходные gates/пороги. Explicit audited profile ещё не включён во все deployments; remaining sources/promotion/full M23/R1 открыты.
 
 CP4/T29 2026-11-07: [настоящий collector](evidence/security-event-collector-2026-11-07.md), runtime `1a234fe` /42351757662 success104Linux tests/0skips. Реальные heartbeat90.691677257s и HTTP0.018888678s, durable route/retry/restart и owned cleanup подтверждены. Windows fixture cleanup исправлена после ResourceWarning; clean fb8a5e1:104tests/22skips без warnings. Actual adapters, promotion audit boundary и полный M23/R1 открыты.
