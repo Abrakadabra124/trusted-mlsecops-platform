@@ -1,5 +1,10 @@
 # Наблюдение и восстановление событий отзыва доверия
 
+[Проверка0e59a92 /43069121670](../evidence/trust-security-events-2026-11-11.md):
+301 Linux-тест без пропусков,37 native observer assertions, настоящий CLI
+outage/restart/rotation/gap и cleanup прошли. Ниже явно отделены проверенные
+replay steps от отсутствующего автоматического восстановления повреждённого state.
+
 Ответственные: оператор authority и оператор security collector. Компонент
 T29 читает подтверждённую историю и доставляет изменения в security.trust.
 [ADR0061](../decisions/0061-trust-history-security-events.md) фиксирует semantics

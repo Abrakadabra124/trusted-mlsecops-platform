@@ -285,6 +285,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 
+- Trust2026-11-11: [0e59a92](../docs/evidence/trust-security-events-2026-11-11.md),43069121670success301 Linux-тест/0skips,37 observer assertions+25 promotion checks. SQL history replay закрывает commit-before-enqueue при сохранной bounded истории; native outage/restart/dual-signature rotation/5receipts/cleanup проверены. Clean52/0, branches57/58. Observer ещё явный; heartbeat/deployment, identity/inventory sources и полная M23 acceptance обязательны.
+
 - Denials2026-11-11: [b984304](../docs/evidence/promotion-audit-2026-11-11.md),43064414379success287Linux/0+25native и43064414458success54unit+45native. Actual promotion.denied с durable outbox/pending flush, доставка двух отказов настоящего candidate, SQL rollback/cleanup. Clean88/0. Trust/identity/inventory sources, heartbeat/deployment и полный M23 ещё нужны.
 
 - Audit2026-11-11: [fresh promotion admission](../docs/evidence/promotion-audit-2026-11-11.md),1cd2466/43061060230success282Linux tests/0skips+14realSQL/HTTPcases, clean d803b1c74/0. Реальный rollback при collector loss после SQL statement, exact retry/cleanup. Full source/heartbeat/deployment/dashboard outage/M23 остаются обязательными; T29 не закрыта.
