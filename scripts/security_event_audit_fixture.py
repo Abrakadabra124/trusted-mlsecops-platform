@@ -22,7 +22,7 @@ def heartbeat(fx, sequence=1):
 
 
 @contextmanager
-def live(*, initial_heartbeat=True):
+def live(*, initial_heartbeat=True, heartbeat_roles=("serving",)):
     if (
         sys.platform != "linux"
         or os.environ.get("GITHUB_ACTIONS") != "true"
@@ -30,6 +30,7 @@ def live(*, initial_heartbeat=True):
     ):
         raise Rejected("audit_fixture_hosted_required")
     fx = fixtures.LiveCollector("runTest")
+    fx.heartbeat_roles = heartbeat_roles
     try:
         fx.setUp()
         config = decode((fx.directory / "collector.json").read_bytes())

@@ -205,6 +205,10 @@ class SourceContracts(unittest.TestCase):
         self.addCleanup(self.ef.doCleanups)
         self.clock = self.fx.fx.clock * 1000
         self.ef.document.update(issued_at_ms=self.clock - 1000, expires_at_ms=self.clock + 600000)
+        if getattr(self, "continuous", False):
+            for producer in self.ef.document["producers"]:
+                if producer["role"] == "trust":
+                    producer["heartbeat_required"] = True
         self.registry = self.ef.registry_for(clock=self.clock)
         self.box = security_event_outbox.Outbox.empty(
             self.registry,

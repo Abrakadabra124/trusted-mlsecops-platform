@@ -228,12 +228,25 @@ def sync(history, emitter, *, environment, initial_root, rotations=()):
     )
 
 
-def configured(path):
-    config = decode(bounded_read(journal.path(path), 16384), 16384)
+def configuration(path, expected=None):
+    content = bounded_read(journal.path(path), 16384)
+    reference = digest(content)
+    if expected is not None and reference != events.hexadecimal(expected):
+        raise Rejected("trust_security_configuration_changed")
+    config = decode(content, 16384)
     events.shape(config, CONFIG_FIELDS)
     events.version(config["schema_version"])
+    journal.path(config["trust_client"])
+    journal.path(config["producer_config"])
+    release_policy.name(config["environment"])
+    events.public_key(config["initial_root"])
     if type(config["rotations"]) is not list or len(config["rotations"]) > MAX_ROTATIONS:
         raise Rejected("trust_security_rotation_limit")
+    return config, reference
+
+
+def configured(path, *, expected=None, heartbeat=False):
+    config, _ = configuration(path, expected)
     rotations = []
     for item in config["rotations"]:
         events.shape(item, ("version", "next_root", "package_file"))
@@ -249,23 +262,41 @@ def configured(path):
         )
     _rotations(rotations)
     emitter = security_event_delivery.configured(journal.path(config["producer_config"]))
-    producer(emitter)
-    return sync(
+    document = producer(emitter)
+    if heartbeat and (
+        document["schema_version"] != 2
+        or not emitter.store.registry.producer(document["producer_id"]).heartbeat_required
+    ):
+        raise Rejected("trust_security_heartbeat_profile")
+    result = sync(
         read(journal.path(config["trust_client"]), config["environment"]),
         emitter,
         environment=config["environment"],
         initial_root=config["initial_root"],
         rotations=rotations,
     )
+    if heartbeat:
+        emitter.heartbeat()
+    return result
 
 
 def main(arguments=None):
     parser = Arguments()
     parser.add_argument("--config", required=True)
+    parser.add_argument("--config-sha256")
+    parser.add_argument("--heartbeat", action="store_true")
     try:
         options = parser.parse_args(arguments)
         enforce()
-        print(canonical(configured(options.config)).decode())
+        if options.heartbeat and options.config_sha256 is None:
+            raise Rejected("trust_security_pin_required")
+        print(
+            canonical(
+                configured(
+                    options.config, expected=options.config_sha256, heartbeat=options.heartbeat
+                )
+            ).decode()
+        )
         return 0
     except (Exception, KeyboardInterrupt) as error:
         print("trust_security_rejected", file=sys.stderr)

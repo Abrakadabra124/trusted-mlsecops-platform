@@ -108,17 +108,19 @@ jobs:
           PY
       - name: Committed trust history, root rotation and replay contracts
         run: |
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/trust-events.coverage" --source=mlsecops.security_trust_events -m unittest scripts.security_trust_events_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/trust-events.coverage" --source=mlsecops.security_trust_events,mlsecops.security_trust_service -m unittest scripts.security_trust_events_qualification scripts.security_trust_service_qualification
           uv run --locked coverage report --data-file="$RUNNER_TEMP/trust-events.coverage" --fail-under=95
           uv run --locked coverage json --data-file="$RUNNER_TEMP/trust-events.coverage" -o "$RUNNER_TEMP/trust-events.json"
           uv run --locked python - <<'PY'
           import json, os
           from pathlib import Path
-          t = json.loads((Path(os.environ['RUNNER_TEMP']) / 'trust-events.json').read_text())['totals']
-          for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
-              if not t[total] or t[covered] / t[total] < .95:
-                  raise SystemExit('trust_security_coverage')
-          print(json.dumps(t, sort_keys=True))
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'trust-events.json').read_text())['files']
+          for name, report in sorted(files.items()):
+              t = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not t[total] or t[covered] / t[total] < .95:
+                      raise SystemExit('trust_security_coverage:' + name)
+              print(json.dumps({'module': name, **t}, sort_keys=True))
           PY
       - name: Actual inventory predicates, pinned observer CLI and lineage regressions
         run: |
@@ -170,5 +172,7 @@ jobs:
           uv run --locked python -W error -m scripts.security_event_promotion_native
       - name: Committed trust SQL history, separate observer CLI and actual collector recovery
         run: uv run --locked python -W error -m scripts.security_trust_events_native
+      - name: Continuous trust observer, actual periodic SQL delivery and source loss
+        run: uv run --locked python -W error -m scripts.security_trust_service_native
       - name: Actual HTTP identity denial, owned child and collector outage recovery
         run: uv run --locked python -W error -m scripts.security_identity_events_native

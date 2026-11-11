@@ -28,6 +28,10 @@ class LiveCollector(unittest.TestCase):
         self.directory = self.fx.directory
         now = self.now()
         self.fx.document.update(issued_at_ms=now - 1000, expires_at_ms=now + 600000)
+        for producer in self.fx.document["producers"]:
+            producer["heartbeat_required"] = producer["role"] in getattr(
+                self, "heartbeat_roles", ("serving",)
+            )
         self.registry = self.fx.registry_for(clock=now)
         envelope = signing.sign(self.fx.document, "security-event-config", self.fx.keys["root"])
         self.write("registry.json", canonical(envelope))
