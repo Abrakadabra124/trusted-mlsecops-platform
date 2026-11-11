@@ -411,7 +411,7 @@ class ScorerOrdering(unittest.TestCase):
             patch.object(
                 storage_pipeline,
                 "evaluate_verified_candidate",
-                side_effect=lambda *args: events.append("worker") or {"status": "test"},
+                side_effect=lambda *args, audit=None: events.append("worker") or {"status": "test"},
             ) as worker,
             patch.object(storage_pipeline, "sign", side_effect=lambda value, *args: value),
             patch.object(storage_pipeline, "verify", side_effect=lambda value, *args: value),

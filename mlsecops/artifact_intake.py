@@ -205,7 +205,39 @@ def _validate_report(report, expected, image_id, origin):
     return report
 
 
-def inspect_candidate(content, expected_digest, image, expected_image, executor):
+def inspect_candidate(content, expected_digest, image, expected_image, executor, *, audit=None):
+    try:
+        return _inspect_candidate(content, expected_digest, image, expected_image, executor)
+    except Rejected as error:
+        # This is the controller's observed decision, never arbitrary worker output.
+        kind = reason = correlation = None
+        if isinstance(error, IntakeFailure):
+            report = error.report
+            if report["origin"] == "worker" and report["status"] == "fail":
+                kind, reason = "artifact.rejected", "unsupported_format"
+            elif report["reason"] == "scanner_protocol_rejected":
+                kind, reason = "worker.policy_violation", "output_schema"
+            correlation = report["inspection_id"]
+        elif str(error) == "intake_subject_mismatch":
+            kind, reason = "artifact.rejected", "integrity"
+            correlation = secrets.token_hex(16)
+        if audit is not None and kind is not None:
+            try:
+                audit.emit(
+                    {
+                        "kind": kind,
+                        "reason": reason,
+                        "correlation_id": correlation,
+                        "asset_sha256": digest(content),
+                        "bundle_sha256": None,
+                    }
+                )
+            except Exception:
+                raise Rejected("intake_security_audit_unavailable") from None
+        raise
+
+
+def _inspect_candidate(content, expected_digest, image, expected_image, executor):
     request = request_for(content, secrets.token_hex(16))
     if expected_digest != request["model_digest"]:
         raise Rejected("intake_subject_mismatch")
@@ -269,10 +301,12 @@ def inspect_candidate(content, expected_digest, image, expected_image, executor)
     return report
 
 
-def inspect_file(root, relative, expected_digest, image, expected_image, executor):
+def inspect_file(root, relative, expected_digest, image, expected_image, executor, *, audit=None):
     path = safe_child(root, relative)
     content = bounded_read(path, MAX_BYTES)
-    report = inspect_candidate(content, expected_digest, image, expected_image, executor)
+    report = inspect_candidate(
+        content, expected_digest, image, expected_image, executor, audit=audit
+    )
     if bounded_read(safe_child(root, relative), MAX_BYTES) != content:
         raise Rejected("intake_input_changed")
     return content, report

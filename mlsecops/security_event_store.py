@@ -115,6 +115,11 @@ def replace(descriptor, document):
 def initialize(root, registry, *, clock_ms):
     platform()
     document = ledger.Ledger.empty(registry, clock_ms=clock_ms).document()
+    return _initialize(root, registry, document)
+
+
+def _initialize(root, registry, document):
+    platform()
     identity = (
         canonical(
             {"schema_version": 1, "config_sha256": registry.sha256, "nonce": secrets.token_hex(32)}
@@ -139,6 +144,9 @@ class Store:
         self.root = path(root)
         self.pin = events.hexadecimal(identity_sha256)
         self.registry = registry
+
+    def _decode(self, document):
+        return ledger.Ledger(self.registry, document)
 
     def _load(self, descriptor):
         names = set()
@@ -165,7 +173,7 @@ class Store:
         document = decode(content, MAX_BYTES)
         if canonical(document) + b"\n" != content:
             raise Rejected("security_store_canonical")
-        result = ledger.Ledger(self.registry, document)
+        result = self._decode(document)
         if ".pending" in names:
             # Only after the committed state has been fully revalidated.
             # This file was never an acknowledged commit; an unknown outcome

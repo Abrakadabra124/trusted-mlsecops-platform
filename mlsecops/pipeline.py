@@ -131,7 +131,7 @@ def load_candidate(state, run_id, policy):
     return metadata, content
 
 
-def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
+def evaluate_candidate(state, run_id, policy, image, executor=run_worker, *, audit=None):
     state = Path(state)
     metadata, content = load_candidate(state, run_id, policy)
     if metadata.get("lineage_id"):
@@ -139,7 +139,7 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
     splits, manifest = verify_dataset(state, metadata["dataset_id"], policy)
     holdout = splits["holdout"]
     report = evaluate_verified_candidate(
-        metadata, content, holdout, manifest, policy, image, executor
+        metadata, content, holdout, manifest, policy, image, executor, audit=audit
     )
     envelope = sign(report, "evaluation", state / "keys/evaluator.pem")
     write_json(state / "evaluations" / f"{run_id}.json", envelope)
@@ -154,10 +154,12 @@ def evaluate_candidate(state, run_id, policy, image, executor=run_worker):
     return report
 
 
-def evaluate_verified_candidate(metadata, content, holdout, manifest, policy, image, executor):
+def evaluate_verified_candidate(
+    metadata, content, holdout, manifest, policy, image, executor, *, audit=None
+):
     rules = evaluation_quality.freeze(policy)
     intake = artifact_intake.inspect_candidate(
-        content, metadata["model_digest"], image, metadata["image_id"], executor
+        content, metadata["model_digest"], image, metadata["image_id"], executor, audit=audit
     )
     batch = PredictionBatch(content, [row["features"] for row in holdout])
     output, execution = executor(image, batch.request)

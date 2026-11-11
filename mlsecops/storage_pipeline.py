@@ -242,7 +242,9 @@ def read_evaluation(
     return bound
 
 
-def evaluate(client, reference, policy, image, trust, signing_key, executor=run_worker):
+def evaluate(
+    client, reference, policy, image, trust, signing_key, executor=run_worker, *, audit=None
+):
     evaluation_quality.freeze(policy)
     record, metadata, model = load_candidate(client, reference, policy)
     manifest, statement = storage_dataset.read_manifest(
@@ -268,7 +270,7 @@ def evaluate(client, reference, policy, image, trust, signing_key, executor=run_
     )
     try:
         report = evaluate_verified_candidate(
-            metadata, model, splits["holdout"], manifest, policy, image, executor
+            metadata, model, splits["holdout"], manifest, policy, image, executor, audit=audit
         )
     except artifact_intake.IntakeFailure as error:
         try:

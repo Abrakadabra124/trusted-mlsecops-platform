@@ -219,3 +219,67 @@ liveness. Исчезновение state, нарушение pin и corruption �
 являются доказательством отсутствия commit. После restart перечитать исходный
 event ID/receipt и incident page. Внешняя SIEM, подключение всех семи реальных
 источников, promotion outage test и полная M23/R1 приёмка ещё не заявлены.
+
+## Producer outbox и отказ intake
+
+Новый путь описан в [ADR0059](../decisions/0059-security-event-producer-outbox.md).
+Ответственный за provisioning - оператор controller, не trainer/worker.
+Native результат этого increment ещё проверяется; команды ниже разделяют
+controlled tests и настоящий Linux collector.
+
+```text
+uv run --locked python -W error -m unittest scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification
+uv run --locked python -W error -m unittest scripts.security_event_source_live_qualification
+```
+
+Вторая команда создаёт собственные private state/keys и loopback collector,
+проверяет фактический путь intake отказа, outage/restart/retry и cleanup.
+Scanner executor в ней synthetic, в harness; это не доказательство Kubernetes
+изоляции worker. На Windows native cases пропускаются, локальные containers/SQL
+для этой проверки не требуются и не запускаются.
+
+Подключение к уже подготовленному controller:
+
+```text
+python -m mlsecops.controller --request /private/scorer-request.json --security-event-config /private/security-producer.json
+```
+
+Producer config содержит ровно `schema_version`=1, `registry_file`,
+`registry_root`, `registry_sha256`, `state_directory`, `state_sha256`,
+`producer_key_file`, `ingress_token_file`, `port`. Пути абсолютные; registry,
+port и ingress token согласованы с collector. Producer key имеет роль controller,
+не receipt/collector. Secrets/outbox монтируются только в controller; worker
+не должен получать эти mounts. Loopback требует общего сетевого namespace с
+collector. Изменение manifests/mounts всего стенда ещё не выполнено, отсутствие
+параметра сохраняет старый профиль и не подтверждает M23.
+
+Outbox создаётся **один раз в новой пустой директории** через
+`security_event_outbox.initialize(root, registry, producer_id, clock_ms=...)`;
+возвращённый state pin сохраняется в operator config. `producer_id` - SHA256
+public key, byte identity проверяет `key_identity`. Воспроизводимый synthetic
+provisioning находится в live test. Этот шаг не подходит для восстановления
+потерянной существующей очереди. На рабочем state его не повторять.
+
+Диагностика начинает с `configured(absolute_config).store.snapshot()` в private
+процессе: проверяются pin/signatures/permissions/counters. Не печатать весь
+snapshot, ключи, bearer token, model bytes или raw exception. Посчитать только
+число pending records и сверить event IDs с операторским incident inbox.
+`security_delivery_unconfirmed` значит неизвестный итог отправки; запрет
+оценки сохраняется. После устранения причины вызвать `configured(...).retry()`
+в том же разрешённом Linux окружении. Это **изменяющий** шаг: отправляет до16
+событий и сохраняет receipts. Затем повторно проверить отсутствие pending и
+совпадение original event ID/receipt с collector. Success command без readback
+недостаточен. Повторный вызов `inspect_candidate` означает новую попытку
+инспекции; для доставки старого события нужен retry, не повторная инспекция.
+
+Если registry истёк, clock регрессировал, pending старше freshness, outbox
+полон, state повреждён или утерян, не обнулять counters/историю и не заменять
+timestamp. Сохранить private evidence и эскалировать оператору. Без проверенной
+миграции registry/epoch или восстановления из доверенного backup автоматического
+лечения нет. Crash до rename оставляет предыдущий commit; после rename исход
+может быть неизвестен. Retry использует сохранённый envelope и исходную receipt.
+
+В тестировании обнаружен отказ binding: valid receipt другого pending event
+могла засчитаться как текущая доставка. Negative test воспроизвёл ошибку;
+Emitter теперь проверяет receipt именно относительно отправленного event до
+изменения outbox. Случай зафиксирован как ошибка разработки, не production incident.

@@ -72,3 +72,9 @@ jobs:
         run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
       - name: Actual loopback delivery, elapsed heartbeat deadline, restart and cleanup
         run: uv run --locked python -m unittest scripts.security_event_live_qualification
+      - name: Producer outbox, bounded transport and actual intake sources
+        run: |
+          uv run --locked ruff check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
+          uv run --locked ruff format --check mlsecops/artifact_intake.py mlsecops/controller.py mlsecops/pipeline.py mlsecops/storage_pipeline.py scripts/holdout_budget_qualification.py
+          uv run --locked python -W error -m unittest scripts.security_event_outbox_qualification scripts.security_event_delivery_qualification scripts.security_event_wire_qualification scripts.security_event_source_qualification scripts.security_event_source_live_qualification
+          uv run --locked python -m unittest scripts.artifact_intake_qualification scripts.intake_denial_qualification scripts.evaluation_quality_qualification scripts.holdout_budget_qualification

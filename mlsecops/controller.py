@@ -40,7 +40,7 @@ def process_state(role, *, require_privacy=False):
     return observation
 
 
-def execute(request):
+def execute(request, *, audit=None):
     require_fields(
         request,
         ("schema_version", "role", "profile", "trust", "dataset_reference", "candidate_reference"),
@@ -94,6 +94,7 @@ def execute(request):
             request["trust"],
             Path("/signer/key.pem"),
             worker,
+            audit=audit,
         )
     return {
         "role": role,
@@ -112,9 +113,17 @@ def main():
             description="Role-scoped ML controller, never a model execution process",
         )
         parser.add_argument("--request", type=Path, required=True)
+        parser.add_argument("--security-event-config", type=Path)
         arguments = parser.parse_args()
+        audit = None
+        if arguments.security_event_config is not None:
+            from mlsecops.security_event_delivery import configured
+
+            audit = configured(str(arguments.security_event_config))
+            if audit.store.registry.producer(audit.store.producer_id).role != "controller":
+                raise Rejected("controller_security_event_role")
         try:
-            result = execute(read_json(arguments.request))
+            result = execute(read_json(arguments.request), audit=audit)
             code = 0
         except RecordedDenial as error:
             result = {
