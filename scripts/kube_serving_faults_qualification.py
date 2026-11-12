@@ -1,11 +1,29 @@
 import unittest
 from unittest.mock import patch
 
+from mlsecops import serving_startup
 from mlsecops.contracts import Rejected, canonical
 from scripts import kube_serving_faults as faults
 
 
 class FaultContracts(unittest.TestCase):
+    def test_finite_startup_refusal_is_not_fault_progress_or_success(self):
+        diagnostic = serving_startup.record("reader", None, Rejected("trust_policy_changed"))
+        raw = canonical(diagnostic)
+        self.assertEqual(faults.progress(raw, "policy-change"), [])
+        self.assertEqual(faults.progress(raw + b'\n{"status":"fail"}', "policy-change"), [])
+        ready = canonical({"event": "trust-fault", "phase": "ready", "fault": "policy-change"})
+        for invalid in (
+            raw + b'\n{"status":"pass"}',
+            raw + b"\n" + ready,
+            ready + b"\n" + raw,
+            raw + b"\n" + raw,
+            canonical({**diagnostic, "cause": "PRIVATE-CANARY"}),
+            canonical({**diagnostic, "extra": "PRIVATE-CANARY"}),
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(Rejected):
+                faults.progress(invalid, "policy-change")
+
     def test_rotation_requires_its_explicit_coordinator_not_generic_revoke(self):
         with self.assertRaisesRegex(Rejected, "serving_fault_kind"):
             faults.Coordinator("state", "root-rotation", "a" * 64, "key", "b" * 64)

@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+M11 наd66b12a /43155792337 завершился fail после12m51s native campaign, а не
+по timeout. Runtime location: scripts/kube_serving_faults.py:31, progress schema
+на controlled live-trust-policy-change; оба owned cleanup steps success.
+Producer уже умеет печатать finite serving-startup-refused, parser его не понимал.
+Этот дефект воспроизведён отдельно: теперь строгое startup refusal не считается
+фазой/успехом, а terminal Job failure сохраняет существующую конечную диагностику.
+Причина native startup refusal пока неизвестна; повторный M11 обязателен.
+[Диагностика](docs/operations/trust-acceptance.md#progress-parser-и-startup-refusal).
+
 T29: audit readback подготовлен для существующего HTTP owner: проверяет profile
 и Pod UID, читает journal через exec внутри этого Pod. При existing service marker
 отдельный serving audit Job запрещён, включая incomplete/suspended state.
@@ -12,8 +21,8 @@ actual-candidate-policy-change; cleanup source SQL и disposable cluster success
 M11 inconclusive, backup не выполнен. Подготовлено пакетное чтение точного inventory
 через один kubectl process вместо отдельных процессов на каждый объект; UID/spec,
 Secret/network, live Pod/PV проверки сохранены, кеша между вызовами нет.
-Local191tests pass без skips; reader41/41statements и24/24branches. Ускорение
-и новый hosted M11 ещё не подтверждены; acceptance budgets не менялись.
+Local191tests pass без skips; reader41/41statements и24/24branches. Primary на
+реальном API pass, но полное прохождение M11 ещё не подтверждено; budgets прежние.
 [Диагностика и воспроизведение](docs/operations/kubernetes-security-state.md#таймаут-кампании-и-пакетное-чтение-inventory).
 
 T29: подготовлена явная смена immutable serving ConfigMap через suspension ticket,

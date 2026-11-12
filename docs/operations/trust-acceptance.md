@@ -84,3 +84,43 @@ Unit tests воспроизводят настоящий отказ `candidate_t
 Если source location неизвестна, требуется дополнительное приватное расследование;
 общий отказ не становится pass. Не продлевать permit и не менять180s preflight guard,
 HTTP deadlines или пороги M11 на основании одного предположения.
+
+## Progress parser и startup refusal
+
+Наd66b12a [M11 run43155792337](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43155792337)
+закончился fail: runtime location scripts/kube_serving_faults.py:31, stage
+controlled live-trust-policy-change. Native campaign04:38:41.850045 ->04:51:33.064321
+UTC; это не общий timeout. Stop owned SQL и Remove owned cluster success,
+следующий backup шаг не принят. Raw private Pod log не опубликован, конкретный
+startup cause из этого run не получен.
+
+При проверке source найден воспроизводимый дефект протокола: kube_serving_probe
+может вывести уже валидированное `serving-startup-refused` перед terminal fail,
+но progress parser ожидал только trust-fault или status pass/fail. Unit test
+повторил тот же отказ schema. Это установленный дефект диагностики; без исходного
+Pod log он не считается доказательством конкретной причины native startup.
+
+Parser теперь распознаёт только существующий finite startup schema с bounded
+phase/worker_phase/cause. Сообщение разрешено один раз до coordination phases и
+не считается фазой. После него запрещены ready/denied и pass; unknown fields,
+private canary, duplicate и ошибочный порядок по-прежнему отклоняются. Host ждёт
+завершения owned Job, существующий finite diagnostic export показывает startup
+record и terminal failure code, затем выполняется прежний UID-bound cleanup.
+Это не retry, не разрешение inference и не увеличение lease/timeout.
+
+Порядок диагностики для оператора disposable hosted стенда:
+
+1. Подтвердить terminal run и оба cleanup steps через `gh run view`.
+2. Сопоставить source_revision/fingerprint и последнюю native stage с M11 report.
+3. После публикации correction выполнить существующий kubernetes-serving.yml
+   playbook. Найти finite serving-startup-refused и последующий probe_failure.
+4. Сверить cause с Reader/worker boundary в том же source. Исправлять подтверждённую
+   причину, сохраняя60s fail-closed,600s permit и180s preflight.
+5. При unknown cause или незавершённой очистке оставить M11 fail/inconclusive;
+   не публиковать raw log, не допускать release и не повторять run без нового
+   диагностического или причинного изменения.
+
+Local46tests без skips проверили protocol и native harness. Parser/coordinator
+96/97statements,51/52branches в focused suite; skipped assertions не используются.
+Поддельный successful report после startup refusal и coordinator acknowledgement
+при таком отказе запрещены. Свежий hosted результат correction ещё pending.

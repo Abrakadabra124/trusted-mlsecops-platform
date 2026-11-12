@@ -3,8 +3,10 @@
 Current checkpoint: d66b12a primary43155788888 passed real HTTP configuration
 roundtrip (54.987612s incompatible policy, 56.628996s restored ONNX), retained
 Deployment/outbox and complete owned cleanup. Security43155788165 passed993 test
-executions and25/37/17/46native assertions. M11 on the same source remains under
-separate verification. Next increment reuses the existing HTTP owner for audit
+executions and25/37/17/46native assertions. M11 on the same source failed at the
+progress parser after12m51s, with owned cleanup confirmed. A finite startup
+refusal producer/parser mismatch was reproduced and corrected; the underlying
+native startup failure is still unknown and needs a new run. Next increment reuses the existing HTTP owner for audit
 readback, refuses another serving audit Job and verifies orphaned Pod absence.
 Its controlled campaign starts HTTP before audit outage/restart proof; bootstrap
 before first actual admission, shared probe handoff and mandatory heartbeat remain

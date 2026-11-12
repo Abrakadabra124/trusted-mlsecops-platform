@@ -576,6 +576,7 @@ class NativeContracts(unittest.TestCase):
         for success, coordinated, foreign, privacy, cli in [
             (True, False, False, False, False),
             (False, False, False, False, False),
+            (False, True, False, False, False),
             (True, True, False, False, False),
             (True, True, True, False, False),
             (True, False, False, True, False),
@@ -630,6 +631,15 @@ class NativeContracts(unittest.TestCase):
                     result = (
                         canonical({"status": "pass", "release_ready": False, "cases": ["verified"]})
                         if success
+                        else canonical(
+                            {
+                                "status": "fail",
+                                "phase": "HTTP",
+                                "error": "Rejected",
+                                "code": "kube_serving_probe:reader-trust_policy_changed",
+                            }
+                        )
+                        if coordinated
                         else b"PRIVATE-DIAGNOSTIC"
                     )
                     return SimpleNamespace(
@@ -651,6 +661,15 @@ class NativeContracts(unittest.TestCase):
                     }
                     if privacy or cli:
                         kwargs["observe"](pod)
+                    elif coordinated and not success:
+                        markers.append(
+                            canonical(
+                                native.serving_startup.record(
+                                    "reader", None, Rejected("trust_policy_changed")
+                                )
+                            )
+                        )
+                        kwargs["observe"](pod)
                     elif coordinated:
                         for phase in ["ready", "denied"]:
                             markers.append(
@@ -662,6 +681,7 @@ class NativeContracts(unittest.TestCase):
                     return {"type": "Complete" if success else "Failed"}, pod, 2.5
 
                 with (
+                    patch("sys.stdout", io.StringIO()) as output,
                     patch.object(native.kube_security_events, "validate") as audit_profile,
                     patch("mlsecops.kube_serving_handoff.require_probe_slot") as probe_slot,
                     patch("mlsecops.kube_serving_handoff.wait_pods_absent") as probe_cleanup,
@@ -727,7 +747,21 @@ class NativeContracts(unittest.TestCase):
                             receiver.return_value.finish.assert_called_once()
                     else:
                         with self.assertRaisesRegex(Rejected, "job_failed"):
-                            native.invoke(state, PROFILE, config, {})
+                            native.invoke(
+                                state,
+                                PROFILE,
+                                config,
+                                {"fault": "outage"} if coordinated else {},
+                                coordinator=coordinator if coordinated else None,
+                            )
+                        if coordinated:
+                            coordinator.assert_not_called()
+                            acknowledgements.assert_not_called()
+                            self.assertIn('"event":"serving-startup-refused"', output.getvalue())
+                            self.assertIn(
+                                '"code":"kube_serving_probe:reader-trust_policy_changed"',
+                                output.getvalue(),
+                            )
                     self.assertEqual(cleanup.call_args.kwargs, {"namespace": "ml-serving"})
                 pod = created[-1]["spec"]["template"]["spec"]
                 self.assertEqual(pod["serviceAccountName"], "serving")

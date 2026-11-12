@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from mlsecops import kube_storage, kube_trust, trust_authority
+from mlsecops import kube_storage, kube_trust, serving_startup, trust_authority
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, decode, digest
 from mlsecops.kube_serving_lifecycle import FAULTS
@@ -16,18 +16,27 @@ def progress(raw, fault):
     if len(raw) > 65536 or fault not in FAULTS:
         raise Rejected("serving_fault_progress_bound")
     phases = []
+    startup_refused = False
     for line in raw.splitlines():
         value = decode(line, 65536)
         if not isinstance(value, dict):
             raise Rejected("serving_fault_progress_schema")
         if value.get("event") == "trust-fault":
+            if startup_refused:
+                raise Rejected("serving_fault_progress_after_startup_refusal")
             phase = value.get("phase")
             if value != {"event": "trust-fault", "phase": phase, "fault": fault}:
                 raise Rejected("serving_fault_progress_binding")
             phases.append(phase)
             if phases != ["ready", "denied"][: len(phases)]:
                 raise Rejected("serving_fault_progress_order")
-        elif value.get("status") not in {"pass", "fail"}:
+        elif value.get("event") == "serving-startup-refused":
+            if phases or startup_refused or serving_startup.validated(line) is None:
+                raise Rejected("serving_fault_startup_diagnostic")
+            # A known finite refusal is not a coordination phase. Let the owned
+            # Job finish so its terminal failure and diagnostic remain visible.
+            startup_refused = True
+        elif value.get("status") not in ({"fail"} if startup_refused else {"pass", "fail"}):
             raise Rejected("serving_fault_progress_schema")
     return phases
 
