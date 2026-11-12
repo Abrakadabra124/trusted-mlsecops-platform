@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from mlsecops import storage_pki
+from mlsecops import kube_resource_readback, storage_pki
 from mlsecops.cluster import CONTEXT, kubectl, validate_cluster
 from mlsecops.contracts import (
     Rejected,
@@ -204,8 +204,10 @@ def validate(state):
         raise Rejected("cluster_storage_spec_change_requires_migration")
     if set(marker.get("resources", {})) != {reference(document) for document in documents}:
         raise Rejected("cluster_storage_resource_inventory_incomplete")
-    for document in documents:
-        verify_resource(document, get(state, document), marker["resources"][reference(document)])
+    for document, observed in zip(
+        documents, kube_resource_readback.read(state, documents), strict=True
+    ):
+        verify_resource(document, observed, marker["resources"][reference(document)])
     return {**marker, **live_state(state, marker)}
 
 

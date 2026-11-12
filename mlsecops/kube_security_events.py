@@ -4,7 +4,7 @@ import sys
 import uuid
 from pathlib import Path
 
-from mlsecops import kube_observer_profile, kube_storage, kube_trust
+from mlsecops import kube_observer_profile, kube_resource_readback, kube_storage, kube_trust
 from mlsecops import kube_security_materials as materials
 from mlsecops import kube_security_resources as resources
 from mlsecops.cluster import kubectl
@@ -316,10 +316,12 @@ def validate(state, *, profile=None, environment=None, initial_root=None, author
     documents = desired(marker, owned)
     if set(marker.get("resources", {})) != {kube_storage.reference(d) for d in documents}:
         raise Rejected("kube_security_resource_inventory")
-    for document in documents:
+    for document, observed in zip(
+        documents, kube_resource_readback.read(state, documents), strict=True
+    ):
         kube_storage.verify_resource(
             document,
-            kube_storage.get(state, document),
+            observed,
             marker["resources"][kube_storage.reference(document)],
         )
     if service_address(state, marker["workspace_id"], marker) != marker["address"]:

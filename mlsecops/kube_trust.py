@@ -4,7 +4,7 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from mlsecops import kube_storage, storage_pki
+from mlsecops import kube_resource_readback, kube_storage, storage_pki
 from mlsecops.cluster import kubectl, validate_cluster
 from mlsecops.contracts import (
     Rejected,
@@ -287,10 +287,12 @@ def validate(state, *, target=Target.PRIMARY):
         or set(marker.get("resources", {})) != {kube_storage.reference(d) for d in documents}
     ):
         raise Rejected("trust_resources_incomplete_or_changed")
-    for document in documents:
+    for document, observed in zip(
+        documents, kube_resource_readback.read(state, documents), strict=True
+    ):
         kube_storage.verify_resource(
             document,
-            kube_storage.get(state, document),
+            observed,
             marker["resources"][kube_storage.reference(document)],
         )
     return {**marker, **live(state, marker, target=target)}

@@ -12,8 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from mlsecops import kube_resource_readback, kube_storage, signing
 from mlsecops import kube_security_resources as resources
-from mlsecops import kube_storage, signing
 from mlsecops.contracts import Rejected, canonical, decode, digest, read_json, write_json
 
 
@@ -184,6 +184,16 @@ class AuditBootstrap(unittest.TestCase):
             return copy.deepcopy(self.objects.get(kube_storage.reference(document)))
 
         def kubectl(state, arguments, document=None, **options):
+            if arguments == ["get", "-f", "-", "-o", "json"]:
+                return SimpleNamespace(
+                    stdout=canonical(
+                        {
+                            "apiVersion": "v1",
+                            "kind": "List",
+                            "items": [get(state, item) for item in document["items"]],
+                        }
+                    )
+                )
             operation = arguments[0]
             if operation == "create":
                 if document["kind"] == self.fail_kind:
@@ -302,6 +312,7 @@ class AuditBootstrap(unittest.TestCase):
 
         for module, name, replacement in (
             (kube_storage, "get", get),
+            (kube_resource_readback, "kubectl", kubectl),
             (self.subject, "kubectl", kubectl),
             (self.subject, "wait_job", wait),
             (self.subject, "verify_running_image", lambda *_: None),

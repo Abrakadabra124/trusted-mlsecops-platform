@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+T29/M11: run43150998160 на2e5043c остановлен общим30min timeout после стадии
+actual-candidate-policy-change; cleanup source SQL и disposable cluster success.
+M11 inconclusive, backup не выполнен. Подготовлено пакетное чтение точного inventory
+через один kubectl process вместо отдельных процессов на каждый объект; UID/spec,
+Secret/network, live Pod/PV проверки сохранены, кеша между вызовами нет.
+Local191tests pass без skips; reader41/41statements и24/24branches. Ускорение
+и новый hosted M11 ещё не подтверждены; acceptance budgets не менялись.
+[Диагностика и воспроизведение](docs/operations/kubernetes-security-state.md#таймаут-кампании-и-пакетное-чтение-inventory).
+
 T29: подготовлена явная смена immutable serving ConfigMap через suspension ticket,
 проверку отсутствия HTTP/worker, UID/resourceVersion preconditions и сохранённый
 intent. Прерванная операция не допускает resume по старому ticket. Primary campaign

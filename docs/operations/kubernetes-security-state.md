@@ -505,3 +505,52 @@ Playbook переключает настоящий HTTP на несовмест�
 независимый receipt нового identity denial после восстановления. Heartbeat нового
 владельца сравнивается с collector counter, снятым после остановки старого; весь
 переход ограничен120s. Failure и неподтверждённая очистка не считаются success.
+
+## Таймаут кампании и пакетное чтение inventory
+
+Наблюдение: M11 run43150998160 на2e5043c исчерпал общий30min budget workflow.
+Последняя завершённая отметка старта - actual-candidate-policy-change. M11 остался
+inconclusive, следующий backup шаг не выполнялся. Stop owned source SQL и Remove
+owned disposable cluster завершились success. Это не ошибка отдельного assertion
+и не доказательство причины более раннего runtime failure наad53e3e.
+
+Установлено: storage, trust и audit validators запускали kubectl отдельно для
+каждого ресурса при каждой валидации. Новый kube_resource_readback.read передаёт
+точный список apiVersion/kind/namespace/name в `kubectl get -f - -o json` одним
+процессом. Такой способ выбора объектов описан в
+[официальной документации Kubernetes1.36](https://v1-36.docs.kubernetes.io/docs/reference/kubectl/generated/kubectl_get/).
+В stdin нет Secret data и desired specs. Output остаётся приватным. Пропущенные,
+лишние, повторные и неверно адресованные объекты приводят к отказу; каждый результат
+проходит прежнюю проверку UID/spec, Secret и network rules. Live Pod/PV readback
+сохранён. Это свежие GET на каждый вызов, не кеш и не атомарный snapshot API.
+
+Ответственный - оператор разрешённого disposable hosted стенда. Перед запуском
+нужно опубликовать проверенный commit и дождаться terminal cleanup предыдущих
+runs этой ветки. Read-only диагностика:
+
+```sh
+gh run view 43150998160 --repo Abrakadabra124/trusted-mlsecops-platform --json headSha,status,conclusion,jobs
+```
+
+Плейбук проверки изменения создаёт только owned disposable ресурсы через existing
+workflow, затем проверяет их удаление:
+
+```sh
+gh workflow run kubernetes-serving.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp4-m23-security-events-20261107
+gh workflow run kubernetes-promotion.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp4-m23-security-events-20261107
+```
+
+Сверить source SHA, полный M11 report, время кампании, первичные HTTP traces,
+обязательные cases и оба cleanup шага. Exit0 без актуального source-bound report
+не является acceptance. Primary дополнительно проверяет serving configuration
+roundtrip. Порог30min workflow,600s permit,180s preflight,60s HTTP и120s telemetry
+не изменены. Local transport tests и существующие qualification fixtures проверяют
+контракты; сокращение времени на настоящем API до hosted run остаётся гипотезой.
+
+Если снова timeout, сохранить очищенные stage timestamps и точную причину
+отмены. Если API/identity/spec mismatch, не допускать promotion и не игнорировать
+отсутствующие объекты. Проверить terminal cleanup, исходный scope/UID и диагностировать
+последнюю незавершённую стадию. Не расширять lease, не отключать security checks,
+не повторять запуск без конкретного исправления. Rollback к прежнему transport
+выполнять отдельным revert после cleanup; acceptance на новом candidate потребует
+нового полного запуска. Локальные Docker/WSL/Kubernetes/SQL не запускать.

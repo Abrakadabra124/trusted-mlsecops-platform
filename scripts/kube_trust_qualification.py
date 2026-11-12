@@ -10,7 +10,14 @@ from unittest.mock import patch
 
 from cryptography import x509
 
-from mlsecops import kube_storage, kube_trust, storage, storage_pki, trust_authority
+from mlsecops import (
+    kube_resource_readback,
+    kube_storage,
+    kube_trust,
+    storage,
+    storage_pki,
+    trust_authority,
+)
 from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from mlsecops.kube_storage_resources import CLASS, WORKSPACE, postgres
 from mlsecops.storage_bootstrap import export_clients
@@ -144,6 +151,16 @@ class KubernetesTrustContracts(unittest.TestCase):
             return copy.deepcopy(self.objects.get(kube_storage.reference(document)))
 
         def kubectl(state, arguments, document=None, **kwargs):
+            if arguments == ["get", "-f", "-", "-o", "json"]:
+                return SimpleNamespace(
+                    stdout=canonical(
+                        {
+                            "apiVersion": "v1",
+                            "kind": "List",
+                            "items": [get(state, item) for item in document["items"]],
+                        }
+                    )
+                )
             if arguments[0] == "create":
                 key = kube_storage.reference(document)
                 value = copy.deepcopy(document)
@@ -157,6 +174,7 @@ class KubernetesTrustContracts(unittest.TestCase):
         for target, name, replacement in (
             (kube_storage, "validate", lambda state: {}),
             (kube_storage, "get", get),
+            (kube_resource_readback, "kubectl", kubectl),
             (kube_trust, "kubectl", kubectl),
             (kube_trust, "validate_cluster", lambda state: {}),
             (kube_trust, "migrate", lambda state, **kwargs: {"version": 1}),
