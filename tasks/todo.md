@@ -290,6 +290,12 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T29
 
+- Checkpoint 2026-11-12: [56f1a19, свежий M11 и serving profile](../docs/evidence/serving-profile-56f1a19-2026-11-12.md).
+  M11 43266471492: pass, 146 критериев, 746 preflight executions / 0 skips,
+  первичные hashes/traces и очистка проверены. Primary/Security success;
+  M13 pass 514 критериев, M14 pass 153 критерия, candidates разные.
+  Полные M23/M18/R1 и независимый M22 остаются обязательными; T29 не закрыта.
+
 - Periodic trust2026-11-11: [25371bf](../docs/evidence/periodic-trust-observer-2026-11-11.md),43087532653success593Linux/0skips,15native assertions. Реальный период30.022s, commit delivery29.775085516s, stopped notice90.930804055s; source loss без heartbeat, sink recovery/restart original events, cleanup verified. Clean83/3Linux skips. Mandatory deployed profile/schema2 Kubernetes adapter/transport/worker isolation, full M23 и свежие M13/M14 остаются.
 
 - Heartbeat2026-11-11: [8b04684](../docs/evidence/producer-heartbeat-2026-11-11.md),43083688017success571Linux/0skips,46native assertions. Durable counter/head,30.096s periodic send,90.412271147s stopped-producer gap/fresh audit refusal, owned cleanup. Clean74/4Linux skips и prior same-runtime201/6; CLI43082185574success. Mandatory deployment/periodic trust observer/sequence campaign/healthy ML dashboard outage/fresh M13M14/full M23 остаются.

@@ -1,5 +1,21 @@
 # Статус и границы доказательств
 
+M11 на `56f1a19` / 43266471492 принят: 146 критериев (125 controlled + 21 aggregate),
+746 preflight executions / 18 batches / 0 skips; primary hashes, source/methods,
+HTTP traces и SQL/cluster cleanup отдельно сверены. Job: 29 min 6 s из 30 min.
+Controlled/candidate batch owner-return: 25.418521/25.277704 s, включая final reads.
+Primary 43266480086 и Security 43266470330: success; M13 43266904494: pass, 514 критериев;
+M14 43266911707: pass, 153 критерия, 16153 correct predictions, 134.6 RPS, p95 98.26 ms.
+У M13/M14 отдельные candidates/images: это не единый M18. Full M23/M10/M17/R1
+и независимый M22 не закрыты. Исторические записи ниже не заменяют текущий source.
+[Полное evidence](docs/evidence/serving-profile-56f1a19-2026-11-12.md).
+
+## История предыдущих source revisions
+
+Ниже записано состояние на момент каждого запуска. Тогдашние `pending` не отменяют
+приведённую выше свежую приёмку; причины исторических сбоев указаны только там,
+где подтверждены доказательствами.
+
 M11 на59bff94 /43259927815 cancelled по подтверждённому GitHub лимиту30min.
 С одной probe ConfigMap прошёл прежнюю quota-точку и дошёл до actual blackhole;
 gate inconclusive, SQL/cluster cleanup success. Primary43259935227 success:

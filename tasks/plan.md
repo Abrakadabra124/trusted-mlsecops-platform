@@ -213,6 +213,12 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
+Checkpoint 2026-11-12: [56f1a19](../docs/evidence/serving-profile-56f1a19-2026-11-12.md),
+M11 43266471492 pass (146 критериев), Primary/Security success; обновлённые
+M13/M14 pass с проверенной очисткой. Обязательный serving profile проверен;
+следом полная M23 campaign, включая collector outage при работающих ML/dashboard.
+Разные candidates в отдельных gates не заменяют M18; неделя 11 и R1 не завершены.
+
 Checkpoint heartbeat2026-11-11: [8b04684](../docs/evidence/producer-heartbeat-2026-11-11.md),43083688017success571Linux/0skips. После actual identity source добавлены durable counter и lifecycle scheduler; native46 assertions,30.096s период,90.412271147s stopped-producer signed gap и fresh audit refusal. Clean74/4Linux skips; предыдущий same-runtime201/6. Далее mandatory deployment/periodic trust observer/sequence campaign/healthy ML dashboard outage и свежие M13/M14/full M23. R1 не принят.
 
 Checkpoint inventory2026-11-11: [78871de](../docs/evidence/inventory-security-events-2026-11-11.md),43072217340success392 Linux-теста/0skips;43072235491success54unit+37inventory assertions+45promotion cases. Actual candidate SQL mismatch и controlled graph events связаны с durable queue, recovery/cleanup проверены; clean99/0. Далее identity source, producer heartbeat/scheduler, обязательный deployment profile и full M23. Полный M19 остаётся отдельным требованием.

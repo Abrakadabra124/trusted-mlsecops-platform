@@ -1,5 +1,10 @@
 # M11: сквозная проверка trust lifecycle
 
+Текущий принятый source: [56f1a19 / 43266471492](../evidence/serving-profile-56f1a19-2026-11-12.md#m11-свежая-приёмка-trust-lifecycle),
+146 критериев, 746 preflight executions / 0 skips, проверенные primary hashes/traces и
+terminal SQL/cluster cleanup. Общий job 29 min 6 s уложился в 30 min; резерв 54 s относится
+только к этому запуску. M11 mechanism pass не разрешает production release или R1.
+
 Предыдущий принятый source: [M11 на5486596 /43132977638](../evidence/m11-observer-callers-2026-11-12.md)
 прошёл146cases с двумя observer transitions, сверкой primary hashes/traces и
 подтверждённой SQL/cluster cleanup. Controlled backup/recovery step также pass,

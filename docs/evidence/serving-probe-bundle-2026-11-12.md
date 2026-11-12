@@ -5,6 +5,10 @@
 M11 на этом source отменён по лимиту 30min: принятия M11 и нового release нет.
 Полные T29/M23, M18 и R1 остаются открытыми.
 
+Последующее исправление принято на [56f1a19 /43266471492](serving-profile-56f1a19-2026-11-12.md#m11-свежая-приёмка-trust-lifecycle):
+146criteria и подтверждённая cleanup. Ниже сохранена история исходного59bff94,
+который остался inconclusive; новый успех не меняет результат старого run.
+
 - Код исправления: [a59e6f27db6e787dfb261c80c0a20d67d0854b63](https://github.com/Abrakadabra124/trusted-mlsecops-platform/commit/a59e6f27db6e787dfb261c80c0a20d67d0854b63).
 - Опубликованный successor: [59bff943fd6395cb5bf4b82f6fa98fdc660ab79b](https://github.com/Abrakadabra124/trusted-mlsecops-platform/commit/59bff943fd6395cb5bf4b82f6fa98fdc660ab79b).
   Между commits изменены только STATUS.md и runbook; код и workflows совпадают.

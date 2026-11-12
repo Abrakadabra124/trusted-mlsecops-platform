@@ -1,5 +1,18 @@
 # Trusted MLSecOps Platform
 
+**M11 принят на `56f1a19` в synthetic CPU профиле:** 146 критериев, source-bound
+первичные отчёты, повторная проверка HTTP-трасс, смена signer и подтверждённая
+очистка. [Результаты и воспроизведение](docs/evidence/serving-profile-56f1a19-2026-11-12.md),
+[runbook M11](docs/operations/trust-acceptance.md). На том же source также прошли
+Primary, Security components, M13 privacy (514 критериев) и M14 load (153 критерия).
+[Milestone prerelease и очищенный verification asset](https://github.com/Abrakadabra124/trusted-mlsecops-platform/releases/tag/m11-trust-lifecycle-2026-11-12).
+
+Текущий этап - неделя 11 / T29, security events и наблюдение за потерей telemetry.
+M11 milestone подтверждает работу механизма доверия. Полный R1 ещё не принят:
+actual production promotion сохраняет отказ без обязательного assurance,
+независимый M22 и остальные открытые gates остаются обязательными.
+Ниже сохранена история предыдущих revisions; текущие границы - в [STATUS.md](STATUS.md).
+
 Неделя 10/T18 завершена для synthetic CPU лаборатории: добавлена операторская панель `/monitoring/ui`. Она показывает состояние сбора, PSI, качество по меткам и доставку сигналов через существующий защищённый API. [Инструкция и диагностика](docs/operations/monitoring-dashboard.md).
 
 На runtime commit `6fa4d96` свежие M15 (188 критериев) и M13 (512 критериев) прошли с проверенной очисткой инфраструктуры. Из чистого checkout воспроизведены 37 связанных тестов без пропусков; интерфейс отдельно проверен в браузере. [Доказательства и точные ограничения](docs/evidence/monitoring-dashboard-2026-11-07.md).
