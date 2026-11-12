@@ -21,8 +21,9 @@ Producer уже умеет печатать finite serving-startup-refused, pars
 T29: audit readback подготовлен для существующего HTTP owner: проверяет profile
 и Pod UID, читает journal через exec внутри этого Pod. При existing service marker
 отдельный serving audit Job запрещён, включая incomplete/suspended state.
-Controlled primary теперь поднимает HTTP перед audit outage/restart proof.
-Это следующий increment; hosted proof и bootstrap перед первой actual promotion
+Controlled primary поднимает HTTP перед audit outage/restart proof. Наaf12c85
+/43158134286 audit.serving_owner.mode=service, Pod UID совпал с before-admission
+readback;12audit checks и cleanup pass. Bootstrap перед первой actual promotion
 ещё pending, mandatory serving heartbeat остаётся false.
 
 T29/M11: run43150998160 на2e5043c остановлен общим30min timeout после стадии

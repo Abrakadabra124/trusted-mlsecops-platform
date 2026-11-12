@@ -579,10 +579,11 @@ owner в отчёте явно указан same-owner readback, без заяв
 Controlled primary playbook выше запускает HTTP до audit outage/restart proof,
 затем использует тот же сервис для admission/inference. Это не перенос всех
 qualification Jobs на постоянный сервис и не bootstrap перед первой actual
-promotion: эти стыки и mandatory heartbeat ещё открыты. Local contracts проверены;
-новый native run должен подтвердить `audit.serving_owner.mode=service`, неизменный
-Pod UID на readback, сохранность receipts и terminal owned cleanup. До такого
-запуска изменение не считается принятым на Kubernetes.
+promotion: эти стыки и mandatory heartbeat ещё открыты. Local contracts проверены.
+Наaf12c85 /43158134286 подтверждены audit.serving_owner.mode=service, тот же Pod
+UID в audit и before-admission readback, сохранность receipts и terminal owned
+cleanup. Это принятый readback increment; общий coordinator следующих callers
+имеет отдельную проверку.
 
 ## Общий coordinator для qualification probes
 

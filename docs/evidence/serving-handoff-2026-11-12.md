@@ -157,3 +157,38 @@ Actual candidate ещё отказан; M11 оценивается отдель�
 и последующий audit readback внутри постоянного HTTP owner этим отчётом не доказаны.
 Прерванный config transition остаётся suspended; автоматический resume после
 такого сбоя пока не реализован и не считается проверенным восстановлением R1.
+
+## Audit внутри существующего HTTP owner наaf12c85
+
+[Primary43158134286](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43158134286)
+на `af12c85e99818c429c1f1b643e327aacd62ebaf2`, job130982761025 success;
+05:00:03.699636 ->05:10:07.543884 UTC. Runtime fingerprint прежний3715b90accd3298cbea5523fc9338c1383189461baad652fef26ad800bd7afbb:
+изменился host harness, а mlsecops runtime/lock/image inputs остались прежними.
+Git source_revision и image revision label различают commits.
+
+`controlled.audit.serving_owner.mode=service`. Audit readback и последующий
+before-admission HTTP readback наблюдали один Pod UID
+`c0a3468c-b0e9-44aa-bba4-1b14f8bd1be5`. Проверка journal выполнилась внутри этого
+Pod; два чтения не выдаются за Pod replacement.12audit assertions подтвердили
+отдельные serving/trust identity и volumes, private permissions, запреты worker,
+отказ настоящего promoter при collector outage, отсутствие изменения model ledger,
+сохранение original pending events и их независимые receipts после восстановления,
+collector/observer restart и сохранение counter.
+
+Перед admission этот же HTTP отдавал503 без inference worker.21aggregate checks
+включают дальнейший controlled admission, настоящий ONNX, handoff и revocation.
+Config roundtrip повторён:54.405273s несовместимая policy и55.74917s восстановление,
+оба в120s, retained Deployment/outbox; после восстановления новый identity receipt.
+Cleanup service0Pods/0Jobs, audit state retained; SQL stop и cluster deletion/readback
+success. Две опубликованные JSON-копии результата совпали.
+
+[Security43158134098](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43158134098)
+также success:1002test executions/23batches без skips,25/37/17/46native assertions;
+max SQL event delivery30.993991066s, forced-lock recovery1.128798347s,
+observer gap90.754629227s и HTTP producer gap90.175439186s. Cleanup подтверждён.
+Чистый af12c85 checkout с отдельным locked Python3.12.15 environment:
+103tests без skips, Ruff909files, docs955files/345Markdown/2531links, git tree clean.
+
+Это не before-first-actual bootstrap, не mandatory serving registry и не полный
+M23 outage на healthy ML/dashboard. full_M10=inconclusive и release_ready=false.
+Общий coordinator callers из следующего commit и M11 имеют самостоятельную приёмку.
