@@ -162,6 +162,62 @@ class SourceHeartbeat(unittest.TestCase):
                 source.configured(str(self.path), expected=self.pin, heartbeat=True)
             read.assert_not_called()
 
+    def test_failure_readback_never_sends_heartbeat_or_discloses_exception(self):
+        from scripts import security_trust_service_native as native
+
+        config = dict(
+            rotations=[],
+            trust_client="client",
+            environment="env",
+            initial_root="root",
+            producer_config="private",
+        )
+        emitter = MagicMock()
+        with (
+            patch.object(
+                native.security_trust_events, "configuration", return_value=(config, "pin")
+            ),
+            patch.object(native.security_trust_events, "read", return_value={}),
+            patch.object(native.security_trust_events, "project"),
+            patch.object(native.security_event_delivery, "configured", return_value=emitter),
+        ):
+            self.assertEqual(
+                native.source_readback("path"),
+                dict(
+                    configuration_valid=True,
+                    signed_sql_history_valid=True,
+                    producer_state_valid=True,
+                ),
+            )
+            emitter.heartbeat.assert_not_called()
+            emitter.emit.assert_not_called()
+            emitter.retry.assert_not_called()
+            with patch.object(
+                native.security_trust_events, "read", side_effect=Rejected("PRIVATE-CANARY")
+            ):
+                result = native.source_readback("path")
+                self.assertFalse(result["signed_sql_history_valid"])
+                self.assertNotIn(b"PRIVATE", canonical(result))
+            with patch.object(
+                native.security_event_delivery, "configured", side_effect=Rejected("PRIVATE-CANARY")
+            ):
+                self.assertFalse(native.source_readback("path")["producer_state_valid"])
+        with (
+            patch.object(
+                native.security_trust_events, "configuration", side_effect=Rejected("private")
+            ),
+            patch.object(native.security_trust_events, "read") as read,
+        ):
+            self.assertEqual(
+                native.source_readback("path"),
+                dict(
+                    configuration_valid=False,
+                    signed_sql_history_valid=None,
+                    producer_state_valid=None,
+                ),
+            )
+            read.assert_not_called()
+
     def test_legacy_outbox_cannot_start_heartbeat_or_mutate_history(self):
         self.fx.box._document["schema_version"] = 1
         self.fx.box._document.pop("heartbeat")

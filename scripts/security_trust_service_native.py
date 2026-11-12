@@ -13,6 +13,7 @@ from mlsecops import (
     security_event_delivery,
     security_event_outbox,
     security_event_store,
+    security_trust_events,
     signing,
     trust_authority,
 )
@@ -27,6 +28,37 @@ def collector_reader(settings, registry):
     return security_event_store.Store(
         settings["state_directory"], settings["state_sha256"], registry
     )
+
+
+def source_readback(path):
+    """Failure-time context only, not a replay or proof of the failed child's cause."""
+    result = dict(
+        configuration_valid=None, signed_sql_history_valid=None, producer_state_valid=None
+    )
+    try:
+        config, _ = security_trust_events.configuration(path)
+        if config["rotations"]:
+            return result  # This native scenario uses the initial root only.
+        result["configuration_valid"] = True
+    except Exception:
+        result["configuration_valid"] = False
+        return result
+    try:
+        history = security_trust_events.read(config["trust_client"], config["environment"])
+        security_trust_events.project(
+            history, environment=config["environment"], initial_root=config["initial_root"]
+        )
+        result["signed_sql_history_valid"] = True
+    except Exception:
+        result["signed_sql_history_valid"] = False
+    try:
+        emitter = security_event_delivery.configured(config["producer_config"])
+        emitter.store.snapshot()
+        emitter.store.registry.valid(time.time_ns() // 1_000_000)
+        result["producer_state_valid"] = True
+    except Exception:
+        result["producer_state_valid"] = False
+    return result
 
 
 def failure_state(private_log, outbox, collector):
@@ -335,7 +367,8 @@ def qualify():
                         {
                             "observer_diagnostic": failure_state(
                                 private_log, snapshot, lambda: readback(collector.snapshot)
-                            )
+                            ),
+                            "source_readback": source_readback(str(config)),
                         }
                     ).decode(),
                     flush=True,

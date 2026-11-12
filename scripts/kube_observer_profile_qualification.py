@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import unittest
+from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from scripts import trust_rotation_qualification as fixtures
@@ -106,6 +107,82 @@ class ObserverProfile(unittest.TestCase):
         self.assertEqual(canonical(profile), before)
         self.assertLessEqual(len(canonical(mapping["data"])), 128 * 1024)
         self.assertEqual(mapping, self.subject.mapping("a" * 32, profile, self.context))
+
+    def test_second_rotation_preserves_first_and_rejects_reordered_or_changed_proof(self):
+        from mlsecops import signing
+        from scripts.kube_root_rotation import prepare
+
+        profile = self.created()
+        current = dict(
+            envelope=self.package["document"],
+            root_public=self.fx.new_public,
+            environment=self.context["environment"],
+            clock=self.fx.clock,
+            sha256=self.history["head_sha256"],
+        )
+        key = self.fx.new_key.with_name("third.pem")
+        package = prepare(current, self.fx.new_key, key)
+        root = signing.encode64(signing.load_key(key).public_key().public_bytes_raw())
+        content = digest(canonical(package["document"]))
+        history = {
+            **self.history,
+            "root_public": root,
+            "head_version": 3,
+            "head_sha256": content,
+            "documents": [
+                *self.history["documents"],
+                dict(version=3, sha256=content, envelope=package["document"]),
+            ],
+        }
+        advanced = self.subject.advance(profile, self.context, history, package, next_root=root)
+        self.assertEqual(advanced["rotations"][0], profile["rotations"][0])
+        reversed_profile = {**advanced, "rotations": list(reversed(advanced["rotations"]))}
+        with self.assertRaisesRegex(Rejected, "rotation_order"):
+            self.subject.verify(reversed_profile, self.context)
+        with self.assertRaisesRegex(Rejected, "retry_changed"):
+            self.subject.advance(advanced, self.context, history, self.package, next_root=root)
+
+    def test_signed_package_and_serialized_configuration_budgets_fail_closed(self):
+        self.fx.following["revoked_artifacts"] = sorted(
+            {"b" * 64, *(digest(str(i).encode()) for i in range(1100))}
+        )
+        self.fx.fixture.payload["revoked_artifacts"] = self.fx.following["revoked_artifacts"]
+        self.fx.previous = self.fx.fixture.envelope()
+        self.fx.intent["previous_sha256"] = digest(canonical(self.fx.previous))
+        package = self.fx.package()
+        content = digest(canonical(package["document"]))
+        history = {
+            **self.history,
+            "head_sha256": content,
+            "documents": [
+                dict(
+                    version=1, sha256=self.fx.intent["previous_sha256"], envelope=self.fx.previous
+                ),
+                dict(version=2, sha256=content, envelope=package["document"]),
+            ],
+        }
+        with self.assertRaisesRegex(Rejected, "configuration_limit"):
+            self.subject.advance(None, self.context, history, package, next_root=self.fx.new_public)
+        # Independently exercise the serializer's final bound even if a future
+        # verifier regression passes an overlarge already-validated structure.
+        profile = self.created()
+        profile["rotations"][0]["package"] = {"oversized": "a" * self.subject.MAX_CONFIG_BYTES}
+        with (
+            patch.object(self.subject, "verify"),
+            self.assertRaisesRegex(Rejected, "configuration_limit"),
+        ):
+            self.subject.mapping("a" * 32, profile, self.context)
+        with (
+            patch.object(self.subject, "verify"),
+            self.assertRaisesRegex(Rejected, "rotation_head"),
+        ):
+            self.subject.advance(
+                None,
+                self.context,
+                {**self.history, "root_public": self.fx.old_public},
+                self.package,
+                next_root=self.fx.new_public,
+            )
 
     def test_deployment_keeps_old_credentials_and_outbox_but_changes_only_active_config(self):
         profile = self.created()

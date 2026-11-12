@@ -195,3 +195,11 @@ ready=false; automatic recovery remains open. Local123tests/1Windows skip pass.
 Hosted primary campaign adds real rotation/old-root refusal/exact-event receipt,
 pending live evidence. Mandatory serving heartbeat and all caller transitions
 remain open; this increment does not close M11/M23/M18 or R1.
+
+e7ec709 hosted43125706293 success:19promotion+12audit+10observer cases,
+rotation9.8959s/heartbeat14->15, exact revocation receipt, old-root refusal,
+unchanged model ledger and cleanup verified. Security43125649611 failed coverage
+and recurring45s source recovery timeout. Coverage gap corrected by signed-state
+negative tests; new modules now have separate >=95% per-module CI guard. Timeout
+cause remains unknown; read-only failure diagnostics added, thresholds unchanged.
+See [evidence](../docs/evidence/observer-rotation-2026-11-12.md); no full gate closure.

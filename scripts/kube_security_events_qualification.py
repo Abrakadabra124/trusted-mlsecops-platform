@@ -333,9 +333,50 @@ class AuditBootstrap(unittest.TestCase):
         before = canonical(marker), list(self.creates)
         self.assertEqual(self.bootstrap(), marker)
         self.assertEqual(before, (canonical(self.state_marker()), self.creates))
-        for changed in ({"profile": {}}, {"environment": "other"}, {"initial_root": "foreign"}):
+        for changed in (
+            {"profile": {}},
+            {"environment": "other"},
+            {"initial_root": "foreign"},
+            {"authority_root": "foreign"},
+        ):
             with self.assertRaises(Rejected):
                 self.subject.validate(self.directory, **changed)
+
+    def test_rotated_profile_retains_anchor_and_requires_owned_signed_config(self):
+        from scripts import kube_observer_profile_qualification as profiles
+
+        fixture = profiles.ObserverProfile()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.world()
+        self.context["initial_root"] = fixture.fx.old_public
+        marker = self.bootstrap()
+        marker["observer"] = fixture.created()
+        mapping = self.subject.kube_observer_profile.mapping(
+            self.workspace, marker["observer"], marker["context"]
+        )
+        self.subject.create(self.directory, self.subject.directory(self.directory), marker, mapping)
+        document = self.subject.runtime(marker, "trust")
+        key = kube_storage.reference(document)
+        document["metadata"]["uid"] = marker["resources"][key]
+        self.objects[key] = document
+        self.subject.save(self.subject.directory(self.directory), marker)
+        created = list(self.creates)
+        for root in (fixture.fx.old_public, fixture.fx.new_public):
+            self.assertEqual(self.subject.validate(self.directory, authority_root=root), marker)
+        self.assertEqual(marker["context"]["initial_root"], fixture.fx.old_public)
+        with self.assertRaises(Rejected):
+            self.subject.validate(self.directory, initial_root=fixture.fx.new_public)
+        changed = copy.deepcopy(marker)
+        changed["observer"]["rotations"][0]["package"]["acceptance"]["signatures"] = []
+        self.subject.save(self.subject.directory(self.directory), changed)
+        with self.assertRaises(Rejected):
+            self.subject.validate(self.directory)
+        self.subject.save(self.subject.directory(self.directory), marker)
+        self.objects[kube_storage.reference(mapping)]["metadata"]["uid"] = "foreign"
+        with self.assertRaises(Rejected):
+            self.subject.validate(self.directory)
+        self.assertEqual(created, self.creates)
 
     def test_same_namespace_serving_and_observer_volumes_cannot_be_swapped_or_recreated(self):
         self.world()

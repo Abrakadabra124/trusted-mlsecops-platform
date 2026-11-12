@@ -272,7 +272,8 @@ python -W error -m unittest scripts.security_event_provision_qualification scrip
 без изменения identity/state и отказ после удаления identity при сохранном state.
 Resource tests проверяют role exclusion, Secret inventory, отдельные PVC,
 fixed commands и узкие Cilium rules. Hosted workflow дополнительно требует
-не менее95% statements и branches отдельно для каждого нового module.
+не менее95% statements и branches отдельно для перечисленных в нём модулей.
+Этот порог остаётся обязательным для всей новой security-critical логики при M18.
 
 Эскалация владельцу нужна при неизвестном ownership, утере pins/единственной
 копии журнала или неподтверждённой очистке. Откат к loopback/unaudited promotion,
@@ -333,3 +334,23 @@ evidence; проверить replicas, Pod UID/container restartCount и collect
 по envelope и receipt с независимым collector, model ledger не меняется.
 Локально проверены123tests/1Windows skip; hosted результат до публикации evidence
 не считается подтверждённым. Полный M11/M23/R1 и включение всех caller paths открыты.
+
+Первый security run на e7ec709 /43125649611 выявил недостаточное покрытие новых
+ветвей `kube_security_events.py` в измеряемом наборе. Порог не менялся; добавлена
+проверка настоящей подписанной цепочки, чужого ConfigMap UID и повреждённой подписи.
+Локальное измерение этого модуля:211/213 statements,74/76 branches. Исходный
+combined84% baseline трёх новых observer-модулей расширен проверками второй
+ротации, очистки obsolete ConfigMap, смены контейнера, ограничений размера и
+позднего readback. Каждый модуль теперь отдельно требует95% statements/branches
+в CI; локально profile71/71+26/26, readback54/54+12/12, operator122/123+29/30.
+Успешный отдельный native сценарий не заменяет этот критерий и полный M18.
+
+В том же run periodic trust observer не восстановил heartbeat за45s после
+возврата SQL credential directory: две failed checks, один event с receipt
+в outbox и collector. Такой симптом встречался раньше; причина не установлена.
+Добавлен read-only failure readback конфигурации, подписанной SQL history и
+producer state. Он не отправляет heartbeat, не повторяет событие и не заменяет
+факт неуспешного процесса. Булевы результаты описывают состояние после сбоя,
+а не доказывают его причину. SQL/collector payloads и exception text не публикуются.
+Интервалы30s/10s и deadline45s сохраняются. Повторный pass не считается устранением
+необъяснённой нестабильности.

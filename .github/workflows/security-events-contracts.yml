@@ -94,6 +94,24 @@ jobs:
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
           print('Operator contracts and real Linux journal provisioning only. Kubernetes deployment is not accepted by these tests.')
           PY
+      - name: Observer rotation proof, ownership and bounded readback coverage
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/observer-rotation.coverage" --source=mlsecops.kube_observer_profile,mlsecops.kube_observer_readback,mlsecops.kube_security_rotation -m unittest scripts.kube_observer_profile_qualification scripts.kube_security_rotation_qualification scripts.kube_security_events_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/observer-rotation.coverage" -o "$RUNNER_TEMP/observer-rotation.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'observer-rotation.json').read_text())['files']
+          expected = {'mlsecops/kube_observer_profile.py', 'mlsecops/kube_observer_readback.py', 'mlsecops/kube_security_rotation.py'}
+          if set(files) != expected:
+              raise SystemExit('observer_rotation_coverage_inventory')
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              print(json.dumps({'module': name, **stats}, sort_keys=True))
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not stats[total] or stats[covered] / stats[total] < .95:
+                      raise SystemExit('observer_rotation_coverage:' + name)
+          PY
       - name: Actual loopback delivery, elapsed heartbeat deadline, restart and cleanup
         run: uv run --locked python -m unittest scripts.security_event_live_qualification
       - name: Producer outbox, bounded mutual TLS and actual intake sources
