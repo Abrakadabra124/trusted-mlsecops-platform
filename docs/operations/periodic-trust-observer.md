@@ -101,3 +101,28 @@ period30.019s, operation-start->receipt29.85712158s, stopped-source90.759104269s
 Runtime fingerprint не изменился. В этом запуске timeout не повторился, поэтому
 новые failure counters не дали сведений о причине первого отказа. Сохранять его
 как открытую нестабильность до воспроизведения и проверки причинного исправления.
+
+Повтор6d202b5 /[43139535579](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43139535579)
+снова завершился timeout, теперь после восстановления collector. Supervisor
+зарегистрировал3 failed checks; outbox содержал2 события/1receipt, collector1/1.
+Последующее чтение config, signed SQL history и producer state прошло. Это
+подтверждает незавершённую доставку, но не устанавливает причину child failure.
+
+Для следующего запуска добавлены ограниченные диагностические exit codes в
+`security_trust_events --heartbeat --config-sha256 ... --diagnostic-exit-code`.
+Этот режим допускается только с pinned heartbeat. Обычный CLI сохраняет общий
+код1 при ошибке, interruption130. Supervisor получает только числовой результат,
+его stdout/stderr по-прежнему направлены в DEVNULL. Публичная диагностика включает
+только `source_unavailable`, `journal_busy`, `journal_unavailable`,
+`delivery_unconfirmed` либо `unclassified`; пути, SQL, envelopes и исключения
+не выводятся. `journal_busy` требует конкретного BlockingIOError EAGAIN/EWOULDBLOCK
+в цепочке ошибки journal; произвольный OSError не считается конкуренцией.
+
+При новом отказе сохранить приватный лог и сопоставить `observer_failure_categories`
+с `observer_failed_checks` и количествами receipts. Категории считаются только из
+строго ограниченных сообщений supervisor. Их отсутствие не доказывает отсутствие
+проблемы: spawn/timeout/cleanup могут не иметь child exit code. Последующее здоровое
+чтение не отменяет прошлый отказ. После диагностики проверить завершение owned child
+и disposable workflow; не выполнять blind retry, reset outbox или смену ключей.
+Эта доработка улучшает диагностику, не объявляется исправлением периодического
+таймаута.30s period,45s ожидание и исходные delivery/detection bounds сохранены.

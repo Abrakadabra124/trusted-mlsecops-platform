@@ -265,3 +265,16 @@ missing independent receipt, failed actual probe). Hosted execution is pending.
 The report uses `single_owner_lifecycle`, not uninterrupted process continuity.
 Interrupted transfer recovery and the global caller/registry integration remain
 open; this checkpoint does not accept M23 or R1.
+
+Readback review found a missing ownership condition: absent Jobs do not prove
+their asynchronously deleted Pods are gone. A negative test reproduced the
+incorrect resume, then the coordinator was changed to wait for empty Pod
+inventories in both serving namespaces. Missing inventories and orphaned Pods
+block the next owner. Local coordinator coverage is now59/59 statements and12/12
+branches;33 focused tests pass. Fresh hosted confirmation remains required.
+
+Security run43139535579 on6d202b5 failed45s observer recovery after collector
+restart (outbox2events/1receipt, collector1/1,3 failed checks). Configuration,
+signed SQL history and producer state were readable afterward; cause remains
+unknown. Finite child exit categories were added without changing scheduling,
+acceptance deadlines or journal locking. This is diagnosis, not causal repair.

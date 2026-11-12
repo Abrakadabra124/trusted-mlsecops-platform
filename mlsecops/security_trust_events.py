@@ -5,6 +5,7 @@ expansion. Explicit operator-pinned rotation packages verify historical roots.
 Observer event times are enqueue times, not attestations of SQL commit time.
 """
 
+import errno
 import sys
 
 import psycopg
@@ -280,16 +281,52 @@ def configured(path, *, expected=None, heartbeat=False):
     return result
 
 
+DIAGNOSTIC_CODES = {
+    41: "source_unavailable",
+    42: "journal_busy",
+    43: "journal_unavailable",
+    44: "delivery_unconfirmed",
+}
+
+
+def diagnostic_code(error):
+    """Bounded classification only; never export exception text, paths or data."""
+    fallback = 1
+    for _ in range(4):
+        if isinstance(error, Rejected):
+            reason = str(error)
+            if reason == "trust_security_source_unavailable":
+                return 41
+            if reason == "security_store_unavailable":
+                cause = error.__cause__ or error.__context__
+                if isinstance(cause, BlockingIOError) and cause.errno in (
+                    errno.EAGAIN,
+                    errno.EWOULDBLOCK,
+                ):
+                    return 42
+                return 43
+            if reason == "trust_security_delivery_unconfirmed":
+                fallback = 44
+        error = error.__cause__ or error.__context__
+        if error is None:
+            break
+    return fallback
+
+
 def main(arguments=None):
     parser = Arguments()
     parser.add_argument("--config", required=True)
     parser.add_argument("--config-sha256")
     parser.add_argument("--heartbeat", action="store_true")
+    parser.add_argument("--diagnostic-exit-code", action="store_true")
+    options = None
     try:
         options = parser.parse_args(arguments)
         enforce()
         if options.heartbeat and options.config_sha256 is None:
             raise Rejected("trust_security_pin_required")
+        if options.diagnostic_exit_code and not options.heartbeat:
+            raise Rejected("trust_security_diagnostic_mode")
         print(
             canonical(
                 configured(
@@ -300,7 +337,9 @@ def main(arguments=None):
         return 0
     except (Exception, KeyboardInterrupt) as error:
         print("trust_security_rejected", file=sys.stderr)
-        return 130 if isinstance(error, KeyboardInterrupt) else 1
+        if isinstance(error, KeyboardInterrupt):
+            return 130
+        return diagnostic_code(error) if options is not None and options.diagnostic_exit_code else 1
 
 
 if __name__ == "__main__":

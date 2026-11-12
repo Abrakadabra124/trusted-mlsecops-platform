@@ -269,6 +269,7 @@ class ServiceContracts(unittest.TestCase):
                 "--config-sha256",
                 "a" * 64,
                 "--heartbeat",
+                "--diagnostic-exit-code",
             ],
         )
         for name in ("stdin", "stdout", "stderr"):

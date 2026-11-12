@@ -102,6 +102,10 @@ disposable CI. API `mlsecops.kube_serving_handoff.transfer(state)` предна�
    suspended marker. Изменившиеся config/identity, оставшийся Job/worker или
    несоответствующий UID запрещают запуск новой реплики. При успехе восстанавливается
    исходный Deployment; новый HTTP Pod должен отличаться от удалённого.
+   Дополнительно проверяется отсутствие всех Pod в `ml-serving` и `ml-serve`:
+   удалённый Job ещё не доказывает завершение фонового удаления Pod. Неполный
+   inventory запрещает возврат; оставшиеся Pod ожидаются до45s без их принятия
+   или удаления координатором. Нельзя трактовать timeout как успешную очистку.
 5. Подтверждение: действующий authenticated inference, совпадающие model/bundle,
    сохранённые pin/permissions и префикс outbox, независимые receipts новых отказов
    авторизации, увеличение serving heartbeat после завершения временного владельца.

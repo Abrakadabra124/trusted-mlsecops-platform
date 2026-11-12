@@ -63,11 +63,33 @@ def source_readback(path):
 
 def failure_state(private_log, outbox, collector):
     # Finite counts only; unknown readback stays unknown, never a successful zero.
-    result = {"observer_failed_checks": None, "outbox": None, "collector": None}
+    result = {
+        "observer_failed_checks": None,
+        "observer_failure_categories": None,
+        "outbox": None,
+        "collector": None,
+    }
     try:
-        result["observer_failed_checks"] = (
-            bounded_read(private_log, 65536).splitlines().count(b"trust_observer_check_failed")
-        )
+        lines = bounded_read(private_log, 65536).splitlines()
+        result["observer_failed_checks"] = lines.count(b"trust_observer_check_failed")
+        categories = {
+            value: 0 for value in (*security_trust_events.DIAGNOSTIC_CODES.values(), "unclassified")
+        }
+        for line in lines:
+            try:
+                entry = decode(line, 512)
+                if (
+                    type(entry) is dict
+                    and set(entry) == {"state", "category", "release_ready"}
+                    and entry["state"] == "trust_observer_child_failure"
+                    and type(entry["category"]) is str
+                    and entry["category"] in categories
+                    and entry["release_ready"] is False
+                ):
+                    categories[entry["category"]] += 1
+            except Rejected:
+                continue
+        result["observer_failure_categories"] = categories
     except Exception:
         pass
     for name, reader in (("outbox", outbox), ("collector", collector)):

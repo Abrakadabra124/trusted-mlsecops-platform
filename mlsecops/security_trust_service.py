@@ -62,6 +62,7 @@ class Observer:
                     "--config-sha256",
                     self.pin,
                     "--heartbeat",
+                    "--diagnostic-exit-code",
                 ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -71,6 +72,18 @@ class Observer:
             while not self.stopped.is_set():
                 code = self.child.poll()
                 if code is not None:
+                    if code != 0:
+                        print(
+                            canonical(
+                                dict(
+                                    state="trust_observer_child_failure",
+                                    category=source.DIAGNOSTIC_CODES.get(code, "unclassified"),
+                                    release_ready=False,
+                                )
+                            ).decode(),
+                            file=sys.stderr,
+                            flush=True,
+                        )
                     return code == 0
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:

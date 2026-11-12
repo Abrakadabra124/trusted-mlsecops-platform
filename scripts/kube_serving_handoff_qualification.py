@@ -133,6 +133,25 @@ class ServingHandoff(unittest.TestCase):
         self.assertTrue(self.marker["ready"])
         self.assertEqual(self.scale.call_count, 2)
 
+    def test_orphaned_pod_without_any_job_blocks_new_owner(self):
+        ticket = self.subject.suspend("state")
+        calls = self.scale.call_count
+        for namespace in ("ml-serving", "ml-serve"):
+
+            def inventory(state, arguments):
+                orphan = arguments[1] == "pods" and namespace in arguments
+                return SimpleNamespace(stdout=canonical({"items": [{}] if orphan else []}))
+
+            with (
+                self.subTest(namespace=namespace),
+                patch.object(self.subject, "kubectl", side_effect=inventory),
+                patch("time.monotonic", side_effect=[0, 46]),
+                self.assertRaisesRegex(Rejected, "pods_present"),
+            ):
+                self.subject.resume("state", ticket)
+            self.assertEqual(self.scale.call_count, calls)
+            self.assertFalse(self.marker["ready"])
+
     def test_failed_return_keeps_suspended_marker(self):
         ticket = self.subject.suspend("state")
         self.live.side_effect = Rejected("startup_failed")
@@ -140,6 +159,23 @@ class ServingHandoff(unittest.TestCase):
             self.subject.resume("state", ticket)
         self.assertFalse(self.marker["ready"])
         self.assertEqual(digest(canonical(self.marker)), ticket["marker_sha256"])
+
+    def test_pod_inventory_must_be_complete_and_background_cleanup_is_awaited(self):
+        for content in (b"{}", b'{"items":null}', b'{"items":{}}'):
+            self.jobs.return_value.stdout = content
+            with self.subTest(content=content), self.assertRaisesRegex(Rejected, "pod_inventory"):
+                self.subject.wait_pods_absent("state")
+        self.jobs.side_effect = [
+            SimpleNamespace(stdout=content)
+            for content in (b'{"items":[{}]}', b'{"items":[]}', b'{"items":[]}', b'{"items":[]}')
+        ]
+        with (
+            patch.object(self.subject.time, "monotonic", side_effect=[0, 1]),
+            patch.object(self.subject.time, "sleep") as sleep,
+        ):
+            self.subject.wait_pods_absent("state")
+        sleep.assert_called_once_with(0.5)
+        self.scale.assert_not_called()
 
     def test_missing_jobs_inventory_is_not_an_empty_namespace(self):
         for content in (b"{}", b'{"items":null}', b'{"items":{}}'):

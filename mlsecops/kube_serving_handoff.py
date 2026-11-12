@@ -1,6 +1,7 @@
 """Explicit, serialized transfer between real serving HTTP owners in an owned lab."""
 
 import secrets
+import time
 from contextlib import contextmanager
 
 from mlsecops import kube_serving_service as service
@@ -18,6 +19,26 @@ def jobs_empty(state):
         raise Rejected("kube_serving_handoff_jobs_present")
 
 
+def wait_pods_absent(state):
+    # Job deletion can finish before background garbage collection removes Pods.
+    # Do not adopt/delete unknown Pods or start a concurrent audit writer.
+    deadline = time.monotonic() + 45
+    while True:
+        inventories = [
+            decode(kubectl(state, ["get", "pods", "-n", namespace, "-o", "json"]).stdout).get(
+                "items"
+            )
+            for namespace in (service.NAMESPACE, "ml-serve")
+        ]
+        if any(type(items) is not list for items in inventories):
+            raise Rejected("kube_serving_handoff_pod_inventory")
+        if not any(inventories):
+            return
+        if time.monotonic() >= deadline:
+            raise Rejected("kube_serving_handoff_pods_present")
+        time.sleep(0.5)
+
+
 def suspend(state):
     marker = service.validate(state)
     jobs_empty(state)
@@ -29,6 +50,7 @@ def suspend(state):
     service.set_replicas(state, marker, 1, 0)
     service.wait_empty(state)
     jobs_empty(state)
+    wait_pods_absent(state)
     verified = service.validate(state, suspended=marker["handoff"])
     return {
         "nonce": marker["handoff"],
@@ -53,6 +75,7 @@ def resume(state, ticket):
         raise Rejected("kube_serving_handoff_marker_changed")
     service.wait_empty(state)
     jobs_empty(state)
+    wait_pods_absent(state)
     service.set_replicas(state, marker, 0, 1)
     after = service.wait_live(state, marker, previous=ticket["previous"])
     marker["ready"] = True
