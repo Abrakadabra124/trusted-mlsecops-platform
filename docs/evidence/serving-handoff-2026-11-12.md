@@ -277,3 +277,25 @@ fingerprint3d6727838007bb8ce9bc32d0d169a08043d294d4f90f8ee14a8e5d24af4e27e1.
 Максимальная delivery31.049631466s, forced-lock recovery1.122129069s,
 observer gap90.190401397s, HTTP gap90.995876636s, heartbeat31.141s.
 Это component evidence с controlled unready engine, не full M23/M13/M14/R1.
+
+## Primary наff06fa0
+
+[Run43246227657](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43246227657),
+job131279502905: success, sourceff06fa00bcc8f8b2eed7c3781402bf677c284e88 clean.
+Fingerprint3d6727838007bb8ce9bc32d0d169a08043d294d4f90f8ee14a8e5d24af4e27e1 совпал
+с Security выше. Две полные JSON-копии совпали; время native report
+15:20:27.588976 ->15:32:25.799719 UTC.21aggregate/17controlled/12audit checks pass.
+
+Actual HTTP до admission: fresh heartbeat0->1 за34.620659s, live process,
+ready/predict503 и отсутствие worker. Parent отказал именно по
+release_assurance_required. Controlled transition56.269086s сохранил Deployment,
+outbox и identity. Последующий ordinary CLI выполнил настоящий ONNX inference,
+проверки401/413/422, worker-loss503 и cleanup. Max golden error7.583384781240099e-08.
+Возврат owner38.205402s, heartbeat15->17 и2independent identity receipts.
+Incompatible configuration56.889707s отказала до worker; restore59.401644s
+вернул predictions и новый receipt.
+
+Финальный readback:0service Pods,0worker Jobs, audit state retained. SQL stop и
+owned cluster deletion success; job terminal success. Измерения возврата относятся
+к старой границе до final reads; корректное измерение нового5d39e71 ещё требует CI.
+full_M10=inconclusive,release_ready=false. Этот Primary не заменяет M11 или R1.

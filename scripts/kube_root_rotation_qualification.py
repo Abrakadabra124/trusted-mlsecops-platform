@@ -1,6 +1,9 @@
 """Real signatures with controlled authority transport for the native coordinator."""
 
+import contextlib
 import copy
+import io
+import json
 import unittest
 from unittest.mock import patch
 
@@ -86,6 +89,23 @@ class NativeRootRotation(unittest.TestCase):
             self.exercise()
         self.assertTrue(self.selected)
         self.assertEqual(self.snapshot()["authority"]["version"], 2)
+
+    def test_failed_observer_reports_committed_root_but_no_completed_transition(self):
+        self.fault = "observer"
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(Rejected):
+            self.exercise()
+        self.assertEqual(
+            [json.loads(line) for line in output.getvalue().splitlines()],
+            [
+                {"stage": stage}
+                for stage in (
+                    "root-rotation-preflight",
+                    "root-rotation-commit",
+                    "root-rotation-observer",
+                )
+            ],
+        )
 
     def update(self, *args, **kwargs):
         if self.selected:

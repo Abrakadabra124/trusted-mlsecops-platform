@@ -1,5 +1,18 @@
 # Статус и границы доказательств
 
+Primaryff06fa0 /43246227657 success:21aggregate/17controlled/12audit checks,
+actual HTTP до admission, controlled ONNX inference и final0service Pods/0worker Jobs.
+Source/fingerprint/full report copies и SQL/cluster cleanup verified.
+M11 на том же source отказал при root rotation; full_M10=inconclusive,release_ready=false.
+[Точное evidence](docs/evidence/serving-handoff-2026-11-12.md#primary-наff06fa0).
+
+M11ff06fa0 /43246221504 fail: после approval/expiry, renewal и rollback дошёл до
+planned-authority-root-rotation, затем Rejected в cluster.py:74. Runtime причина
+не установлена; SQL/cluster cleanup success. Диагностика теперь сохраняет только
+finite Kubernetes operation/category и четыре фиксированные root-rotation stages.
+22diagnostic/rotation/acceptance tests pass; новый native run pending.
+[Порядок диагностики](docs/operations/trust-acceptance.md#отказ-kubernetes-при-ротации-корня).
+
 T29: исправлено измерение120s owner-return/configuration deadline после final
 UID и независимых receipt checks. Отрицательные tests воспроизвели поздний false
 success;59affected tests/0skips pass, owned coordinator55statements16branches100%.

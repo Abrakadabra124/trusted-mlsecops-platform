@@ -193,3 +193,34 @@ production-инцидентом. Аналогичная граница найд�
 
 Локальный результат:59affected tests/0skips. Общий coordinator имеет55statements
 и16branches, все покрыты focused suite. Native проверка исправления pending.
+
+## Отказ Kubernetes при ротации корня
+
+[M11 run43246221504](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43246221504),
+sourceff06fa0: fail. Native campaign15:21:29.645891 ->15:34:41.271662 UTC;
+planned-authority-root-rotation15:33:07.323734. Диагностика сохранила Rejected,
+mlsecops/cluster.py:74, но потеряла уже классифицированные operation/category.
+SQL stop и owned cluster cleanup success. Точная причина runtime отказа неизвестна.
+Продвижение после signed-approval-expiry не является полной приёмкой expiry/M11:
+итоговый gate не сформировал положительные cases/metrics.
+
+Исправлена диагностика: M11 экспортирует kubernetes_request только для точного
+конечного множества операций и категорий. Любой посторонний suffix/exception type,
+stderr, command arguments и private canary не попадают в это поле. Отдельные
+stages preflight/commit/observer/completed показывают продвижение ротации;
+stage обозначает начало фазы, кроме completed. Без completed переход не принят.
+
+1. Выполнить `python -W error -m unittest scripts.cluster_command_qualification
+   scripts.trust_acceptance_qualification scripts.kube_root_rotation_qualification`.
+   Локально22tests pass/0skips; проверены redaction и отсутствие completed после
+   неудачного observer transition. Это тест диагностики, не runtime correction.
+2. После terminal предыдущего CI и подтверждённой cleanup запустить прежний M11
+   workflow на новом source. Сопоставить последнюю root stage, finite operation и
+   category с исходным кодом. Не публиковать raw logs, SQL или credential paths.
+3. При unknown сохранить неопределённость и исследовать конкретную операцию.
+   При timeout не увеличивать120s transition,60s serving lease или общий30min budget.
+4. Если commit ротации прошёл, нельзя откатывать retired root ради green.
+   Убедиться в остановке принадлежащих запуску ресурсов и сохранении private evidence.
+   Не выполнять повторный bootstrap поверх неизвестного ownership.
+5. Только после причинного исправления, свежего source-bound M11 pass и cleanup
+   создавать milestone prerelease. Пока M11 fail, релиз не публиковать.

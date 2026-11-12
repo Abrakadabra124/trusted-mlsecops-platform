@@ -91,6 +91,7 @@ def transition(before, after, receipt):
 
 
 def exercise(state, old_key, new_key):
+    print(canonical({"stage": "root-rotation-preflight"}).decode(), flush=True)
     models = model_snapshot(state)
     _, initial = trust_authority.current(state, backend=kube_trust.binding)
     policy = trust.validate(initial["envelope"], initial["root_public"], initial["environment"])
@@ -169,6 +170,7 @@ def exercise(state, old_key, new_key):
         lambda: trust_root_store.rotate(state, bad, **arguments),
         "trust_update_conflict_or_unrevocation",
     )
+    print(canonical({"stage": "root-rotation-commit"}).decode(), flush=True)
     receipt = trust_root_store.rotate(state, package, **arguments)
     if (
         receipt.get("state") != "rotated-not-activated"
@@ -188,9 +190,11 @@ def exercise(state, old_key, new_key):
         ),
         "untrusted_key",
     )
+    print(canonical({"stage": "root-rotation-observer"}).decode(), flush=True)
     observer = kube_security_rotation.update(state, package, next_root=intent["next_root"])
     if model_snapshot(state) != models:
         raise Rejected("rotation_native_model_storage_changed")
+    print(canonical({"stage": "root-rotation-completed"}).decode(), flush=True)
     return {
         "scope": "planned-authority-root-rotation-not-full-M11",
         "status": "pass",

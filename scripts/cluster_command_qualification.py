@@ -9,6 +9,23 @@ from mlsecops.contracts import Rejected
 
 
 class ClusterCommandContracts(unittest.TestCase):
+    def test_report_diagnostic_is_an_exact_finite_allowlist(self):
+        for operation in ("exec", "replace", "get", "other"):
+            self.assertEqual(
+                cluster.request_failure(Rejected(f"kubernetes_request_failed:{operation}:timeout")),
+                {"operation": operation, "category": "timeout"},
+            )
+        for message in (
+            "private-canary",
+            "kubernetes_request_failed:exec:timeout:private-canary",
+            "kubernetes_request_failed:private-operation:timeout",
+            "kubernetes_request_failed:exec:private-canary",
+        ):
+            self.assertIsNone(cluster.request_failure(Rejected(message)))
+        self.assertIsNone(
+            cluster.request_failure(ValueError("kubernetes_request_failed:exec:timeout"))
+        )
+
     def test_safe_operation_and_failure_classification(self):
         scenarios = (
             (["logs", "private-pod"], b"container is waiting to start", "logs:container_pending"),

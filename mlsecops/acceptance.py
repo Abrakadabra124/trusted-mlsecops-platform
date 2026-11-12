@@ -405,12 +405,16 @@ def report(gate, profile, root, state=None):
                 ],
             )
             if gate == "M11":
+                from mlsecops.cluster import request_failure
                 from scripts.kube_privacy_diagnostic import location, validated
 
                 result["diagnostics"] = {
                     "runtime_failure": validated(location(error))
                     or {"exception": "other", "source_file": "unknown", "source_line": 0}
                 }
+                request = request_failure(error)
+                if request is not None:
+                    result["diagnostics"]["kubernetes_request"] = request
         result["finished_at"] = now()
     elif gate == "M21":
         if not (state / "workspace.json").is_file():

@@ -30,6 +30,27 @@ NAMESPACES = {
 }
 MEMORY_BUDGETS = {"ml-train": "4Gi", "ml-eval": "1Gi", "ml-serve": "1Gi", "ml-control": "512Mi"}
 ROOT = Path(__file__).resolve().parents[1]
+REQUEST_OPERATIONS = frozenset(
+    {"get", "create", "apply", "replace", "delete", "logs", "wait", "exec", "config", "other"}
+)
+REQUEST_CATEGORIES = frozenset(
+    {"container_pending", "timeout", "not_found", "forbidden", "connection_refused", "unknown"}
+)
+
+
+def request_failure(error):
+    """Export only the finite request classification, never command arguments or stderr."""
+    if not isinstance(error, Rejected):
+        return None
+    fields = str(error).split(":")
+    if (
+        len(fields) == 3
+        and fields[0] == "kubernetes_request_failed"
+        and fields[1] in REQUEST_OPERATIONS
+        and fields[2] in REQUEST_CATEGORIES
+    ):
+        return {"operation": fields[1], "category": fields[2]}
+    return None
 
 
 def kubectl(state, arguments, value=None, timeout=60, check=True, config=None):
@@ -53,7 +74,7 @@ def kubectl(state, arguments, value=None, timeout=60, check=True, config=None):
     )
     if check and result.returncode:
         operation = arguments[0] if arguments else "other"
-        if operation not in {"get", "create", "apply", "delete", "logs", "wait", "exec", "config"}:
+        if operation not in REQUEST_OPERATIONS:
             operation = "other"
         diagnostic = result.stderr[:8192].lower()
         category = next(

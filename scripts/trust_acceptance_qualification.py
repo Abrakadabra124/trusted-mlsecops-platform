@@ -81,6 +81,27 @@ class TrustAcceptanceContracts(unittest.TestCase):
             )
             self.assertNotIn("private-canary", canonical(result).decode())
 
+    def test_M11_keeps_finite_kubernetes_reason_without_command_or_stderr(self):
+        from mlsecops import acceptance
+
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            for name in ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json"):
+                (state / name).write_bytes(b"owned fixture")
+            for message, expected in (
+                (
+                    "kubernetes_request_failed:exec:unknown",
+                    {"operation": "exec", "category": "unknown"},
+                ),
+                ("kubernetes_request_failed:exec:unknown:private-canary", None),
+            ):
+                with patch.object(trust_acceptance, "qualify", side_effect=Rejected(message)):
+                    result = acceptance.report("M11", "local-cpu", root, state)
+                self.assertEqual(result["status"], "fail")
+                self.assertEqual(result["diagnostics"].get("kubernetes_request"), expected)
+                self.assertNotIn("private-canary", canonical(result).decode())
+
     def test_acceptance_dispatches_M11_and_reports_missing_runtime_without_success(self):
         from mlsecops import acceptance
 
