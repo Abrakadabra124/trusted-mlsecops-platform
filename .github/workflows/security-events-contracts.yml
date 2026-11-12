@@ -10,6 +10,26 @@ concurrency:
   group: security-events-contracts-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  sequence-gap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked pure sequence replay and transport contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check scripts/security_event_sequence_native*.py
+          uv run --locked ruff format --check scripts/security_event_sequence_native*.py
+          uv run --locked python -B -W error -m unittest scripts.security_event_sequence_native_qualification
+      - name: Real sequence loss, collector restart and signed recovery
+        run: uv run --locked python -W error -m scripts.security_event_sequence_native
   contracts:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

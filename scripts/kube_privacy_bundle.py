@@ -9,7 +9,11 @@ MAX_BYTES = 512 * 1024
 
 
 def manifest(root, name, workspace, *, entry="kube_privacy_probe"):
-    if entry not in {"kube_privacy_probe", "kube_cli_privacy_probe"}:
+    if entry not in {
+        "kube_privacy_probe",
+        "kube_cli_privacy_probe",
+        "security_audit_boundary_probe",
+    }:
         raise Rejected("privacy_bundle_entry")
     pending, data = [entry], {"__init__.py": ""}
     while pending:

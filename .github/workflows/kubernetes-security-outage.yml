@@ -1,0 +1,77 @@
+name: M23 healthy ML during audit outage component
+on:
+  push:
+    branches: [codex/cp4-m23-security-events-20261107]
+    paths: ['mlsecops/security_outage*.py', 'scripts/kube_security*.py', 'scripts/security_audit_boundary*.py', 'scripts/kube_candidate_native.py', 'scripts/kube_serving_native.py', 'scripts/kube_privacy_bundle.py', '.github/workflows/kubernetes-security-outage.yml', 'Dockerfile', 'pyproject.toml', 'uv.lock']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-security-outage-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  security-outage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked boundary and green-window contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.security_outage_exchange_qualification scripts.security_outage_packet_qualification scripts.security_outage_probe_qualification scripts.kube_security_boundary_qualification scripts.kube_security_outage_operator_qualification scripts.kube_security_outage_native_qualification scripts.security_audit_boundary_probe_qualification scripts.kube_candidate_qualification scripts.kube_monitoring_native_qualification scripts.kube_serving_native_qualification scripts.kube_privacy_bundle_qualification
+      - name: Prepare pinned tools and image
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Prepare model storage and source candidate
+        run: |
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline
+      - name: Actual inference and fresh monitoring during scoped collector outage
+        id: campaign
+        run: uv run --locked python -W error -m scripts.kube_security_outage_native
+      - name: Stop verified owned source SQL
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('security_outage_source_cleanup_incomplete')
+          PY
+          fi
+      - name: Remove verified owned disposable cluster
+        if: always() && steps.bootstrap.outcome == 'success'
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import validate_cluster
+          validate_cluster(Path('.runtime'))
+          PY
+          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
+      - name: Reconcile retained primary packets after infrastructure cleanup
+        if: success() && steps.campaign.outcome == 'success'
+        run: uv run --locked python -m scripts.kube_security_outage_native --reverify

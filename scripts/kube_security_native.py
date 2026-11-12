@@ -226,7 +226,7 @@ def collector(state, marker):
 
 
 @contextmanager
-def outage(state, workspace):
+def outage(state, workspace, *, owned=None):
     document = resources.resource(
         "CiliumNetworkPolicy",
         "audit-outage-" + uuid.uuid4().hex,
@@ -237,14 +237,17 @@ def outage(state, workspace):
             "ingressDeny": [{"fromEntities": ["all"]}],
         },
     )
-    created = []
+    created = [] if owned is None else owned
+    if created:
+        raise Rejected("audit_native_fault_already_owned")
     try:
         observed = decode(kubectl(state, ["create", "-f", "-", "-o", "json"], document).stdout)
         created.append((document, observed["metadata"]["uid"]))
         kube_storage.verify_resource(document, observed, created[0][1])
         yield
     finally:
-        kube_promotion.cleanup(state, created, namespace=resources.NAMESPACE)
+        kube_promotion.cleanup(state, list(created), namespace=resources.NAMESPACE)
+        created.clear()
 
 
 def restart(state, marker, role):

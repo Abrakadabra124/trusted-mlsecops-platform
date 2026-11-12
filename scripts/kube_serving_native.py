@@ -70,8 +70,20 @@ def invoke(
     cli_privacy=False,
     load_operator=None,
     monitoring_operator=None,
+    security_operator=None,
 ):
     trust_target = select(trust_target)
+    if security_operator is not None and (
+        not candidate_probe
+        or monitoring_operator is not None
+        or load_operator is not None
+        or privacy_operator is not None
+        or coordinator is not None
+        or cli_privacy
+        or trust_target is not Target.PRIMARY
+        or "fault" in expected
+    ):
+        raise Rejected("security_probe_mode_conflict")
     if monitoring_operator is not None and (
         not candidate_probe
         or load_operator is not None
@@ -142,7 +154,9 @@ def invoke(
     spec["serviceAccountName"] = "serving"
     spec = kube_security_resources.serving_spec(spec)
     spec["containers"][0]["command"][2] = (
-        "mlsecops.monitoring_probe"
+        "mlsecops.security_outage_probe"
+        if security_operator is not None
+        else "mlsecops.monitoring_probe"
         if monitoring_operator is not None
         else "mlsecops.load_probe"
         if load_operator is not None
@@ -186,7 +200,13 @@ def invoke(
     ):
         raise Rejected("kube_serving_probe_bundle_limit")
     mount_api(spec)
-    deadline = 360 if load_operator is not None or monitoring_operator is not None else 240
+    deadline = (
+        360
+        if any(
+            value is not None for value in (load_operator, monitoring_operator, security_operator)
+        )
+        else 240
+    )
     job = job_document(name, NAMESPACE, spec, deadline)
     job["metadata"]["labels"]["trusted-mlsecops/workspace"] = workspace_id(state)
     created = []
@@ -201,6 +221,9 @@ def invoke(
             or pod["metadata"]["ownerReferences"][0]["uid"] != created[-1][1]
         ):
             raise Rejected("kube_serving_probe_pod_changed")
+        if security_operator is not None:
+            security_operator.observe(pod)
+            return
         if privacy_operator is not None:
             privacy_operator.observe(pod)
             return
@@ -235,6 +258,8 @@ def invoke(
             phases.append(phase)
 
     try:
+        if security_operator is not None:
+            security_operator.start()
         if monitoring_operator is not None:
             monitoring_operator.start()
         if load_operator is not None:
@@ -268,6 +293,7 @@ def invoke(
                 or cli_receiver is not None
                 or load_operator is not None
                 or monitoring_operator is not None
+                or security_operator is not None
                 else {}
             ),
         )
@@ -382,12 +408,18 @@ def invoke(
             report = load_operator.finish(report, raw)
         if monitoring_operator is not None:
             report = monitoring_operator.finish(report, raw)
+        if security_operator is not None:
+            report = security_operator.finish(report, raw)
         if cli_receiver is not None:
             report["_privacy_needles"] = cli_receiver.finish(raw)
         return {**report, "elapsed_seconds": elapsed}
     finally:
-        kube_promotion.cleanup(state, created, namespace=NAMESPACE)
-        wait_pods_absent(state)
+        try:
+            if security_operator is not None:
+                security_operator.close()
+        finally:
+            kube_promotion.cleanup(state, created, namespace=NAMESPACE)
+            wait_pods_absent(state)
 
 
 def prepare(root, state, image):

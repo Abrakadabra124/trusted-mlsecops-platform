@@ -63,8 +63,15 @@ def qualify(
     privacy=False,
     load=False,
     monitoring=False,
+    security=False,
 ):
     hosted()
+    if (
+        type(security) is not bool
+        or security
+        and (monitoring or load or privacy or include_key_revocation or include_trust_lifecycle)
+    ):
+        raise Rejected("candidate_security_mode_conflict")
     if (
         type(monitoring) is not bool
         or monitoring
@@ -144,7 +151,7 @@ def qualify(
         {"response": output, "receipt": receipt, "execution": execution},
     )
     monitor_materials = None
-    if monitoring or load or privacy:
+    if monitoring or load or privacy or security:
         descriptor = decode(package["documents"]["split_manifest"])["objects"]["validation.json"]
         validation = storage.get(
             state / "storage-clients/publisher", "validation", descriptor["sha256"]
@@ -192,7 +199,7 @@ def qualify(
         "issued_at": issued,
         "expires_at": min(issued + 600, verified["manifest"]["expires_at"]),
     }
-    if permit["expires_at"] - issued < (360 if load or monitoring else 240):
+    if permit["expires_at"] - issued < (360 if load or monitoring or security else 240):
         raise Rejected("candidate_inference_window")
     envelope = signing.sign(permit, KIND, key)
     permit_hash = digest(canonical(permit))
@@ -241,7 +248,7 @@ def qualify(
             "expected_permit": digest(canonical(unsigned_permit)),
         },
     }
-    if monitoring or load or privacy:
+    if monitoring or load or privacy or security:
         expected["monitoring"] = monitor_materials
     write_json(destination / "config.json", config)
     write_json(destination / "request.json", expected)
@@ -268,7 +275,7 @@ def qualify(
         write_json(destination / "config.json", config)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     options = {}
-    if monitoring:
+    if monitoring or security:
         from mlsecops.release_policy import checked
         from scripts.kube_monitoring_operator import Coordinator
 
@@ -286,7 +293,15 @@ def qualify(
             "monitor-reference",
             monitor_materials["reference_public"],
         )
-        options["monitoring_operator"] = Coordinator(state, profile, campaign, reference, trace)
+        if security:
+            from mlsecops.load_golden import Golden
+            from scripts.kube_security_outage_operator import Coordinator as SecurityCoordinator
+
+            options["security_operator"] = SecurityCoordinator(
+                state, profile, campaign, reference, trace, Golden.from_expected(expected)
+            )
+        else:
+            options["monitoring_operator"] = Coordinator(state, profile, campaign, reference, trace)
     if load:
         from scripts.kube_load_operator import Coordinator
 
@@ -325,6 +340,8 @@ def qualify(
     if monitoring:
         result["operator_retained_reverified"] = options["monitoring_operator"].reverify()
         options["monitoring_operator"].retain_binding()
+    if security:
+        result["operator_retained_reverified"] = options["security_operator"].reverify()
     if load:
         result["operator_retained_reverified"] = options["load_operator"].reverify()
     if privacy:
@@ -436,6 +453,7 @@ def qualify(
         ),
         **({"full_M14": "inconclusive", "load_campaign_id": campaign} if load else {}),
         **({"full_M15": "inconclusive", "monitoring_campaign_id": campaign} if monitoring else {}),
+        **({"full_M23": "inconclusive", "security_campaign_id": campaign} if security else {}),
         **(
             {
                 "full_M13": "inconclusive",
@@ -481,7 +499,7 @@ def qualify(
                 "probe.json",
                 *(
                     ("monitor-worker.json", "monitor-reference.json")
-                    if monitoring or load or privacy
+                    if monitoring or load or privacy or security
                     else ()
                 ),
                 *(("root-rotation.json",) if root_rotation is not None else ()),
