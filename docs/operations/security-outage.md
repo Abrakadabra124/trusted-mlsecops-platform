@@ -1,7 +1,7 @@
 # T29: sequence gap и отказ audit при здоровом ML
 
-Статус: [sequence campaign на 0a55421](../evidence/m23-sequence-0a55421-2026-11-12.md)
-подтверждена; actual outage завершился отказом и требует повторной проверки.
+Статус: [sequence и actual outage на c57d3f6](../evidence/m23-outage-c57d3f6-2026-11-12.md)
+прошли компонентную hosted-проверку, включая recovery и post-cleanup replay.
 Это компонентные проверки [плана M23](../m23-acceptance-plan.md),
 не общий gate M23/M18/R1. Ответственный - оператор disposable CI lab.
 Реальные данные и production в этот профиль не входят.
@@ -114,7 +114,7 @@ ConfigMap содержит `source/<filename>`, а `/app/scripts` монтиру
 `subPath: source`: подкаталог содержит обычные файлы. Отдельный regression test
 воспроизводит представление проекции и выполняет fixture setup/cleanup с запретом
 SQL, socket connect/bind и дочерних процессов внутри fixture. Pod spec проверяет
-точный subPath/items/readOnly; реальный bind mount проверяется в следующем CI.
+точный subPath/items/readOnly; реальный bind mount прошёл CI на `c57d3f6`.
 Нельзя подменять ROOT в production, обходить policy или считать этот pure test
 доказательством полного native recovery. Ошибки operator и child теперь выводят
 только проверенные public code locations до удаления Job.

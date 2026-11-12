@@ -1,5 +1,12 @@
 # Статус и границы доказательств
 
+T29 на `c57d3f6`: actual audit-outage component 43282778973 success,
+26000 observations / 26 fresh green windows, refusal/recovery и post-cleanup
+replay подтверждены. Security 43282778885 success, 1100 test executions,
+sequence detection 90.39/90.33 s. [Evidence](docs/evidence/m23-outage-c57d3f6-2026-11-12.md).
+Это component pass: полный M23, M18/R1, independent M22 и остальные gates открыты.
+Следующая запись описывает предыдущий source и сохранённый failure.
+
 T29/M23 на `0a55421`: Security workflow 43279107795 success, 1100 test executions,
 новая actual sequence campaign 25 checks, detection 91.18/90.93 s при пороге 120 s.
 Соседний outage run 43279107452 failed при возврате ownership; SQL/cluster cleanup

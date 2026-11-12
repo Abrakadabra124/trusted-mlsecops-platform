@@ -2,7 +2,8 @@
 
 - [T29: sequence gap и здоровый ML при audit outage](operations/security-outage.md):
   fixed phases, actual monitoring windows, controlled audit boundary, original-event
-  recovery, owned cleanup; sequence native подтверждён, actual outage ещё не принят.
+  recovery, owned cleanup; component sequence/outage на c57d3f6 подтверждены,
+  общий M23 остаётся открытым.
 
 - [T29: защищённый TLS transport](operations/audit-tls.md): certificate/endpoint,
   bounded deadline, original-event recovery и история qualification failures.
