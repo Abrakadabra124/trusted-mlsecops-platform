@@ -114,7 +114,7 @@ class ConfigurationEvidence(unittest.TestCase):
             patch.object(subject.audit, "collector", side_effect=collect)
         )
         self.clock = self.stack.enter_context(
-            patch.object(subject.time, "monotonic", side_effect=[0, 1])
+            patch.object(subject.time, "monotonic", side_effect=[0, 1, 1])
         )
         self.sleep = self.stack.enter_context(patch.object(subject.time, "sleep"))
 
@@ -174,6 +174,36 @@ class ConfigurationEvidence(unittest.TestCase):
         self.clock.side_effect = [0, 121]
         with self.assertRaisesRegex(Rejected, "configuration_binding"):
             self.run_change()
+
+    def test_final_binding_and_receipt_checks_are_inside_total_deadline(self):
+        for boundary in ("pod", "receipt"):
+            elapsed = [0]
+            self.order.clear()
+            self.clock.side_effect = lambda: elapsed[0]
+
+            def finish(*args):
+                elapsed[0] = 121
+                return {"metadata": {"uid": "new-http"}} if boundary == "pod" else 1
+
+            target = subject.service if boundary == "pod" else subject.audit
+            name = "pod" if boundary == "pod" else "identity_receipts"
+            with (
+                self.subTest(boundary=boundary),
+                patch.object(target, name, side_effect=finish),
+                self.assertRaisesRegex(Rejected, "configuration_binding"),
+            ):
+                self.run_change()
+
+    def test_exact_deadline_after_receipt_is_measured_and_accepted(self):
+        elapsed = [0]
+        self.clock.side_effect = lambda: elapsed[0]
+
+        def receipt(*args):
+            elapsed[0] = 120
+            return 1
+
+        with patch.object(subject.audit, "identity_receipts", side_effect=receipt):
+            self.assertEqual(self.run_change()["elapsed_seconds"], 120)
 
     def test_missing_original_heartbeat_stops_before_new_owner(self):
         self.collector.side_effect = None

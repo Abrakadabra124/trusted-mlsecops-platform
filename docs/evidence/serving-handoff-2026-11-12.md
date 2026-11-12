@@ -253,3 +253,27 @@ engine; он не заменяет healthy ML/dashboard outage или M13/M14/fu
 M11 на451c713 failed с конкретным startup expiry отказом, см.
 [runbook](../operations/trust-acceptance.md#expiry-и-передача-http-владельца).
 Следующие readback-capacity и paired-expiry corrections этим Primary не приняты.
+
+## Полная граница времени возврата
+
+Внутренний Codex review воспроизвёл позднее завершение final UID validation при
+своевременном heartbeat. Независимый M22 reviewer этим review не заменяется.
+Два новых test methods сначала дали3failures: поздний Pod readback, поздний receipt
+и заниженное время успешного отчёта. В смежном configuration transition повторены
+те же3failures двумя отдельными methods. После исправления59affected tests pass,
+0skips; Ruff check/format затронутых5files pass.
+
+Оба координатора повторно измеряют elapsed после binding и receipt validation.
+Предел120s не увеличен; exact-boundary120s принят,121s отказан. Старый failure probe
+не превращается в success после восстановления. Focused coverage owned-probe:
+55/55statements и16/16branches; startup41/41 и14/14, paired-expiry27/27 и2/2.
+Native доказательство нового deadline correction pending; см.
+[runbook](../operations/trust-acceptance.md#полное-время-возврата-владельца).
+
+[Security43246221510](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43246221510)
+на предшествующем sourceff06fa00bcc8f8b2eed7c3781402bf677c284e88 завершился success.
+Contracts1057test executions/24batches/0skips. Native25/37/17/46assertions;
+fingerprint3d6727838007bb8ce9bc32d0d169a08043d294d4f90f8ee14a8e5d24af4e27e1.
+Максимальная delivery31.049631466s, forced-lock recovery1.122129069s,
+observer gap90.190401397s, HTTP gap90.995876636s, heartbeat31.141s.
+Это component evidence с controlled unready engine, не full M23/M13/M14/R1.

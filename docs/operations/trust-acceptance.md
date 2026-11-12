@@ -162,3 +162,34 @@ scripts.kube_serving_expiry_qualification`. Сверить после новог
 отдельные positive/expiry observations, trace до и после настоящего expires_at,
 negative cold/retry, ownership return и terminal cleanup. Пока этого нет,
 коррекция локально проверена, M11 на новом source не принят.
+
+## Полное время возврата владельца
+
+Симптом: fresh heartbeat получен вовремя, но заключительное чтение Pod UID или
+проверка независимых receipts заканчивается после120s. Старое измерение до этих
+операций могло сообщить успех и занизить return_seconds/elapsed_seconds.
+Это воспроизведено управляемыми часами в unit tests, не объявляется наблюдавшимся
+production-инцидентом. Аналогичная граница найдена при change_configuration.
+
+Ответственный оператор hosted qualification выполняет следующую проверку:
+
+1. Запустить отрицательные проверки без инфраструктуры:
+
+   ```bash
+   uv run --locked python -W error -m unittest scripts.kube_owned_probe_qualification scripts.kube_serving_handoff_native_qualification scripts.kube_serving_reconfigure_native_qualification
+   ```
+
+2. Подтвердить, что heartbeat до deadline не разрешает успех после позднего
+   UID/receipt readback. Новый report измеряет время после всех этих проверок;
+   завершение ровно на120s принимается, после120s отвергается.
+3. При owned_probe_return_binding или kube_serving_configuration_binding
+   сопоставить finite stage, source и UID. Не редактировать report и не увеличивать
+   срок. Исходная ошибка probe остаётся ошибкой при своевременном возврате owner.
+4. Дождаться terminal CI, SQL stop и удаления только owned cluster с readback.
+   При неопределённом ownership не повторять bootstrap и не выполнять global prune.
+5. После причинного исправления запустить прежние M11/Primary workflows на одном
+   новом commit. До source-bound native результата коррекция остаётся локально
+   проверенной; предыдущие green runs её не принимают.
+
+Локальный результат:59affected tests/0skips. Общий coordinator имеет55statements
+и16branches, все покрыты focused suite. Native проверка исправления pending.

@@ -1,5 +1,12 @@
 # Статус и границы доказательств
 
+T29: исправлено измерение120s owner-return/configuration deadline после final
+UID и независимых receipt checks. Отрицательные tests воспроизвели поздний false
+success;59affected tests/0skips pass, owned coordinator55statements16branches100%.
+Native correction pending. Security43246221510 на предыдущемff06fa0 success:
+1057executions/24batches/0skips,25/37/17/46native assertions.
+[Evidence и границы](docs/evidence/serving-handoff-2026-11-12.md#полная-граница-времени-возврата).
+
 Primary451c713 /43162487334 pass: actual before-admission HTTP и fresh serving
 heartbeat0->1 за39.897243s, mandatory trust+serving registry, controlled context
 transition66.003658s,21aggregate checks/12audit checks и owned cleanup подтверждены.

@@ -63,7 +63,7 @@ class HandoffEvidence(unittest.TestCase):
             )
         )
         self.clock = self.stack.enter_context(
-            patch.object(subject.time, "monotonic", side_effect=[0, 1])
+            patch.object(subject.time, "monotonic", side_effect=[0, 1, 1])
         )
         self.sleep = self.stack.enter_context(patch.object(subject.time, "sleep"))
 
@@ -76,7 +76,7 @@ class HandoffEvidence(unittest.TestCase):
             {"heartbeats": {"serving": 4}},
             self.inbox,
         ]
-        self.clock.side_effect = [0, 0.5, 1]
+        self.clock.side_effect = [0, 0.5, 1, 1]
         report = self.run_handoff()
         self.assertEqual(self.order, ["old-owner-removed", "real-probe", "original-owner-restored"])
         self.assertEqual(report["return_heartbeat_before"], 4)

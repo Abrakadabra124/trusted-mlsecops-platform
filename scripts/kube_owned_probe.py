@@ -54,6 +54,10 @@ def run(state, profile, operation, *, after_return=None, restore_failure=None):
     ):
         raise Rejected("owned_probe_return_binding")
     receipts = 0 if before == after else audit.identity_receipts(before, after, inbox)
+    # UID binding and independent receipt reads are part of the return, too.
+    elapsed = time.monotonic() - returned
+    if elapsed > 120:
+        raise Rejected("owned_probe_return_binding")
     if failure is not None:
         raise failure
     return {

@@ -53,7 +53,7 @@ class OwnedProbe(unittest.TestCase):
             patch.object(self.subject.service, "pod", return_value={"metadata": {"uid": "new"}})
         )
         self.clock = self.enterContext(
-            patch.object(self.subject.time, "monotonic", side_effect=[0, 1])
+            patch.object(self.subject.time, "monotonic", side_effect=[0, 1, 1])
         )
         self.enterContext(patch.object(self.subject.time, "sleep"))
 
@@ -113,6 +113,56 @@ class OwnedProbe(unittest.TestCase):
         self.pod.return_value = {"metadata": {"uid": "foreign"}}
         with self.assertRaises(Rejected):
             self.subject.run("state", "profile", self.operation)
+
+    def test_deadline_includes_final_binding_and_receipt_validation(self):
+        elapsed = [0]
+        self.clock.side_effect = lambda: elapsed[0]
+        self.after["records"] = [{"id": "confirmed"}]
+
+        def collector(*args):
+            if self.collector.call_count == 1:
+                return {"heartbeats": {"serving": 5}}
+            elapsed[0] = 119
+            return self.inbox
+
+        def late_binding(*args):
+            elapsed[0] = 121
+            return {"metadata": {"uid": "new"}}
+
+        self.collector.side_effect = collector
+        self.pod.side_effect = late_binding
+        with (
+            patch.object(self.subject.audit, "identity_receipts", return_value=1),
+            self.assertRaisesRegex(Rejected, "owned_probe_return_binding"),
+        ):
+            self.subject.run("state", "profile", self.operation)
+
+    def test_report_uses_time_after_receipt_validation_and_rejects_late_receipt(self):
+        elapsed = [0]
+        self.clock.side_effect = lambda: elapsed[0]
+        self.after["records"] = [{"id": "confirmed"}]
+
+        def validate_receipts(*args):
+            elapsed[0] = completed
+            return 1
+
+        for completed in (120, 121):
+            elapsed[0] = 0
+            self.collector.side_effect = [{"heartbeats": {"serving": 5}}, self.inbox]
+            with (
+                self.subTest(completed=completed),
+                patch.object(
+                    self.subject.observations, "snapshot", side_effect=[self.before, self.after]
+                ),
+                patch.object(self.subject.audit, "identity_receipts", validate_receipts),
+            ):
+                if completed > 120:
+                    with self.assertRaisesRegex(Rejected, "owned_probe_return_binding"):
+                        self.subject.run("state", "profile", self.operation)
+                else:
+                    result = self.subject.run("state", "profile", self.operation)
+                    self.assertEqual(result["ownership"]["return_seconds"], completed)
+                    self.assertEqual(result["ownership"]["identity_events_delivered"], 1)
 
     def test_mutated_identity_or_history_is_not_retention(self):
         self.after["records"] = [{"id": "unconfirmed", "receipt": None, "kind": "identity.denied"}]

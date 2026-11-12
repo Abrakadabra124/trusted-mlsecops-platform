@@ -155,6 +155,9 @@ def change_configuration(state, promotion, expected):
         raise Rejected("kube_serving_configuration_refusal_state_changed")
     else:
         receipts = 0
+    elapsed = time.monotonic() - started
+    if elapsed > 120:
+        raise Rejected("kube_serving_configuration_binding")
     return {
         "replacement": replacement,
         "observation": observed,
