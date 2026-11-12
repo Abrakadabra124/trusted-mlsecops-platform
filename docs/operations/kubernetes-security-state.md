@@ -386,7 +386,7 @@ candidate77/77+30/30. Hosted проверка этого включения вы
 trust_authority/trust_root_store, и RuntimeWarning становился ошибкой. Изоляция
 исправлена через `runpy.run_path` известного файла в отдельном `__main__` namespace;
 warnings не подавляются, production CLI и подтверждение authority не меняются.
-Contract runner теперь показывает идентификаторы непрошедших тестов, без private
+Unit-проверка contract runner теперь показывает идентификаторы непрошедших тестов, без private
 exception text. Проверены обе исходные ошибки и полный набор161tests22.322s,
 1POSIX Windows skip. Это исправление тестового окружения не объясняет прежний
 hosted45s recovery timeout observer.

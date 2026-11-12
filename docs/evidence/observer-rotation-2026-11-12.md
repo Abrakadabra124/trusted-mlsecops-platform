@@ -74,3 +74,33 @@ Mandatory serving heartbeat, остальные caller transitions, автома
 
 Инструкции: [runbook](../operations/kubernetes-security-state.md#переход-observer-после-ротации-корня),
 [план интеграции](../../tasks/audited-serving-integration-plan.md).
+
+## Проверка caller-интеграции
+
+Source `aa276b260e4689a59487221182eaa2648f20a878` подключил реальный observer
+transition к ordinary и candidate PRIMARY rotation. Local161tests/1Windows skip,
+чистый locked checkout161tests23.224s/1Windows skip; обе coordinator modules
+имеют155/155statements и48/48branches. Эти результаты не доказывают hosted flow.
+
+[Security43130462337](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43130462337)
+завершился success:856Linux executions/0skips и25/37/15/46native cases.
+Период trust30.020s, max commit delivery29.878474680s, stopped notice90.802325302s.
+Прежний45s observer timeout остаётся необъяснённым.
+
+[M11 run43130494941](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43130494941),
+job130893141074, завершился failure. M11 выполнялся00:56:11-01:08:04UTC12ноября.
+После `planned-authority-root-rotation` достигнут `live-trust-outage`, затем
+`kube_serving_probe:trust-fault-response-contract`, HTTP phase, exit1. Сам
+HTTP status/body исходная диагностика не сохраняла в публичном результате,
+поэтому причина пока не установлена. Candidate rotation и следующие проверки
+этой кампании не приняты. Backup/recovery step skipped, source SQL stop и
+удаление owned disposable cluster success с проверкой конечного состояния.
+M11 `status=fail`, `release_ready=false`; полный R1 не принят.
+
+Следующий диагностический increment сохраняет конечный allowlist кодов отказа
+HTTP вместо общего response-contract. Порог, успешный контракт и fail-closed
+поведение не меняются. Отрицательные cases проверяют отсутствие private canary
+в результате, сохранение отказа и доступность кода через CLI allowlist.
+Local47смежных tests pass; отдельный lifecycle coverage набор36tests,
+106/106statements и44/44branches в изменённом module. Hosted replay pending;
+это улучшение диагностики, не доказанное исправление причины.

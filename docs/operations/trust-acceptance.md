@@ -1,6 +1,11 @@
 # M11: сквозная проверка trust lifecycle
 
-Статус: [свежая M11 campaign](../evidence/m11-trust-acceptance-2026-11-06.md) pass на `21317fd`, CI 42202109996 success: 141 cases, 656 Linux method executions, primary hashes и cleanup verified. Общий M18/R1 остаётся открытым. Исторические component reports не подменяют этот новый запуск.
+Текущий статус: M11 на `aa276b2`, run43130494941, завершился fail в
+`live-trust-outage` с `kube_serving_probe:trust-fault-response-contract`.
+SQL/cluster cleanup подтверждён, последующий backup/recovery step пропущен.
+Причина неожиданного HTTP-ответа пока не установлена. [Evidence](../evidence/observer-rotation-2026-11-12.md#проверка-caller-интеграции).
+Историческая [M11 campaign](../evidence/m11-trust-acceptance-2026-11-06.md) pass на
+`21317fd`, CI42202109996, не заменяет текущую приёмку. Общий M18/R1 открыт.
 
 ## Назначение и границы
 
@@ -40,8 +45,16 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 | `M11_descriptor_or_time_order` | Proposal должна предшествовать checks, timestamps должны иметь timezone и правильный порядок. Новый proposal требует новой кампании |
 | `M11_inputs_changed` | Source или метод изменился во время проверки. Завершить cleanup и запустить новую кампанию из чистого checkout |
 | Native runtime failure | Сохранить private evidence, определить failed stage, исправить причину и повторить. Historical green не закрывает текущий отказ |
+| `trust-fault-response-*` | Сверить последний `live-trust-*` stage и конечный код. `overloaded` означает HTTP429/overloaded, `client-limited` означает HTTP429/client_limited; `http-200` или `http-503` означает неверный контракт соответствующего ответа; прочие `http-N` означают неожиданный статус. `other` сохраняет неопределённость. Диагностика не выводит body, request ID или неизвестный error code |
 | Cleanup failure | Сверить ownership и конкретные IDs. Не выполнять global prune; без подтверждённой очистки campaign не принимается |
 
 До запуска reporter заменяет прежний итог на `inconclusive`. Ошибка не оставляет прежний success текущим результатом. Raw logs, keys и credentials остаются в private state. После failure сохранять первичные материалы и проверять остановку source SQL, удаление собственного cluster и созданных signer targets/workers. При неизвестной причине, чужом ownership или нехватке независимого approval остановить activation и передать диагностику владельцу.
 
 Критерий принятия: terminal success job, M11 `pass`, совпадающие hashes/current source, пройденные negative cases и подтверждённая очистка. Это проверка M11 механизма; готовность R1 требует оставшейся общей приёмки.
+
+Для ошибки response contract: сначала сохранить stage/code и проверить cleanup,
+затем воспроизвести соответствующий отказ с ограниченной диагностикой. Не
+засчитывать429 как503, не менять60s deadline, не сбрасывать trust history и не
+повторять старую кампанию с утверждением об исправлении без установленной причины.
+Finite-классификатор проверен отрицательными unit cases с приватным canary;
+hosted результат с этой диагностикой пока ожидается.

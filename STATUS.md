@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+Текущий M11 наaa276b2 /43130494941 завершился fail в live-trust-outage:
+неожиданный HTTP response contract, причина пока неизвестна. SQL/cluster cleanup
+success, backup/recovery skipped. Security43130462337success856Linux/0skips.
+[Результат и диагностический followup](docs/evidence/observer-rotation-2026-11-12.md#проверка-caller-интеграции).
+Исторический M11 pass не принимается как текущий, R1/M18/M23 остаются открытыми.
+
 CP4/T29 observer root rotation наe7ec709 прошла hosted run43125706293:
 10cases,9.8959s,heartbeat14->15, сохранный outbox, независимый receipt,
 отказ старого корня и проверка нового, idempotent retry, SQL/cluster cleanup.

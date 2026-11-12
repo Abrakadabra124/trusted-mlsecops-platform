@@ -10,7 +10,9 @@ from mlsecops.contracts import Rejected, canonical
 
 
 class LifecycleContracts(unittest.TestCase):
-    def exercise(self, fault, *, late=False, resurrect=False, invalid=False, fail_signal=False):
+    def exercise(
+        self, fault, *, late=False, resurrect=False, invalid=False, fail_signal=False, response=None
+    ):
         clock = [100.0]
         phase = [None]
         checks = []
@@ -32,6 +34,8 @@ class LifecycleContracts(unittest.TestCase):
             checks.append("cold-read-before-restoration")
 
         def request(path, body=None):
+            if phase[0] == "ready" and path == "/v1/predict" and response is not None:
+                return response
             if phase[0] == "denied" and resurrect:
                 code = 200
             elif phase[0] == "denied" or path == "/readyz":
@@ -239,6 +243,34 @@ class LifecycleContracts(unittest.TestCase):
         self.assertFalse(lifecycle.valid(429, {}, expected))
         self.assertFalse(lifecycle.valid(503, None, expected))
         self.assertFalse(lifecycle.valid(503, {"error": "private"}, expected))
+
+    def test_response_failure_reports_only_finite_categories_and_never_payload(self):
+        from mlsecops import kube_serving_probe
+
+        for status, reply, wanted in (
+            (429, {"error": {"code": "overloaded"}}, "overloaded"),
+            (429, {"error": {"code": "client_limited"}}, "client-limited"),
+            (429, {"error": {"code": "PRIVATE-CANARY"}}, "http-429"),
+            (503, {"error": "PRIVATE-CANARY"}, "http-503"),
+            (200, {"predictions": ["PRIVATE-CANARY"]}, "http-200"),
+            (401, None, "http-401"),
+            (403, [], "http-403"),
+            (413, {}, "http-413"),
+            (422, {}, "http-422"),
+            (500, {}, "http-500"),
+            (504, {}, "other"),
+            (True, {}, "other"),
+            (["PRIVATE-CANARY"], {}, "other"),
+            ("PRIVATE-CANARY", {}, "other"),
+        ):
+            with self.subTest(status=status):
+                label = lifecycle.response_failure(status, reply)
+                self.assertEqual(label, "trust-fault-response-" + wanted)
+                self.assertIn(label, lifecycle.CHECKS)
+                self.assertIn("kube_serving_probe:" + label, kube_serving_probe.CODES)
+                self.assertNotIn("PRIVATE-CANARY", label)
+                with self.assertRaisesRegex(Rejected, label):
+                    self.exercise("policy-change", response=(status, reply))
 
 
 if __name__ == "__main__":

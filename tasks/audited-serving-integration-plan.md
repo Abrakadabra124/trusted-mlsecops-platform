@@ -215,3 +215,10 @@ after the measured live PRIMARY refusal/recovery and before the independent
 MODEL_REVOCATION peer. Failed observer transition preserves committed PRIMARY,
 does not rotate peer, and cannot report success.14coordinator tests,100% statements
 and branches for both modules. Hosted M11 caller proof pending; no broader closure.
+
+aa276b2 hosted M11 43130494941 terminal failure: ordinary rotation reached the
+next live-trust-outage stage, then response-contract failed. Candidate transition
+not accepted. Source SQL/cluster cleanup passed; backup/recovery skipped.
+Security43130462337 passed856Linux/0skip and25/37/15/46native cases. Root cause
+is unknown; finite response-failure categories added for the next bounded replay,
+without changing accepted responses, deadlines or interpreting429 as trust refusal.

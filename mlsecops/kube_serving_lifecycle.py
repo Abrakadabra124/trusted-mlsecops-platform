@@ -12,6 +12,7 @@ from mlsecops.storage_pki import TRUST_HOST
 
 DIRECTORY = Path("/tmp")
 FAULTS = {"outage", "blackhole", "policy-change", "revocation", "key-revocation", "root-rotation"}
+RESPONSE_STATUSES = {200, 401, 403, 413, 422, 429, 500, 503}
 CHECKS = {
     "trust-fault-kind",
     "trust-fault-initial-prediction",
@@ -25,6 +26,24 @@ CHECKS = {
     "trust-blackhole-TCP-blocked",
     "trust-blackhole-TCP-restored",
 }
+CHECKS |= {
+    "trust-fault-response-" + reason
+    for reason in {"overloaded", "client-limited", "other"}
+    | {"http-" + str(status) for status in RESPONSE_STATUSES}
+}
+
+
+def response_failure(status, reply):
+    """Classify a rejected response without exporting its body or arbitrary status."""
+    reason = "other"
+    if type(status) is int and status in RESPONSE_STATUSES:
+        reason = "http-" + str(status)
+        if status == 429 and isinstance(reply, dict):
+            if reply.get("error") == {"code": "overloaded"}:
+                reason = "overloaded"
+            elif reply.get("error") == {"code": "client_limited"}:
+                reason = "client-limited"
+    return "trust-fault-response-" + reason
 
 
 def tcp_state(address, *, blocked):
@@ -125,7 +144,10 @@ def exercise(process, request, body, expected, check, *, pause=None, on_denied=l
             and abs((end_wall - anchor_wall) - (end - anchor)) <= 2,
         )
         previous = end
-        check("trust-fault-response-contract", valid(status, reply, expected))
+        accepted = valid(status, reply, expected)
+        if not accepted:
+            check(response_failure(status, reply), False)
+        check("trust-fault-response-contract", accepted)
         records.append(
             {"start_seconds": start - anchor, "end_seconds": end - anchor, "http_status": status}
         )
