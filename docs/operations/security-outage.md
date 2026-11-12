@@ -65,6 +65,16 @@ full M23 остаётся `inconclusive` до отдельной общей пр
 
 ## Диагностика и безопасное восстановление
 
+На Windows проверочный checkout следует размещать в коротком пути, без вложенных
+`.runtime/checkouts` внутри другого worktree. При clean-checkout проверке
+`scipy.sparse.linalg` не импортировался: путь к `_arpacklib.cp312-win_amd64.pyd`
+имел длину 261 символ. Перенос только owned test worktree в более короткий путь
+восстановил импорт с тем же установленным wheel, без смены lockfile или версий.
+Это наблюдённое ограничение Windows native-module loading. Сначала проверить
+наличие файла и длину пути, затем выбрать короткий checkout и повторить
+`python -c "import scipy.sparse.linalg"` и полные тесты. Не исправлять это
+понижением SciPy, отключением проверок или изменением чужих окружений.
+
 1. При `sequence_deadline_failed` или `sequence_packet_invalid` проверить
    конечный код и шаг, затем private observations в пределах owned runner.
    Различать heartbeat loss и sequence gap; нельзя обнулять ledger, начинать
