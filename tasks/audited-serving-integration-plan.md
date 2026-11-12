@@ -222,3 +222,12 @@ not accepted. Source SQL/cluster cleanup passed; backup/recovery skipped.
 Security43130462337 passed856Linux/0skip and25/37/15/46native cases. Root cause
 is unknown; finite response-failure categories added for the next bounded replay,
 without changing accepted responses, deadlines or interpreting429 as trust refusal.
+
+5486596 hosted M11 43132977638 terminal success:146cases,701Linux executions/0skip,
+ordinary observer11.688843s/HB16->17 and candidate10.732460s/HB25->26, retained
+outbox and cleanup. Three primary hashes and trace/signer metrics independently
+reconciled. Security43132975200 passed856Linux/0skip. Clean72tests/0skip.
+[Evidence](../docs/evidence/m11-observer-callers-2026-11-12.md). Previous response
+contract and45s observer failures remain unexplained; success is not causal repair.
+Next mandatory step remains coherent serving lifecycle/heartbeat across callers,
+fresh M13/M14 and full M23; actual admission/M18/R1 remain open.

@@ -376,10 +376,11 @@ observer PRIMARY уже изменена, peer ещё прежний; слепо
 
 Локально14coordinator tests проверили порядок, обе подписи и прерывание без
 возврата ключа. Coverage обычного coordinator78/78statements+18/18branches,
-candidate77/77+30/30. Hosted проверка этого включения выполняется workflow
-`kubernetes-serving.yml` через существующий M11 сценарий; до terminal evidence
-новые caller paths не считаются принятыми. Общий обязательный serving heartbeat
-и полный R1 остаются открытыми.
+candidate77/77+30/30. [Hosted5486596 /43132977638](../evidence/m11-observer-callers-2026-11-12.md)
+проверил оба caller paths через существующий M11:146cases, ordinary transition
+11.688843s/HB16->17 и candidate10.732460s/HB25->26, сохранный outbox и cleanup.
+Предыдущий HTTP response-contract fail и45s observer timeout остаются
+необъяснёнными. Общий обязательный serving heartbeat и полный R1 открыты.
 
 При локальном расширенном прогоне M11 с `-W error` выявлена ошибка двух
 существующих CLI-тестов: `runpy.run_module` повторно запускал уже импортированные

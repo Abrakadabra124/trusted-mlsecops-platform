@@ -104,3 +104,7 @@ HTTP вместо общего response-contract. Порог, успешный �
 Local47смежных tests pass; отдельный lifecycle coverage набор36tests,
 106/106statements и44/44branches в изменённом module. Hosted replay pending;
 это улучшение диагностики, не доказанное исправление причины.
+
+Последующий [5486596 /43132977638](m11-observer-callers-2026-11-12.md) завершился
+success с146M11cases и обеими observer transitions. Причина прежнего отказа
+не установлена; полный результат, primary hash validation и ограничения по ссылке.

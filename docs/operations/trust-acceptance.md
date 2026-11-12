@@ -1,9 +1,11 @@
 # M11: сквозная проверка trust lifecycle
 
-Текущий статус: M11 на `aa276b2`, run43130494941, завершился fail в
-`live-trust-outage` с `kube_serving_probe:trust-fault-response-contract`.
-SQL/cluster cleanup подтверждён, последующий backup/recovery step пропущен.
-Причина неожиданного HTTP-ответа пока не установлена. [Evidence](../evidence/observer-rotation-2026-11-12.md#проверка-caller-интеграции).
+Текущий запуск: [M11 на5486596 /43132977638](../evidence/m11-observer-callers-2026-11-12.md)
+прошёл146cases с двумя observer transitions, сверкой primary hashes/traces и
+подтверждённой SQL/cluster cleanup. Controlled backup/recovery step также pass,
+но full_M17 остаётся inconclusive. Предыдущий `aa276b2` fail в live-trust-outage
+с `kube_serving_probe:trust-fault-response-contract` не повторился; его причина
+не установлена. Новый pass не закрывает эту нестабильность.
 Историческая [M11 campaign](../evidence/m11-trust-acceptance-2026-11-06.md) pass на
 `21317fd`, CI42202109996, не заменяет текущую приёмку. Общий M18/R1 открыт.
 
@@ -56,5 +58,6 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 затем воспроизвести соответствующий отказ с ограниченной диагностикой. Не
 засчитывать429 как503, не менять60s deadline, не сбрасывать trust history и не
 повторять старую кампанию с утверждением об исправлении без установленной причины.
-Finite-классификатор проверен отрицательными unit cases с приватным canary;
-hosted результат с этой диагностикой пока ожидается.
+Finite-классификатор проверен отрицательными unit cases с приватным canary.
+Hosted5486596 прошёл, но failure branch новой диагностики там не исполнялась;
+причина предыдущего неожиданного ответа остаётся неизвестной.
