@@ -4,7 +4,7 @@ import time
 import uuid
 from contextlib import contextmanager
 
-from mlsecops import kube_promotion, kube_security_events, kube_storage
+from mlsecops import kube_promotion, kube_security_events, kube_serving_service, kube_storage
 from mlsecops import kube_security_resources as resources
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, canonical, decode
@@ -88,6 +88,8 @@ def job(state, profile, code, *, worker=False, serving=False):
     hosted()
     if type(worker) is not bool or type(serving) is not bool or worker and serving:
         raise Rejected("audit_native_role_conflict")
+    if serving and kube_serving_service.directory(state).exists():
+        raise Rejected("audit_serving_owner_present")
     namespace, account = (
         ("ml-train", "trainer")
         if worker
@@ -140,6 +142,25 @@ def job(state, profile, code, *, worker=False, serving=False):
         return decode(content, 65536)
     finally:
         kube_promotion.cleanup(state, created, namespace=namespace)
+
+
+def serving_readback(state, profile):
+    """Read the retained journal inside its verified owner when HTTP already exists."""
+    hosted()
+    if not kube_serving_service.directory(state).exists():
+        return {
+            "mode": "probe",
+            "pod_uid": None,
+            "snapshot": job(state, profile, SERVING, serving=True),
+        }
+    marker = kube_serving_service.validate(state)
+    if marker["profile"] != profile:
+        raise Rejected("audit_serving_profile_changed")
+    before = kube_serving_service.pod(state, marker)["metadata"]["uid"]
+    snapshot = kube_serving_service.execute(state, SERVING)
+    if kube_serving_service.pod(state, marker)["metadata"]["uid"] != before:
+        raise Rejected("audit_serving_owner_changed")
+    return {"mode": "service", "pod_uid": before, "snapshot": snapshot}
 
 
 def health(state, profile, expected=True):
@@ -255,18 +276,21 @@ def qualify(root, state, config, request, image):
 
     health(state, profile)
     confirmed("fresh-signed-audit-over-kubernetes-mtls", True)
-    serving = job(state, profile, SERVING, serving=True)
+    serving_owner = serving_readback(state, profile)
+    serving = serving_owner["snapshot"]
     confirmed(
         "serving-outbox-is-distinct-from-trust-observer",
         serving["pin"] == marker["pins"]["serving"]
         and marker["pins"]["serving"] != marker["pins"]["trust"]
         and marker["volumes"]["serving"] != marker["volumes"]["trust"]
-        and serving["records"] == [],
+        and (serving_owner["mode"] == "service" or serving["records"] == []),
     )
-    replacement = job(state, profile, SERVING, serving=True)
+    replacement = serving_readback(state, profile)
     confirmed(
-        "serving-probe-replacement-retains-private-outbox",
-        replacement == serving
+        "same-serving-owner-retains-private-outbox"
+        if serving_owner["mode"] == "service"
+        else "serving-probe-replacement-retains-private-outbox",
+        replacement == serving_owner
         and serving["permissions"] == {"directory": "0o700", "identity": "0o600", "state": "0o600"},
     )
     worker = """
@@ -345,6 +369,7 @@ except OSError:
         "cases": cases,
         "collector_replacement": replacement,
         "observer_replacement": observer,
+        "serving_owner": {name: serving_owner[name] for name in ("mode", "pod_uid")},
         "trust_heartbeat_before": old_sequence,
         "trust_heartbeat_after": observed,
         "source_fingerprint": profile["source_fingerprint"],

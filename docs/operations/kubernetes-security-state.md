@@ -554,3 +554,27 @@ roundtrip. Порог30min workflow,600s permit,180s preflight,60s HTTP и120s t
 не повторять запуск без конкретного исправления. Rollback к прежнему transport
 выполнять отдельным revert после cleanup; acceptance на новом candidate потребует
 нового полного запуска. Локальные Docker/WSL/Kubernetes/SQL не запускать.
+
+## Audit proof при работающем HTTP owner
+
+Если HTTP Deployment уже использует serving identity/outbox, отдельный audit
+serving Job создаёт второго владельца и расходует namespace quota. Исправление
+читает journal через `kube_security_native.serving_readback` внутри существующего
+проверенного Pod. Проверяются service marker, точный image profile и Pod UID до
+и после remote read; внутри исполняется только fixed SERVING readback program.
+Если service directory отсутствует, сохраняется прежний owned probe с cleanup.
+
+Incomplete/suspended marker, изменившийся profile, Pod replacement или ошибка
+readback приводят к отказу без fallback Job. Прямой serving audit Job также
+отказывает при существующей service directory. Не удалять marker для обхода этого
+отказа; проверить состояние HTTP через существующий service runbook. Сохраняются
+отдельные identity, volume и permissions checks, журнал не сбрасывается. При active
+owner в отчёте явно указан same-owner readback, без заявления о замене Pod.
+
+Controlled primary playbook выше запускает HTTP до audit outage/restart proof,
+затем использует тот же сервис для admission/inference. Это не перенос всех
+qualification Jobs на постоянный сервис и не bootstrap перед первой actual
+promotion: эти стыки и mandatory heartbeat ещё открыты. Local contracts проверены;
+новый native run должен подтвердить `audit.serving_owner.mode=service`, неизменный
+Pod UID на readback, сохранность receipts и terminal owned cleanup. До такого
+запуска изменение не считается принятым на Kubernetes.

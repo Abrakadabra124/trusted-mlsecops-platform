@@ -258,12 +258,12 @@ def controlled(root, state, image, *, check_actual=False):
         confirmed(
             "controlled-missing-approval-no-write", ledger(state) == before and head(state) == "0:"
         )
-        audit_proof = kube_security_native.qualify(root, state, config, request, image)
         serving_profile = controller_bootstrap.bootstrap(root, state, image, serving=True)[
             "profile"
         ]
         kube_serving_service.bootstrap(state, serving_profile, config)
         service_started = True
+        audit_proof = kube_security_native.qualify(root, state, config, request, image)
         expected = {"ready": False, "features": features, "scores": scores}
         serving_before = serving_service.observe(state, expected)
         confirmed("controlled-unapproved-http-refuses-without-write", ledger(state) == before)

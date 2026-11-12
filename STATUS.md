@@ -1,5 +1,12 @@
 # Статус и границы доказательств
 
+T29: audit readback подготовлен для существующего HTTP owner: проверяет profile
+и Pod UID, читает journal через exec внутри этого Pod. При existing service marker
+отдельный serving audit Job запрещён, включая incomplete/suspended state.
+Controlled primary теперь поднимает HTTP перед audit outage/restart proof.
+Это следующий increment; hosted proof и bootstrap перед первой actual promotion
+ещё pending, mandatory serving heartbeat остаётся false.
+
 T29/M11: run43150998160 на2e5043c остановлен общим30min timeout после стадии
 actual-candidate-policy-change; cleanup source SQL и disposable cluster success.
 M11 inconclusive, backup не выполнен. Подготовлено пакетное чтение точного inventory
