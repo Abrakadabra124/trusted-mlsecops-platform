@@ -1,5 +1,15 @@
 # Mandatory serving audit and coherent campaign lifecycle
 
+Current checkpoint: d66b12a primary43155788888 passed real HTTP configuration
+roundtrip (54.987612s incompatible policy, 56.628996s restored ONNX), retained
+Deployment/outbox and complete owned cleanup. Security43155788165 passed993 test
+executions and25/37/17/46native assertions. M11 on the same source remains under
+separate verification. Next increment reuses the existing HTTP owner for audit
+readback, refuses another serving audit Job and verifies orphaned Pod absence.
+Its controlled campaign starts HTTP before audit outage/restart proof; bootstrap
+before first actual admission, shared probe handoff and mandatory heartbeat remain
+open. See [source-bound evidence](../docs/evidence/serving-handoff-2026-11-12.md#проверенная-смена-конфигурации-наd66b12a).
+
 Неделя11/T29, continuation of audited-kubernetes-promotion-plan.md. Baseline
 c4b6cdc documents runtime4aeece4; scoped promotion/outage recovery is verified,
 full M23/R1 remains open. Existing authorization permits implementation and hosted

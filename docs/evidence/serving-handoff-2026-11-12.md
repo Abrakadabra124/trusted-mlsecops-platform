@@ -119,3 +119,41 @@ bootstrap до actual admission и mandatory serving heartbeat. После ок�
 профиля обязательны свежие M13/M14 и полная M23 campaign. Actual admission, M19,
 независимые M22 challenges и итоговая M18-приёмка одного candidate остаются открытыми.
 Локальные Docker/WSL/Kubernetes/SQL в этой задаче не запускались.
+
+## Проверенная смена конфигурации наd66b12a
+
+Source `d66b12ab4ed269dbd587fa5dd35b9af371768d12`, fingerprint
+`3715b90accd3298cbea5523fc9338c1383189461baad652fef26ad800bd7afbb`.
+[Primary43155788888](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43155788888),
+job130975280323: terminal success. Report04:38:03.097080 ->04:48:13.440003 UTC.
+21aggregate checks, включая17controlled checks; это вложенные проверки,
+не21принятый acceptance gate. Runtime JSON и повторный sanitized readback совпали.
+
+| Переход | Результат |
+|---|---|
+| Working policy -> несовместимая policy |54.987612s, heartbeat8->9, Ready/predict503, no inference worker, exact Reader refusal |
+| Возврат исходной policy |56.628996s, heartbeat9->11, Ready200, один worker,3ONNX predictions |
+| Golden parity после возврата |max error7.583384781240099e-08 |
+| Config binding |Исходный hash восстановлен; оба ConfigMap UID новые |
+| Владение HTTP |Оба Pod UID новые и совпали с final readback, Deployment UID сохранён |
+| Journal и permissions |Сохранены; отказ без новых событий, после восстановления1новый identity.denied с независимым receipt |
+| Финальная очистка service |service_pods0, worker_jobs0, audit_state_retained=true |
+| Cleanup runner |Stop owned SQL и Remove owned cluster success с readback |
+
+Исполнялись реальные suspend/reconfigure/resume, UID/resourceVersion-guarded
+удаление immutable ConfigMap и ожидание нового heartbeat после исчезновения
+старого владельца. Оба перехода уложились в исходные120s. Это не атомарная
+операция нескольких объектов и не непрерывный PID.
+
+[Security43155788165](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43155788165)
+на том же source: оба jobs success,993test executions/22batches без skips;
+coordinator139/139statements,46/46branches и batch reader41/41statements,
+24/24branches. Чистый detached checkout d66b12a с собственным locked Python3.12.15
+повторил191tests без skips, Ruff908files, docs954files/345Markdown/2529links,
+git tree clean. Runtime ниже обязательных сроков не заменяет эти проверки source.
+
+Границы: full_M10=inconclusive, release_ready=false, mandatory_serving_heartbeat=false.
+Actual candidate ещё отказан; M11 оценивается отдельным run. Ускорение всего M11
+и последующий audit readback внутри постоянного HTTP owner этим отчётом не доказаны.
+Прерванный config transition остаётся suspended; автоматический resume после
+такого сбоя пока не реализован и не считается проверенным восстановлением R1.

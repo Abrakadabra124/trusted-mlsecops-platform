@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from mlsecops import kube_serving_handoff
 from mlsecops import kube_serving_service as service
 from mlsecops.contracts import Rejected
 from scripts import kube_security_native as subject
@@ -103,6 +104,18 @@ class ServingOwner(unittest.TestCase):
         with (
             patch.object(subject, "kubectl") as api,
             self.assertRaisesRegex(Rejected, "audit_serving_owner_present"),
+        ):
+            subject.job("state", self.profile, subject.SERVING, serving=True)
+        api.assert_not_called()
+
+    def test_orphaned_pod_blocks_probe_even_without_a_service_marker(self):
+        with (
+            patch.object(service, "directory", return_value=self.path / "absent"),
+            patch.object(
+                kube_serving_handoff, "require_probe_slot", side_effect=Rejected("orphaned-owner")
+            ),
+            patch.object(subject, "kubectl") as api,
+            self.assertRaisesRegex(Rejected, "orphaned-owner"),
         ):
             subject.job("state", self.profile, subject.SERVING, serving=True)
         api.assert_not_called()

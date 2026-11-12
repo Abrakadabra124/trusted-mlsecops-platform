@@ -457,7 +457,9 @@ hosted45s recovery timeout observer.
 ## Явная смена конфигурации постоянного HTTP-владельца
 
 Механизм подготовлен для общего serving lifecycle; hosted proof этого increment
-ещё не получен. Локально91tests pass, coordinator139/139statements и46/46branches.
+получен наd66b12a /43155788888:54.987612s policy mismatch и56.628996s возврат
+конфигурации с настоящим ONNX; cleanup success. Локально91tests pass,
+coordinator139/139statements и46/46branches.
 Это не приёмка mandatory serving heartbeat или полного M23/R1.
 
 Оператор работает только в разрешённом disposable hosted стенде. Нужны существующие
@@ -562,7 +564,10 @@ serving Job создаёт второго владельца и расходуе
 читает journal через `kube_security_native.serving_readback` внутри существующего
 проверенного Pod. Проверяются service marker, точный image profile и Pod UID до
 и после remote read; внутри исполняется только fixed SERVING readback program.
-Если service directory отсутствует, сохраняется прежний owned probe с cleanup.
+Если service directory отсутствует, перед owned probe проверяется свободный slot:
+нет HTTP/worker Pods и Jobs, кроме независимо проверенного trust observer.
+После удаления Job отдельно подтверждается исчезновение Pods. Удалённый Job
+при оставшемся Pod не считается завершённой очисткой.
 
 Incomplete/suspended marker, изменившийся profile, Pod replacement или ошибка
 readback приводят к отказу без fallback Job. Прямой serving audit Job также

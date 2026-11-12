@@ -80,6 +80,7 @@ class NativeAuditContracts(unittest.TestCase):
         content=b'{"verified":true}',
         terminal="Complete",
         multiple=False,
+        pod_cleanup_error=False,
     ):
         record = {}
 
@@ -110,12 +111,24 @@ class NativeAuditContracts(unittest.TestCase):
             patch.object(subject, "kubectl", side_effect=api),
             patch.object(subject, "wait_job", side_effect=wait),
             patch.object(subject, "verify_running_image"),
+            patch.object(subject.kube_serving_handoff, "require_probe_slot") as slot,
+            patch.object(
+                subject.kube_serving_handoff,
+                "wait_pods_absent",
+                side_effect=Rejected("pods-still-present") if pod_cleanup_error else None,
+            ) as absent,
             patch.object(subject.kube_promotion, "cleanup") as cleanup,
         ):
             try:
                 result = subject.job("state", self.profile, "pass", worker=worker, serving=serving)
             finally:
                 cleanup.assert_called_once()
+                if serving:
+                    slot.assert_called_once_with("state")
+                    absent.assert_called_once_with("state")
+                else:
+                    slot.assert_not_called()
+                    absent.assert_not_called()
                 self.assertEqual(cleanup.call_args.args[1][0][1], "owned")
                 self.assertEqual(
                     cleanup.call_args.kwargs["namespace"],
@@ -165,6 +178,10 @@ class NativeAuditContracts(unittest.TestCase):
         ):
             with self.assertRaises(Rejected):
                 self.job(**change)
+
+    def test_completed_serving_probe_with_remaining_pods_is_not_success(self):
+        with self.assertRaisesRegex(Rejected, "pods-still-present"):
+            self.job(serving=True, pod_cleanup_error=True)
 
     def test_fresh_probe_must_report_exact_expected_health_without_release_grant(self):
         for result in (

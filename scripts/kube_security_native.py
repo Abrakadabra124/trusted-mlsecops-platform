@@ -4,7 +4,13 @@ import time
 import uuid
 from contextlib import contextmanager
 
-from mlsecops import kube_promotion, kube_security_events, kube_serving_service, kube_storage
+from mlsecops import (
+    kube_promotion,
+    kube_security_events,
+    kube_serving_handoff,
+    kube_serving_service,
+    kube_storage,
+)
 from mlsecops import kube_security_resources as resources
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import Rejected, canonical, decode
@@ -90,6 +96,8 @@ def job(state, profile, code, *, worker=False, serving=False):
         raise Rejected("audit_native_role_conflict")
     if serving and kube_serving_service.directory(state).exists():
         raise Rejected("audit_serving_owner_present")
+    if serving:
+        kube_serving_handoff.require_probe_slot(state)
     namespace, account = (
         ("ml-train", "trainer")
         if worker
@@ -142,6 +150,8 @@ def job(state, profile, code, *, worker=False, serving=False):
         return decode(content, 65536)
     finally:
         kube_promotion.cleanup(state, created, namespace=namespace)
+        if serving:
+            kube_serving_handoff.wait_pods_absent(state)
 
 
 def serving_readback(state, profile):

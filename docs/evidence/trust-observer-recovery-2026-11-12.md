@@ -69,3 +69,28 @@ actual-candidate-policy-change; для него подготовлена отд�
 диагностика source location. Mandatory serving heartbeat, общая конфигурация всех
 callers, M10 actual admission и остальные незакрытые R1 gates этим результатом
 не заменяются.
+
+## Повторная проверка наd66b12a
+
+[CI43155788165](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43155788165)
+на source `d66b12ab4ed269dbd587fa5dd35b9af371768d12` завершился success:
+contracts130975273404 и native130975273728. Runtime fingerprint
+`3715b90accd3298cbea5523fc9338c1383189461baad652fef26ad800bd7afbb`.
+
+После добавления serving config coordinator и пакетного inventory readback:
+993test executions в22сериях без skipped summaries; coordinator139/139statements,
+46/46branches и reader41/41statements,24/24branches. Native components снова
+подтвердили25/37/17/46assertions в тех же ограниченных scopes.
+
+| Измерение | Повторное наблюдение |
+|---|---:|
+| Unlock -> receipt после принудительного journal lock |1.237934058s |
+| Максимум SQL commit -> receipt |31.019346446s |
+| Интервал source heartbeat |31.225s |
+| Остановка observer -> signed gap |90.967472137s |
+| Остановка HTTP producer -> signed gap |90.452072873s |
+
+Collector и собственный SQL/volume очищены; оба supervisor lifecycle завершились
+с подтверждённой очисткой child, все три HTTP lifecycle также reaped children.
+Этот workflow не запускает Kubernetes config roundtrip и не доказывает ускорение
+M11. Их отдельные Primary/M11 runs на том же source оцениваются самостоятельно.

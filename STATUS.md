@@ -21,8 +21,11 @@ T29: подготовлена явная смена immutable serving ConfigMap 
 intent. Прерванная операция не допускает resume по старому ticket. Primary campaign
 соединена с реальным переходом policy mismatch ->503/no worker -> исходная config
 и ONNX, независимым heartbeat/receipt и проверкой конечного Pod UID.
-Local coordinator139/139statements,46/46branches; hosted результат этого increment
-ещё pending. [Порядок и ограничения восстановления](docs/operations/kubernetes-security-state.md#явная-смена-конфигурации-постоянного-http-владельца).
+Наd66b12a /43155788888 оба actual HTTP перехода pass:54.987612s и56.628996s,
+новые CM/Pod UID, прежний Deployment, retained outbox и новый signed identity
+receipt после восстановления. ONNX max error7.583384781240099e-08, cleanup0Pods/0Jobs,
+SQL/cluster teardown success. Local coordinator139/139statements,46/46branches.
+[Evidence](docs/evidence/serving-handoff-2026-11-12.md#проверенная-смена-конфигурации-наd66b12a).
 
 T29 observer recovery на80dea70 /43149916553 принят: оба CI jobs success,
 950Linux test executions без skips,25/37/17/46native assertions.
