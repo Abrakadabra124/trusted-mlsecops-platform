@@ -297,6 +297,8 @@ def diagnostic_code(error):
             reason = str(error)
             if reason == "trust_security_source_unavailable":
                 return 41
+            if reason == "security_store_busy":
+                return 42
             if reason == "security_store_unavailable":
                 cause = error.__cause__ or error.__context__
                 if isinstance(cause, BlockingIOError) and cause.errno in (

@@ -51,7 +51,7 @@ jobs:
         run: |
           uv run --locked ruff check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py
           uv run --locked ruff format --check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-store.coverage" --source=mlsecops.security_event_ledger,mlsecops.security_event_store,mlsecops.security_event_health -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification scripts.security_event_health_qualification scripts.security_event_routes_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-store.coverage" --source=mlsecops.security_event_ledger,mlsecops.security_event_store,mlsecops.security_event_health -m unittest scripts.security_event_ledger_qualification scripts.security_event_store_qualification scripts.security_event_health_qualification scripts.security_event_routes_qualification scripts.trust_observer_diagnostics_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-store.coverage" -o "$RUNNER_TEMP/security-store-coverage.json"
           uv run --locked python - <<'PY'
           import json
@@ -93,6 +93,7 @@ jobs:
           uv run --locked ruff check mlsecops/kube_security*.py scripts/kube_security*.py
           uv run --locked ruff format --check mlsecops/kube_security*.py scripts/kube_security*.py
           uv run --locked python -m unittest scripts.kube_security_native_qualification scripts.kube_promotion_qualification scripts.kube_promotion_native_qualification scripts.trust_targets_qualification scripts.kube_serving_native_qualification scripts.kube_privacy_native_qualification scripts.kube_load_native_qualification scripts.kube_candidate_qualification scripts.kube_cli_privacy_qualification
+          uv run --locked python -W error -m unittest scripts.load_probe_qualification scripts.monitoring_probe_qualification scripts.kube_privacy_probe_qualification scripts.serving_privacy_qualification
           uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-provision.coverage" --source=mlsecops.security_event_provision,mlsecops.kube_security_resources,mlsecops.kube_security_materials,mlsecops.kube_security_events -m unittest scripts.security_event_provision_qualification scripts.kube_security_resources_qualification scripts.kube_security_materials_qualification scripts.kube_security_events_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/security-provision.coverage" -o "$RUNNER_TEMP/security-provision-coverage.json"
           uv run --locked python - <<'PY'

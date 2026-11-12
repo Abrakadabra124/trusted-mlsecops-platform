@@ -51,6 +51,9 @@ class IntegrationBoundary(unittest.TestCase):
             calls.clear()
             self.assertEqual(native.readback(read), {"verified": True})
             self.assertEqual(len(calls), 2)
+        reader = Mock(side_effect=[Rejected("security_store_busy"), {"verified": True}])
+        self.assertEqual(native.readback(reader), {"verified": True})
+        self.assertEqual(reader.call_count, 2)
         with patch.object(native.time, "monotonic", side_effect=[0, 3]):
             with self.assertRaisesRegex(Rejected, "identity_readback_unavailable"):
                 native.readback(Mock(side_effect=Rejected("security_store_unavailable")))

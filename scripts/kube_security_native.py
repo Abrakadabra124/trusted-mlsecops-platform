@@ -45,7 +45,7 @@ while True:
         document = store.snapshot()
         break
     except Rejected as error:
-        if str(error) not in ('artifact_unavailable', 'security_store_unavailable') or time.monotonic() >= deadline:
+        if str(error) not in ('artifact_unavailable', 'security_store_unavailable', 'security_store_busy') or time.monotonic() >= deadline:
             raise
         time.sleep(0.03)
 if len(document['records']) > 32:

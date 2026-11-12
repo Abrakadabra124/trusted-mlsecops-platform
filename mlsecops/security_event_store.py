@@ -5,6 +5,7 @@ Durability assumes a persistent filesystem honoring fsync; host-admin rollback
 and lost volumes require an external recovery authority and are not solved here.
 """
 
+import errno
 import os
 import secrets
 import stat
@@ -52,7 +53,14 @@ def locked(root):
                 private(os.fstat(descriptor), directory=True)
                 import fcntl
 
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError as error:
+                    if error.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                        # Keep lock contention distinct from the shared path
+                        # guard's generic OSError conversion. No retry or unlock.
+                        raise Rejected("security_store_busy") from None
+                    raise
                 yield descriptor
             finally:
                 os.close(descriptor)

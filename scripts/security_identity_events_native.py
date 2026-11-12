@@ -45,7 +45,11 @@ def readback(reader):
         try:
             return reader()
         except Rejected as failure:
-            if str(failure) not in ("artifact_unavailable", "security_store_unavailable"):
+            if str(failure) not in (
+                "artifact_unavailable",
+                "security_store_unavailable",
+                "security_store_busy",
+            ):
                 raise
             if time.monotonic() >= deadline:
                 raise Rejected("identity_readback_unavailable") from None
@@ -376,7 +380,10 @@ def qualify():
                     try:
                         _, periodic = heartbeat()
                     except Rejected as failure:
-                        if str(failure) != "security_store_unavailable":
+                        if str(failure) not in (
+                            "security_store_unavailable",
+                            "security_store_busy",
+                        ):
                             raise
                 heartbeat_interval = (
                     periodic["observed_at_ms"] - first_heartbeat["observed_at_ms"]
@@ -400,7 +407,10 @@ def qualify():
                         ):
                             break
                     except Rejected as failure:
-                        if str(failure) != "security_store_unavailable":
+                        if str(failure) not in (
+                            "security_store_unavailable",
+                            "security_store_busy",
+                        ):
                             raise
                     time.sleep(0.05)
                 check(

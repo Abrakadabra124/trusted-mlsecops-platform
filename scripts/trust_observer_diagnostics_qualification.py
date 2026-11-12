@@ -21,6 +21,7 @@ class Diagnostics(unittest.TestCase):
         self.assertTrue(hasattr(source, "diagnostic_code"), "failure classifier is missing")
         for error, code in (
             (Rejected("trust_security_source_unavailable"), 41),
+            (Rejected("security_store_busy"), 42),
             (Rejected("security_store_unavailable"), 43),
             (Rejected("trust_security_delivery_unconfirmed"), 44),
             (Rejected("private-path-and-token"), 1),
@@ -96,6 +97,18 @@ class Diagnostics(unittest.TestCase):
                         self.fail("simultaneous exclusive lock accepted")
                 except Rejected as error:
                     self.assertEqual(source.diagnostic_code(error), 42)
+
+    @unittest.skipUnless(os.name == "posix", "actual flock requires Linux")
+    def test_other_blocking_io_error_is_not_reported_as_lock_contention(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "journal"
+            root.mkdir(mode=0o700)
+            with patch("fcntl.flock", side_effect=BlockingIOError(errno.EIO, "PRIVATE")):
+                try:
+                    with journal.locked(str(root)):
+                        self.fail("filesystem failure accepted")
+                except Rejected as error:
+                    self.assertEqual(source.diagnostic_code(error), 1)
 
     def test_failure_readback_ignores_unknown_categories_and_private_fields(self):
         from scripts import security_trust_service_native as native
