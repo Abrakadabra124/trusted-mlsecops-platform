@@ -215,3 +215,41 @@ deletion/readback завершились success. Полные логи сохр
 release_ready=false; M10/M13/M14/M19/M22/M23 и остальные обязательные gates не
 закрываются этим результатом. Причина startup refusal предыдущего d66b12a остаётся
 неустановленной: успешный повтор не доказывает причинного исправления.
+
+## Обязательный serving profile на451c713
+
+[Primary43162487334](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43162487334),
+job130996675110, source451c713908e04db50f2ea6e20abb181952ad4906: success.
+Runtime fingerprint1bf9b48696aa1dd78b85fa78998c95ba24a030ddd35933d3c3d6f46118a8bbeb,
+source clean;05:38:56.333834 ->05:52:44.787021 UTC. Две JSON-копии отчёта совпали.
+
+До parent submit и Kubernetes admission actual candidate появился настоящий HTTP
+Pod377f2117-3aa0-4be3-b3c3-4be98fea1760: /livez200, /readyz503, predict503,
+inference worker отсутствовал. Fresh serving heartbeat0->1 подтверждён за39.897243s,
+UID в HTTP observation и final readback совпал. Parent отказал с
+release_assurance_required, Kubernetes admission также rejected. Mandatory trust
+и serving heartbeat включены, optional serving registry больше не принимается.
+
+Controlled context заменён через прежний suspension/reconfigure/resume за66.003658s,
+heartbeat3->4, Deployment и outbox сохранены. Audit readback использовал этот же
+HTTP Pod, UID совпал с before-admission observation.12audit checks и21aggregate
+checks прошли: admission, настоящий ONNX, outage/refusal, retained events/receipts,
+смена Pod, revocation и сохранение отказа. Общий coordinator вернул HTTP за46.584579s
+с2новыми independently matched identity receipts. Следующий incompatible config
+transition67.69003s и restore68.751609s уложились в120s, receipt после restore есть.
+
+Финальное состояние:0service Pods,0worker Jobs, audit state retained. Source SQL
+stop и owned cluster deletion/readback success. full_M10=inconclusive,
+release_ready=false; controlled approval не разрешает actual candidate.
+
+[Security43162487960](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43162487960)
+на том же source/fingerprint success:1047test executions/24batches/0skips,
+25promotion/37trust/17continuous-observer/46HTTP-identity assertions. Max committed
+event delivery31.023695234s, forced-lock recovery1.126971016s, observer gap90.766003236s,
+HTTP producer gap91.282036754s, heartbeat period30.101s. Owned SQL/collector и
+child-process cleanup подтверждены. HTTP component использует controlled unready
+engine; он не заменяет healthy ML/dashboard outage или M13/M14/full M23.
+
+M11 на451c713 failed с конкретным startup expiry отказом, см.
+[runbook](../operations/trust-acceptance.md#expiry-и-передача-http-владельца).
+Следующие readback-capacity и paired-expiry corrections этим Primary не приняты.

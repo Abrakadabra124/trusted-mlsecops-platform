@@ -624,7 +624,8 @@ Primary должен подтвердить реальный возврат че
 
 ## HTTP до первой admission
 
-Статус: local contracts pass; новый hosted proof pending. Исполняемый playbook:
+Статус: Primary451c713 /43162487334 pass, startup39.897243s и heartbeat0->1.
+Fresh M11 с corrected expiry и полная M23 остаются обязательными. Исполняемый playbook:
 `scripts.kube_promotion_native.actual` вызывает `scripts.kube_serving_start_native.start`
 после audit/controller bootstrap и до parent submit и Kubernetes admission.
 

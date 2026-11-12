@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+Primary451c713 /43162487334 pass: actual before-admission HTTP и fresh serving
+heartbeat0->1 за39.897243s, mandatory trust+serving registry, controlled context
+transition66.003658s,21aggregate checks/12audit checks и owned cleanup подтверждены.
+Общий coordinator вернул HTTP за46.584579s с2independent identity receipts.
+Security43162487960 success:1047test executions/24batches/0skips,25/37/17/46native
+assertions. Это не full M23/M10/R1 и не успех M11, который отказал на expiry ниже.
+[Evidence](docs/evidence/serving-handoff-2026-11-12.md#обязательный-serving-profile-на451c713).
+
 M11 на451c713 /43162491549 fail на signed-approval-expiry, до общего timeout.
 Reader вернул release_expired_or_future_document при startup второго probe;
 SQL/cluster cleanup success. Два отдельных handoff добавили возврат и suspend
@@ -21,7 +29,8 @@ T29: startup HTTP перед первой actual admission подключён л
 serving; signed weakened registry отвергается без rekey/migration. Controlled
 переход использует существующий suspension/reconfigure/resume. Local205tests
 без skips; startup41/41statements+14/14branches, materials125/125+30/30.
-Native bootstrap/mandatory heartbeat и общий coordinator ещё pending; R1 не принят.
+Primary451c713 подтвердил bootstrap/mandatory heartbeat и общий coordinator.
+Fresh M11 на исправленном expiry, M13/M14 и full M23/R1 ещё обязательны.
 
 M11 наaf12c85 /43158137922 pass:146cases, source bindings, оба primary signer
 report hashes и terminal owned cleanup проверены. Это предыдущий profile до
@@ -34,8 +43,8 @@ suspension ticket, возврат владельца и fresh heartbeat<=120s. �
 UID, pin/permissions и сохранность журнала; failed probe остаётся failure даже
 после успешного восстановления. Исходный primary handoff использует тот же путь.
 Local153tests pass без skips, coordinator52/52statements и14/14branches.
-Bootstrap и mandatory serving heartbeat подключены следующим локальным increment;
-native proof общего coordinator и нового startup pending.
+Bootstrap и mandatory serving heartbeat подключены следующим increment;
+Primary451c713 подтвердил общий coordinator и новый startup.
 
 M11 наd66b12a /43155792337 завершился fail после12m51s native campaign, а не
 по timeout. Runtime location: scripts/kube_serving_faults.py:31, progress schema
