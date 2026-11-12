@@ -19,6 +19,8 @@ from mlsecops.storage_pki import workspace_id
 from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_trust_native import hosted
 
+READBACK_BYTES = kube_serving_service.READBACK_BYTES
+
 HEALTH = """
 import time
 from mlsecops import security_event_admission as admission
@@ -42,6 +44,8 @@ while True:
 READ = """
 import os, time
 from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.security_event_ledger import MAX_RECORDS as COLLECTOR_RECORDS
+from mlsecops.security_event_outbox import MAX_RECORDS as PRODUCER_RECORDS
 from mlsecops.process_privacy import enforce
 enforce()
 SETUP
@@ -54,7 +58,7 @@ while True:
         if str(error) not in ('artifact_unavailable', 'security_store_unavailable', 'security_store_busy') or time.monotonic() >= deadline:
             raise
         time.sleep(0.03)
-if len(document['records']) > 32:
+if len(document['records']) > min(COLLECTOR_RECORDS, PRODUCER_RECORDS):
     raise SystemExit(1)
 records = []
 for item in document['records']:
@@ -144,10 +148,10 @@ def job(state, profile, code, *, worker=False, serving=False):
                 namespace,
                 "-c",
                 "worker",
-                "--limit-bytes=65537",
+                f"--limit-bytes={READBACK_BYTES + 1}",
             ],
         ).stdout
-        return decode(content, 65536)
+        return decode(content, READBACK_BYTES)
     finally:
         kube_promotion.cleanup(state, created, namespace=namespace)
         if serving:
@@ -206,7 +210,7 @@ def collector(state, marker):
             COLLECTOR,
         ],
     ).stdout
-    return decode(content, 65536)
+    return decode(content, READBACK_BYTES)
 
 
 @contextmanager

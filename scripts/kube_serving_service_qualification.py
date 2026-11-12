@@ -159,6 +159,25 @@ class PersistentServing(unittest.TestCase):
                     with self.assertRaisesRegex(Rejected, "pod_changed"):
                         self.subject.execute("state", "code")
 
+    def test_large_audit_readback_remains_bounded(self):
+        with (
+            patch.object(self.subject, "validate", return_value={}),
+            patch.object(
+                self.subject, "pod", return_value={"metadata": {"name": "pod", "uid": "owned"}}
+            ),
+            patch.object(
+                self.subject,
+                "kubectl",
+                return_value=SimpleNamespace(stdout=canonical({"projection": "a" * 70000})),
+            ) as api,
+        ):
+            self.assertEqual(len(self.subject.execute("state", "code")["projection"]), 70000)
+            api.return_value = SimpleNamespace(
+                stdout=canonical({"projection": "a" * self.subject.READBACK_BYTES})
+            )
+            with self.assertRaises(Rejected):
+                self.subject.execute("state", "code")
+
     def test_scale_uses_uid_and_resource_version_but_accepts_next_server_version(self):
         config = self.subject.configuration(self.promotion, PROFILE)
         document = self.subject.documents("a" * 32, PROFILE, config)[1]

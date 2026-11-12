@@ -652,3 +652,27 @@ owned teardown с проверкой конечного состояния, за
 Передача владельца добавляет время campaign; workflow budget30min, permit600s,
 fail-closed60s и telemetry120s не изменены. Timeout остаётся inconclusive/fail,
 а не доказательством завершённого M11, M23 или R1.
+
+## Накопление событий между probes
+
+Установленный локально дефект: fixed audit readback завершался SystemExit1 при
+33records, хотя producer и collector допускают1024retained records. С общей
+serving identity журнал сохраняется между probes, поэтому размер маленького
+начального fixture больше не годится как предел чтения. Это отдельное unit
+воспроизведение, не установленная причина какого-либо старого native отказа.
+
+Исправление читает полный journal в пределах существующих MAX_RECORDS обоих
+хранилищ. Projection содержит только event id/kind, digests envelope/receipt,
+heartbeat counters, pin и permissions. Signed envelopes всё ещё проверяются;
+payload, ключи и токены не выводятся. Операторский exec/Job readback ограничен
+512KiB, что вмещает projection1024records. Это лимит диагностики, а не повышение
+ёмкости journal:1025records, invalid signature и oversized response отвергаются.
+
+Read-only диагностика: подтвердить terminal source/run и owned cleanup, проверить
+приватный record count и конечную причину отказа. Для локального воспроизведения
+без инфраструктуры выполнить `python -W error -m unittest
+scripts.kube_security_native_qualification.RetainedJournalReadback`.
+Test33 использует реальные подписи и receipts и проверяет неизменность журнала.
+При фактическом заполнении journal сохранить приватную копию и остановить новые
+запуски; не чистить историю и не сбрасывать epoch ради прохождения теста. Retention
+и recovery требуют отдельного проверенного действия. Новый hosted proof pending.

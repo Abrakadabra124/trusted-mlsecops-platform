@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+T29: readback больше не обрывается после32events. Unit test с33подписанными и
+подтверждёнными событиями воспроизвёл прежний отказ. Projection теперь ограничена
+реальной ёмкостью journal1024records и ответом512KiB; eviction/reset отсутствуют,
+signature checks сохранены.59affected tests pass/0skips. Native proof этого
+исправления pending; текущие Primary/M11/Security на451c713 проверяют предыдущий код.
+
 T29: startup HTTP перед первой actual admission подключён локально. Реальный
 /livez, /ready и predict refusal, тот же Pod UID/pin и новый signed heartbeat
 проверяются до parent submit и Kubernetes admission. Registry требует trust и

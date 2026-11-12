@@ -21,6 +21,8 @@ from mlsecops.storage_pki import workspace_id
 
 NAMESPACE = "ml-serving"
 NAME = "release-risk-advisor"
+# A projection of all 1024 retained audit records fits below this bound.
+READBACK_BYTES = 512 * 1024
 PROBE = (
     "import http.client; from pathlib import Path; "
     "c=http.client.HTTPConnection('127.0.0.1',8080,timeout=4); "
@@ -212,7 +214,7 @@ def execute(state, code):
     ).stdout
     if pod(state, marker)["metadata"]["uid"] != before["metadata"]["uid"]:
         raise Rejected("kube_serving_service_pod_changed")
-    return decode(content, 65536)
+    return decode(content, READBACK_BYTES)
 
 
 def wait_live(state, marker, *, previous=None):

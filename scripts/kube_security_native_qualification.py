@@ -1,12 +1,99 @@
 """Host guard, proof ownership and finite results; no cluster is executed here."""
 
 import copy
+import io
+import tempfile
 import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlsecops.contracts import Rejected, canonical
+from mlsecops import process_privacy
+from mlsecops.contracts import Rejected, canonical, decode, digest
 from scripts import kube_security_native as subject
+from scripts import security_event_ledger_qualification as ledger_fixtures
+
+
+class RetainedJournalReadback(unittest.TestCase):
+    def setUp(self):
+        fixture = ledger_fixtures.LedgerContracts("runTest")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.fixture = fixture
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        for name in ("identity", "state"):
+            (root / name).write_bytes(b"private-test-state")
+        self.store = SimpleNamespace(
+            root=root, registry=fixture.registry, pin="a" * 64, snapshot=fixture.book.document
+        )
+
+    def project(self):
+        output = io.StringIO()
+        with patch.object(process_privacy, "enforce"), redirect_stdout(output):
+            exec(
+                compile(
+                    subject.READ.replace("SETUP", "store = supplied"), "<fixed-readback>", "exec"
+                ),
+                {"supplied": self.store},
+            )
+        return decode(output.getvalue().encode(), 512 * 1024)
+
+    def test_33_signed_settled_events_remain_readable_without_eviction(self):
+        for n in range(1, 34):
+            clock = 2100 + n * 200
+            record = self.fixture.book.ingest(self.fixture.envelope(n), clock_ms=clock)
+            self.fixture.book.acknowledge(self.fixture.receipt(record), clock_ms=clock + 100)
+        before = self.fixture.book.document()
+        result = self.project()
+        self.assertEqual(len(result["records"]), 33)
+        self.assertEqual(
+            result["records"][0]["envelope"], digest(canonical(before["records"][0]["envelope"]))
+        )
+        self.assertEqual(
+            result["records"][-1]["receipt"], digest(canonical(before["records"][-1]["receipt"]))
+        )
+        self.assertEqual(self.fixture.book.document(), before)
+        self.assertNotIn("private-test-state", repr(result))
+
+    def test_readback_rejects_more_than_actual_store_capacity_before_verification(self):
+        from mlsecops.security_event_ledger import MAX_RECORDS
+
+        self.store.snapshot = lambda: {"records": [{}] * (MAX_RECORDS + 1)}
+        with self.assertRaises(SystemExit):
+            self.project()
+
+    def test_full_projection_fits_bounded_operator_response(self):
+        from mlsecops.security_event_ledger import MAX_RECORDS
+
+        # Size budget for the exact projected fields, not a claim of journal validity.
+        record = {
+            "id": "a" * 64,
+            "kind": "artifact.rejected",
+            "envelope": "b" * 64,
+            "receipt": "c" * 64,
+        }
+        content = canonical(
+            {
+                "pin": "d" * 64,
+                "records": [record] * MAX_RECORDS,
+                "heartbeats": {str(i): 2**63 - 1 for i in range(6)},
+                "permissions": {"directory": "0o700", "identity": "0o600", "state": "0o600"},
+            }
+        )
+        self.assertGreater(len(content), 65536)
+        self.assertLess(len(content), subject.READBACK_BYTES)
+        self.assertEqual(len(decode(content, subject.READBACK_BYTES)["records"]), MAX_RECORDS)
+
+    def test_corrupt_signature_still_prevents_projection(self):
+        self.fixture.book.ingest(self.fixture.envelope(), clock_ms=2100)
+        document = self.fixture.book.document()
+        document["records"][0]["envelope"]["payload"] = "invalid"
+        self.store.snapshot = lambda: document
+        with self.assertRaises(Rejected):
+            self.project()
 
 
 class NativeAuditContracts(unittest.TestCase):
@@ -178,6 +265,12 @@ class NativeAuditContracts(unittest.TestCase):
         ):
             with self.assertRaises(Rejected):
                 self.job(**change)
+
+    def test_job_projection_accepts_retained_history_but_rejects_oversized_output(self):
+        result, _ = self.job(content=canonical({"projection": "a" * 70000}))
+        self.assertEqual(len(result["projection"]), 70000)
+        with self.assertRaises(Rejected):
+            self.job(content=canonical({"projection": "a" * subject.READBACK_BYTES}))
 
     def test_completed_serving_probe_with_remaining_pods_is_not_success(self):
         with self.assertRaisesRegex(Rejected, "pods-still-present"):
