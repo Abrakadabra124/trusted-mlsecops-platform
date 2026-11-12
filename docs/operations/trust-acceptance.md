@@ -124,3 +124,41 @@ Local46tests без skips проверили protocol и native harness. Parser/
 96/97statements,51/52branches в focused suite; skipped assertions не используются.
 Поддельный successful report после startup refusal и coordinator acknowledgement
 при таком отказе запрещены. Свежий hosted результат correction ещё pending.
+
+## Expiry и передача HTTP владельца
+
+[Run43162491549](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43162491549),
+source451c713908e04db50f2ea6e20abb181952ad4906, job130996687187: M11 fail,
+05:39:16.955328 ->05:44:14.609934 UTC. SQL stop и owned cluster cleanup success.
+Последовательность finite observations: controlled-after-approval05:42:31.061148,
+signed-approval-expiry05:43:24.431970, startup refusal05:43:49.081212.
+Диагностика Reader: `release_expired_or_future_document`, worker_phase=none.
+Это конкретный новый отказ; причина старого d66b12a им не устанавливается.
+
+Контекст: controlled approval задаётся на90s. Общий coordinator вернул постоянный
+HTTP после положительного probe, затем снова остановил его перед expiry probe.
+Короткое разрешение продолжало стареть во время этих переходов. Отказ Reader
+сохранил fail-closed, но не является требуемым наблюдением перехода200->503 в
+уже работающем процессе. M11 нельзя принимать по такому cold refusal.
+
+Исправленный playbook `scripts.kube_approval_campaign.qualify` использует один
+existing owner transfer для пары отдельных Jobs. После подтверждённого suspend
+подписывается прежнее90s approval, выполняется admission, затем первый настоящий
+probe с positive inference и worker-loss check, затем отдельный expiry probe.
+Каждый Job сохраняет собственный cleanup с подтверждением отсутствия Pods.
+Постоянный owner возвращается один раз после обоих probes; fresh heartbeat,
+Pod/pin/permissions/receipt проверки общего coordinator сохраняются. Оба отчёта
+сохраняются отдельно, одна проверка не копируется вместо другой.
+
+После возврата выполняются прежние cold-start отказ, запрещённый retry без записи,
+явный controlled renewal и следующие trust tests.90s approval,60s fail-closed,
+120s telemetry/return,600s permit и30min M11 budget не увеличены. Ошибка второго
+probe не приводит к автоматическому re-sign/retry; она остаётся ошибкой после
+безопасного возврата владельца. Actual candidate не получает controlled approval.
+
+Проверка без инфраструктуры: `python -W error -m unittest
+scripts.kube_approval_campaign_qualification scripts.kube_approval_fixture_qualification
+scripts.kube_serving_expiry_qualification`. Сверить после нового hosted run обе
+отдельные positive/expiry observations, trace до и после настоящего expires_at,
+negative cold/retry, ownership return и terminal cleanup. Пока этого нет,
+коррекция локально проверена, M11 на новом source не принят.

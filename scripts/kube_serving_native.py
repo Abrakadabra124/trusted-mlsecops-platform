@@ -30,7 +30,7 @@ from mlsecops.trust_targets import Target, select
 from scripts import kube_cli_privacy_exchange as cli_exchange
 from scripts import promotion_qualification as fixtures
 from scripts import serving_native
-from scripts.kube_approval_fixture import renew, shorten
+from scripts.kube_approval_fixture import renew
 from scripts.kube_privacy_bundle import manifest as privacy_bundle
 from scripts.kube_privacy_diagnostic import validated as privacy_location
 from scripts.kube_promotion_native import actual, configuration, initialize_campaign, stage
@@ -405,6 +405,7 @@ def qualify(
     include_key_revocation=False,
     include_trust_lifecycle=False,
 ):
+    from scripts.kube_approval_campaign import qualify as approval_campaign
     from scripts.kube_owned_probe import invoke
 
     hosted()
@@ -449,23 +450,14 @@ def qualify(
         refused = invoke(state, profile, config, expected)
         if ledger(state) != before:
             raise Rejected("kube_serving_refusal_wrote_storage")
-        expires = shorten(fixture)
-        request = stage(
-            state,
-            arguments["package"],
-            arguments["policy_envelope"],
-            arguments["assurance_envelope"],
-            arguments["approval_envelope"],
-            arguments["reports"],
+        approval_pair = approval_campaign(
+            root, state, image, profile, promotion, config, fixture, expected
         )
-        accepted = kube_promotion.invoke(root, state, promotion, request, image)
-        model = digest(fixture.fixture.bundle.materials.fixture.model)
-        expected.update(ready=True, model=model, bundle=accepted["receipt"]["subject_sha256"])
-        after = ledger(state)
-        print(canonical({"stage": "controlled-after-approval"}).decode(), flush=True)
-        admitted = invoke(state, profile, config, expected)
-        print(canonical({"stage": "signed-approval-expiry"}).decode(), flush=True)
-        expiry = invoke(state, profile, config, {**expected, "expires_at": expires})
+        approval = approval_pair["value"]
+        request, model, expected, after, admitted, expiry = (
+            approval[name]
+            for name in ("request", "model", "expected", "after", "admitted", "expiry")
+        )
         cold_expired = invoke(
             state,
             profile,
@@ -514,7 +506,7 @@ def qualify(
             image,
             rollback_config,
             previous,
-            accepted["receipt"],
+            approval["receipt"],
             receipt,
             fixture.fixture.authorities.keys["approver"],
         )
@@ -604,6 +596,7 @@ def qualify(
             "approved": admitted,
             "after_revocation": revoked,
             "approval_expiry": {
+                "ownership_return": approval_pair["ownership"],
                 "active": expiry,
                 "cold": cold_expired,
                 "retry": expired_retry,

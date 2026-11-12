@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+M11 на451c713 /43162491549 fail на signed-approval-expiry, до общего timeout.
+Reader вернул release_expired_or_future_document при startup второго probe;
+SQL/cluster cleanup success. Два отдельных handoff добавили возврат и suspend
+между positive и expiry при прежнем90s approval. Подготовлен один owner transfer
+для двух отдельных Jobs; shorten выполняется после suspend. Сроки, negative
+expiry trace, worker-loss probe, cold отказ и retry сохраняются.53local tests
+pass, helper27statements/2branches100%; native correction pending.
+[Runbook](docs/operations/trust-acceptance.md#expiry-и-передача-http-владельца).
+
 T29: readback больше не обрывается после32events. Unit test с33подписанными и
 подтверждёнными событиями воспроизвёл прежний отказ. Projection теперь ограничена
 реальной ёмкостью journal1024records и ответом512KiB; eviction/reset отсутствуют,
