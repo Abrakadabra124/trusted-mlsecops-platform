@@ -255,8 +255,12 @@ requested/used/limited. Имена ресурсов, namespace, пользова
 Контролируемый harness воспроизвёл недостаток квоты: при трёх постоянных картах
 (namespace CA, HTTP config, rotated observer) прежние две карты probe требуют
 пятого объекта, а count/configmaps=4. Privacy/CLI probe добавлял ещё карту кода.
-Связь с native create:forbidden требует quota record следующего CI; один unit
-результат не устанавливает причину предыдущего Kubernetes отказа.
+Связь подтверждена [M11 run43255736643](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43255736643)
+на source cf019804ae1e0a154bac0ba9e67e0ec26d1c8e72: после root-rotation-completed
+создание ConfigMap с index1 получило category quota и count/configmaps
+requested1/used4/limited4. Это доказывает превышение квоты, но не полный inventory
+постоянных объектов. Native campaign16:14:18.765150 ->16:29:29.914562 UTC,
+cases/metrics пусты; SQL stop и owned cluster cleanup success.
 
 Подготовлено объединение временных данных в одну immutable ConfigMap на Job.
 config.json и request.json читаются по прежним read-only subPath. Для privacy/CLI

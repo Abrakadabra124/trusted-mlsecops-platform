@@ -1,10 +1,12 @@
 # Статус и границы доказательств
 
-T29: локально подготовлен один immutable probe bundle вместо2/3ConfigMaps,
+T29: подготовлен один immutable probe bundle вместо2/3ConfigMaps,
 без повышения count/configmaps=4. Harness с тремя постоянными картами сначала
 воспроизвёл отказ, затем прошёл все9режимов; oversized bundle отказан до create.
-38tests/0skips и внутренний review без Critical/Important. Native связь с квотой
-и M11 correction pending. Primarycf01980 /43255745071 fail до первого native case,
+38tests/0skips в clean checkout и внутренний review без Critical/Important.
+M11cf01980 /43255736643 подтвердил quota отказ второго ConfigMap после завершённой
+root rotation: requested1/used4/limited4. SQL/cluster cleanup success; native
+проверка исправления pending. Primarycf01980 /43255745071 fail до первого native case,
 SQL/cluster cleanup success; причина неизвестна, добавлена bounded диагностика.
 [Runbook](docs/operations/trust-acceptance.md#probe-bundle-в-прежнем-бюджете-configmap).
 
