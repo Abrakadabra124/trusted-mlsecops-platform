@@ -152,7 +152,7 @@ def validate(state):
         state,
         profile=profile,
         environment=config["context"]["policy"]["environment"],
-        initial_root=config["trust_root"],
+        authority_root=config["trust_root"],
     )
     if marker.get("audit_pin") != audit["pins"]["serving"]:
         raise Rejected("kube_serving_service_audit_pin")
@@ -239,7 +239,7 @@ def bootstrap(state, profile, promotion):
         state,
         profile=profile,
         environment=config["context"]["policy"]["environment"],
-        initial_root=config["trust_root"],
+        authority_root=config["trust_root"],
     )
     local = directory(state)
     if local.exists():

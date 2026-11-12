@@ -42,6 +42,28 @@ class AuditResources(unittest.TestCase):
             if role != "collector":
                 self.assertFalse({"receipt.pem", "collector.pem", "operator.token"} & set(files))
 
+    def test_public_observer_mount_cannot_choose_private_paths_or_shell_names(self):
+        for area, public, names in (
+            ("../escape", True, ("observer.json",)),
+            (None, True, ("observer.json",)),
+            ("observer", False, ("observer.json",)),
+            ("observer", True, ()),
+            ("observer", True, ("../producer.pem",)),
+            ("observer", True, ("rotation-65.json",)),
+            ("observer", True, ("rotation-1.json",)),
+            ("observer", True, ("rotation-2.json;echo",)),
+        ):
+            spec = kube_worker.pod_spec(self.image, "serving", ["module"])
+            before = canonical(spec)
+            with self.subTest(area=area, public=public, names=names), self.assertRaises(Rejected):
+                self.subject.private_files(spec, "owned", names, public=public, area=area)
+            self.assertEqual(canonical(spec), before)
+        spec = kube_worker.pod_spec(self.image, "serving", ["module"])
+        self.subject.private_files(
+            spec, "owned", ("observer.json", "rotation-2.json"), public=True, area="observer"
+        )
+        self.assertEqual(spec["containers"][0]["volumeMounts"][-1]["mountPath"], "/observer")
+
     def test_provision_job_has_only_public_config_and_one_role_persistent_volume(self):
         for role in ("promoter", "trust", "collector", "serving"):
             spec = self.subject.provision_spec(self.image, role, "owned-config")

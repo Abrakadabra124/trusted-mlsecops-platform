@@ -123,7 +123,7 @@ def invoke(
             state,
             profile=profile,
             environment=config["context"]["policy"]["environment"],
-            initial_root=config["trust_root"],
+            authority_root=config["trust_root"],
         )
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [

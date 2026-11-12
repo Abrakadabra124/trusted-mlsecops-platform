@@ -369,6 +369,9 @@ def qualify(root, state, image):
     fingerprint, started = source_fingerprint(root), now()
     checked = controlled(root, state, image, check_actual=True)
     actual_outcome = checked.pop("actual")
+    from scripts import kube_observer_rotation_native
+
+    observer_rotation = kube_observer_rotation_native.qualify(state, campaign_authority(state)[0])
     if (
         storage_bootstrap.validate(state)["container_id"] != source["container_id"]
         or source_fingerprint(root) != fingerprint
@@ -389,6 +392,7 @@ def qualify(root, state, image):
         "finished_at": now(),
         "actual": actual_outcome,
         "controlled": checked,
+        "observer_rotation": observer_rotation,
         "cases": [
             "actual-parent-missing-assurance",
             "actual-isolated-CLI-refusal",

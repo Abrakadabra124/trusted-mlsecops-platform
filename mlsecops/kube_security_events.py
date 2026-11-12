@@ -4,9 +4,9 @@ import sys
 import uuid
 from pathlib import Path
 
+from mlsecops import kube_observer_profile, kube_storage, kube_trust
 from mlsecops import kube_security_materials as materials
 from mlsecops import kube_security_resources as resources
-from mlsecops import kube_storage, kube_trust
 from mlsecops.cluster import kubectl
 from mlsecops.contracts import (
     Rejected,
@@ -212,17 +212,31 @@ def provision(state, local, marker, owned, role):
         cleanup(state, local, marker, documents)
 
 
-def desired(marker, owned):
+def runtime(marker, role):
     workspace, image = marker["workspace_id"], marker["profile"]["image"]
+    if role == "trust" and marker.get("observer") is not None:
+        return kube_observer_profile.deployment(
+            workspace, image, marker["observer"], marker["context"]
+        )
+    return resources.deployment(workspace, image, role)
+
+
+def desired(marker, owned):
+    workspace = marker["workspace_id"]
     return [
         *resources.base_resources(workspace),
+        *(
+            [kube_observer_profile.mapping(workspace, marker["observer"], marker["context"])]
+            if marker.get("observer") is not None
+            else []
+        ),
         *(
             resources.secret(
                 workspace, role, owned.runtime_files(role, marker["pins"][role], marker["address"])
             )
             for role in resources.ROLES
         ),
-        *(resources.deployment(workspace, image, role) for role in ("collector", "trust")),
+        *(runtime(marker, role) for role in ("collector", "trust")),
     ]
 
 
@@ -271,7 +285,7 @@ def live(state, document, marker, *, require_ready=True):
     return pod["metadata"]["uid"]
 
 
-def validate(state, *, profile=None, environment=None, initial_root=None):
+def validate(state, *, profile=None, environment=None, initial_root=None, authority_root=None):
     kube_storage.validate(state)
     kube_trust.validate(state)
     local = directory(state)
@@ -289,6 +303,9 @@ def validate(state, *, profile=None, environment=None, initial_root=None):
         and marker["context"]["initial_root"] != initial_root
     ):
         raise Rejected("kube_security_profile_incomplete_or_changed")
+    roots = kube_observer_profile.authorized_roots(marker.get("observer"), marker["context"])
+    if authority_root is not None and authority_root not in roots:
+        raise Rejected("kube_security_authority_root_unproven")
     owned = materials.load(
         safe_child(local, "materials"), workspace=marker["workspace_id"], **marker["context"]
     )

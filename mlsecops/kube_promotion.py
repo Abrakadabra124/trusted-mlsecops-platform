@@ -199,7 +199,7 @@ def invoke(root, state, config, request, image="trusted-mlsecops:dev"):
         state,
         profile=profile,
         environment=config["context"]["policy"]["environment"],
-        initial_root=config["trust_root"],
+        authority_root=config["trust_root"],
     )
     name = "promotion-" + uuid.uuid4().hex
     maps = [
@@ -261,7 +261,7 @@ def configure(state, config):
     audit = kube_security_events.validate(
         state,
         environment=config["context"]["policy"]["environment"],
-        initial_root=config["trust_root"],
+        authority_root=config["trust_root"],
     )
     if audit["profile"]["image_id"] != config["expected_serving_image"]:
         raise Rejected("kube_promotion_image_pin_mismatch")

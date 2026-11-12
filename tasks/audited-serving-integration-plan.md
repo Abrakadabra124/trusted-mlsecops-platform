@@ -186,3 +186,12 @@ worker and final SQL/cluster cleanup verified. Actual candidate remains refused
 release_assurance_required. Security43113651515success763Linux0skip+25/37/15/46native;
 clean locked128tests1Windows skip. Continuous lifecycle and all remaining requirements
 above are unchanged, no M18 or full R1 acceptance follows from this composition.
+
+2026-11-12 observer rotation increment prepared: full anchored signed history,
+immutable public ConfigMap, serialized UID/resourceVersion-bound replacement,
+unchanged producer keys/PVC/pin and signed-event prefix, current-container first
+source success plus independent collector counter. Interrupted transition keeps
+ready=false; automatic recovery remains open. Local123tests/1Windows skip pass.
+Hosted primary campaign adds real rotation/old-root refusal/exact-event receipt,
+pending live evidence. Mandatory serving heartbeat and all caller transitions
+remain open; this increment does not close M11/M23/M18 or R1.

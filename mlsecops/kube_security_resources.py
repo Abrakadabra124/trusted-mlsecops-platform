@@ -1,6 +1,7 @@
 """Audit deployment plans. Operator bootstrap must verify ownership before creating them."""
 
 import copy
+import re
 
 from mlsecops import kube_trust, kube_worker
 from mlsecops.contracts import Rejected
@@ -62,7 +63,21 @@ def secret(workspace, role, files):
     )
 
 
-def private_files(spec, name, names, *, public=False):
+def private_files(spec, name, names, *, public=False, area="security"):
+    if (
+        area not in ("security", "observer")
+        or area == "observer"
+        and (
+            public is not True
+            or not names
+            or any(
+                filename != "observer.json"
+                and not re.fullmatch(r"rotation-(?:[2-9]|[1-5][0-9]|6[0-4])\.json", filename)
+                for filename in names
+            )
+        )
+    ):
+        raise Rejected("kube_security_private_area")
     # Fixed names supplied only by this module; no input-generated shell fragments.
     source = (
         {"configMap": {"name": name, "defaultMode": 416}}
@@ -71,31 +86,37 @@ def private_files(spec, name, names, *, public=False):
     )
     spec["volumes"].extend(
         [
-            {"name": "security-source", **source},
-            {"name": "security-private", "emptyDir": {"medium": "Memory", "sizeLimit": "1Mi"}},
+            {"name": area + "-source", **source},
+            {"name": area + "-private", "emptyDir": {"medium": "Memory", "sizeLimit": "1Mi"}},
         ]
     )
     initializer = copy.deepcopy(spec["containers"][0])
     initializer.update(
-        name="security-files",
+        name=area + "-files",
         command=[
             "sh",
             "-ec",
-            "umask 077; mkdir -m 700 /private/security; cp "
+            "umask 077; mkdir -m 700 /private/"
+            + area
+            + "; cp "
             + " ".join("/source/" + filename for filename in names)
-            + " /private/security/; chmod 600 /private/security/*",
+            + " /private/"
+            + area
+            + "/; chmod 600 /private/"
+            + area
+            + "/*",
         ],
         volumeMounts=[
-            {"name": "security-source", "mountPath": "/source", "readOnly": True},
-            {"name": "security-private", "mountPath": "/private"},
+            {"name": area + "-source", "mountPath": "/source", "readOnly": True},
+            {"name": area + "-private", "mountPath": "/private"},
         ],
     )
     spec.setdefault("initContainers", []).append(initializer)
     spec["containers"][0]["volumeMounts"].append(
         {
-            "name": "security-private",
-            "mountPath": "/security",
-            "subPath": "security",
+            "name": area + "-private",
+            "mountPath": "/" + area,
+            "subPath": area,
             "readOnly": True,
         }
     )

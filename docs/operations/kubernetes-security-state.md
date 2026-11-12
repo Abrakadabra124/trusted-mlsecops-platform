@@ -277,3 +277,59 @@ fixed commands и узкие Cilium rules. Hosted workflow дополнител�
 Эскалация владельцу нужна при неизвестном ownership, утере pins/единственной
 копии журнала или неподтверждённой очистке. Откат к loopback/unaudited promotion,
 новый ключ/epoch и удаление истории не являются rollback этой интеграции.
+
+## Переход observer после ротации корня
+
+Ответственный: оператор принадлежащего проекту стенда. Prerequisites:
+подписанная обоими корнями rotation package, отдельный ожидаемый next_root,
+исходный workspace marker, неизменные producer keys/outbox pins/PVC UID и доступ
+к разрешённому hosted runner. Локальные Docker/WSL/Kubernetes/SQL этим ранбуком
+не запускаются. Нужен зафиксированный image с новым operator и observer.
+
+Диагностика начинается с `mlsecops.kube_security_events.validate(state)` и
+`mlsecops.kube_observer_readback.history(state, marker)` в операторском окружении.
+История читается реальной serving SQL ролью из собственного observer Pod;
+raw history и markers остаются приватными. Сопоставить environment,
+первоначальный корень, порядок документов и обе подписи перехода.
+Новый корень в аргументе сам по себе не является доверенным.
+
+После отдельно подтверждённой записи ротации authority выполнить:
+
+```text
+python -m mlsecops.kube_security_rotation --state .runtime --package /private/rotation.json --next-root <expected-public-key>
+```
+
+Это изменяющий шаг. Operator сначала проверяет цепочку от исходного
+корня, затем сохраняет ready=false и immutable ConfigMap с публичным доказательством.
+Он меняет только owned trust Deployment: UID/resourceVersion-bound scale0,
+подтверждение отсутствия старого Pod, затем scale1. Новые Secret/producer/PVC
+не создаются. ConfigMap копируется init-container в отдельный0700/0600 tmpfs,
+чтобы runtime не обходил защиту reader от symlink.
+
+Успех требует нового Pod/container, его собственного первого успешного source
+check с хешем конфигурации, сохранности префикса подписанных событий и producer pin,
+роста durable heartbeat counter и независимого readback collector. Старый log
+из предыдущего контейнера и поздний heartbeat старого процесса недостаточны.
+Время перехода ограничено120s; это проверка observer, не доказательство
+непрерывной доступности HTTP и не разрешение на выпуск модели.
+
+Повтор той же package при ready=true не перезапускает Pod и не заменяет историю.
+Runtime ML reader продолжает сверять текущий SQL root: исторический корень,
+присутствующий в проверенной цепочке, не разрешает свежий ML-запрос.
+
+При прерывании после ready=false повторный bootstrap/update отказывает.
+Сохранить marker, UID объектов, обе конфигурации, package и journals в приватном
+evidence; проверить replicas, Pod UID/container restartCount и collector.
+Не выставлять ready=true вручную, не откатывать authority на отозванный
+ключ, не удалять outbox и не создавать новую epoch. Автоматическое продолжение
+прерванного перехода пока не реализовано: неизвестное конечное состояние требует
+эскалации оператору. На disposable hosted стенде workflow выполняет проверенную
+очистку своего source SQL и кластера; это teardown, не доказательство M17 recovery.
+
+Воспроизведение: `kubernetes-promotion.yml` после существующей HTTP-проверки
+исполняет `scripts.kube_observer_rotation_native`. Неподписанный/неподтверждённый
+переход должен отказать до изменения marker; после успеха старый SQL reader root
+отказывает, новый проходит, одно конкретное событие trust.revoked/key совпадает
+по envelope и receipt с независимым collector, model ledger не меняется.
+Локально проверены123tests/1Windows skip; hosted результат до публикации evidence
+не считается подтверждённым. Полный M11/M23/R1 и включение всех caller paths открыты.

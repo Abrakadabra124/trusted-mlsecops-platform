@@ -201,7 +201,7 @@ def outage(state, workspace):
 
 
 def restart(state, marker, role):
-    document = resources.deployment(marker["workspace_id"], marker["profile"]["image"], role)
+    document = kube_security_events.runtime(marker, role)
     before = kube_security_events.live(state, document, marker)
     kube_storage.verify_resource(
         document,

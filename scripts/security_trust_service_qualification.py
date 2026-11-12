@@ -294,6 +294,34 @@ class ServiceContracts(unittest.TestCase):
             self.observer.run()
         self.assertEqual(once.call_count, 1)
 
+    def test_first_success_is_pinned_finite_and_never_reports_failed_check(self):
+        self.assertTrue(hasattr(self.observer, "first_success"))
+        outcomes = iter([False, True, True])
+        calls = 0
+
+        def once():
+            nonlocal calls
+            calls += 1
+            value = next(outcomes)
+            if calls == 3:
+                self.observer.stopped.set()
+            return value
+
+        with (
+            patch.object(self.observer, "once", side_effect=once),
+            patch.object(self.observer.stopped, "wait"),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            contextlib.redirect_stderr(io.StringIO()) as errors,
+        ):
+            self.observer.run()
+        self.assertEqual(
+            output.getvalue(),
+            '{"config_sha256":"'
+            + "a" * 64
+            + '","release_ready":false,"state":"trust_observer_first_success"}\n',
+        )
+        self.assertEqual(errors.getvalue(), "trust_observer_check_failed\n")
+
     def test_real_owned_python_timeout_is_reaped(self):
         spawn = subprocess.Popen
         children = []

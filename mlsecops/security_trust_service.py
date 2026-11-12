@@ -25,6 +25,7 @@ class Observer:
         _, self.pin = source.configuration(self.path)
         self.stopped = threading.Event()
         self.child = None
+        self.first_success = False
 
     def close(self):
         process = self.child
@@ -93,6 +94,20 @@ class Observer:
                     ok = False
                 if not ok and not self.stopped.is_set():
                     print("trust_observer_check_failed", file=sys.stderr, flush=True)
+                if ok and not self.first_success:
+                    # One bounded public signal per process. Child output stays private;
+                    # the operator must separately verify collector state and Pod identity.
+                    print(
+                        canonical(
+                            dict(
+                                state="trust_observer_first_success",
+                                config_sha256=self.pin,
+                                release_ready=False,
+                            )
+                        ).decode(),
+                        flush=True,
+                    )
+                    self.first_success = True
                 self.stopped.wait(max(0, PERIOD_SECONDS - (time.monotonic() - started)))
         finally:
             self.close()

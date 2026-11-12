@@ -704,7 +704,7 @@ class NativeContracts(unittest.TestCase):
                 else:
                     self.assertIn("security-serving", secrets)
                     audit_profile.assert_called_once_with(
-                        state, profile=PROFILE, environment="local-cpu", initial_root="root"
+                        state, profile=PROFILE, environment="local-cpu", authority_root="root"
                     )
                 self.assertEqual(
                     pod["containers"][0]["command"][2],
