@@ -306,6 +306,19 @@ def controlled(root, state, image, *, check_actual=False):
             {**expected, "ready": True, "model": model, "bundle": receipt["subject_sha256"]},
         )
         confirmed("controlled-http-owner-transfer-preserves-model-ledger", ledger(state) == after)
+        incompatible = serving_service.change_configuration(
+            state,
+            {**config, "expected_policy": digest(b"controlled-other-serving-policy")},
+            {**expected, "reader_refusal": "serving_head_binding"},
+        )
+        restored_configuration = serving_service.change_configuration(
+            state,
+            config,
+            {**expected, "ready": True, "model": model, "bundle": receipt["subject_sha256"]},
+        )
+        confirmed(
+            "controlled-configuration-roundtrip-preserves-model-ledger", ledger(state) == after
+        )
         repeated = kube_promotion.invoke(root, state, config, request, image)
         confirmed("controlled-exact-retry-same-receipt", repeated["receipt"] == receipt)
         confirmed(
@@ -332,7 +345,7 @@ def controlled(root, state, image, *, check_actual=False):
         confirmed(
             "controlled-revoked-http-refuses-in-same-pod-without-write",
             ledger(state) == after
-            and serving_revoked["pod_uid"] == ownership_transfer["restored"]["pod_uid"],
+            and serving_revoked["pod_uid"] == restored_configuration["observation"]["pod_uid"],
         )
         service_report = {
             "before_admission": serving_before,
@@ -341,6 +354,10 @@ def controlled(root, state, image, *, check_actual=False):
             "after_revocation": serving_revoked,
             "replacement": replacement,
             "ownership_transfer": ownership_transfer,
+            "configuration_change": {
+                "incompatible": incompatible,
+                "restored": restored_configuration,
+            },
             "identity_events_delivered": identity_count,
             "single_owner_lifecycle": True,
             "mandatory_serving_heartbeat": False,

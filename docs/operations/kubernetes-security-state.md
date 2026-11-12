@@ -453,3 +453,55 @@ Unit-проверка contract runner теперь показывает иден
 exception text. Проверены обе исходные ошибки и полный набор161tests22.322s,
 1POSIX Windows skip. Это исправление тестового окружения не объясняет прежний
 hosted45s recovery timeout observer.
+
+## Явная смена конфигурации постоянного HTTP-владельца
+
+Механизм подготовлен для общего serving lifecycle; hosted proof этого increment
+ещё не получен. Локально91tests pass, coordinator139/139statements и46/46branches.
+Это не приёмка mandatory serving heartbeat или полного M23/R1.
+
+Оператор работает только в разрешённом disposable hosted стенде. Нужны существующие
+проверенные service/audit markers, целевая promotion configuration, тот же image,
+environment и credential paths. Для нового root сначала требуется существующая
+проверка dual-signed rotation и обновление observer. Исторический root позволяет
+проверить старую конфигурацию, но новая должна ссылаться на current verified root.
+Model Reader независимо проверяет актуальное SQL-состояние перед inference.
+
+Последовательность исполняется coordinator API, без ручного редактирования marker:
+
+```python
+from mlsecops import kube_serving_handoff
+
+ticket = kube_serving_handoff.suspend(state)
+ticket = kube_serving_handoff.reconfigure(state, ticket, promotion)
+result = kube_serving_handoff.resume(state, ticket)
+```
+
+`suspend` подтверждает исчезновение HTTP/worker/Jobs. `reconfigure` проверяет
+identity, целевой root и scope; сохраняет intent; удаляет ConfigMap с preconditions
+на точные UID и resourceVersion; подтверждает отсутствие старого объекта; создаёт
+новый immutable ConfigMap и проверяет итоговый marker. Deployment, keys и audit PVC
+сохраняются. Только после этого выдаётся новый ticket для resume. Старый ticket
+недействителен с начала изменения. No-op конфигурация не удаляет ConfigMap.
+
+| Ситуация | Действие и критерий |
+|---|---|
+| Неверный scope/root/identity до intent | Не выполнять удаление. Проверить целевую конфигурацию. Возврат старого ticket допускается только через обычную полную проверку resume; он не разрешает отозванную модель. |
+| ConfigMap не исчез, изменился UID/version либо create отказал | Оставить HTTP suspended. Не усыновлять существующий объект и не увеличивать deadline вместо диагностики. |
+| Сохранён `configuration_change` после прерывания | Не удалять intent и не пересчитывать ticket вручную. Автоматическое восстановление прерванного перехода ещё не реализовано. На disposable runner подтвердить scoped teardown и воспроизвести чистый стенд. |
+| Новый процесс жив, но Ready=false | Проверить точную причину Reader. Heartbeat подтверждает жизнь HTTP identity handler, но не разрешает prediction. |
+| Требуется возврат предыдущей конфигурации после успешного перехода | Выполнить новую полную suspend/reconfigure/resume с прежней проверенной конфигурацией. Retired root и revoked release не получают исключений. |
+
+Воспроизводимый native playbook включён в existing primary workflow:
+
+```sh
+gh workflow run kubernetes-promotion.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp4-m23-security-events-20261107
+```
+
+Запускать после публикации commit и terminal cleanup предыдущих runs этой ветки.
+Playbook переключает настоящий HTTP на несовместимую policy, требует503/no worker
+и `serving_head_binding`, возвращает исходную config и проверяет ONNX. Обязательны
+новые ConfigMap/Pod UID, прежний Deployment UID, неизменный model ledger и outbox,
+независимый receipt нового identity denial после восстановления. Heartbeat нового
+владельца сравнивается с collector counter, снятым после остановки старого; весь
+переход ограничен120s. Failure и неподтверждённая очистка не считаются success.

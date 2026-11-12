@@ -90,6 +90,7 @@ READER_ERRORS = {
     "trust_artifact_revoked",
     "serving_head_unavailable",
     "serving_head_missing",
+    "serving_head_binding",
     "serving_clock_skew",
     "serving_release_expired",
     "storage_connection_rejected",

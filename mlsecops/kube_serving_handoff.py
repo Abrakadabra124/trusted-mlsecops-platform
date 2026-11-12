@@ -114,7 +114,7 @@ def suspend(state):
     }
 
 
-def resume(state, ticket):
+def ticket_marker(state, ticket):
     require_fields(ticket, ("nonce", "marker_sha256", "previous"))
     reference = object_id(ticket["marker_sha256"])
     if (
@@ -126,8 +126,13 @@ def resume(state, ticket):
     ):
         raise Rejected("kube_serving_handoff_ticket")
     marker = service.validate(state, suspended=ticket["nonce"])
-    if digest(canonical(marker)) != reference:
+    if digest(canonical(marker)) != reference or "configuration_change" in marker:
         raise Rejected("kube_serving_handoff_marker_changed")
+    return marker
+
+
+def resume(state, ticket):
+    marker = ticket_marker(state, ticket)
     service.wait_empty(state)
     jobs_empty(state)
     wait_pods_absent(state)
@@ -138,6 +143,83 @@ def resume(state, ticket):
     service.kube_security_events.save(service.directory(state), marker)
     service.validate(state)
     return {"before": ticket["previous"], "after": after, "release_ready": False}
+
+
+def reconfigure(state, ticket, promotion):
+    """Replace only the owned immutable config while HTTP remains suspended."""
+    marker = ticket_marker(state, ticket)
+    config = service.configuration(promotion, marker["profile"])
+    previous = marker["config"]
+    environment = previous["context"]["policy"]["environment"]
+    if config["context"]["policy"]["environment"] != environment or any(
+        config[key] != previous[key] for key in ("storage_client", "trust_client")
+    ):
+        raise Rejected("kube_serving_handoff_configuration_scope")
+    audit = service.kube_security_events.validate(
+        state,
+        profile=marker["profile"],
+        environment=environment,
+        authority_root=config["trust_root"],
+    )
+    if audit["pins"]["serving"] != marker["audit_pin"] or config[
+        "trust_root"
+    ] != service.kube_security_events.kube_observer_profile.current_root(
+        audit.get("observer"), audit["context"]
+    ):
+        raise Rejected("kube_serving_handoff_configuration_identity")
+    if config == previous:
+        return dict(ticket)
+    old_mapping, old_deployment = service.documents(
+        marker["workspace_id"], marker["profile"], previous
+    )
+    mapping, deployment = service.documents(marker["workspace_id"], marker["profile"], config)
+    if deployment != old_deployment:
+        raise Rejected("kube_serving_handoff_configuration_scope")
+    service.wait_empty(state)
+    jobs_empty(state)
+    wait_pods_absent(state)
+    key = service.kube_storage.reference(old_mapping)
+    uid = marker["resources"][key]
+    observed = service.kube_storage.get(state, old_mapping)
+    service.kube_storage.verify_resource(old_mapping, observed, uid)
+    version = observed["metadata"].get("resourceVersion")
+    if type(version) is not str or not version:
+        raise Rejected("kube_serving_handoff_configuration_version")
+    local = service.directory(state)
+    marker["configuration_change"] = {
+        "from": marker["config_sha256"],
+        "to": digest(canonical(config)),
+    }
+    service.kube_security_events.save(local, marker)
+    endpoint = f"/api/v1/namespaces/{service.NAMESPACE}/configmaps/{service.NAME}"
+    kubectl(
+        state,
+        ["delete", "--raw=" + endpoint, "-f", "-"],
+        {
+            "apiVersion": "v1",
+            "kind": "DeleteOptions",
+            "preconditions": {"uid": uid, "resourceVersion": version},
+            "propagationPolicy": "Foreground",
+        },
+    )
+    deadline = time.monotonic() + 45
+    while (observed := service.kube_storage.get(state, old_mapping)) is not None:
+        service.kube_storage.verify_resource(old_mapping, observed, uid)
+        if time.monotonic() >= deadline:
+            raise Rejected("kube_serving_handoff_configuration_cleanup")
+        time.sleep(0.5)
+    # A crash from here onward leaves suspended, non-resumable state until the
+    # operator proves the replacement. Never adopt another creator's ConfigMap.
+    del marker["resources"][key]
+    marker.update(config=config, config_sha256=digest(canonical(config)))
+    service.kube_security_events.save(local, marker)
+    service.kube_security_events.create(state, local, marker, mapping)
+    verified = service.validate(state, suspended=ticket["nonce"])
+    if verified != marker:
+        raise Rejected("kube_serving_handoff_configuration_readback")
+    del verified["configuration_change"]
+    service.kube_security_events.save(local, verified)
+    return {**ticket, "marker_sha256": digest(canonical(verified))}
 
 
 @contextmanager

@@ -99,6 +99,32 @@ M18 remains LAST and must accept every required gate on one candidate.
 
 ## Implementation ledger
 
+2026-11-12 explicit serving configuration transition, currently local-only:
+`kube_security_events.validate(authority_root=...)` already accepts roots proven
+by the signed observer rotation history. This establishes continuity, while the
+model Reader still checks the current SQL root. Therefore an old suspended HTTP
+configuration can be verified after observer rotation without bypassing integrity.
+The NEW target configuration additionally requires the observer's CURRENT verified
+root, the same environment, credential paths, serving identity and worker image.
+
+The coordinator consumes a verified suspension ticket, checks old HTTP/worker/Job
+absence, persists a change intent, deletes only the pinned ConfigMap UID and
+resourceVersion, confirms disappearance, then creates a new immutable ConfigMap.
+Deployment UID, signing/TLS credentials and PVC/outbox remain owned and unchanged.
+An intent invalidates the original ticket before deletion begins; failed/uncertain
+deletion or creation remains suspended and cannot resume by recomputing that ticket.
+Only full new-config validation clears the intent and returns a rebound ticket.
+Exact no-op configuration requests are idempotent. Interrupted-transition recovery
+still needs an explicit operator procedure; no blind reset/adoption is introduced.
+
+Negative-first local91tests pass,139/139statements and46/46branches of the
+coordinator covered. Next native proof must switch the actual HTTP process to an
+incompatible policy config (real503/no worker), return to the original admitted
+config (real ONNX), retain independent identity receipts and heartbeat, and verify
+old/new ConfigMap and Pod UIDs plus unchanged model ledger. This proof is pending;
+bootstrap-before-actual, all-caller handoff and mandatory serving heartbeat remain
+required. No new full-M23 or R1 acceptance is claimed.
+
 Persistent Deployment increment: service configuration, UID/resourceVersion-bound
 scale-to-zero, verified old process cleanup, then single-replica
 replacement, separate service.token, exec readiness/liveness probes and in-place

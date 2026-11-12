@@ -72,7 +72,7 @@ jobs:
         run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
       - name: Audit operator ownership, role resources and explicit fresh volume provisioning
         run: |
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/serving-handoff.coverage" --source=mlsecops.kube_serving_handoff -m unittest scripts.kube_serving_service_qualification scripts.kube_serving_handoff_qualification scripts.kube_serving_handoff_native_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/serving-handoff.coverage" --source=mlsecops.kube_serving_handoff -m unittest scripts.kube_serving_service_qualification scripts.kube_serving_handoff_qualification scripts.kube_serving_handoff_native_qualification scripts.kube_serving_reconfigure_qualification scripts.kube_serving_reconfigure_native_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/serving-handoff.coverage" -o "$RUNNER_TEMP/serving-handoff.json"
           uv run --locked python - <<'PY'
           import json, os

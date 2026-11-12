@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+T29: подготовлена явная смена immutable serving ConfigMap через suspension ticket,
+проверку отсутствия HTTP/worker, UID/resourceVersion preconditions и сохранённый
+intent. Прерванная операция не допускает resume по старому ticket. Primary campaign
+соединена с реальным переходом policy mismatch ->503/no worker -> исходная config
+и ONNX, независимым heartbeat/receipt и проверкой конечного Pod UID.
+Local coordinator139/139statements,46/46branches; hosted результат этого increment
+ещё pending. [Порядок и ограничения восстановления](docs/operations/kubernetes-security-state.md#явная-смена-конфигурации-постоянного-http-владельца).
+
 T29 observer recovery на80dea70 /43149916553 принят: оба CI jobs success,
 950Linux test executions без skips,25/37/17/46native assertions.
 Принудительная конкуренция за lock: receipt через1.123634229s после unlock,
