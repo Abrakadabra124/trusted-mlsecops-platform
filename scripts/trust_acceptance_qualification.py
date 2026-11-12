@@ -16,6 +16,71 @@ from scripts.trust_gate_fixtures import fixture
 
 
 class TrustAcceptanceContracts(unittest.TestCase):
+    def test_M11_failure_identifies_the_trusted_source_without_private_exception_text(self):
+        from mlsecops import acceptance
+        from scripts import kube_candidate_faults, kube_privacy_diagnostic
+
+        root = Path(__file__).resolve().parents[1]
+
+        def expiring_permit(*_):
+            return kube_candidate_faults.exercise(
+                None,
+                None,
+                {"trust_target": "primary"},
+                {},
+                key=None,
+                policy=None,
+                revoked_key=None,
+                faults=kube_candidate_faults.NONTERMINAL,
+                expires_at=0,
+            )
+
+        def private_failure(*_):
+            raise Rejected("private-canary-token-path-and-payload")
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            for name in ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json"):
+                (state / name).write_bytes(b"owned fixture")
+            for failing, source in (
+                (expiring_permit, "scripts/kube_candidate_faults.py"),
+                (private_failure, "scripts/trust_acceptance_qualification.py"),
+            ):
+                with patch.object(trust_acceptance, "qualify", side_effect=failing):
+                    result = acceptance.report("M11", "local-cpu", root, state)
+                self.assertEqual((result["status"], result["exit_code"]), ("fail", 1))
+                self.assertEqual(result["cases"], [])
+                diagnostic = result["diagnostics"]["runtime_failure"]
+                self.assertIsNotNone(kube_privacy_diagnostic.validated(diagnostic))
+                self.assertEqual(diagnostic["exception"], "Rejected")
+                self.assertEqual(diagnostic["source_file"], source)
+                self.assertGreater(diagnostic["source_line"], 0)
+                self.assertNotIn("private-canary", canonical(result).decode())
+                self.assertNotIn(directory, canonical(result).decode())
+
+    def test_M11_invalid_location_is_replaced_with_bounded_unknown(self):
+        from mlsecops import acceptance
+        from scripts import kube_privacy_diagnostic
+
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            for name in ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json"):
+                (state / name).write_bytes(b"owned fixture")
+            with (
+                patch.object(trust_acceptance, "qualify", side_effect=Rejected("private-canary")),
+                patch.object(
+                    kube_privacy_diagnostic, "location", return_value={"secret": "private-canary"}
+                ),
+            ):
+                result = acceptance.report("M11", "local-cpu", root, state)
+            self.assertEqual(result["status"], "fail")
+            self.assertEqual(
+                result["diagnostics"]["runtime_failure"],
+                {"exception": "other", "source_file": "unknown", "source_line": 0},
+            )
+            self.assertNotIn("private-canary", canonical(result).decode())
+
     def test_acceptance_dispatches_M11_and_reports_missing_runtime_without_success(self):
         from mlsecops import acceptance
 

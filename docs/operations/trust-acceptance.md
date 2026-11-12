@@ -1,6 +1,6 @@
 # M11: сквозная проверка trust lifecycle
 
-Текущий запуск: [M11 на5486596 /43132977638](../evidence/m11-observer-callers-2026-11-12.md)
+Предыдущий принятый source: [M11 на5486596 /43132977638](../evidence/m11-observer-callers-2026-11-12.md)
 прошёл146cases с двумя observer transitions, сверкой primary hashes/traces и
 подтверждённой SQL/cluster cleanup. Controlled backup/recovery step также pass,
 но full_M17 остаётся inconclusive. Предыдущий `aa276b2` fail в live-trust-outage
@@ -61,3 +61,26 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 Finite-классификатор проверен отрицательными unit cases с приватным canary.
 Hosted5486596 прошёл, но failure branch новой диагностики там не исполнялась;
 причина предыдущего неожиданного ответа остаётся неизвестной.
+
+## Общий отказ без точного кода в ad53e3e
+
+[Run43146213251](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43146213251)
+дошёл до `actual-candidate-policy-change` и завершился с exit1. M11 report сохранил
+только `runtime verification rejected`; SQL/cluster cleanup подтверждён. Срок permit
+и другие возможные причины пока не установлены этим отчётом. Подробная временная
+линия находится в [evidence](../evidence/serving-handoff-2026-11-12.md).
+
+Следующий increment сохраняет в `diagnostics.runtime_failure` только проверенные
+`exception`, `source_file`, `source_line`. Используется существующий ограниченный
+валидатор source location: путь только внутри известных scripts/mlsecops, без
+абсолютного каталога, текста исключения, locals или payload. Некорректная location
+заменяется `other/unknown/0`; исходный fail/inconclusive и exit code сохраняются.
+Unit tests воспроизводят настоящий отказ `candidate_trust_window` до инфраструктуры,
+а также приватный canary и некорректную location. Это проверка диагностики, а не
+доказательство причины старого hosted отказа.
+
+Оператор повторяет существующий hosted workflow на новом source, сверяет location
+с файлом именно этого commit и последним stage, затем проверяет owned cleanup.
+Если source location неизвестна, требуется дополнительное приватное расследование;
+общий отказ не становится pass. Не продлевать permit и не менять180s preflight guard,
+HTTP deadlines или пороги M11 на основании одного предположения.

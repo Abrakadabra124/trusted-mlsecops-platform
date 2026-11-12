@@ -1,12 +1,21 @@
 # Статус и границы доказательств
 
-T29 ad53e3e: primary43146216798 success20checks, handoff63.797179s,
+T29 observer recovery на80dea70 /43149916553 принят: оба CI jobs success,
+950Linux test executions без skips,25/37/17/46native assertions.
+Принудительная конкуренция за lock: receipt через1.123634229s после unlock,
+max commit delivery31.000750327s, period31.178s, signed gap90.204897724s;
+owned child/collector/SQL cleanup подтверждён.
+[Evidence](docs/evidence/trust-observer-recovery-2026-11-12.md).
+M11 ad53e3e остаётся failure; добавлена unit-проверенная диагностика source
+location, её следующий hosted результат pending. Полный M23/R1 не принят.
+
+Предыдущий T29 ad53e3e: primary43146216798 success20checks, handoff63.797179s,
 heartbeat10->12 и2independent receipts; owned cleanup pass.
 [Evidence](docs/evidence/serving-handoff-2026-11-12.md). Security43146211890:
 contracts success, native failure с подтверждённым journal_busy. Подготовлен
 ограниченный повтор только этого отказа, с подтверждением завершения child и
-проверкой остатка30s cycle. Local54tests/3Linux skips pass; hosted fault/recovery
-ещё не принят. [Runbook](docs/operations/periodic-trust-observer.md).
+проверкой остатка30s cycle. Local54tests/3Linux skips pass; последующий hosted
+fault/recovery принят на80dea70 выше. [Runbook](docs/operations/periodic-trust-observer.md).
 M1143146213251 failure после actual-candidate-policy-change; точная причина
 скрыта общим обработчиком, SQL/cluster cleanup pass. Прежняя точка отказа expiry
 пройдена. Mandatory serving heartbeat, полный M23/R1 остаются открытыми.

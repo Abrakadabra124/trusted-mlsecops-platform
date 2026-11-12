@@ -404,6 +404,13 @@ def report(gate, profile, root, state=None):
                     else f"{gate} runtime verification rejected"
                 ],
             )
+            if gate == "M11":
+                from scripts.kube_privacy_diagnostic import location, validated
+
+                result["diagnostics"] = {
+                    "runtime_failure": validated(location(error))
+                    or {"exception": "other", "source_file": "unknown", "source_line": 0}
+                }
         result["finished_at"] = now()
     elif gate == "M21":
         if not (state / "workspace.json").is_file():
