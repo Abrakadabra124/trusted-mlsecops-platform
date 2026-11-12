@@ -90,21 +90,22 @@ jobs:
           PY
       - name: Audit operator ownership, role resources and explicit fresh volume provisioning
         run: |
-          uv run --locked ruff check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py
-          uv run --locked ruff format --check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/owned-probe.coverage" --source=scripts.kube_owned_probe -m unittest scripts.kube_owned_probe_qualification scripts.kube_serving_handoff_native_qualification
+          uv run --locked ruff check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py scripts/kube_serving_start_native.py scripts/kube_serving_start_qualification.py
+          uv run --locked ruff format --check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py scripts/kube_serving_start_native.py scripts/kube_serving_start_qualification.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/owned-probe.coverage" --source=scripts.kube_owned_probe,scripts.kube_serving_start_native -m unittest scripts.kube_owned_probe_qualification scripts.kube_serving_handoff_native_qualification scripts.kube_serving_start_qualification scripts.kube_promotion_native_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/owned-probe.coverage" -o "$RUNNER_TEMP/owned-probe.json"
           uv run --locked python - <<'PY'
           import json, os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'owned-probe.json').read_text())['files']
-          if set(files) != {'scripts/kube_owned_probe.py'}:
+          if set(files) != {'scripts/kube_owned_probe.py', 'scripts/kube_serving_start_native.py'}:
               raise SystemExit('owned_probe_coverage_inventory')
-          stats = files['scripts/kube_owned_probe.py']['summary']
-          for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
-              if not stats[total] or stats[covered] / stats[total] < .95:
-                  raise SystemExit('owned_probe_coverage_incomplete')
-          print(json.dumps({'module': 'scripts/kube_owned_probe.py', 'coverage': stats}, sort_keys=True))
+          for name, file in files.items():
+              stats = file['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not stats[total] or stats[covered] / stats[total] < .95:
+                      raise SystemExit('owned_probe_coverage_incomplete')
+              print(json.dumps({'module': name, 'coverage': stats}, sort_keys=True))
           PY
           uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/serving-handoff.coverage" --source=mlsecops.kube_serving_handoff -m unittest scripts.kube_serving_service_qualification scripts.kube_serving_handoff_qualification scripts.kube_serving_handoff_native_qualification scripts.kube_serving_reconfigure_qualification scripts.kube_serving_reconfigure_native_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/serving-handoff.coverage" -o "$RUNNER_TEMP/serving-handoff.json"

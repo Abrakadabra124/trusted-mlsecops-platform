@@ -63,9 +63,10 @@ Readiness/startup/liveness probes разрешены только основно
 не мигрирует автоматически. Не пересоздавать ключи или PVC ради успешного старта;
 для такого состояния требуется отдельная проверенная процедура миграции.
 
-Registry пока требует heartbeat только trust. Этот increment проверяет фактический
-serving heartbeat и его счётчик, но потеря serving ещё не является обязательным
-условием отказа promotion. Это открытая работа M23, не разрешение полного R1.
+Новый registry требует heartbeat trust и serving; до первого serving heartbeat
+collector не healthy. Старые signed registry с optional serving отвергаются при
+load, даже если их подпись и file hashes корректны. Миграция существующего
+registry/key/PVC автоматически не выполняется. Native proof нового профиля pending.
 
 Причина сериализованной замены: Recreate управляет обновлением Deployment, но
 ручной DELETE Pod позволяет ReplicaSet создать замену до завершения старого.
@@ -80,7 +81,8 @@ serving heartbeat и его счётчик, но потеря serving ещё н�
 ONNX и cleanup. [Evidence](../evidence/serving-handoff-2026-11-12.md).
 В primary campaign добавлен путь Deployment -> настоящий
 qualification HTTP -> исходный Deployment. Это последовательные владельцы одного
-outbox, а не один непрерывно работающий PID. Registry heartbeat пока не изменён.
+outbox, а не один непрерывно работающий PID. Этот исторический run предшествует
+включению mandatory serving heartbeat в новом коде.
 
 Prerequisites: тот же trusted hosted operator, проверенные audit и service markers,
 исходный профиль и promotion config текущей campaign. Ответственный - владелец
@@ -617,5 +619,36 @@ identity handler; он не утверждает Ready=true или разреш�
 
 Local ownership tests и caller compatibility проверены. Следующий опубликованный
 Primary должен подтвердить реальный возврат через общий путь; fresh M11/M13/M14
-и обязательный serving registry всё ещё необходимы. Current code не даёт права
+на новом обязательном serving registry всё ещё необходимы. Current code не даёт права
 объявлять полный M23/R1 и не добавляет distributed locking нескольких operators.
+
+## HTTP до первой admission
+
+Статус: local contracts pass; новый hosted proof pending. Исполняемый playbook:
+`scripts.kube_promotion_native.actual` вызывает `scripts.kube_serving_start_native.start`
+после audit/controller bootstrap и до parent submit и Kubernetes admission.
+
+1. Считать collector counter до bootstrap и проверить pinned audit profile.
+2. Поднять настоящий serving Deployment с его прежними ключами и outbox.
+3. Через exec внутри того же Pod проверить /livez=200, /ready=503 и отказ predict
+   без worker. Это unapproved model, поэтому HTTP liveness не означает Model Ready.
+4. Дождаться увеличения подписанного serving counter; проверить journal pin,
+   HTTP observation UID и final Pod UID. Весь этап, включая final readback, <=120s.
+5. Только после этого выполнить существующие admission проверки. Для controlled
+   fixture сменить actual context через проверенный suspension ticket и immutable
+   ConfigMap replacement, затем проверять missing approval и остальные сценарии.
+
+Отказы `serving_start_heartbeat_deadline`, `serving_start_identity_binding` или
+`serving_start_profile_changed` останавливают admission. Проверить приватный marker,
+UID и freshness collector без вывода ключей. Не менять heartbeat_required на false,
+не увеличивать deadline и не удалять marker/PVC. Если bootstrap прерван, ordinary
+validate не примет incomplete state; на disposable стенде выполнить существующий
+owned teardown с проверкой конечного состояния, затем новый чистый запуск.
+
+Для сохранённого старого профиля `kube_security_heartbeat_policy` означает
+несовместимый подписанный registry. Это не причина генерировать новые identities
+в существующем окружении: сохранить диагностику приватно и эскалировать процедуру
+миграции. Проверенного rollback registry без ослабления требований пока нет.
+Передача владельца добавляет время campaign; workflow budget30min, permit600s,
+fail-closed60s и telemetry120s не изменены. Timeout остаётся inconclusive/fail,
+а не доказательством завершённого M11, M23 или R1.

@@ -1,13 +1,26 @@
 # Статус и границы доказательств
 
+T29: startup HTTP перед первой actual admission подключён локально. Реальный
+/livez, /ready и predict refusal, тот же Pod UID/pin и новый signed heartbeat
+проверяются до parent submit и Kubernetes admission. Registry требует trust и
+serving; signed weakened registry отвергается без rekey/migration. Controlled
+переход использует существующий suspension/reconfigure/resume. Local205tests
+без skips; startup41/41statements+14/14branches, materials125/125+30/30.
+Native bootstrap/mandatory heartbeat и общий coordinator ещё pending; R1 не принят.
+
+M11 наaf12c85 /43158137922 pass:146cases, source bindings, оба primary signer
+report hashes и terminal owned cleanup проверены. Это предыдущий profile до
+mandatory serving heartbeat. Успех не устанавливает причину старого startup
+отказа наd66b12a. [Evidence](docs/evidence/serving-handoff-2026-11-12.md#m11-наaf12c85).
+
 T29: общий owned probe coordinator подготовлен для ordinary/candidate/load/
 monitoring/privacy/fault callers. При existing HTTP marker он использует прежний
 suspension ticket, возврат владельца и fresh heartbeat<=120s. Проверяет final Pod
 UID, pin/permissions и сохранность журнала; failed probe остаётся failure даже
 после успешного восстановления. Исходный primary handoff использует тот же путь.
 Local153tests pass без skips, coordinator52/52statements и14/14branches.
-Bootstrap до первой actual promotion и mandatory serving heartbeat ещё открыты;
-native proof общего coordinator pending.
+Bootstrap и mandatory serving heartbeat подключены следующим локальным increment;
+native proof общего coordinator и нового startup pending.
 
 M11 наd66b12a /43155792337 завершился fail после12m51s native campaign, а не
 по timeout. Runtime location: scripts/kube_serving_faults.py:31, progress schema
@@ -15,7 +28,8 @@ M11 наd66b12a /43155792337 завершился fail после12m51s native c
 Producer уже умеет печатать finite serving-startup-refused, parser его не понимал.
 Этот дефект воспроизведён отдельно: теперь строгое startup refusal не считается
 фазой/успехом, а terminal Job failure сохраняет существующую конечную диагностику.
-Причина native startup refusal пока неизвестна; повторный M11 обязателен.
+Причина native startup refusal пока неизвестна; повторный M11 наaf12c85 pass,
+что не доказывает исправление прежней причины startup.
 [Диагностика](docs/operations/trust-acceptance.md#progress-parser-и-startup-refusal).
 
 T29: audit readback подготовлен для существующего HTTP owner: проверяет profile

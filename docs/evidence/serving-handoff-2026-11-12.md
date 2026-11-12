@@ -192,3 +192,26 @@ observer gap90.754629227s и HTTP producer gap90.175439186s. Cleanup подтв�
 Это не before-first-actual bootstrap, не mandatory serving registry и не полный
 M23 outage на healthy ML/dashboard. full_M10=inconclusive и release_ready=false.
 Общий coordinator callers из следующего commit и M11 имеют самостоятельную приёмку.
+
+## M11 наaf12c85
+
+[M11 run43158137922](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43158137922)
+и job130982781249 завершились success. Gate report:146/146cases pass, exit_code0,
+source clean и exact af12c85e99818c429c1f1b643e327aacd62ebaf2. Gate interval
+05:03:13.134157 ->05:25:53.878972 UTC; весь шаг с подготовкой начался05:01:22.
+Source revision/fingerprint совпали с input_digests; SHA256 обоих primary signer
+report files пересчитаны из canonical JSON с завершающим newline и совпали с
+artifact_hashes M11. Actual candidate c5f6ba79246a468390d0b6d2f841633a5d6e2d7bfb18e1b2a6bb800a1b617bc8,
+model fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46.
+
+Максимальный первый503 при actual outage59.791335739s, controlled outage59.793921363s;
+остальные измеренные actual trust faults3.178120563-12.9481417s. Signer revocation
+для publisher/assessor/approver0.579493061-0.584212183s. Пороги не расширялись.
+Следующий component recovery прошёл36cases: restore-to-golden7.327263s,
+1000golden rows, max error0.0; full_M17=inconclusive. SQL stop и owned cluster
+deletion/readback завершились success. Полные логи сохранены только приватно.
+
+Этот source предшествует общему coordinator и mandatory serving registry.
+release_ready=false; M10/M13/M14/M19/M22/M23 и остальные обязательные gates не
+закрываются этим результатом. Причина startup refusal предыдущего d66b12a остаётся
+неустановленной: успешный повтор не доказывает причинного исправления.

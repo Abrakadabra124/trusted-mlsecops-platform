@@ -12,8 +12,15 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.x509.oid import ExtendedKeyUsageOID
 
 from mlsecops import kube_security_resources as resources
-from mlsecops import security_event_config, security_event_tls, signing
-from mlsecops.contracts import Rejected, decode, read_json, write_json
+from mlsecops import (
+    security_event_config,
+    security_event_ledger,
+    security_event_outbox,
+    security_event_tls,
+    security_events,
+    signing,
+)
+from mlsecops.contracts import Rejected, canonical, decode, digest, read_json, write_json
 
 
 class AuditMaterials(unittest.TestCase):
@@ -53,7 +60,7 @@ class AuditMaterials(unittest.TestCase):
             self.created()
         self.assertEqual((self.root / "untouched").read_bytes(), b"owner")
 
-    def test_signed_registry_has_all_six_roles_and_only_trust_requires_heartbeat(self):
+    def test_signed_registry_has_all_six_roles_and_requires_trust_and_serving_heartbeats(self):
         materials = self.created()
         self.assertNotEqual(materials.identity["registry_root"], self.authority)
         registry = materials.registry
@@ -61,7 +68,9 @@ class AuditMaterials(unittest.TestCase):
             {p.role for p in registry.producers},
             {"intake", "controller", "serving", "promoter", "trust", "collector"},
         )
-        self.assertEqual([p.role for p in registry.producers if p.heartbeat_required], ["trust"])
+        self.assertEqual(
+            {p.role for p in registry.producers if p.heartbeat_required}, {"trust", "serving"}
+        )
         self.assertEqual(registry.policy_sha256, self.options["policy"])
         self.assertEqual(len({p.public_key for p in registry.producers}), 6)
         for role in resources.ROLES:
@@ -74,6 +83,62 @@ class AuditMaterials(unittest.TestCase):
             )
             self.assertEqual(observed.producer(value["producer_id"]).role, role)
             self.assertFalse(any("key_file" in field or "token" in field for field in value))
+
+    def test_trust_heartbeat_alone_cannot_allow_admission(self):
+        materials = self.created()
+        registry = materials.registry
+        clock = registry.issued_at_ms
+        ledger = security_event_ledger.Ledger.empty(registry, clock_ms=clock)
+        producers = {p.role: p for p in registry.producers}
+        for step, role in enumerate(("trust", "serving"), 1):
+            box = security_event_outbox.Outbox.empty(
+                registry, producers[role].identity, clock_ms=clock
+            )
+            signed = box.heartbeat(self.root / f"keys/{role}.pem", clock_ms=clock + step)
+            ledger.heartbeat(signed, clock_ms=clock + step)
+            report = ledger.poll(clock_ms=clock + step)
+            self.assertEqual(report["healthy"], role == "serving")
+            self.assertEqual(
+                report["awaiting_heartbeat"],
+                [] if role == "serving" else [producers["serving"].identity],
+            )
+            self.assertFalse(report["release_ready"])
+
+    def test_validly_signed_but_weakened_or_incomplete_registry_is_rejected(self):
+        materials = self.created()
+        envelope = read_json(self.root / "registry.json")
+        original = security_events.signed(
+            envelope, "security-event-config", materials.identity["registry_root"]
+        )
+        for mutation in (
+            "optional-serving",
+            "optional-trust",
+            "extra-required-role",
+            "missing-role",
+        ):
+            with self.subTest(mutation=mutation):
+                document = decode(canonical(original))
+                if mutation == "missing-role":
+                    document["producers"].pop(0)
+                else:
+                    role = {
+                        "optional-serving": "serving",
+                        "optional-trust": "trust",
+                        "extra-required-role": "intake",
+                    }[mutation]
+                    next(p for p in document["producers"] if p["role"] == role)[
+                        "heartbeat_required"
+                    ] = mutation == "extra-required-role"
+                write_json(
+                    self.root / "registry.json",
+                    signing.sign(document, "security-event-config", self.root / "keys/root.pem"),
+                )
+                identity = decode(canonical(materials.identity))
+                identity["registry_sha256"] = digest(canonical(document))
+                identity["files"]["registry.json"] = digest(materials.read("registry.json"))
+                write_json(self.root / "identity.json", identity)
+                with self.assertRaisesRegex(Rejected, "kube_security_heartbeat_policy"):
+                    self.subject.load(self.root, **self.options)
 
     def test_separate_ca_purposes_fixed_dns_and_private_key_pairs(self):
         self.created()

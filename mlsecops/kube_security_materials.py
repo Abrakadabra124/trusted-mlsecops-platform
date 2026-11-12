@@ -157,7 +157,7 @@ def create(directory, *, workspace, environment, initial_root, policy):
                 public_key=public[role],
                 role=role,
                 epoch=secrets.token_hex(16),
-                heartbeat_required=role == "trust",
+                heartbeat_required=role in ("trust", "serving"),
             )
             for role in PRODUCERS
         ],
@@ -304,4 +304,11 @@ def load(directory, *, workspace, environment, initial_root, policy):
     )
     if registry.policy_sha256 != policy:
         raise Rejected("kube_security_policy_binding")
+    if (
+        len(registry.producers) != len(PRODUCERS)
+        or {producer.role for producer in registry.producers} != set(PRODUCERS)
+        or {producer.role for producer in registry.producers if producer.heartbeat_required}
+        != {"trust", "serving"}
+    ):
+        raise Rejected("kube_security_heartbeat_policy")
     return Materials(directory, identity, registry)

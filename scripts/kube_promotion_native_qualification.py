@@ -3,11 +3,110 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from mlsecops import signing
 from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from scripts import kube_promotion_native as target
+
+
+class ActualStartupOrdering(unittest.TestCase):
+    def setUp(self):
+        from scripts import kube_serving_start_native as serving_start
+
+        self.order = []
+        proposal = dict(
+            campaign_id="campaign",
+            proposal_reference="proposal",
+            source={"image_id": "image"},
+            policy_sha256="policy",
+            model_sha256="model",
+        )
+        self.enterContext(patch.object(target.release_native, "qualify", return_value=proposal))
+        self.enterContext(patch.object(target, "safe_child", return_value=Path("campaign")))
+        self.enterContext(
+            patch.object(
+                target,
+                "read_json",
+                side_effect=lambda p: {
+                    "storage-demo.json": {
+                        "candidate": {"candidate_reference": "candidate"},
+                        "evaluation_reference": "evaluation",
+                    },
+                    "trusted-keys.json": {"trust": "trust"},
+                }.get(Path(p).name, {}),
+            )
+        )
+        self.enterContext(
+            patch.object(
+                target.release_policy,
+                "checked",
+                return_value={"identities": {"publisher": {"public_key": "publisher"}}},
+            )
+        )
+        self.enterContext(patch.object(target.release_bundle, "load", return_value={}))
+        self.enterContext(patch.object(target.storage, "put", return_value="policy-reference"))
+        self.enterContext(
+            patch.object(
+                target.controller_bootstrap, "bootstrap", return_value={"profile": "profile"}
+            )
+        )
+        self.start = self.enterContext(
+            patch.object(
+                serving_start,
+                "start",
+                side_effect=lambda *a: (
+                    self.order.append("HTTP-and-heartbeat") or {"release_ready": False}
+                ),
+            )
+        )
+        audit = Mock(audit_config="audit")
+        self.enterContext(
+            patch.object(target.security_event_audit_fixture, "live")
+        ).__enter__.return_value = audit
+        self.enterContext(patch.object(target, "host_configuration", return_value={}))
+
+        def refuse(*args):
+            self.order.append("parent-admission")
+            raise Rejected("release_assurance_required")
+
+        self.submit = self.enterContext(
+            patch.object(target.promotion_controller, "submit", side_effect=refuse)
+        )
+        self.enterContext(
+            patch.object(
+                target,
+                "stage",
+                return_value={
+                    "schema_version": 1,
+                    "proposal_reference": "proposal",
+                    "policy_reference": "policy-reference",
+                    "assurance_reference": None,
+                    "approval_reference": None,
+                },
+            )
+        )
+        self.enterContext(patch.object(target, "ledger", return_value="unchanged"))
+        self.invoke = self.enterContext(
+            patch.object(
+                target.kube_promotion,
+                "invoke",
+                side_effect=lambda *a: self.order.append("job-admission") or {"status": "rejected"},
+            )
+        )
+
+    def test_actual_owner_precedes_both_parent_and_kubernetes_admission(self):
+        result = target.actual(Path("root"), Path("state"), "image", authority_root="authority")
+        self.assertEqual(self.order, ["HTTP-and-heartbeat", "parent-admission", "job-admission"])
+        self.assertFalse(result["serving_before_admission"]["release_ready"])
+        self.assertEqual(self.start.call_args.args[2]["trust_root"], "authority")
+
+    def test_failed_startup_prevents_both_admission_attempts(self):
+        self.start.side_effect = Rejected("serving_start_heartbeat_deadline")
+        with self.assertRaisesRegex(Rejected, "heartbeat_deadline"):
+            target.actual(Path("root"), Path("state"), "image", authority_root="authority")
+        self.submit.assert_not_called()
+        self.invoke.assert_not_called()
 
 
 class KubernetesPromotionNativeContracts(unittest.TestCase):

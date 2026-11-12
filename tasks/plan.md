@@ -1,5 +1,12 @@
 # План перехода DevSecOps -> MLSecOps
 
+CP4/T29: HTTP startup перед parent/Kubernetes admission и mandatory trust+serving
+registry подключены локально,205tests/0skips; native proof pending. Исполняемый
+[playbook](../docs/operations/kubernetes-security-state.md#http-до-первой-admission)
+сохраняет исходные deadlines и отказ для старого профиля без implicit rekey.
+[Предыдущий M11 af12c85](../docs/evidence/serving-handoff-2026-11-12.md#m11-наaf12c85)
+pass146cases с cleanup; он не принимает новый profile или весь R1.
+
 CP4/T29 2026-11-12: [audited Kubernetes promotion](../docs/evidence/kubernetes-audit-2026-11-12.md)
 на4aeece4 /43102906649 success,13promotion+10audit assertions. Full M23 ещё открыт:
 все sources, serving identity/rotation, свежие M13/M14, sequence gap и healthy ML

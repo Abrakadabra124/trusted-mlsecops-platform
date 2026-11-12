@@ -128,6 +128,8 @@ def stage(state, package, policy, assurance=None, approval=None, reports=None):
 
 
 def actual(root, state, image, *, authority_root=None):
+    from scripts import kube_serving_start_native as serving_start
+
     proposal = release_native.qualify(root, state, image)
     campaign = safe_child(state, "release-proposals/" + proposal["campaign_id"])
     envelope = read_json(campaign / "policy-envelope.json")
@@ -162,6 +164,11 @@ def actual(root, state, image, *, authority_root=None):
         "assurance_reference": None,
         "approval_reference": None,
     }
+    if authority_root is None:
+        authority_root = kube_security_events.validate(state)["context"]["initial_root"]
+    config = configuration("/client", "/trust-client", arguments, authority_root)
+    profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
+    serving_before = serving_start.start(state, profile, config)
     with security_event_audit_fixture.live() as audit:
         local = host_configuration(client, client, arguments, public["trust"], audit.audit_config)
         try:
@@ -173,9 +180,6 @@ def actual(root, state, image, *, authority_root=None):
             raise Rejected("kube_promotion_actual_bypass")
     if stage(state, package, envelope) != request:
         raise Rejected("kube_promotion_actual_reference_changed")
-    if authority_root is None:
-        authority_root = kube_security_events.validate(state)["context"]["initial_root"]
-    config = configuration("/client", "/trust-client", arguments, authority_root)
     before = ledger(state)
     result = kube_promotion.invoke(root, state, config, request, image)
     if result["status"] != "rejected" or ledger(state) != before:
@@ -187,6 +191,7 @@ def actual(root, state, image, *, authority_root=None):
         "model": proposal["model_sha256"],
         "parent_refusal": "release_assurance_required",
         "job_outcome": result["status"],
+        "serving_before_admission": serving_before,
     }
 
 
@@ -201,6 +206,7 @@ def controlled(root, state, image, *, check_actual=False):
     # Local import: the ordinary serving harness also uses preparation helpers here.
     from mlsecops import kube_serving_service
     from scripts import kube_serving_service_native as serving_service
+    from scripts import kube_serving_start_native as serving_start
 
     fixtures.PromotionAdmissionContracts.setUpClass()
     fixture = fixtures.PromotionAdmissionContracts()
@@ -232,6 +238,12 @@ def controlled(root, state, image, *, check_actual=False):
         actual_result = (
             actual(root, state, image, authority_root=authority_public) if check_actual else None
         )
+        serving_profile = controller_bootstrap.bootstrap(root, state, image, serving=True)[
+            "profile"
+        ]
+        expected = {"ready": False, "features": features, "scores": scores}
+        serving_startup = serving_start.select(state, serving_profile, config, expected=expected)
+        service_started = True
         request = stage(
             state,
             arguments["package"],
@@ -258,13 +270,7 @@ def controlled(root, state, image, *, check_actual=False):
         confirmed(
             "controlled-missing-approval-no-write", ledger(state) == before and head(state) == "0:"
         )
-        serving_profile = controller_bootstrap.bootstrap(root, state, image, serving=True)[
-            "profile"
-        ]
-        kube_serving_service.bootstrap(state, serving_profile, config)
-        service_started = True
         audit_proof = kube_security_native.qualify(root, state, config, request, image)
-        expected = {"ready": False, "features": features, "scores": scores}
         serving_before = serving_service.observe(state, expected)
         confirmed("controlled-unapproved-http-refuses-without-write", ledger(state) == before)
         accepted = kube_promotion.invoke(root, state, config, request, image)
@@ -348,6 +354,7 @@ def controlled(root, state, image, *, check_actual=False):
             and serving_revoked["pod_uid"] == restored_configuration["observation"]["pod_uid"],
         )
         service_report = {
+            "startup": serving_startup,
             "before_admission": serving_before,
             "after_selection_before_replacement": unactivated,
             "after_admission": serving_active,
@@ -360,7 +367,7 @@ def controlled(root, state, image, *, check_actual=False):
             },
             "identity_events_delivered": identity_count,
             "single_owner_lifecycle": True,
-            "mandatory_serving_heartbeat": False,
+            "mandatory_serving_heartbeat": True,
             "release_ready": False,
         }
         return {
