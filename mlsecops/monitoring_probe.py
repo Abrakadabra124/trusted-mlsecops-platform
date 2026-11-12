@@ -12,6 +12,7 @@ from mlsecops import (
     monitoring_config,
     monitoring_packet,
     monitoring_state,
+    security_identity_http,
     serving,
     serving_http,
     signing,
@@ -246,6 +247,9 @@ def qualify(config, expected):
                     metrics_token=operator,
                     monitor=runtime,
                     audit_path=root / "audit",
+                    identity_audit=security_identity_http.configured(
+                        "/security/identity-audit.json"
+                    ),
                 )
                 with listen(app) as port:
                     packet = campaign(port, token, operator, runtime, supplied["rows"], label_key)

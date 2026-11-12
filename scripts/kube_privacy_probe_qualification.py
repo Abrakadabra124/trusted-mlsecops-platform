@@ -3,7 +3,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from mlsecops.contracts import Rejected, decode, read_json, write_json
 from scripts import kube_privacy_probe as probe
@@ -29,6 +29,34 @@ def envelope():
 
 
 class PrivacyProbeEnvelopeContracts(unittest.TestCase):
+    def test_http_helper_owns_identity_observer_lifecycle(self):
+        from scripts import serving_native
+
+        identity = Mock(
+            spec=probe.security_identity_http.Observer, start=AsyncMock(), close=AsyncMock()
+        )
+        engine = Mock()
+        with serving_native.site(engine, identity_audit=identity) as request:
+            self.assertEqual(request("/livez")[0], 200)
+            identity.start.assert_awaited_once()
+            identity.close.assert_not_awaited()
+        identity.close.assert_awaited_once()
+        engine.close.assert_called()
+
+    def test_missing_security_identity_prevents_native_privacy_campaign(self):
+        with (
+            patch.object(
+                probe.security_identity_http, "configured", side_effect=Rejected("identity_missing")
+            ) as identity,
+            patch.object(probe, "Client") as api,
+            patch.object(probe, "site") as site,
+            self.assertRaisesRegex(Rejected, "identity_missing"),
+        ):
+            probe.qualify({}, {}, Mock())
+        identity.assert_called_once_with("/security/identity-audit.json")
+        api.assert_not_called()
+        site.assert_not_called()
+
     def test_parent_accepts_only_complete_empty_diagnostic_lifecycle(self):
         result = probe.finish(envelope())
         self.assertEqual(result["output_observation"]["canary_count"], 9)

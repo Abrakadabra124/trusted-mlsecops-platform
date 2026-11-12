@@ -125,3 +125,38 @@ python -W error -m unittest scripts.security_identity_events_qualification scrip
 actual inference/M13/M14 acceptance. На текущей Windows локальные Docker/WSL/
 Kubernetes/SQL не запускать. Pure Python unit tests и собственный проверочный
 Python child не являются запуском этой инфраструктуры.
+
+## Identity в candidate, load, monitoring и privacy HTTP
+
+Статус интеграции: код и локальные проверки готовы; свежие hosted M11/M13/M14
+на этой версии ещё не выполнены. Общий `kube_serving_native.invoke` теперь проверяет
+audit profile до создания любого Job и подключает serving Secret/PVC также к
+candidate-проверкам. Используется только фиксированный
+`/security/identity-audit.json`; передать иной путь или promoter config через
+candidate request нельзя. Promoter/trust signing credentials HTTP Job не получает,
+inference worker не получает serving audit Secret.
+
+Candidate, load и monitoring создают `security_identity_http.Observer` и передают
+его существующему `serving_http.create_app`. Privacy передаёт тот же observer через
+свой HTTP helper. Запуск/остановка и child cleanup принадлежат реальному ASGI
+lifespan; отдельного процесса, имитирующего heartbeat вместо HTTP, нет. Перед
+созданием probe проверяется отсутствие HTTP/worker Pod/Jobs в обоих serving namespaces;
+исключается только отдельно проверенный trust observer с другой identity/outbox;
+существующий Deployment должен пройти явный handoff. Некорректная или отсутствующая
+identity запрещает запуск приложения; audit-события не заменяют private request
+journal и измерения privacy.
+
+Для отдельного MODEL_REVOCATION target audit profile остаётся привязанным к
+PRIMARY authority из operator state. Второй корень проверяется существующим
+candidate trust reader для своего назначения; подменять им корень audit collector
+нельзя. В PRIMARY-вызовах совпадение корня config с audit state проверяется явно.
+После удаления Job координатор ждёт фактического исчезновения его Pod, прежде
+чем возвращать результат следующему caller. Граница остаётся одним trusted operator;
+параллельные независимые operators и распределённая блокировка здесь не заявлены.
+
+Граница этого изменения: mandatory serving heartbeat в registry ещё не включён.
+Автоматическое соединение всех native callers с постоянным Deployment и явные изменения его
+конфигурации остаются отдельной обязательной работой. Не запускать одновременно
+несколько приложений с одним Secret/PVC и не считать этот код доказательством
+полных M13/M14/M23. Следующая проверка должна подтвердить фактическую доставку,
+прежний privacy inventory и performance bounds на окончательном runtime.

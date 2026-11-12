@@ -119,12 +119,18 @@ def invoke(
             or "security_audit_config" in config
         ):
             raise Rejected("kube_serving_audit_configuration")
-        kube_security_events.validate(
-            state,
-            profile=profile,
-            environment=config["context"]["policy"]["environment"],
-            authority_root=config["trust_root"],
-        )
+    elif "identity_audit_file" in config or "security_audit_config" in config:
+        # Candidate applications use the fixed serving Secret, never a caller path.
+        raise Rejected("kube_serving_audit_configuration")
+    kube_security_events.validate(
+        state,
+        profile=profile,
+        environment=config["context"]["policy"]["environment"],
+        **({"authority_root": config["trust_root"]} if trust_target is Target.PRIMARY else {}),
+    )
+    from mlsecops.kube_serving_handoff import require_probe_slot, wait_pods_absent
+
+    require_probe_slot(state)
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [
         kube_promotion.configuration_map(state, name + "-" + field, field, value)
@@ -136,8 +142,7 @@ def invoke(
         profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"], trust_target=trust_target
     )
     spec["serviceAccountName"] = "serving"
-    if not candidate_probe:
-        spec = kube_security_resources.serving_spec(spec)
+    spec = kube_security_resources.serving_spec(spec)
     spec["containers"][0]["command"][2] = (
         "mlsecops.monitoring_probe"
         if monitoring_operator is not None
@@ -364,6 +369,7 @@ def invoke(
         return {**report, "elapsed_seconds": elapsed}
     finally:
         kube_promotion.cleanup(state, created, namespace=NAMESPACE)
+        wait_pods_absent(state)
 
 
 def prepare(root, state, image):

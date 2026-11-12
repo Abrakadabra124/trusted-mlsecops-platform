@@ -20,6 +20,24 @@ class ServingHandoff(unittest.TestCase):
         self.order = []
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        self.observer = {
+            "metadata": {"uid": "owned-trust"},
+            "spec": {"serviceAccountName": "serving"},
+            "status": {
+                "containerStatuses": [
+                    {
+                        "name": "worker",
+                        "containerID": "trust-container",
+                        "restartCount": 0,
+                        "state": {"running": {"startedAt": "now"}},
+                    }
+                ]
+            },
+        }
+        self.real_verified_observer = self.subject.verified_observer
+        self.observer_reader = self.stack.enter_context(
+            patch.object(self.subject, "verified_observer", return_value=self.observer)
+        )
 
         def validate(state, *, suspended=None):
             self.order.append("validate-live" if suspended is None else "validate-suspended")
@@ -183,6 +201,69 @@ class ServingHandoff(unittest.TestCase):
             with self.assertRaisesRegex(Rejected, "jobs_present"):
                 self.subject.suspend("state")
         self.scale.assert_not_called()
+
+    def test_probe_preflight_rejects_any_existing_owner_or_incomplete_inventory(self):
+        self.subject.require_probe_slot("state")
+        self.assertEqual(self.jobs.call_count, 4)
+        for namespace in ("ml-serving", "ml-serve"):
+            for kind in ("jobs", "pods"):
+                for items in (None, {}, [{}]):
+
+                    def inventory(state, arguments):
+                        bad = kind == arguments[1] and namespace in arguments
+                        return SimpleNamespace(stdout=canonical({"items": items if bad else []}))
+
+                    with (
+                        self.subTest(namespace=namespace, kind=kind, items=items),
+                        patch.object(self.subject, "kubectl", side_effect=inventory),
+                        self.assertRaisesRegex(Rejected, "probe_owner_present|pod_inventory"),
+                    ):
+                        self.subject.require_probe_slot("state")
+        self.scale.assert_not_called()
+
+    def test_only_verified_trust_observer_is_exempt_from_http_ownership_inventory(self):
+        self.assertEqual(
+            self.subject.remaining_pods([self.observer], "ml-serving", self.observer), []
+        )
+        self.assertEqual(
+            self.subject.remaining_pods([self.observer], "ml-serve", self.observer), [self.observer]
+        )
+        foreign = copy.deepcopy(self.observer)
+        foreign["metadata"]["uid"] = "lookalike"
+        self.assertEqual(
+            self.subject.remaining_pods([self.observer, foreign], "ml-serving", self.observer),
+            [foreign],
+        )
+        for changed in ("spec", "container", "duplicate"):
+            document = copy.deepcopy(self.observer)
+            if changed == "spec":
+                document["spec"] = {"foreign": True}
+            if changed == "container":
+                document["status"]["containerStatuses"][0]["containerID"] = "restarted"
+            items = [document] * (2 if changed == "duplicate" else 1)
+            with (
+                self.subTest(changed=changed),
+                self.assertRaisesRegex(Rejected, "observer_changed"),
+            ):
+                self.subject.remaining_pods(items, "ml-serving", self.observer)
+        self.observer_reader.return_value = foreign
+        with self.assertRaisesRegex(Rejected, "observer_changed"):
+            self.subject.confirm_observer("state", self.observer)
+
+    def test_observer_exemption_uses_verified_role_owner_chain(self):
+        with (
+            patch.object(
+                self.subject.service.kube_security_events,
+                "validate",
+                return_value={"verified": "audit"},
+            ) as marker,
+            patch.object(
+                self.subject.kube_observer_readback, "pod", return_value=self.observer
+            ) as pod,
+        ):
+            self.assertEqual(self.real_verified_observer("state"), self.observer)
+            marker.assert_called_once_with("state")
+            pod.assert_called_once_with("state", {"verified": "audit"}, "trust")
 
 
 if __name__ == "__main__":

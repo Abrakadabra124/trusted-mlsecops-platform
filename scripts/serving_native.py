@@ -94,14 +94,28 @@ def bind_release(fixture, image):
 
 
 @contextmanager
-def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=None, monitor=None):
+def site(
+    engine,
+    *,
+    clients=None,
+    audit=None,
+    audit_export=None,
+    http_ledger=None,
+    monitor=None,
+    identity_audit=None,
+):
     from scripts.serving_privacy_probe import scan_owned_audit
 
     if audit is not None:
         if audit_export is not None or http_ledger is not None:
             raise Rejected("serving_native_export_ownership")
         with _site(
-            engine, clients=clients, audit=audit, http_ledger=http_ledger, monitor=monitor
+            engine,
+            clients=clients,
+            audit=audit,
+            http_ledger=http_ledger,
+            monitor=monitor,
+            identity_audit=identity_audit,
         ) as request:
             yield request
         return
@@ -114,7 +128,12 @@ def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=Non
         journal.start()
         try:
             with _site(
-                engine, clients=clients, audit=journal, http_ledger=http_ledger, monitor=monitor
+                engine,
+                clients=clients,
+                audit=journal,
+                http_ledger=http_ledger,
+                monitor=monitor,
+                identity_audit=identity_audit,
             ) as request:
                 request.audit_scan = partial(scan_owned_audit, path)
                 yield request
@@ -125,7 +144,7 @@ def site(engine, *, clients=None, audit=None, audit_export=None, http_ledger=Non
 
 
 @contextmanager
-def _site(engine, *, clients, audit, http_ledger=None, monitor=None):
+def _site(engine, *, clients, audit, http_ledger=None, monitor=None, identity_audit=None):
     if http_ledger is not None:
         from scripts.audit_http_observation import ObservedJournal
 
@@ -138,7 +157,12 @@ def _site(engine, *, clients, audit, http_ledger=None, monitor=None):
         token = clients["clients"][0]["token"]
     metrics_token = secrets.token_hex(32)
     app = serving_http.create_app(
-        engine, clients=access, audit=audit, metrics_token=metrics_token, monitor=monitor
+        engine,
+        clients=access,
+        audit=audit,
+        metrics_token=metrics_token,
+        monitor=monitor,
+        identity_audit=identity_audit,
     )
     server = uvicorn.Server(
         uvicorn.Config(

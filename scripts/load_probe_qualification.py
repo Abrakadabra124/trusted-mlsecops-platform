@@ -126,6 +126,7 @@ class ProbeContracts(unittest.TestCase):
             "monitor-receipt",
             "monitor-summary",
             "monitor-finish",
+            "security",
             "cleanup",
         ):
             with self.subTest(fault=fault):
@@ -193,6 +194,11 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe.serving, "Engine", return_value=engine) as construct,
             patch.object(probe, "listen", side_effect=listen),
             patch.object(probe.serving_http, "create_app") as create_app,
+            patch.object(
+                probe.security_identity_http,
+                "configured",
+                side_effect=Rejected("identity_missing") if fault == "security" else None,
+            ) as identity,
             patch.object(probe.load_monitoring, "session", return_value=nullcontext(monitor)),
             patch.object(
                 probe.load_measurement,
@@ -224,6 +230,8 @@ class ProbeContracts(unittest.TestCase):
                 self.assertFalse(report["release_ready"])
                 self.assertEqual(report["monitoring"], {"fixture": "summary"})
                 self.assertIs(create_app.call_args.kwargs["monitor"], monitor.runtime)
+                self.assertIs(create_app.call_args.kwargs["identity_audit"], identity.return_value)
+                identity.assert_called_once_with("/security/identity-audit.json")
                 monitor.finish.assert_called_once_with(1 + len(observation["records"]) + 8 + 1)
                 self.assertEqual(send.call_args_list[0].args[3]["monitoring"], monitor.binding)
                 self.assertEqual(
@@ -381,6 +389,7 @@ class ProbeContracts(unittest.TestCase):
             patch.object(probe.serving, "Engine", return_value=engine),
             patch.object(probe, "listen", return_value=nullcontext(1234)),
             patch.object(probe.serving_http, "create_app"),
+            patch.object(probe.security_identity_http, "configured"),
             patch.object(probe.load_monitoring, "session", return_value=nullcontext(Mock())),
             patch.object(
                 probe.load_measurement, "request", new=AsyncMock(return_value=(200, response()))

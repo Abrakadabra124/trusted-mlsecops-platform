@@ -21,6 +21,7 @@ from mlsecops import (
     kube_candidate_trust,
     kube_trust_isolation,
     release_policy,
+    security_identity_http,
     serving,
     serving_http,
     trust,
@@ -72,12 +73,17 @@ def candidate(config, *, connection_factory=None):
 @contextmanager
 def site(engine):
     """Real loopback HTTP, production app/lifespan and owned private journal."""
+    try:
+        identity = security_identity_http.configured("/security/identity-audit.json")
+    except BaseException:
+        engine.close()
+        raise
     with tempfile.TemporaryDirectory(prefix="m12-", dir="/tmp") as temporary:
         directory = Path(temporary)
         audit = directory / "audit"
         audit.mkdir(mode=0o700)
         token = secrets.token_hex(32)
-        app = serving_http.create_app(engine, token, audit_path=audit)
+        app = serving_http.create_app(engine, token, audit_path=audit, identity_audit=identity)
         listener = socket.socket()
         listener.bind(("127.0.0.1", 0))
         listener.listen(16)

@@ -272,6 +272,26 @@ class CandidateInferenceContracts(unittest.TestCase):
         with self.assertRaises(AssertionError):
             probe.matrix(bypass, engine, expected, check)
 
+    def test_missing_identity_prevents_http_listener_and_closes_engine(self):
+        self.assertTrue(
+            hasattr(probe, "security_identity_http"), "candidate HTTP has no identity observer"
+        )
+        engine = Mock()
+        with (
+            patch.object(
+                probe.security_identity_http, "configured", side_effect=Rejected("identity_missing")
+            ) as identity,
+            patch.object(probe.serving_http, "create_app") as app,
+            patch.object(probe.socket, "socket") as listener,
+            self.assertRaisesRegex(Rejected, "identity_missing"),
+        ):
+            with probe.site(engine):
+                self.fail("unaudited listener started")
+        identity.assert_called_once_with("/security/identity-audit.json")
+        app.assert_not_called()
+        listener.assert_not_called()
+        engine.close.assert_called_once()
+
     def test_site_thread_start_failure_closes_engine_and_listener(self):
         temporary = tempfile.TemporaryDirectory
         listener, engine, server = Mock(), Mock(), Mock(started=False)
@@ -280,7 +300,8 @@ class CandidateInferenceContracts(unittest.TestCase):
             patch.object(
                 probe.tempfile, "TemporaryDirectory", side_effect=lambda **kw: temporary()
             ),
-            patch.object(probe.serving_http, "create_app"),
+            patch.object(probe.security_identity_http, "configured") as identity,
+            patch.object(probe.serving_http, "create_app") as app,
             patch.object(probe.socket, "socket", return_value=listener),
             patch.object(probe.uvicorn, "Config"),
             patch.object(probe.uvicorn, "Server", return_value=server),
@@ -293,6 +314,8 @@ class CandidateInferenceContracts(unittest.TestCase):
             thread.return_value.join.assert_not_called()
         listener.close.assert_called_once()
         engine.close.assert_called_once()
+        identity.assert_called_once_with("/security/identity-audit.json")
+        self.assertIs(app.call_args.kwargs["identity_audit"], identity.return_value)
 
     def test_native_refuses_dirty_checkout_before_any_infrastructure_mutation(self):
         with (

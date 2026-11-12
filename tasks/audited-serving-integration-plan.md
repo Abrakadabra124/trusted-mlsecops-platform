@@ -278,3 +278,19 @@ restart (outbox2events/1receipt, collector1/1,3 failed checks). Configuration,
 signed SQL history and producer state were readable afterward; cause remains
 unknown. Finite child exit categories were added without changing scheduling,
 acceptance deadlines or journal locking. This is diagnosis, not causal repair.
+
+Candidate/load/monitoring/privacy applications now attach the existing serving
+Observer to their actual HTTP lifespan. Native invoke validates the audit profile
+and mounts only serving identity/state for these callers; PRIMARY and independent
+MODEL_REVOCATION authority scopes stay distinct. Local combined165 tests/4 Linux
+skips pass, including owned real-loopback helper lifecycle and missing-identity
+refusals. Hosted caller proof and mandatory registry/shared handoff integration
+remain pending. No new metrics series or acceptance threshold were introduced.
+
+86a6327 primary43141312875 failed during handoff because the newly added empty-Pod
+condition also counted the legitimate trust observer in ml-serving. SQL/cluster
+cleanup succeeded. The corrected inventory excludes only the independently
+validated observer UID/spec/container instance, never a label/name match; orphaned
+HTTP/worker Pods still block handoff. Native invoke now checks the probe slot and
+waits for Pod cleanup after Job deletion. Local coordinator85/85 statements and
+26/26 branches; hosted verification of this correction is pending.

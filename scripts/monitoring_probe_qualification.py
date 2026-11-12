@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from mlsecops import monitoring_probe as probe
 from mlsecops import signing
@@ -30,11 +30,15 @@ class ProbeContracts(unittest.TestCase):
                 }
             }
             engine, api = Mock(audit_context=context()), Mock()
+            identity = Mock(
+                spec=probe.security_identity_http.Observer, start=AsyncMock(), close=AsyncMock()
+            )
             api.request.return_value = {"items": []}
             summary = {"packet_sha256": "a" * 64, "release_ready": False}
             with (
                 patch.object(probe, "Client", return_value=api),
                 patch.object(probe, "candidate"),
+                patch.object(probe.security_identity_http, "configured", return_value=identity),
                 patch.object(probe.serving, "Engine", return_value=engine),
                 patch.object(probe, "campaign", return_value={}),
                 patch.object(probe.monitoring_packet, "verify", return_value=summary),
@@ -47,6 +51,8 @@ class ProbeContracts(unittest.TestCase):
                 self.assertTrue(result["worker_cleanup_verified"])
                 engine.activate.assert_called_once()
                 self.assertGreaterEqual(engine.close.call_count, 1)
+                identity.start.assert_awaited_once()
+                identity.close.assert_awaited_once()
 
     def test_failure_location_never_contains_foreign_paths_or_exception_text(self):
         self.assertEqual(
@@ -98,6 +104,7 @@ class ProbeContracts(unittest.TestCase):
             "fault",
             "ack",
             "campaign",
+            "security",
         ):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -136,10 +143,17 @@ class ProbeContracts(unittest.TestCase):
                     patch.object(probe.serving, "Engine", return_value=engine) as factory,
                     patch.object(probe, "listen", side_effect=lambda app: nullcontext(12345)),
                     patch.object(
+                        probe.security_identity_http,
+                        "configured",
+                        side_effect=Rejected("identity_missing") if fault == "security" else None,
+                    ) as identity,
+                    patch.object(
                         probe.serving_http,
                         "create_app",
                         side_effect=lambda *args, **kwargs: (
-                            self.assertTrue(kwargs["audit_path"].is_dir()) or Mock()
+                            self.assertTrue(kwargs["audit_path"].is_dir())
+                            or self.assertIs(kwargs["identity_audit"], identity.return_value)
+                            or Mock()
                         ),
                     ),
                     patch.object(probe.monitoring_config, "producer", return_value=runtime),

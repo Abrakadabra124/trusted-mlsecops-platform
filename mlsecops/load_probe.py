@@ -14,6 +14,7 @@ from mlsecops import (
     load_diagnostics,
     load_measurement,
     load_monitoring,
+    security_identity_http,
     serving,
     serving_http,
     serving_lifecycle,
@@ -174,6 +175,7 @@ def qualify(config, expected):
             startup_diagnostics=True,
             monitor=monitor.runtime,
             metrics_token=secrets.token_hex(32),
+            identity_audit=security_identity_http.configured("/security/identity-audit.json"),
         )
         with listen(app) as port:
             identity = engine.check()

@@ -63,6 +63,38 @@ class NativeContracts(unittest.TestCase):
                 native.invoke(Path("unused"), PROFILE, config, {})
             api.assert_not_called()
 
+    def test_candidate_also_requires_verified_audit_before_creating_any_job(self):
+        for target in (native.Target.PRIMARY, native.Target.MODEL_REVOCATION):
+            config = {
+                "context": {"policy": {"environment": "local-cpu"}},
+                "trust_root": "root",
+                "trust_target": target.value,
+            }
+            with (
+                self.subTest(target=target),
+                patch.object(
+                    native.kube_security_events,
+                    "validate",
+                    side_effect=Rejected("missing_owned_state"),
+                ) as validate,
+                patch.object(
+                    native.kube_promotion,
+                    "configuration_map",
+                    side_effect=AssertionError("unaudited Job preparation"),
+                ) as mapping,
+                self.assertRaisesRegex(Rejected, "missing_owned_state"),
+            ):
+                native.invoke(
+                    Path("unused"), PROFILE, config, {}, candidate_probe=True, trust_target=target
+                )
+            validate.assert_called_once_with(
+                Path("unused"),
+                profile=PROFILE,
+                environment="local-cpu",
+                **({"authority_root": "root"} if target is native.Target.PRIMARY else {}),
+            )
+            mapping.assert_not_called()
+
     def test_prepare_requires_campaign_before_actual_refusal_and_does_not_continue_on_failure(self):
         for failure in (False, True):
             order = []
@@ -565,6 +597,8 @@ class NativeContracts(unittest.TestCase):
                     "context": {"policy": {"environment": "local-cpu"}},
                     "trust_root": "root",
                 }
+                if privacy:
+                    del config["identity_audit_file"]
 
                 def mapping(state, name, field, value):
                     return {
@@ -629,6 +663,8 @@ class NativeContracts(unittest.TestCase):
 
                 with (
                     patch.object(native.kube_security_events, "validate") as audit_profile,
+                    patch("mlsecops.kube_serving_handoff.require_probe_slot") as probe_slot,
+                    patch("mlsecops.kube_serving_handoff.wait_pods_absent") as probe_cleanup,
                     patch.object(native.kube_promotion, "configuration_map", side_effect=mapping),
                     patch.object(
                         native.kube_promotion, "pod_spec", return_value=copy.deepcopy(spec)
@@ -698,14 +734,12 @@ class NativeContracts(unittest.TestCase):
                 secrets = [v["secret"]["secretName"] for v in pod["volumes"] if "secret" in v]
                 self.assertNotIn("security-promoter", secrets)
                 self.assertNotIn("security-trust", secrets)
-                if privacy:
-                    self.assertNotIn("security-serving", secrets)
-                    audit_profile.assert_not_called()
-                else:
-                    self.assertIn("security-serving", secrets)
-                    audit_profile.assert_called_once_with(
-                        state, profile=PROFILE, environment="local-cpu", authority_root="root"
-                    )
+                self.assertIn("security-serving", secrets)
+                probe_slot.assert_called_once_with(state)
+                probe_cleanup.assert_called_once_with(state)
+                audit_profile.assert_called_once_with(
+                    state, profile=PROFILE, environment="local-cpu", authority_root="root"
+                )
                 self.assertEqual(
                     pod["containers"][0]["command"][2],
                     "scripts.kube_cli_privacy_probe"

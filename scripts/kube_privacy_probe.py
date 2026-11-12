@@ -10,6 +10,7 @@ from mlsecops import (
     audit_snapshot,
     load_monitoring,
     release_bundle,
+    security_identity_http,
     serving,
     signing,
     worker_transport,
@@ -40,6 +41,7 @@ PHASES = {"startup", "bind", "http", "worker", "audit", "capture"}
 
 
 def qualify(config, expected, input_observer):
+    identity = security_identity_http.configured("/security/identity-audit.json")
     global PHASE
     DIRECTORY.mkdir(mode=0o700)
     PHASE = "bind"
@@ -137,6 +139,7 @@ def qualify(config, expected, input_observer):
             audit_export=closed,
             http_ledger=ledger,
             monitor=monitor.runtime,
+            identity_audit=identity,
         ) as transport,
     ):
         PHASE = "http"
