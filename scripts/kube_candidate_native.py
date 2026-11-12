@@ -45,9 +45,9 @@ from scripts.kube_candidate_faults import NONTERMINAL
 from scripts.kube_candidate_faults import exercise as exercise_faults
 from scripts.kube_candidate_root import exercise as exercise_root
 from scripts.kube_candidate_terminals import exercise as exercise_terminals
+from scripts.kube_owned_probe import invoke
 from scripts.kube_promotion_native import actual, campaign_authority, initialize_campaign
 from scripts.kube_promotion_snapshot import read as snapshot
-from scripts.kube_serving_native import invoke
 from scripts.kube_trust_native import hosted
 
 

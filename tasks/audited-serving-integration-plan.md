@@ -1,5 +1,15 @@
 # Mandatory serving audit and coherent campaign lifecycle
 
+Shared probe lifecycle is now implemented for ordinary, candidate, root/fault,
+load/monitoring/privacy and CLI privacy callers when a persistent service exists.
+It uses the existing suspension ticket and final Pod binding, samples a fresh
+collector counter after probe cleanup and requires a new heartbeat within120s.
+An explicitly supplied reversible-fault cleanup precedes owner return on failure;
+the original probe error remains an error. Primary handoff uses the same path
+and retains its mandatory independent identity receipt. Local153 tests pass,
+52/52statements and14/14branches; clean checkout and native confirmation pending.
+The before-first-actual bootstrap and globally mandatory registry are still open.
+
 Current checkpoint: d66b12a primary43155788888 passed real HTTP configuration
 roundtrip (54.987612s incompatible policy, 56.628996s restored ONNX), retained
 Deployment/outbox and complete owned cleanup. Security43155788165 passed993 test

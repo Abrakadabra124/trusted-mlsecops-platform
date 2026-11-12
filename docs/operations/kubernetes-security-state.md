@@ -583,3 +583,38 @@ promotion: эти стыки и mandatory heartbeat ещё открыты. Local
 новый native run должен подтвердить `audit.serving_owner.mode=service`, неизменный
 Pod UID на readback, сохранность receipts и terminal owned cleanup. До такого
 запуска изменение не считается принятым на Kubernetes.
+
+## Общий coordinator для qualification probes
+
+`scripts.kube_owned_probe.invoke` соединяет ordinary/candidate/root/fault/CLI
+privacy callers с постоянным HTTP owner. Load, monitoring и privacy candidate
+режимы проходят через тот же candidate caller. При отсутствии service directory
+используется прежний probe, который сам проверяет пустой slot. Этот preparation
+путь не является доказательством обязательного HTTP heartbeat до первой promotion.
+Если directory существует, invalid или suspended marker не обходится fallback.
+
+Порядок на disposable hosted стенде: проверить profile и журнал -> suspend и
+подтвердить отсутствие старого владельца -> выполнить настоящий probe и его
+cleanup -> свежий audit readback и collector counter -> resume через исходный
+suspension ticket -> новый heartbeat -> проверить final Pod UID и journal prefix.
+Счётчик снимается после cleanup probe, до resume; deadline120s включает свежую
+проверку audit перед возвратом. Изменённые pin/permissions, потерянные записи,
+подмена Pod или старый heartbeat не разрешают success.
+
+Для reversible trust fault caller передаёт свой `Coordinator.restore` как явный
+failure cleanup. При отказе probe восстановление fault выполняется до возврата
+HTTP owner. Затем исходная ошибка всё равно пробрасывается; recovery не превращает
+её в acceptance. Неизвестная очистка Jobs/Pods блокирует core resume. Root/key/model
+revocation не получает автоматического обратного изменения. Для interrupted marker
+сохраняется прежний порядок диагностики и запрет ручного удаления intent.
+
+Primary handoff использует этот общий coordinator и дополнительно требует
+настоящий ONNX/HTTP readback и новый independently receipted identity event.
+Generic inactive probe может не создавать identity.denied, но обязан сохранить
+журнал и доказать heartbeat нового HTTP owner. Результат описывает доступность
+identity handler; он не утверждает Ready=true или разрешение отозванной модели.
+
+Local ownership tests и caller compatibility проверены. Следующий опубликованный
+Primary должен подтвердить реальный возврат через общий путь; fresh M11/M13/M14
+и обязательный serving registry всё ещё необходимы. Current code не даёт права
+объявлять полный M23/R1 и не добавляет distributed locking нескольких operators.

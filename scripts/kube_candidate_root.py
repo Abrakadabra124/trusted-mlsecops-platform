@@ -14,8 +14,8 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.trust_targets import Target
 from scripts import kube_root_rotation as rotation
+from scripts.kube_owned_probe import invoke
 from scripts.kube_promotion_snapshot import read as snapshot
-from scripts.kube_serving_native import invoke
 
 
 def checked(report, expected, recovery, permit):

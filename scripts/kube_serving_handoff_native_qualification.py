@@ -6,6 +6,7 @@ from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected
+from scripts import kube_owned_probe as ownership
 from scripts import kube_serving_native as probe
 from scripts import kube_serving_service_native as subject
 
@@ -33,6 +34,11 @@ class HandoffEvidence(unittest.TestCase):
                 result.update(after="new", release_ready=False)
 
         self.stack.enter_context(patch.object(subject, "hosted"))
+        self.stack.enter_context(patch.object(ownership, "hosted"))
+        self.stack.enter_context(patch.object(subject.service, "validate", return_value={}))
+        self.stack.enter_context(
+            patch.object(subject.service, "pod", return_value={"metadata": {"uid": "new"}})
+        )
         self.stack.enter_context(
             patch.object(
                 subject.kube_security_events, "validate", return_value={"pins": {"serving": "a"}}
@@ -101,27 +107,32 @@ class HandoffEvidence(unittest.TestCase):
 
     def test_late_counter_or_replaced_pod_is_not_accepted(self):
         self.clock.side_effect = [0, 121]
-        with self.assertRaisesRegex(Rejected, "return_changed"):
+        with self.assertRaisesRegex(Rejected, "return_binding"):
             self.run_handoff()
 
     def test_probe_of_another_pod_is_not_proof_of_returned_owner(self):
         self.observe.return_value = {"pod_uid": "unexpected"}
-        with self.assertRaisesRegex(Rejected, "return_changed"):
+        with self.assertRaisesRegex(Rejected, "return_binding"):
             self.run_handoff()
 
     def test_changed_permissions_are_rejected(self):
         self.after["permissions"] = {"mode": 511}
-        with self.assertRaisesRegex(Rejected, "identity_changed"):
+        with self.assertRaisesRegex(Rejected, "return_binding"):
             self.run_handoff()
 
     def test_wrong_registered_identity_is_rejected(self):
         self.before["pin"] = "foreign"
-        with self.assertRaisesRegex(Rejected, "identity_changed"):
+        with self.assertRaisesRegex(Rejected, "return_binding"):
             self.run_handoff()
 
     def test_returned_identity_cannot_change_pin_or_drop_receipts(self):
         self.after["pin"] = "foreign"
-        with self.assertRaisesRegex(Rejected, "http_receipt"):
+        with self.assertRaisesRegex(Rejected, "return_binding"):
+            self.run_handoff()
+
+    def test_ready_http_roundtrip_requires_a_new_independently_receipted_event(self):
+        self.after["records"] = copy.deepcopy(self.before["records"])
+        with self.assertRaisesRegex(Rejected, "identity_events_missing"):
             self.run_handoff()
 
     def test_outbox_success_without_independent_receipt_is_rejected(self):

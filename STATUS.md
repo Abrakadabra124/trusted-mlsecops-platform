@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+T29: общий owned probe coordinator подготовлен для ordinary/candidate/load/
+monitoring/privacy/fault callers. При existing HTTP marker он использует прежний
+suspension ticket, возврат владельца и fresh heartbeat<=120s. Проверяет final Pod
+UID, pin/permissions и сохранность журнала; failed probe остаётся failure даже
+после успешного восстановления. Исходный primary handoff использует тот же путь.
+Local153tests pass без skips, coordinator52/52statements и14/14branches.
+Bootstrap до первой actual promotion и mandatory serving heartbeat ещё открыты;
+native proof общего coordinator pending.
+
 M11 наd66b12a /43155792337 завершился fail после12m51s native campaign, а не
 по timeout. Runtime location: scripts/kube_serving_faults.py:31, progress schema
 на controlled live-trust-policy-change; оба owned cleanup steps success.

@@ -14,10 +14,11 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, decode, digest, safe_child, write_json
 from scripts import audit_correlation_probe, promotion_qualification, serving_native
 from scripts.kube_cli_privacy_probe import verify_snapshot
+from scripts.kube_owned_probe import invoke
 from scripts.kube_privacy_services import Windows
 from scripts.kube_promotion_native import configuration, initialize_campaign, stage
 from scripts.kube_promotion_snapshot import read as snapshot
-from scripts.kube_serving_native import invoke, serving_configuration
+from scripts.kube_serving_native import serving_configuration
 from scripts.kube_trust_native import hosted
 
 CLI_CASES = {

@@ -27,6 +27,7 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
             observed.append(request["fault"])
             self.assertTrue(kwargs["candidate_probe"])
             self.assertIs(kwargs["trust_target"], authority)
+            self.assertIs(kwargs["restore_failure"], coordinator.restore)
             if fail:
                 raise Rejected("controlled_probe_failure")
             result = {
@@ -39,9 +40,8 @@ class CandidateFaultCoordinatorTests(unittest.TestCase):
             }
             return {**result, **(mutate or {})}
 
-        coordinator = Mock(
-            __enter__=Mock(return_value="coordinator"), __exit__=Mock(return_value=False)
-        )
+        coordinator = Mock(__enter__=Mock(), __exit__=Mock(return_value=False))
+        coordinator.__enter__.return_value = coordinator
         self.last_coordinator = coordinator
         with (
             patch.object(target, "snapshot", side_effect=states),

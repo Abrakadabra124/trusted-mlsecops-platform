@@ -68,13 +68,12 @@ def replace(state):
 
 def handoff(state, profile, promotion, expected):
     """Exercise the actual qualification HTTP owner between two verified Deployments."""
+    from scripts.kube_owned_probe import run
     from scripts.kube_serving_native import invoke, serving_configuration
 
     hosted()
     if expected.get("ready") is not True:
         raise Rejected("kube_serving_handoff_expected_active")
-    marker = kube_security_events.validate(state, profile=profile)
-    before = snapshot(state)
     config = serving_configuration(promotion)
     config.update(
         minimum_sequence=1,
@@ -82,37 +81,23 @@ def handoff(state, profile, promotion, expected):
         token_file="/tmp/token",
         kubernetes_worker=profile,
     )
-    with kube_serving_handoff.transfer(state) as transfer:
-        qualified = invoke(state, profile, config, expected)
-        sequence = audit.collector(state, marker)["heartbeats"].get("serving", 0)
-        if sequence <= 0:
-            raise Rejected("kube_serving_handoff_heartbeat_missing")
-        returned = time.monotonic()
-    restored = observe(state, expected)
-    after = snapshot(state)
-    deadline = returned + 120
-    while True:
-        inbox = audit.collector(state, marker)
-        counter = inbox["heartbeats"].get("serving", 0)
-        if counter > sequence:
-            break
-        if time.monotonic() >= deadline:
-            raise Rejected("kube_serving_handoff_heartbeat_deadline")
-        time.sleep(0.5)
-    elapsed = time.monotonic() - returned
-    if elapsed > 120 or restored["pod_uid"] != transfer["after"]:
-        raise Rejected("kube_serving_handoff_return_changed")
-    if before["pin"] != marker["pins"]["serving"] or before["permissions"] != after["permissions"]:
-        raise Rejected("kube_serving_handoff_identity_changed")
-    receipts = audit.identity_receipts(before, after, inbox)
+    result = run(
+        state,
+        profile,
+        lambda: invoke(state, profile, config, expected),
+        after_return=lambda: observe(state, expected),
+    )
+    owner = result["ownership"]
+    if owner["identity_events_delivered"] <= 0:
+        raise Rejected("kube_serving_handoff_identity_events_missing")
     return {
-        "transfer": transfer,
-        "qualification": qualified,
-        "restored": restored,
-        "return_seconds": round(elapsed, 6),
-        "return_heartbeat_before": sequence,
-        "return_heartbeat_after": counter,
-        "identity_events_delivered": receipts,
+        "transfer": owner["transfer"],
+        "qualification": result["value"],
+        "restored": owner["observation"],
+        "return_seconds": owner["return_seconds"],
+        "return_heartbeat_before": owner["heartbeat_before"],
+        "return_heartbeat_after": owner["heartbeat_after"],
+        "identity_events_delivered": owner["identity_events_delivered"],
         "outbox_retained": True,
         "release_ready": False,
     }

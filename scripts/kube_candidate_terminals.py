@@ -4,8 +4,8 @@ from mlsecops.contracts import Rejected, canonical
 from mlsecops.trust_targets import Target
 from scripts.kube_authority_pair import capture, isolation, transition
 from scripts.kube_candidate_faults import exercise as faults
+from scripts.kube_owned_probe import invoke
 from scripts.kube_promotion_snapshot import read as snapshot
-from scripts.kube_serving_native import invoke
 
 
 def exercise(state, profile, config, expected, *, base_probe, key, revoked_key, expires_at):

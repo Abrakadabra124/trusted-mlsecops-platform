@@ -405,6 +405,8 @@ def qualify(
     include_key_revocation=False,
     include_trust_lifecycle=False,
 ):
+    from scripts.kube_owned_probe import invoke
+
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     prepared = prepare(root, state, image) if prepared is None else prepared
@@ -544,7 +546,12 @@ def qualify(
                 state, fault, promotion["expected_policy"], authority_key, model
             ) as coordinator:
                 lifecycle[fault] = invoke(
-                    state, profile, config, {**expected, "fault": fault}, coordinator=coordinator
+                    state,
+                    profile,
+                    config,
+                    {**expected, "fault": fault},
+                    coordinator=coordinator,
+                    restore_failure=coordinator.restore,
                 )
                 print(
                     canonical({"completed_fault": fault, "result": lifecycle[fault]}).decode(),

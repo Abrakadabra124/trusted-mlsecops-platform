@@ -6,9 +6,9 @@ import time
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.kube_candidate_trust import NONTERMINAL
 from mlsecops.trust_targets import Target, select
+from scripts.kube_owned_probe import invoke
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_serving_faults import Coordinator
-from scripts.kube_serving_native import invoke
 
 
 def exercise(
@@ -51,6 +51,7 @@ def exercise(
                 config,
                 {**expected, "fault": fault},
                 coordinator=coordinator,
+                restore_failure=coordinator.restore,
                 candidate_probe=True,
                 trust_target=target,
             )
