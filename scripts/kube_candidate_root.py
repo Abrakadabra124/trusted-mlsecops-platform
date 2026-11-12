@@ -4,7 +4,13 @@ import math
 import time
 from functools import partial
 
-from mlsecops import kube_trust, trust_authority, trust_root_store, trust_rotation
+from mlsecops import (
+    kube_security_rotation,
+    kube_trust,
+    trust_authority,
+    trust_root_store,
+    trust_rotation,
+)
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.trust_targets import Target
 from scripts import kube_root_rotation as rotation
@@ -146,6 +152,9 @@ def exercise(state, profile, config, expected, *, old_key, new_key, expires_at):
     retry = trust_root_store.rotate(state, package, backend=backends[Target.PRIMARY], **arguments)
     if retry != {**receipt, "reused": True} or rotation.snapshot(state) != primary:
         raise Rejected("candidate_root_retry")
+    # Observe PRIMARY only after the live HTTP denial/recovery trace has completed;
+    # observer rollout must not delay or rewrite that trace's measured start.
+    observer = kube_security_rotation.update(state, package, next_root=intent["next_root"])
     # The peer is a separate operator action after live primary recovery. Its
     # own history is preserved; this is not an atomic two-authority operation.
     _, peer = trust_authority.current(state, backend=backends[Target.MODEL_REVOCATION])
@@ -162,6 +171,7 @@ def exercise(state, profile, config, expected, *, old_key, new_key, expires_at):
         "release_ready": False,
         "scope": "actual-candidate-live-root-rotation",
         "next_public": intent["next_root"],
+        "observer_transition": observer,
         "minimum_trust_version": receipt["version"],
         "permit_sha256": config["expected_permit"],
         "permit_envelope_sha256": permit["envelope"],

@@ -79,7 +79,11 @@ class TrustAcceptanceContracts(unittest.TestCase):
         from scripts import trust_contracts
 
         report = trust_contracts.qualify()
-        self.assertEqual(report["status"], "pass")
+        self.assertEqual(
+            report["status"],
+            "pass",
+            {"unpassed": sorted(trust_contracts.case_ids() - {c["id"] for c in report["cases"]})},
+        )
         self.assertEqual({c["id"] for c in report["cases"]}, trust_contracts.case_ids())
 
         class Skipped(unittest.TestCase):

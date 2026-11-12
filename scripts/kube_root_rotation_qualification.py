@@ -4,7 +4,7 @@ import copy
 import unittest
 from unittest.mock import patch
 
-from mlsecops import signing, trust_rotation
+from mlsecops import kube_security_rotation, signing, trust_rotation
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import kube_root_rotation as native
 from scripts import trust_rotation_qualification as fixtures
@@ -63,6 +63,29 @@ class NativeRootRotation(unittest.TestCase):
         self.models = self.enterContext(
             patch.object(native, "model_snapshot", side_effect=lambda state: {"unchanged": True})
         )
+        self.observers = []
+        self.enterContext(patch.object(kube_security_rotation, "update", side_effect=self.observe))
+
+    def observe(self, state, package, *, next_root):
+        self.assertTrue(self.selected)
+        self.assertEqual(package, self.package)
+        self.assertEqual(next_root, self.fixture.new_public)
+        self.observers.append(next_root)
+        if self.fault == "observer":
+            raise Rejected("observer_transition_failed")
+        return {"release_ready": False, "reused": False}
+
+    def test_observer_transition_follows_committed_authority_and_is_reported(self):
+        report = self.exercise()
+        self.assertEqual(self.observers, [self.fixture.new_public])
+        self.assertEqual(report["observer_transition"], {"release_ready": False, "reused": False})
+
+    def test_observer_failure_cannot_publish_success_or_restore_retired_root(self):
+        self.fault = "observer"
+        with self.assertRaisesRegex(Rejected, "observer_transition_failed"):
+            self.exercise()
+        self.assertTrue(self.selected)
+        self.assertEqual(self.snapshot()["authority"]["version"], 2)
 
     def update(self, *args, **kwargs):
         if self.selected:

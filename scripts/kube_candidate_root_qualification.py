@@ -2,7 +2,7 @@ import copy
 import unittest
 from unittest.mock import patch
 
-from mlsecops import signing, trust_rotation
+from mlsecops import kube_security_rotation, signing, trust_rotation
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.trust_targets import Target
 from scripts import kube_candidate_root as native
@@ -75,6 +75,33 @@ class CandidateRootContracts(unittest.TestCase):
         )
         self.enterContext(patch.object(native, "invoke", side_effect=self.invoke))
         self.enterContext(patch.object(native.time, "time", return_value=self.f.clock))
+        self.observers = []
+        self.enterContext(patch.object(kube_security_rotation, "update", side_effect=self.observe))
+
+    def observe(self, state, package, *, next_root):
+        self.assertEqual(self.phases, ["primary-rotated-while-live"])
+        self.assertEqual(self.states[Target.PRIMARY.value]["authority"]["version"], 2)
+        self.assertEqual(self.states[Target.MODEL_REVOCATION.value]["authority"]["version"], 1)
+        self.assertEqual(next_root, self.f.new_public)
+        self.assertEqual(
+            digest(canonical(package)), self.receipts[Target.PRIMARY.value]["rotation_sha256"]
+        )
+        self.observers.append(next_root)
+        if self.fault == "observer":
+            raise Rejected("observer_transition_failed")
+        return {"release_ready": False, "reused": False}
+
+    def test_observer_updates_primary_after_live_probe_before_separate_peer(self):
+        report = self.exercise()
+        self.assertEqual(self.observers, [self.f.new_public])
+        self.assertEqual(report["observer_transition"], {"release_ready": False, "reused": False})
+
+    def test_observer_failure_does_not_rotate_peer_or_restore_primary(self):
+        self.fault = "observer"
+        with self.assertRaisesRegex(Rejected, "observer_transition_failed"):
+            self.exercise()
+        self.assertEqual(self.states[Target.PRIMARY.value]["authority"]["version"], 2)
+        self.assertEqual(self.states[Target.MODEL_REVOCATION.value]["authority"]["version"], 1)
 
     def snapshot(self, state, *, target=Target.PRIMARY):
         return copy.deepcopy(self.states[target.value])

@@ -208,3 +208,10 @@ Followup4f726f5 security43127559794 terminal success:842Linux test executions,
 zero skips;25/37/15/46native cases; new per-module coverage gates passed.
 Runtime fingerprint unchanged from e7ec709; clean checkout133tests7.930s1Windows
 skip. Recurring timeout cause remains unexplained despite this successful replay.
+
+Next caller increment implemented locally: ordinary rotation now updates the
+owned observer before old/new-root HTTP checks; candidate rotation updates it
+after the measured live PRIMARY refusal/recovery and before the independent
+MODEL_REVOCATION peer. Failed observer transition preserves committed PRIMARY,
+does not rotate peer, and cannot report success.14coordinator tests,100% statements
+and branches for both modules. Hosted M11 caller proof pending; no broader closure.

@@ -256,7 +256,7 @@ class RotationStore(unittest.TestCase):
             redirect_stderr(io.StringIO()),
             self.assertRaises(SystemExit) as result,
         ):
-            runpy.run_module("mlsecops.trust_root_store", run_name="__main__")
+            runpy.run_path(trust_root_store.__file__, run_name="__main__")
         self.assertEqual(result.exception.code, 1)
 
 

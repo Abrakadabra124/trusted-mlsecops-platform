@@ -356,3 +356,37 @@ producer state. Он не отправляет heartbeat, не повторяе�
 а не доказывают его причину. SQL/collector payloads и exception text не публикуются.
 Интервалы30s/10s и deadline45s сохраняются. Повторный pass не считается устранением
 необъяснённой нестабильности.
+
+### Включение перехода в serving и candidate
+
+`scripts.kube_root_rotation.exercise` после подтверждения SQL-ротации, retry и
+отказа retired key вызывает тот же `kube_security_rotation.update`. Затем обычный
+serving-сценарий проверяет настоящий отказ старой конфигурации и запускает reader
+с новым root pin. Ошибка observer не допускает отчёт success и не возвращает
+отозванный ключ. Контекст первоначального корня остаётся неизменным.
+
+В `scripts.kube_candidate_root.exercise` сначала полностью заканчивается
+измеряемый HTTP trace отказа/восстановления PRIMARY. После проверки trace и
+истории вызывается переход observer. Он не сдвигает начало измерения отказа
+и не увеличивает допустимые60s. Только затем отдельно ротируется MODEL_REVOCATION.
+Observer читает PRIMARY, его профиль не меняется на историю второй authority.
+Это две отдельные операции, не атомарная ротация двух сервисов. При ошибке
+observer PRIMARY уже изменена, peer ещё прежний; слепой повтор или возврат
+старого root запрещён, требуется диагностика фактической истории и marker.
+
+Локально14coordinator tests проверили порядок, обе подписи и прерывание без
+возврата ключа. Coverage обычного coordinator78/78statements+18/18branches,
+candidate77/77+30/30. Hosted проверка этого включения выполняется workflow
+`kubernetes-serving.yml` через существующий M11 сценарий; до terminal evidence
+новые caller paths не считаются принятыми. Общий обязательный serving heartbeat
+и полный R1 остаются открытыми.
+
+При локальном расширенном прогоне M11 с `-W error` выявлена ошибка двух
+существующих CLI-тестов: `runpy.run_module` повторно запускал уже импортированные
+trust_authority/trust_root_store, и RuntimeWarning становился ошибкой. Изоляция
+исправлена через `runpy.run_path` известного файла в отдельном `__main__` namespace;
+warnings не подавляются, production CLI и подтверждение authority не меняются.
+Contract runner теперь показывает идентификаторы непрошедших тестов, без private
+exception text. Проверены обе исходные ошибки и полный набор161tests22.322s,
+1POSIX Windows skip. Это исправление тестового окружения не объясняет прежний
+hosted45s recovery timeout observer.

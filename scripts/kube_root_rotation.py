@@ -2,7 +2,15 @@
 
 import copy
 
-from mlsecops import kube_trust, signing, trust, trust_authority, trust_root_store, trust_rotation
+from mlsecops import (
+    kube_security_rotation,
+    kube_trust,
+    signing,
+    trust,
+    trust_authority,
+    trust_root_store,
+    trust_rotation,
+)
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from mlsecops.trust_targets import Target
 from scripts.kube_authority_pair import read as authority_snapshot
@@ -180,6 +188,7 @@ def exercise(state, old_key, new_key):
         ),
         "untrusted_key",
     )
+    observer = kube_security_rotation.update(state, package, next_root=intent["next_root"])
     if model_snapshot(state) != models:
         raise Rejected("rotation_native_model_storage_changed")
     return {
@@ -187,6 +196,7 @@ def exercise(state, old_key, new_key):
         "status": "pass",
         "release_ready": False,
         "next_public": intent["next_root"],
+        "observer_transition": observer,
         "migration": migration,
         "before": before,
         "after": after,

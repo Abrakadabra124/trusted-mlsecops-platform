@@ -289,7 +289,9 @@ class AuthorityContracts(unittest.TestCase):
             redirect_stderr(io.StringIO()),
             self.assertRaises(SystemExit) as outcome,
         ):
-            runpy.run_module("mlsecops.trust_authority", run_name="__main__")
+            # Exercise the __main__ entry in an isolated namespace; the module is
+            # already imported above, so run_module emits a legitimate warning.
+            runpy.run_path(trust_authority.__file__, run_name="__main__")
         self.assertEqual(outcome.exception.code, 1)
         for arguments in (
             ["install", "--state", "state"],
