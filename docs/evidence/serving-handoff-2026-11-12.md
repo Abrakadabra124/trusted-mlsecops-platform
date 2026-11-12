@@ -57,9 +57,39 @@ M11 дошёл до `controlled-after-approval` в02:54:30.874629Z, затем
 перехода через expiry в этом запуске, поэтому его нельзя засчитать как M11 pass.
 После этого подготовлена оптимизация повторной audit validation внутри одного
 preflight; после Job состояние читается заново.90s approval, bounds expiry,
-delivery и telemetry не изменены. Новый hosted результат этой оптимизации pending.
+delivery и telemetry не изменены.
+
+Последующий [M1143146213251](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43146213251)
+на ad53e3e прошёл прежнюю точку отказа: после signed-approval-expiry03:17:19.421202Z
+дошёл до unexpired-previous-sequence03:19:18.526670Z, затем до actual candidate.
+Последний stage `actual-candidate-policy-change` в03:37:36.068734Z, общий отказ
+в03:38:32.338942Z. M11 report:fail/exit1, cases=[], metrics={}, причина только
+`M11 runtime verification rejected`. Он не доказывает конкретную первопричину
+последнего отказа. SQL stop и cluster deletion с readback прошли; signer и backup
+этапы не приняты. Нужна ограниченная диагностика этого отказа перед следующим
+M11 acceptance. Увеличение срока permit или ослабление gates не выполнялось.
 
 ## Локальная проверка и границы
+
+Последующий source `ad53e3e658f42fcf432dc586a4f789d801fc85f4`, fingerprint
+`35298d26beb5917e3354c52a256315c089433f052eb48316822aad3d44a76a48`, прошёл
+[primary43146216798](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43146216798).
+Report03:11:47.937712-03:25:21.909515UTC:20aggregate checks; handoff63.797179s,
+heartbeat10->12,2independent identity receipts,22legacy HTTP и10restored checks.
+Максимальная ONNX/golden ошибка7.583387712228884e-08. Независимое чтение cleanup
+подтвердило0service Pods/0worker Jobs и сохранённый audit state; SQL/cluster cleanup
+также прошёл. Full M10 остаётся inconclusive, mandatory serving heartbeat=false,
+release_ready=false. Это повторное подтверждение scoped handoff, не полный R1.
+
+В том же source
+[security43146211890](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43146211890)
+contracts job прошёл, а native observer failed с подтверждённым `journal_busy`.
+Подробности и ограниченный recovery playbook записаны в
+[ранбуке](../operations/periodic-trust-observer.md#подтверждённая-конкуренция-за-journal-и-ограниченное-восстановление).
+Общий security workflow не принят; результат handoff не отменяет этот отказ.
+Clean checkout ad53e3e:241tests/4Linux-dependent skips с warnings as errors;
+координатор89/89statements и30/30branches. Собственное locked Python3.12.15
+окружение, импорты из этого checkout и чистое Git tree проверены.
 
 Clean checkout39e0159 с собственным locked Python3.12.15 environment:
 229tests,4Linux-dependent skips, warnings as errors, чистое Git tree.

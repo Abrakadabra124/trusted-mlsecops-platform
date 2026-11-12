@@ -17,6 +17,8 @@ from mlsecops.process_privacy import enforce
 PERIOD_SECONDS = 30
 CHILD_SECONDS = 10
 STOP_SECONDS = 1
+BUSY_RETRIES = 2
+BUSY_BACKOFF_SECONDS = 1
 
 
 class Observer:
@@ -26,6 +28,7 @@ class Observer:
         self.stopped = threading.Event()
         self.child = None
         self.first_success = False
+        self.last_exit_code = None
 
     def close(self):
         process = self.child
@@ -51,6 +54,7 @@ class Observer:
         if self.stopped.is_set() or self.child is not None:
             raise Rejected("trust_observer_lifecycle")
         deadline = time.monotonic() + CHILD_SECONDS
+        self.last_exit_code = None
         try:
             self.child = subprocess.Popen(
                 [
@@ -72,6 +76,7 @@ class Observer:
             while not self.stopped.is_set():
                 code = self.child.poll()
                 if code is not None:
+                    self.last_exit_code = code
                     if code != 0:
                         print(
                             canonical(
@@ -93,12 +98,32 @@ class Observer:
         finally:
             self.close()
 
+    def check(self, started):
+        retries = 0
+        while True:
+            ok = self.once()  # finally confirms reap before a retry is considered.
+            if ok or self.last_exit_code != 42 or self.stopped.is_set():
+                return ok
+            if (
+                retries >= BUSY_RETRIES
+                or time.monotonic() + BUSY_BACKOFF_SECONDS + CHILD_SECONDS + 2 * STOP_SECONDS
+                > started + PERIOD_SECONDS
+            ):
+                return False
+            self.stopped.wait(BUSY_BACKOFF_SECONDS)
+            if (
+                self.stopped.is_set()
+                or time.monotonic() + CHILD_SECONDS + 2 * STOP_SECONDS > started + PERIOD_SECONDS
+            ):
+                return False
+            retries += 1
+
     def run(self):
         try:
             while not self.stopped.is_set():
                 started = time.monotonic()
                 try:
-                    ok = self.once()
+                    ok = self.check(started)
                 except Exception:
                     # A failed reap is fatal: never lose the child handle and
                     # launch a second process over a possibly live operation.

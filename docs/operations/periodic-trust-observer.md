@@ -138,3 +138,67 @@ Linux test на86a6327 /43141310976 обнаружил ошибку именно
 ошибку чтения, сохраняя прежние интервалы и deadline; pin/identity mismatch
 по-прежнему не повторяются автоматически.
 Нативная часть того же86a6327 CI прошла; это не устраняет предыдущий45s timeout.
+
+## Подтверждённая конкуренция за journal и ограниченное восстановление
+
+На ad53e3e /[43146211890](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43146211890)
+contracts job прошёл. Native observer отказал при ожидании первого committed
+события:1 failed check с точной категорией `journal_busy`, outbox0/0 и collector0/0.
+Последующее чтение конфигурации, signed SQL history и producer state прошло.
+Это наблюдаемый отказ hosted qualification, не production-инцидент.
+Конкуренция за lock подтверждена; PID второго держателя в этом запуске не записан.
+Прежние отказы без этих diagnostics нельзя автоматически приписать той же причине.
+
+Подготовлен следующий runtime: успешные проверки сохраняют30s cycle. Только после
+числового child exit42 разрешаются до двух повторов с1s backoff. Предыдущий child
+должен быть подтверждённо завершён и собран; неизвестная очистка остаётся fatal.
+Новый child запускается, только если в исходном30s cycle помещаются backoff,
+10s child budget и2s на terminate/kill с подтверждением завершения. После backoff
+остаток проверяется ещё раз, чтобы задержка планировщика не разрешала поздний
+запуск. SIGTERM/stop прекращает повторы. Source unavailable,
+delivery error, неизвестный код, timeout и configuration/integrity refusal этим
+правилом не повторяются. Повтор сам не публикует heartbeat: это может сделать
+только child после обычной проверки источника, history и receipts.
+
+Hosted playbook расширен детерминированным fault: оператор удерживает lock только
+своего fixture outbox, commits revocation, дожидается точного `journal_busy` и
+подтверждает неизменность heartbeat у независимого collector. Затем освобождает
+lock и проверяет доставку исходного события. Общий45s wait отсчитывается от commit,
+включая время принудительной конкуренции; он не перезапускается после unlock.
+Существующие60s delivery,25-40s periodic observation и120s loss bounds сохранены.
+Этот fault выполняется только на разрешённом disposable hosted runner. Локальные
+Docker/WSL/Kubernetes/SQL не нужны и не разрешены.
+
+До успешного свежего hosted прогона изменение считается проверенным unit tests,
+а причинное восстановление всей цепочки остаётся pending. Если повтор исчерпан,
+сохранять error/gap состояние и действовать по диагностике выше; не сбрасывать
+журнал, ключи или sequence и не превращать отсутствие receipt в success.
+
+### Повторение проверки после исправления
+
+Ответственный оператор сначала проверяет, что предыдущие runs этой ветки завершены
+и их owned cleanup подтверждён. Из чистого checkout запускается unit suite:
+
+```sh
+uv sync --locked --no-build --python 3.12.15
+uv run --locked python -W error -m unittest scripts.security_trust_events_qualification scripts.security_trust_service_qualification scripts.trust_observer_diagnostics_qualification scripts.trust_observer_retry_qualification
+```
+
+На Windows ожидаются3Linux-dependent skips. Они не заменяют native proof.
+Для опубликованного SHA этой ветки оператор запускает hosted workflow, если push
+уже не запустил его автоматически; дублировать существующий run не требуется:
+
+```sh
+gh workflow run security-events-contracts.yml --repo Abrakadabra124/trusted-mlsecops-platform --ref codex/cp4-m23-security-events-20261107
+gh run list --repo Abrakadabra124/trusted-mlsecops-platform --workflow security-events-contracts.yml --branch codex/cp4-m23-security-events-20261107 --limit 5
+```
+
+Сверить head SHA выбранного run с проверяемым commit. В native report обязательны
+оба `confirmed-lock-contention-*` cases, receipt именно исходного committed event,
+`forced_contention_recovery_seconds`, неизменные delivery/period/gap bounds и
+подтверждённая очистка child/process group/fixture SQL. Успех одного contracts job
+не заменяет success native job. При failure сохранить raw logs приватно, проверить
+cleanup и классификацию отказа; retry workflow без установленной причины не считать
+исправлением. Откат к предыдущему source возвращает прежнее поведение scheduling,
+но не устраняет его подтверждённую проблему с lock contention; журнал и ключи
+при откате сохраняются.

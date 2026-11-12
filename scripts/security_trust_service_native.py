@@ -271,17 +271,44 @@ def qualify():
                     and duplicate.stdout == b""
                     and duplicate.stderr == b"trust_observer_rejected\n",
                 )
-                began = time.monotonic()
-                committed = trust_authority.update(
-                    state, "a" * 64, authority_key, revoked_artifacts=["b" * 64]
+                busy_marker = canonical(
+                    dict(
+                        state="trust_observer_child_failure",
+                        category="journal_busy",
+                        release_ready=False,
+                    )
                 )
+                previous_busy = bounded_read(private_log, 65536).splitlines().count(busy_marker)
+                first_envelope = received_heartbeat()["envelope"]
+                with security_event_store.locked(producer["state_directory"]):
+                    began = time.monotonic()
+                    committed = trust_authority.update(
+                        state, "a" * 64, authority_key, revoked_artifacts=["b" * 64]
+                    )
+                    wait_for(
+                        lambda: (
+                            bounded_read(private_log, 65536).splitlines().count(busy_marker)
+                            > previous_busy
+                        ),
+                        seconds=max(0, began + 45 - time.monotonic()),
+                    )
+                    check(
+                        "confirmed-lock-contention-cannot-publish-heartbeat",
+                        received_heartbeat()["envelope"] == first_envelope,
+                    )
+                contention_released = time.monotonic()
                 wait_for(
                     lambda: (
                         len(snapshot()["records"]) == 1
                         and snapshot()["records"][0]["receipt"] is not None
-                    )
+                    ),
+                    seconds=max(0, began + 45 - time.monotonic()),
                 )
                 deliveries.append(time.monotonic() - began)
+                contention_recovery_seconds = time.monotonic() - contention_released
+                check(
+                    "confirmed-lock-contention-recovers-within-original-wait", deliveries[-1] <= 45
+                )
                 wait_for(lambda: heartbeat()["sequence"] > first["sequence"])
                 periodic_seconds = (heartbeat()["observed_at_ms"] - first["observed_at_ms"]) / 1000
                 record = snapshot()["records"][0]
@@ -413,6 +440,7 @@ def qualify():
         cases=cases,
         max_commit_delivery_seconds=max(deliveries),
         periodic_seconds=periodic_seconds,
+        forced_contention_recovery_seconds=contention_recovery_seconds,
         stopped_source_notice_seconds=notice_seconds,
         release_ready=False,
         scope="continuous-trust-source-not-full-M23-or-R1",
