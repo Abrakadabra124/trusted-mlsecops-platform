@@ -28,6 +28,7 @@ jobs:
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.data_source_lock_qualification
+          uv run --locked python -W error -m unittest scripts.kube_controlled_trust_campaign_qualification scripts.kube_owned_probe_qualification scripts.kube_candidate_campaign_qualification scripts.kube_readback_retry_qualification
           uv run --locked coverage run --branch --data-file=.coverage-M11 --source=mlsecops.trust_trace,mlsecops.trust_gate,mlsecops.trust_acceptance,scripts.trust_contracts -m unittest scripts.trust_trace_qualification scripts.trust_gate_qualification scripts.trust_acceptance_qualification scripts.inference_gate_qualification
           uv run --locked coverage report --data-file=.coverage-M11 --fail-under=95
           uv run --locked coverage json --data-file=.coverage-M11 -o .coverage-M11.json

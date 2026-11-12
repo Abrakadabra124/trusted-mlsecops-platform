@@ -41,10 +41,10 @@ from mlsecops.private_cli import Arguments
 from mlsecops.serving_context import QualificationTrace
 from mlsecops.trust_targets import Target
 from scripts.candidate_serving_reader import bind_proposal
+from scripts.kube_candidate_campaign import qualify as qualify_campaign
 from scripts.kube_candidate_faults import NONTERMINAL
 from scripts.kube_candidate_faults import exercise as exercise_faults
 from scripts.kube_candidate_root import exercise as exercise_root
-from scripts.kube_candidate_terminals import exercise as exercise_terminals
 from scripts.kube_owned_probe import invoke
 from scripts.kube_promotion_native import actual, campaign_authority, initialize_campaign
 from scripts.kube_promotion_snapshot import read as snapshot
@@ -306,7 +306,22 @@ def qualify(
         private = options["privacy_operator"].destination
         write_json(private / "permit.json", envelope)
         write_json(private / "public.json", {"qualification": qualification_public})
-    result = invoke(state, profile, config, expected, candidate_probe=True, **options)
+    revoked_key = digest(signing.decode64(public))
+    trust_campaign = None
+    if independent:
+        trust_campaign = qualify_campaign(
+            state,
+            profile,
+            config,
+            expected,
+            key=authority_key,
+            revoked_key=revoked_key,
+            expires_at=permit["expires_at"],
+            base_snapshot=base_snapshot,
+        )
+        result = trust_campaign["value"]["native"]
+    else:
+        result = invoke(state, profile, config, expected, candidate_probe=True, **options)
     if monitoring:
         result["operator_retained_reverified"] = options["monitoring_operator"].reverify()
         options["monitoring_operator"].retain_binding()
@@ -356,12 +371,13 @@ def qualify(
         )
     if snapshot(state) != base_snapshot:
         raise Rejected("candidate_inference_promotion_state_changed")
-    revoked_key = digest(signing.decode64(public))
     faults = NONTERMINAL if include_trust_lifecycle else ()
     if include_key_revocation and not independent:
         faults += ("key-revocation",)
     fault_results = (
-        exercise_faults(
+        trust_campaign["value"]["faults"]
+        if trust_campaign is not None
+        else exercise_faults(
             state,
             profile,
             config,
@@ -375,18 +391,8 @@ def qualify(
         if faults
         else {}
     )
-    terminals = None
+    terminals = trust_campaign["value"]["terminals"] if trust_campaign is not None else None
     if independent:
-        terminals = exercise_terminals(
-            state,
-            profile,
-            config,
-            expected,
-            base_probe=result,
-            key=authority_key,
-            revoked_key=revoked_key,
-            expires_at=permit["expires_at"],
-        )
         fault_results["model-revocation"] = terminals["model"]
         fault_results["key-revocation"] = terminals["key"]
         write_json(
@@ -423,6 +429,11 @@ def qualify(
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "native": result,
+        **(
+            {"trust_lifecycle_ownership_return": trust_campaign["ownership"]}
+            if trust_campaign is not None
+            else {}
+        ),
         **({"full_M14": "inconclusive", "load_campaign_id": campaign} if load else {}),
         **({"full_M15": "inconclusive", "monitoring_campaign_id": campaign} if monitoring else {}),
         **(

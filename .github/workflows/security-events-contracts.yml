@@ -90,15 +90,15 @@ jobs:
           PY
       - name: Audit operator ownership, role resources and explicit fresh volume provisioning
         run: |
-          uv run --locked ruff check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py scripts/kube_serving_start_native.py scripts/kube_serving_start_qualification.py scripts/kube_approval_campaign.py scripts/kube_approval_campaign_qualification.py
-          uv run --locked ruff format --check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py scripts/kube_serving_start_native.py scripts/kube_serving_start_qualification.py scripts/kube_approval_campaign.py scripts/kube_approval_campaign_qualification.py
-          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/owned-probe.coverage" --source=scripts.kube_owned_probe,scripts.kube_serving_start_native,scripts.kube_approval_campaign -m unittest scripts.kube_owned_probe_qualification scripts.kube_serving_handoff_native_qualification scripts.kube_serving_start_qualification scripts.kube_promotion_native_qualification scripts.kube_approval_campaign_qualification
+          uv run --locked ruff check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py scripts/kube_serving_start_native.py scripts/kube_serving_start_qualification.py scripts/kube_approval_campaign.py scripts/kube_approval_campaign_qualification.py scripts/kube_controlled_trust_campaign.py scripts/kube_controlled_trust_campaign_qualification.py scripts/kube_candidate_campaign.py scripts/kube_candidate_campaign_qualification.py
+          uv run --locked ruff format --check scripts/kube_owned_probe.py scripts/kube_owned_probe_qualification.py scripts/kube_serving_start_native.py scripts/kube_serving_start_qualification.py scripts/kube_approval_campaign.py scripts/kube_approval_campaign_qualification.py scripts/kube_controlled_trust_campaign.py scripts/kube_controlled_trust_campaign_qualification.py scripts/kube_candidate_campaign.py scripts/kube_candidate_campaign_qualification.py
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/owned-probe.coverage" --source=scripts.kube_owned_probe,scripts.kube_serving_start_native,scripts.kube_approval_campaign,scripts.kube_controlled_trust_campaign,scripts.kube_candidate_campaign -m unittest scripts.kube_owned_probe_qualification scripts.kube_serving_handoff_native_qualification scripts.kube_serving_start_qualification scripts.kube_promotion_native_qualification scripts.kube_approval_campaign_qualification scripts.kube_controlled_trust_campaign_qualification scripts.kube_candidate_campaign_qualification
           uv run --locked coverage json --data-file="$RUNNER_TEMP/owned-probe.coverage" -o "$RUNNER_TEMP/owned-probe.json"
           uv run --locked python - <<'PY'
           import json, os
           from pathlib import Path
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'owned-probe.json').read_text())['files']
-          if set(files) != {'scripts/kube_owned_probe.py', 'scripts/kube_serving_start_native.py', 'scripts/kube_approval_campaign.py'}:
+          if set(files) != {'scripts/kube_owned_probe.py', 'scripts/kube_serving_start_native.py', 'scripts/kube_approval_campaign.py', 'scripts/kube_controlled_trust_campaign.py', 'scripts/kube_candidate_campaign.py'}:
               raise SystemExit('owned_probe_coverage_inventory')
           for name, file in files.items():
               stats = file['summary']
@@ -123,7 +123,7 @@ jobs:
           PY
           uv run --locked ruff check mlsecops/kube_serving*.py scripts/kube_serving*.py
           uv run --locked ruff format --check mlsecops/kube_serving*.py scripts/kube_serving*.py
-          uv run --locked python -W error -m unittest scripts.kube_observer_profile_qualification scripts.kube_security_rotation_qualification
+          uv run --locked python -W error -m unittest scripts.kube_observer_profile_qualification scripts.kube_security_rotation_qualification scripts.kube_readback_retry_qualification
           uv run --locked python -W error -m unittest scripts.kube_root_rotation_qualification scripts.kube_candidate_root_qualification
           uv run --locked python -W error -m unittest scripts.kube_security_serving_owner_qualification
           uv run --locked ruff check mlsecops/kube_security*.py scripts/kube_security*.py

@@ -23,6 +23,7 @@ def exercise(
     faults,
     expires_at,
     target=Target.PRIMARY,
+    probe=None,
 ):
     target = select(target)
     allowed = (
@@ -45,13 +46,15 @@ def exercise(
         with Coordinator(
             state, fault, policy, key, expected["model"], revoked_key=revoked_key, target=target
         ) as coordinator:
-            report = invoke(
+            # A campaign owns the outer return. Its Coordinator exits (including
+            # reversible restoration) before that return on success or failure.
+            report = (invoke if probe is None else probe)(
                 state,
                 profile,
                 config,
                 {**expected, "fault": fault},
                 coordinator=coordinator,
-                restore_failure=coordinator.restore,
+                **({"restore_failure": coordinator.restore} if probe is None else {}),
                 candidate_probe=True,
                 trust_target=target,
             )

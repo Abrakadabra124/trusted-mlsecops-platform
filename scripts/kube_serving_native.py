@@ -39,7 +39,7 @@ from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_rollback_native import exercise as exercise_rollback
 from scripts.kube_rollback_native import variant as rollback_variant
 from scripts.kube_root_rotation import exercise as exercise_root_rotation
-from scripts.kube_serving_faults import Coordinator, acknowledge, progress
+from scripts.kube_serving_faults import acknowledge, progress
 from scripts.kube_trust_native import hosted
 
 NAMESPACE = "ml-serving"
@@ -536,39 +536,26 @@ def qualify(
         print(canonical({"stage": "planned-authority-root-rotation"}).decode(), flush=True)
         next_key = authority_key.with_name("rotated-authority.pem")
         rotation = exercise_root_rotation(state, authority_key, next_key)
-        rotation["old_config_refusal"] = invoke(
+        from scripts.kube_controlled_trust_campaign import qualify as controlled_trust
+
+        authority_key = next_key
+        trust_window = controlled_trust(
             state,
             profile,
             config,
-            {**expected, "ready": False, "reader_refusal": "trust_authority_missing_or_foreign"},
+            rollback_config,
+            expected,
+            rotation,
+            promotion["expected_policy"],
+            authority_key,
+            model,
         )
-        authority_key = next_key
-        for operator_config in (config, rollback_config):
-            operator_config.update(
-                trust_root=rotation["next_public"],
-                minimum_trust_version=rotation["receipt"]["version"],
-            )
-        rotation["serving"] = invoke(state, profile, config, expected)
-        lifecycle = {}
-        for fault in ("outage", "blackhole", "policy-change", "revocation"):
-            print(canonical({"stage": "live-trust-" + fault}).decode(), flush=True)
-            with Coordinator(
-                state, fault, promotion["expected_policy"], authority_key, model
-            ) as coordinator:
-                lifecycle[fault] = invoke(
-                    state,
-                    profile,
-                    config,
-                    {**expected, "fault": fault},
-                    coordinator=coordinator,
-                    restore_failure=coordinator.restore,
-                )
-                print(
-                    canonical({"completed_fault": fault, "result": lifecycle[fault]}).decode(),
-                    flush=True,
-                )
-        print(canonical({"stage": "controlled-after-revocation"}).decode(), flush=True)
-        revoked = invoke(state, profile, config, {**expected, "ready": False})
+        observed_trust = trust_window["value"]
+        rotation.update(
+            old_config_refusal=observed_trust["old_config_refusal"],
+            serving=observed_trust["serving"],
+        )
+        lifecycle, revoked = observed_trust["live_trust"], observed_trust["revoked"]
         rollback["revoked_retry"] = kube_promotion.invoke(
             root, state, rollback_config, rollback["request"], image
         )
@@ -630,6 +617,7 @@ def qualify(
                 ],
             },
             "live_trust": lifecycle,
+            "trust_lifecycle_ownership_return": trust_window["ownership"],
             "unexpired_replay": replay,
             **({"actual_inference": candidate_result} if candidate_result is not None else {}),
             "limitations": [

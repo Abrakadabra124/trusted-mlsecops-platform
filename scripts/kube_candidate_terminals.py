@@ -8,7 +8,9 @@ from scripts.kube_owned_probe import invoke
 from scripts.kube_promotion_snapshot import read as snapshot
 
 
-def exercise(state, profile, config, expected, *, base_probe, key, revoked_key, expires_at):
+def exercise(
+    state, profile, config, expected, *, base_probe, key, revoked_key, expires_at, probe=None
+):
     public, policy = config.get("trust_root", config["permit_public"]), config["expected_permit"]
     before = capture(state, public, policy)
     isolation(base_probe, before, Target.PRIMARY)
@@ -32,6 +34,7 @@ def exercise(state, profile, config, expected, *, base_probe, key, revoked_key, 
         faults=("revocation",),
         expires_at=expires_at,
         target=Target.MODEL_REVOCATION,
+        probe=probe,
     )["revocation"]
     after_model = capture(state, public, policy)
     transition(before, after_model, Target.MODEL_REVOCATION, "revoked_artifacts", expected["model"])
@@ -46,13 +49,14 @@ def exercise(state, profile, config, expected, *, base_probe, key, revoked_key, 
         revoked_key=revoked_key,
         faults=("key-revocation",),
         expires_at=expires_at,
+        probe=probe,
     )["key-revocation"]
     after_key = capture(state, public, policy)
     transition(after_model, after_key, Target.PRIMARY, "revoked_keys", revoked_key)
     cold = {}
     for target in Target:
         selected = config if target is Target.PRIMARY else alternate
-        report = invoke(
+        report = (invoke if probe is None else probe)(
             state,
             profile,
             selected,

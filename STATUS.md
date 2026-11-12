@@ -1,5 +1,17 @@
 # Статус и границы доказательств
 
+M11 на59bff94 /43259927815 cancelled по подтверждённому GitHub лимиту30min.
+С одной probe ConfigMap прошёл прежнюю quota-точку и дошёл до actual blackhole;
+gate inconclusive, SQL/cluster cleanup success. Primary43259935227 success:
+21aggregate/17controlled/12audit, ownerreturn40.006074s; Security43259909260 success
+1063executions/24batches/0skips и25/37/17/46native cases.
+Подготовлена группировка прежних22Jobs:21owner transfers ->8, без изменения
+30min/600s/180s/120s/60s критериев. Native проверка grouping ещё не выполнена.
+Объединённые170tests/0skips pass; пять owner/campaign modules165statements и40branches
+покрыты100%. Три bounded reviews без Critical/Important. Setup audit readback
+также включён в прежний3s retry budget; исторический early Primary остаётся unexplained.
+[Evidence и повтор](docs/evidence/serving-probe-bundle-2026-11-12.md).
+
 T29: подготовлен один immutable probe bundle вместо2/3ConfigMaps,
 без повышения count/configmaps=4. Harness с тремя постоянными картами сначала
 воспроизвёл отказ, затем прошёл все9режимов; oversized bundle отказан до create.

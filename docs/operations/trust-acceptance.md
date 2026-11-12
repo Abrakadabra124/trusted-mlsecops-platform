@@ -293,3 +293,73 @@ Failure report Primary теперь использует существующи�
 и категорию операции с тем же source; при unknown сохраняет неопределённость.
 Report прежнего успеха по-прежнему заменяется до запуска, error/interrupt не
 создают ложный pass. Native объяснение этого раннего отказа пока pending.
+
+### M11 не укладывается в общий бюджет
+
+[Run43259927815](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43259927815)
+на59bff94 отменён по подтверждённому GitHub timeout30min, с terminal SQL/cluster
+cleanup success. Прежний quota-барьер пройден; последний actual stage blackhole.
+M11 остаётся inconclusive. Отметка начала stage не доказывает завершение сценария.
+
+1. Сверить source, job started/completed, check annotations, последний stage и
+   конечный report. Не считать любой cancelled следствием timeout без annotation.
+2. Проверить обе cleanup steps и отсутствие собственного кластера по их readback.
+   При неудачной очистке не запускать повтор поверх неизвестного ownership.
+3. Сопоставить затраты с неизменным бюджетом: общий job30min, qualification permit
+   максимум600s, минимум180s до каждого live fault,60s fail-closed и120s на возврат
+   owner с финальными UID/receipt checks. Не увеличивать эти пределы ради pass.
+4. Для подготовленной группировки выполнить:
+
+   ```bash
+   uv run --locked python -W error -m unittest scripts.kube_controlled_trust_campaign_qualification scripts.kube_candidate_campaign_qualification scripts.kube_owned_probe_qualification scripts.kube_serving_faults_qualification
+   ```
+
+5. Первые пять controlled windows и отдельная candidate root/peer rotation
+   сохраняются. После каждого root transition Jobs группируются внутри явного
+   ownership.run: семь controlled и восемь candidate. Все22Jobs остаются
+   отдельными, owner transfers сокращаются с21 до8. Каждый Job заново проверяет
+   audit/root/profile, UID и собственную cleanup; общего кеша preflight нет.
+6. При ошибке очередного Job последующие не запускаются. Обратимый fault
+   восстанавливается при выходе из Coordinator до попытки вернуть owner.
+   Необратимые revocations не отменяются. Итоговый heartbeat baseline читается
+   после последнего cleanup; ранний heartbeat не заменяет подтверждение возврата.
+7. Запустить свежий полный workflow на опубликованном source, дождаться всех
+   signer/recovery checks и cleanup, пересчитать hashes/traces. Локальный pass
+   и расчёт предполагаемой экономии не доказывают укладывание в30min.
+
+Один ownership report сохраняется на уровне группы. Нельзя копировать его в
+несколько Jobs как отдельные подтверждённые возвраты или разрешать raw probes
+по одному наличию suspended marker. Пока свежая кампания не принята, M11 release
+не публикуется; общий R1 требует остальных gates и независимого M22.
+
+### Busy при начальной настройке audit reader
+
+Контролируемое выполнение настоящего generated readback воспроизвело отдельный
+дефект: configured() создаёт Emitter, который читает store.snapshot ещё до
+прежнего retry loop. Временный security_store_busy при этой настройке немедленно
+прерывал чтение. Это не установленная причина исторического early Primary или
+timeout M11: для таких утверждений в их отчётах нет достаточной диагностики.
+
+Setup и snapshot теперь используют один прежний бюджет3s. Успешный setup
+повторно не выполняется; во время setup повторяется только security_store_busy.
+Для snapshot сохранены прежние transient категории. Deadline проверяется до
+операций и после их успешного возврата, sleep ограничен оставшимся временем.
+Поздний результат не становится success, постоянные ошибки не превращаются в retry.
+Этот бюджет не прерывает зависший файловый ввод-вывод принудительно и не включает
+последующую проекцию; внешние ограничения выполнения процесса остаются отдельными.
+
+1. Сохранить bounded operation/category/location и source. Не печатать конфигурацию,
+   private store, credentials или полный stderr ради диагностики блокировки.
+2. Воспроизвести generated code без инфраструктуры:
+
+   ```bash
+   uv run --locked python -W error -m unittest scripts.kube_readback_retry_qualification scripts.kube_security_native_qualification scripts.kube_observer_profile_qualification
+   ```
+
+3. Проверить busy при setup и snapshot, исчерпание общего бюджета, отказ после
+   позднего успешного чтения, постоянные ошибки и foreign producer role. Эти
+   tests инъецируют ошибки и clock; они не доказывают реальную Linux lock contention.
+4. При повторном native отказе сохранить fail и его точную фазу. Не удалять lock
+   или journal, не сбрасывать counter/pin и не увеличивать3s deadline.
+5. После исправления требуется свежий hosted workflow с существующими delivery,
+   heartbeat, ownership и cleanup checks. Старый success не принимает новый source.
