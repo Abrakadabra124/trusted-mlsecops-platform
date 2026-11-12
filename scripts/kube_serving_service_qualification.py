@@ -263,6 +263,52 @@ class PersistentServing(unittest.TestCase):
                 self.subject.restart(state)
             api.assert_not_called()
 
+    def test_suspended_validation_requires_matching_ticket_and_zero_owned_replicas(self):
+        config = self.subject.configuration(self.promotion, PROFILE)
+        expected = self.subject.documents("a" * 32, PROFILE, config)
+        for document in expected:
+            document["metadata"]["uid"] = "owned-" + document["kind"]
+            if document["kind"] == "Deployment":
+                document["spec"]["replicas"] = 0
+        marker = dict(
+            schema_version=1,
+            ready=False,
+            handoff="c" * 32,
+            workspace_id="a" * 32,
+            profile=PROFILE,
+            config=config,
+            config_sha256=digest(canonical(config)),
+            audit_pin="b" * 64,
+            resources={
+                self.subject.kube_storage.reference(d): d["metadata"]["uid"] for d in expected
+            },
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            write_json(state / "kubernetes-serving-service/resources.json", marker)
+            with (
+                patch.object(self.subject, "workspace_id", return_value="a" * 32),
+                patch.object(
+                    self.subject.kube_security_events,
+                    "validate",
+                    return_value={"pins": {"serving": "b" * 64}},
+                ),
+                patch.object(
+                    self.subject.kube_storage,
+                    "get",
+                    side_effect=lambda s, d: next(x for x in expected if x["kind"] == d["kind"]),
+                ),
+                patch.object(self.subject, "kubectl") as api,
+            ):
+                for nonce in (None, "d" * 32, "c" * 31, True, "g" * 32):
+                    with self.subTest(nonce=nonce), self.assertRaisesRegex(Rejected, "marker"):
+                        self.subject.validate(state, suspended=nonce)
+                self.assertEqual(self.subject.validate(state, suspended="c" * 32), marker)
+                expected[1]["spec"]["replicas"] = 1
+                with self.assertRaises(Rejected):
+                    self.subject.validate(state, suspended="c" * 32)
+                api.assert_not_called()
+
     def test_bootstrap_checks_existing_audit_before_creating_any_service(self):
         with (
             patch.object(

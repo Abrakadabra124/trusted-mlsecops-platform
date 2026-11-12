@@ -72,7 +72,22 @@ jobs:
         run: uv run --locked python -m unittest scripts.security_event_runtime_qualification scripts.security_event_http_qualification
       - name: Audit operator ownership, role resources and explicit fresh volume provisioning
         run: |
-          uv run --locked python -W error -m unittest scripts.kube_serving_service_qualification
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/serving-handoff.coverage" --source=mlsecops.kube_serving_handoff -m unittest scripts.kube_serving_service_qualification scripts.kube_serving_handoff_qualification scripts.kube_serving_handoff_native_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/serving-handoff.coverage" -o "$RUNNER_TEMP/serving-handoff.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'serving-handoff.json').read_text())['files']
+          if set(files) != {'mlsecops/kube_serving_handoff.py'}:
+              raise SystemExit('serving_handoff_coverage_inventory')
+          stats = files['mlsecops/kube_serving_handoff.py']['summary']
+          for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+              if not stats[total] or stats[covered] / stats[total] < .95:
+                  raise SystemExit('serving_handoff_coverage_incomplete')
+          print(json.dumps({'module': 'mlsecops/kube_serving_handoff.py', 'coverage': stats}, sort_keys=True))
+          PY
+          uv run --locked ruff check mlsecops/kube_serving*.py scripts/kube_serving*.py
+          uv run --locked ruff format --check mlsecops/kube_serving*.py scripts/kube_serving*.py
           uv run --locked python -W error -m unittest scripts.kube_observer_profile_qualification scripts.kube_security_rotation_qualification
           uv run --locked python -W error -m unittest scripts.kube_root_rotation_qualification scripts.kube_candidate_root_qualification
           uv run --locked ruff check mlsecops/kube_security*.py scripts/kube_security*.py

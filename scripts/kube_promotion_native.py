@@ -299,6 +299,13 @@ def controlled(root, state, image, *, check_actual=False):
             kube_security_native.collector(state, marker),
         )
         confirmed("controlled-http-denial-has-independent-collector-receipt", identity_count > 0)
+        ownership_transfer = serving_service.handoff(
+            state,
+            serving_profile,
+            config,
+            {**expected, "ready": True, "model": model, "bundle": receipt["subject_sha256"]},
+        )
+        confirmed("controlled-http-owner-transfer-preserves-model-ledger", ledger(state) == after)
         repeated = kube_promotion.invoke(root, state, config, request, image)
         confirmed("controlled-exact-retry-same-receipt", repeated["receipt"] == receipt)
         confirmed(
@@ -324,7 +331,8 @@ def controlled(root, state, image, *, check_actual=False):
         )
         confirmed(
             "controlled-revoked-http-refuses-in-same-pod-without-write",
-            ledger(state) == after and serving_revoked["pod_uid"] == serving_active["pod_uid"],
+            ledger(state) == after
+            and serving_revoked["pod_uid"] == ownership_transfer["restored"]["pod_uid"],
         )
         service_report = {
             "before_admission": serving_before,
@@ -332,8 +340,9 @@ def controlled(root, state, image, *, check_actual=False):
             "after_admission": serving_active,
             "after_revocation": serving_revoked,
             "replacement": replacement,
+            "ownership_transfer": ownership_transfer,
             "identity_events_delivered": identity_count,
-            "continuous_lifecycle": True,
+            "single_owner_lifecycle": True,
             "mandatory_serving_heartbeat": False,
             "release_ready": False,
         }

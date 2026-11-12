@@ -74,6 +74,53 @@ serving heartbeat и его счётчик, но потеря serving ещё н�
 конфликте состояния и зависшем shutdown. resourceVersion используется как условие
 записи; при проверке ответа принимается новая версия, присвоенная API server.
 
+## Передача serving identity проверочному HTTP-процессу
+
+Статус: координатор и отрицательные проверки реализованы; hosted проверка этого
+перехода ещё не выполнена. В primary campaign добавлен путь Deployment -> настоящий
+qualification HTTP -> исходный Deployment. Это последовательные владельцы одного
+outbox, а не один непрерывно работающий PID. Registry heartbeat пока не изменён.
+
+Prerequisites: тот же trusted hosted operator, проверенные audit и service markers,
+исходный профиль и promotion config текущей campaign. Ответственный - владелец
+disposable CI. API `mlsecops.kube_serving_handoff.transfer(state)` предназначен для
+операторского координатора, не для inference worker или произвольного HTTP клиента.
+Исполняемая проверка: `scripts.kube_serving_service_native.handoff(...)` внутри
+`python -m scripts.kube_promotion_native --state .runtime` на hosted стенде.
+
+1. Read-only диагностика: `kube_serving_service.validate(state)` проверяет UID,
+   спецификацию, image и audit pin. Проверить отсутствие Jobs в `ml-serving`.
+   Неизвестный Job блокирует переход; координатор его не удаляет и не принимает.
+2. Координатор сохраняет `ready=false` и уникальный handoff nonce, затем переводит
+   принадлежащий стенду Deployment из одной реплики в ноль с UID/resourceVersion
+   precondition. До запуска probe проверяет отсутствие старого HTTP Pod, worker
+   Jobs в `ml-serve` и любых Jobs в `ml-serving`.
+3. Временный владелец выполняет существующий HTTP probe с теми же ключами и PVC.
+   Проверка использует настоящий inference и завершает свой Job/worker. Ошибка
+   теста остаётся ошибкой даже при успешном последующем возврате владения.
+4. Возврат принимает только исходный ticket, совпадающий nonce и SHA256 полного
+   suspended marker. Изменившиеся config/identity, оставшийся Job/worker или
+   несоответствующий UID запрещают запуск новой реплики. При успехе восстанавливается
+   исходный Deployment; новый HTTP Pod должен отличаться от удалённого.
+5. Подтверждение: действующий authenticated inference, совпадающие model/bundle,
+   сохранённые pin/permissions и префикс outbox, независимые receipts новых отказов
+   авторизации, увеличение serving heartbeat после завершения временного владельца.
+   Измеряемый возврат с heartbeat ограничен120s. Это не доказывает непрерывность
+   heartbeat на протяжении всей ещё не интегрированной M23 campaign.
+
+Ветка отказа: `ready=false` с `handoff` означает незавершённую передачу. Обычные
+validate/exec/restart не должны принимать её за готовый service. Ticket существует
+только внутри активного координатора; нельзя собирать новый ticket из marker,
+удалять marker, править replicas вручную или сбрасывать PVC/ключи ради продолжения.
+Если процесс оборвался после replicas1, но до окончательной проверки, Pod может
+существовать при unready marker. Автоматический resume такого состояния ещё не
+реализован. Сохранить приватные marker и метаданные ресурсов, остановить новые
+запуски, передать диагностику владельцу; автоматическое восстановление не заявлено.
+Разрешённый выход текущего disposable workflow - его existing owned-cluster cleanup
+с проверкой удаления и отдельная проверка остановки принадлежащего стенду SQL.
+Трафик и promotion при неопределённом состоянии не разрешать. Возврат ownership
+не является rollback модели и не отменяет revocation.
+
 ## Границы ролей
 
 | Роль | Namespace / service account | Приватные материалы | Persistent state |

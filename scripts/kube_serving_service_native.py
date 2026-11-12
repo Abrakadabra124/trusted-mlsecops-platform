@@ -2,7 +2,7 @@
 
 import time
 
-from mlsecops import kube_security_events
+from mlsecops import kube_security_events, kube_serving_handoff
 from mlsecops import kube_serving_service as service
 from mlsecops.contracts import Rejected, canonical
 from scripts import kube_security_native as audit
@@ -63,4 +63,56 @@ def replace(state):
         "heartbeat_after": observed,
         "elapsed_seconds": round(elapsed, 6),
         "outbox_retained": True,
+    }
+
+
+def handoff(state, profile, promotion, expected):
+    """Exercise the actual qualification HTTP owner between two verified Deployments."""
+    from scripts.kube_serving_native import invoke, serving_configuration
+
+    hosted()
+    if expected.get("ready") is not True:
+        raise Rejected("kube_serving_handoff_expected_active")
+    marker = kube_security_events.validate(state, profile=profile)
+    before = snapshot(state)
+    config = serving_configuration(promotion)
+    config.update(
+        minimum_sequence=1,
+        audit_directory="/tmp/audit",
+        token_file="/tmp/token",
+        kubernetes_worker=profile,
+    )
+    with kube_serving_handoff.transfer(state) as transfer:
+        qualified = invoke(state, profile, config, expected)
+        sequence = audit.collector(state, marker)["heartbeats"].get("serving", 0)
+        if sequence <= 0:
+            raise Rejected("kube_serving_handoff_heartbeat_missing")
+        returned = time.monotonic()
+    restored = observe(state, expected)
+    after = snapshot(state)
+    deadline = returned + 120
+    while True:
+        inbox = audit.collector(state, marker)
+        counter = inbox["heartbeats"].get("serving", 0)
+        if counter > sequence:
+            break
+        if time.monotonic() >= deadline:
+            raise Rejected("kube_serving_handoff_heartbeat_deadline")
+        time.sleep(0.5)
+    elapsed = time.monotonic() - returned
+    if elapsed > 120 or restored["pod_uid"] != transfer["after"]:
+        raise Rejected("kube_serving_handoff_return_changed")
+    if before["pin"] != marker["pins"]["serving"] or before["permissions"] != after["permissions"]:
+        raise Rejected("kube_serving_handoff_identity_changed")
+    receipts = audit.identity_receipts(before, after, inbox)
+    return {
+        "transfer": transfer,
+        "qualification": qualified,
+        "restored": restored,
+        "return_seconds": round(elapsed, 6),
+        "return_heartbeat_before": sequence,
+        "return_heartbeat_after": counter,
+        "identity_events_delivered": receipts,
+        "outbox_retained": True,
+        "release_ready": False,
     }

@@ -231,3 +231,37 @@ reconciled. Security43132975200 passed856Linux/0skip. Clean72tests/0skip.
 contract and45s observer failures remain unexplained; success is not causal repair.
 Next mandatory step remains coherent serving lifecycle/heartbeat across callers,
 fresh M13/M14 and full M23; actual admission/M18/R1 remain open.
+
+## Next implementation: explicit transfer of the serving identity
+
+The permanent Deployment and qualification CLI already run the real serving
+HTTP implementation. They must never write the same audit state concurrently.
+Use an explicit operator transfer: validate owned Deployment/config/identity;
+persist a suspended marker and unique ticket; scale1->0; verify old HTTP and
+worker removal; run the qualification HTTP owner; verify its Job/worker cleanup;
+then restore the original Deployment with the same config, keys and PVC.
+An altered/stale ticket, unknown Job, failed cleanup or interrupted replacement
+must keep the marker unready and prohibit a second owner. A failed test may return
+ownership only after cleanup is independently confirmed; it still fails the gate.
+
+This preserves existing real-process expiry/fault/privacy tests, including their
+SIGSTOP-based trust-read anchor, without applying SIGSTOP to the permanent
+Deployment's liveness-probed process. It does not claim one uninterrupted PID
+across qualification runs. Heartbeats must always originate in whichever real
+HTTP process currently owns the identity. Collector readback and retained state
+must prove handovers before enabling the mandatory registry flag.
+
+Required followup in this same integration: explicit configuration changes between
+actual/controlled contexts, bootstrap before first admission attempt, transfer in
+the shared native invoke path, measured heartbeat continuity and cleanup, and
+fresh M11/M13/M14/M23. The existing globally optional serving heartbeat is not
+considered solved until these callers and the registry requirement are coherent.
+
+Operator transfer is now implemented and wired into the primary controlled
+promotion campaign. Local verification:59 tests/0skips with warnings as errors;
+the new coordinator covers45/45 statements and6/6 branches.11 of those tests
+reject incomplete return evidence (stale heartbeat, changed Pod/identity/permissions,
+missing independent receipt, failed actual probe). Hosted execution is pending.
+The report uses `single_owner_lifecycle`, not uninterrupted process continuity.
+Interrupted transfer recovery and the global caller/registry integration remain
+open; this checkpoint does not accept M23 or R1.

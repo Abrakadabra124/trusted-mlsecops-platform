@@ -138,11 +138,22 @@ def directory(state):
     return safe_child(state, "kubernetes-serving-service")
 
 
-def validate(state):
+def validate(state, *, suspended=None):
     marker = read_json(safe_child(directory(state), "resources.json"))
+    suspension_valid = (
+        type(suspended) is str
+        and len(suspended) == 32
+        and all(character in "0123456789abcdef" for character in suspended)
+        and marker.get("handoff") == suspended
+        and marker.get("ready") is False
+    )
     if (
         marker.get("schema_version") != 1
-        or marker.get("ready") is not True
+        or (
+            (marker.get("ready") is not True or "handoff" in marker)
+            if suspended is None
+            else not suspension_valid
+        )
         or marker.get("workspace_id") != workspace_id(state)
         or marker.get("config_sha256") != digest(canonical(marker.get("config")))
     ):
@@ -160,6 +171,8 @@ def validate(state):
     if set(marker["resources"]) != {kube_storage.reference(d) for d in desired}:
         raise Rejected("kube_serving_service_inventory")
     for document in desired:
+        if suspended is not None and document["kind"] == "Deployment":
+            document["spec"]["replicas"] = 0
         kube_storage.verify_resource(
             document,
             kube_storage.get(state, document),
