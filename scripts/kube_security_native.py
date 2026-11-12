@@ -48,16 +48,28 @@ from mlsecops.security_event_ledger import MAX_RECORDS as COLLECTOR_RECORDS
 from mlsecops.security_event_outbox import MAX_RECORDS as PRODUCER_RECORDS
 from mlsecops.process_privacy import enforce
 enforce()
-SETUP
 deadline = time.monotonic() + 3
+setup_complete = False
 while True:
+    if time.monotonic() >= deadline:
+        raise Rejected('security_readback_deadline')
     try:
+        if not setup_complete:
+            # Fixed source snippets retain their multiline READ.replace interface.
+            exec('''SETUP''')
+            setup_complete = True
+        if time.monotonic() >= deadline:
+            raise Rejected('security_readback_deadline')
         document = store.snapshot()
+        if time.monotonic() >= deadline:
+            raise Rejected('security_readback_deadline')
         break
     except Rejected as error:
-        if str(error) not in ('artifact_unavailable', 'security_store_unavailable', 'security_store_busy') or time.monotonic() >= deadline:
+        transient = ('artifact_unavailable', 'security_store_unavailable', 'security_store_busy') if setup_complete else ('security_store_busy',)
+        remaining = deadline - time.monotonic()
+        if str(error) not in transient or remaining <= 0:
             raise
-        time.sleep(0.03)
+        time.sleep(min(0.03, remaining))
 if len(document['records']) > min(COLLECTOR_RECORDS, PRODUCER_RECORDS):
     raise SystemExit(1)
 records = []
