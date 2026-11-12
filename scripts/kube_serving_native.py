@@ -122,7 +122,7 @@ def invoke(
     elif "identity_audit_file" in config or "security_audit_config" in config:
         # Candidate applications use the fixed serving Secret, never a caller path.
         raise Rejected("kube_serving_audit_configuration")
-    kube_security_events.validate(
+    audit_marker = kube_security_events.validate(
         state,
         profile=profile,
         environment=config["context"]["policy"]["environment"],
@@ -130,7 +130,7 @@ def invoke(
     )
     from mlsecops.kube_serving_handoff import require_probe_slot, wait_pods_absent
 
-    require_probe_slot(state)
+    require_probe_slot(state, marker=audit_marker)
     name = "serving-probe-" + uuid.uuid4().hex
     maps = [
         kube_promotion.configuration_map(state, name + "-" + field, field, value)

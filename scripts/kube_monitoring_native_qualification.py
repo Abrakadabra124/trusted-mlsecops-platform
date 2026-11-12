@@ -22,7 +22,7 @@ class NativeMonitoringContracts(unittest.TestCase):
             patch.object(sys, "stdout", io.StringIO()) as output,
             self.assertRaises(SystemExit) as stopped,
         ):
-            runpy.run_module("scripts.kube_monitoring_native", run_name="__main__")
+            runpy.run_path(native.__file__, run_name="__main__")
         self.assertEqual(stopped.exception.code, 1)
         self.assertNotIn("PRIVATE", output.getvalue())
 

@@ -20,8 +20,9 @@ def jobs_empty(state):
         raise Rejected("kube_serving_handoff_jobs_present")
 
 
-def verified_observer(state):
-    marker = service.kube_security_events.validate(state)
+def verified_observer(state, *, marker=None):
+    if marker is None:
+        marker = service.kube_security_events.validate(state)
     return kube_observer_readback.pod(state, marker, "trust")
 
 
@@ -42,17 +43,18 @@ def remaining_pods(items, namespace, observer):
     return [item for item in items if item not in known]
 
 
-def confirm_observer(state, before):
-    if kube_observer_readback.instance(verified_observer(state)) != kube_observer_readback.instance(
-        before
-    ):
+def confirm_observer(state, before, *, marker=None):
+    if kube_observer_readback.instance(
+        verified_observer(state, marker=marker)
+    ) != kube_observer_readback.instance(before):
         raise Rejected("kube_serving_handoff_observer_changed")
 
 
 def wait_pods_absent(state):
     # Job deletion can finish before its Pods. The independently verified trust
     # observer shares ml-serving but owns a DIFFERENT identity and outbox.
-    observer = verified_observer(state)
+    marker = service.kube_security_events.validate(state)
+    observer = verified_observer(state, marker=marker)
     deadline = time.monotonic() + 45
     while True:
         inventories = [
@@ -66,16 +68,20 @@ def wait_pods_absent(state):
             for namespace in (service.NAMESPACE, "ml-serve")
         ]
         if not any(inventories):
-            confirm_observer(state, observer)
+            confirm_observer(state, observer, marker=marker)
             return
         if time.monotonic() >= deadline:
             raise Rejected("kube_serving_handoff_pods_present")
         time.sleep(0.5)
 
 
-def require_probe_slot(state):
+def require_probe_slot(state, *, marker=None):
     """A native probe cannot overlap an existing HTTP owner or inference worker."""
-    observer = verified_observer(state)
+    # A caller may reuse its just-validated audit inventory for this single
+    # preflight. Never reuse it across a Job or a root/configuration transition.
+    if marker is None:
+        marker = service.kube_security_events.validate(state)
+    observer = verified_observer(state, marker=marker)
     for namespace in (service.NAMESPACE, "ml-serve"):
         for kind in ("pods", "jobs"):
             items = decode(kubectl(state, ["get", kind, "-n", namespace, "-o", "json"]).stdout).get(
@@ -85,7 +91,7 @@ def require_probe_slot(state):
                 items = remaining_pods(items, namespace, observer)
             if type(items) is not list or items:
                 raise Rejected("kube_serving_handoff_probe_owner_present")
-    confirm_observer(state, observer)
+    confirm_observer(state, observer, marker=marker)
 
 
 def suspend(state):

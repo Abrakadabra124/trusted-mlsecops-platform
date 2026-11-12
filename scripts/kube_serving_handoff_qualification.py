@@ -47,6 +47,11 @@ class ServingHandoff(unittest.TestCase):
             return self.marker
 
         service = self.subject.service
+        self.audit = self.stack.enter_context(
+            patch.object(
+                service.kube_security_events, "validate", return_value={"verified": "audit"}
+            )
+        )
         self.stack.enter_context(patch.object(service, "validate", side_effect=validate))
         self.stack.enter_context(patch.object(service, "directory", return_value="private-state"))
         self.stack.enter_context(
@@ -264,6 +269,28 @@ class ServingHandoff(unittest.TestCase):
             self.assertEqual(self.real_verified_observer("state"), self.observer)
             marker.assert_called_once_with("state")
             pod.assert_called_once_with("state", {"verified": "audit"}, "trust")
+
+    def test_inventory_is_reused_only_inside_one_preflight_and_refreshed_after_job(self):
+        marker = {"verified": "caller-preflight"}
+        self.subject.require_probe_slot("state", marker=marker)
+        self.audit.assert_not_called()
+        self.assertEqual(self.observer_reader.call_count, 2)
+        for call in self.observer_reader.call_args_list:
+            self.assertIs(call.kwargs["marker"], marker)
+        self.observer_reader.reset_mock()
+        self.subject.wait_pods_absent("state")
+        self.audit.assert_called_once_with("state")
+        for call in self.observer_reader.call_args_list:
+            self.assertIs(call.kwargs["marker"], self.audit.return_value)
+
+    def test_verified_observer_can_reuse_inventory_but_still_verifies_live_owner(self):
+        marker = {"verified": "same-operation"}
+        with patch.object(
+            self.subject.kube_observer_readback, "pod", return_value=self.observer
+        ) as pod:
+            self.assertEqual(self.real_verified_observer("state", marker=marker), self.observer)
+            self.audit.assert_not_called()
+            pod.assert_called_once_with("state", marker, "trust")
 
 
 if __name__ == "__main__":

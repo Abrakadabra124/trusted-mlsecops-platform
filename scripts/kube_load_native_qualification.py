@@ -148,6 +148,9 @@ class NativeLoadContracts(unittest.TestCase):
                 patch.object(serving, "verify_running_image"),
                 patch.object(serving, "workspace_id", return_value="a" * 32),
                 patch.object(serving.kube_promotion, "cleanup") as cleanup,
+                patch.object(serving.kube_security_events, "validate") as audit,
+                patch("mlsecops.kube_serving_handoff.require_probe_slot") as slot,
+                patch("mlsecops.kube_serving_handoff.wait_pods_absent") as pods,
                 patch.object(serving.kube_storage, "verify_resource"),
                 patch.object(
                     serving.kube_promotion,
@@ -182,12 +185,13 @@ class NativeLoadContracts(unittest.TestCase):
                 patch.object(sys, "stdout", io.StringIO()) as output,
             ):
                 (Path(temporary) / "evidence").mkdir()
+                config = {"context": {"policy": {"environment": "local-cpu"}}, "trust_root": "root"}
                 if failed:
                     with self.assertRaisesRegex(Rejected, "job_failed"):
                         serving.invoke(
                             Path(temporary),
                             PROFILE,
-                            {},
+                            config,
                             {},
                             candidate_probe=True,
                             load_operator=observer,
@@ -202,7 +206,7 @@ class NativeLoadContracts(unittest.TestCase):
                     result = serving.invoke(
                         Path(temporary),
                         PROFILE,
-                        {},
+                        config,
                         {},
                         candidate_probe=True,
                         load_operator=observer,
@@ -212,8 +216,20 @@ class NativeLoadContracts(unittest.TestCase):
                 observer.start.assert_called_once()
                 observer.observe.assert_called_once()
                 cleanup.assert_called_once()
+                audit.assert_called_once_with(
+                    Path(temporary), profile=PROFILE, environment="local-cpu", authority_root="root"
+                )
+                slot.assert_called_once_with(Path(temporary), marker=audit.return_value)
+                pods.assert_called_once_with(Path(temporary))
                 self.assertEqual(created[-1]["spec"]["activeDeadlineSeconds"], 360)
                 pod = created[-1]["spec"]["template"]["spec"]
+                secret_names = [
+                    volume["secret"]["secretName"]
+                    for volume in pod["volumes"]
+                    if "secret" in volume
+                ]
+                self.assertIn("security-serving", secret_names)
+                self.assertNotIn("security-promoter", secret_names)
                 self.assertEqual(pod["containers"][0]["resources"]["limits"]["memory"], "1Gi")
                 self.assertEqual(
                     pod["volumes"][0],

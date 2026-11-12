@@ -76,8 +76,9 @@ serving heartbeat и его счётчик, но потеря serving ещё н�
 
 ## Передача serving identity проверочному HTTP-процессу
 
-Статус: координатор и отрицательные проверки реализованы; hosted проверка этого
-перехода ещё не выполнена. В primary campaign добавлен путь Deployment -> настоящий
+Статус: hosted39e0159 /43143770511 pass:53.747003s, heartbeat9->11,2receipts,
+ONNX и cleanup. [Evidence](../evidence/serving-handoff-2026-11-12.md).
+В primary campaign добавлен путь Deployment -> настоящий
 qualification HTTP -> исходный Deployment. Это последовательные владельцы одного
 outbox, а не один непрерывно работающий PID. Registry heartbeat пока не изменён.
 
@@ -113,6 +114,9 @@ disposable CI. API `mlsecops.kube_serving_handoff.transfer(state)` предна�
    Совпадение одного label или имени недостаточно. Чужой или изменившийся Pod
    блокирует переход. Ошибка86a6327 /43141312875 требовала пустого namespace целиком
    и поэтому блокировала корректный observer; SQL/cluster cleanup того запуска прошли.
+   В одной preflight разрешено повторно использовать только что проверенный audit
+   inventory; live Pod/owner читается до и после проверки. Через границу Job или
+   смену root/config этот inventory не переносится: cleanup читает новое состояние.
 5. Подтверждение: действующий authenticated inference, совпадающие model/bundle,
    сохранённые pin/permissions и префикс outbox, независимые receipts новых отказов
    авторизации, увеличение serving heartbeat после завершения временного владельца.

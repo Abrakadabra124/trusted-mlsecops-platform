@@ -735,7 +735,7 @@ class NativeContracts(unittest.TestCase):
                 self.assertNotIn("security-promoter", secrets)
                 self.assertNotIn("security-trust", secrets)
                 self.assertIn("security-serving", secrets)
-                probe_slot.assert_called_once_with(state)
+                probe_slot.assert_called_once_with(state, marker=audit_profile.return_value)
                 probe_cleanup.assert_called_once_with(state)
                 audit_profile.assert_called_once_with(
                     state, profile=PROFILE, environment="local-cpu", authority_root="root"

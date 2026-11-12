@@ -1,5 +1,12 @@
 # Статус и границы доказательств
 
+T29 serving handoff на39e0159 /43143770511 прошёл:53.747003s, heartbeat9->11,
+2independent receipts, настоящий ONNX и cleanup. [Evidence](docs/evidence/serving-handoff-2026-11-12.md).
+M11 того же source43143774536 failed:90s approval истекло до expiry reader;
+никакой M11/R1 приёмки этого source нет. Security native pass25/37/15/46,
+contracts failed на устаревшей load-fixture. Коррекции fixture и повторной
+preflight validation проверяются отдельно. Mandatory serving heartbeat ещё не включён.
+
 M11 на5486596 /43132977638 прошёл146cases,701Linux executions/0skips,
 обе caller rotations observer11.688843s/10.732460s и SQL/cluster cleanup.
 Первичные traces/метрики и3report hashes сверены повторно. Controlled backup
