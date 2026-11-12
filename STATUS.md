@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+Primaryf85140e /43250411996 success:21aggregate/17controlled/12audit checks;
+owner-return49.255072s теперь включает final UID/receipt validation, все config
+transitions<120s. Source/full reports/SQL+cluster cleanup verified.
+Security43250403360 success1062executions/24batches/0skips и25/37/17/46native checks.
+Clean81tests/0skips; M11 на этом source fail после root rotation: create:forbidden.
+Full M23/M10/R1 не закрыты. Новая finite диагностика различает quota/RBAC/admission,
+тип probe resource и разрешённые числовые quota counts; правила доступа не менялись.
+[Native correction evidence](docs/evidence/serving-handoff-2026-11-12.md#финальное-измерение-наf85140e).
+
 Primaryff06fa0 /43246227657 success:21aggregate/17controlled/12audit checks,
 actual HTTP до admission, controlled ONNX inference и final0service Pods/0worker Jobs.
 Source/fingerprint/full report copies и SQL/cluster cleanup verified.

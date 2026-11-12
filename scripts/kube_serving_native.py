@@ -233,7 +233,17 @@ def invoke(
             load_operator.start()
         if privacy_operator is not None:
             privacy_operator.start()
-        for document in [*maps, job]:
+        for index, document in enumerate([*maps, job]):
+            print(
+                canonical(
+                    {
+                        "stage": "serving-probe-create",
+                        "resource": "Job" if document is job else "ConfigMap",
+                        "index": index,
+                    }
+                ).decode(),
+                flush=True,
+            )
             observed = decode(kubectl(state, ["create", "-f", "-", "-o", "json"], document).stdout)
             uid = observed["metadata"]["uid"]
             created.append((document, uid))

@@ -299,3 +299,25 @@ Incompatible configuration56.889707s отказала до worker; restore59.401
 owned cluster deletion success; job terminal success. Измерения возврата относятся
 к старой границе до final reads; корректное измерение нового5d39e71 ещё требует CI.
 full_M10=inconclusive,release_ready=false. Этот Primary не заменяет M11 или R1.
+
+## Финальное измерение наf85140e
+
+[Primary43250411996](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43250411996)
+и[Security43250403360](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43250403360)
+success на sourcef85140e8bcfb4f556d3ce36c33313c7f5066fc60.
+Fingerprint9ade76dc47a67eee9bc8cf26a15ee8420c2682edc5f0d294e7399a22fdddaa33 совпал;
+Primary clean, обе полные копии отчёта идентичны. Native report
+15:43:36.198326 ->15:57:27.853945 UTC,21aggregate/17controlled/12audit checks.
+
+HTTP до admission39.1179s. Возврат owner49.255072s включает final UID и receipt
+validation: heartbeat20->22,2independent receipts. Configuration переход68.484214s,
+incompatible67.838097s, restore69.510022s с новым receipt. Все ниже120s; limits не
+менялись. Max ONNX golden error7.583387712228884e-08. Final0service Pods/0worker Jobs,
+audit retained, SQL stop и owned cluster cleanup success. full_M10=inconclusive,
+release_ready=false.
+
+Security:1062test executions/24batches/0skips, owned coordinator55/55statements и
+16/16branches. Native25/37/17/46assertions. Max committed delivery31.106404561s,
+observer stopped notice90.170662227s, HTTP stopped notice90.934879428s.
+Это проверка correction и компонентов; отдельный M11 и полный M23/R1 не заменены.
+Clean checkout того же source:81affected tests/0skips, Ruff и docs checks pass.

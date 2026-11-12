@@ -224,3 +224,28 @@ stage обозначает начало фазы, кроме completed. Без c
    Не выполнять повторный bootstrap поверх неизвестного ownership.
 5. Только после причинного исправления, свежего source-bound M11 pass и cleanup
    создавать milestone prerelease. Пока M11 fail, релиз не публиковать.
+
+### Уточнение create forbidden наf85140e
+
+[Run43250406895](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43250406895),
+job131294342513: M11 fail, SQL stop и owned cluster cleanup success. Source
+f85140e8bcfb4f556d3ce36c33313c7f5066fc60, native15:44:35.629473 ->16:00:17.458988 UTC.
+Root preflight15:58:19.050075, commit phase15:58:41.700633,
+observer phase15:58:53.500798 и completed15:59:15.764189 UTC.
+После завершения ротации Kubernetes отказал `create:forbidden`.
+Это не доказательство ошибки чтения outbox или незавершённой ротации.
+M11 cases/metrics пусты, итоговый gate не принят.
+
+Следующая диагностика сохраняет прежний общий отказ и добавляет только finite
+категории quota/admission/rbac/pod_security. Перед созданием probe resource
+печатаются тип ConfigMap/Job и его индекс. Для распознанной счётной квоты отдельный
+record kubernetes-quota-refused содержит только разрешённый вид ресурса и целые
+requested/used/limited. Имена ресурсов, namespace, пользователь и raw stderr
+не экспортируются; неизвестные форматы остаются без выдуманных значений.
+
+Оператор сопоставляет последний serving-probe-create с category. При quota
+сверяет фактический peak с декларацией storage-budget и подтверждённой очисткой
+предыдущих ресурсов; нельзя автоматически повышать budget или удалять чужие
+объекты. При admission/RBAC сверяет конкретный manifest и разрешённую роль,
+сохраняя запреты credential/command/privilege. После исправления необходим тот же
+полный M11 с cleanup, а не только успешное создание одного Job.

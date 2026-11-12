@@ -1,4 +1,5 @@
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -34,7 +35,18 @@ REQUEST_OPERATIONS = frozenset(
     {"get", "create", "apply", "replace", "delete", "logs", "wait", "exec", "config", "other"}
 )
 REQUEST_CATEGORIES = frozenset(
-    {"container_pending", "timeout", "not_found", "forbidden", "connection_refused", "unknown"}
+    {
+        "container_pending",
+        "timeout",
+        "not_found",
+        "forbidden",
+        "connection_refused",
+        "unknown",
+        "quota",
+        "admission",
+        "rbac",
+        "pod_security",
+    }
 )
 
 
@@ -50,6 +62,28 @@ def request_failure(error):
         and fields[2] in REQUEST_CATEGORIES
     ):
         return {"operation": fields[1], "category": fields[2]}
+    return None
+
+
+def quota_counts(diagnostic):
+    """Read finite count quotas without exporting resource names or server text."""
+    for resource in (
+        b"count/configmaps",
+        b"count/jobs.batch",
+        b"pods",
+        b"count/secrets",
+        b"persistentvolumeclaims",
+    ):
+        found = {}
+        for field in (b"requested", b"used", b"limited"):
+            match = re.search(
+                field + rb":\s*" + re.escape(resource) + rb"=([0-9]{1,8})(?:,|\s|$)",
+                diagnostic[:8192],
+            )
+            if match:
+                found[field.decode()] = int(match[1])
+        if len(found) == 3:
+            return {"resource": resource.decode(), **found}
     return None
 
 
@@ -85,6 +119,11 @@ def kubectl(state, arguments, value=None, timeout=60, check=True, config=None):
                     (b"timed out", "timeout"),
                     (b"timeout", "timeout"),
                     (b"(notfound)", "not_found"),
+                    (b"exceeded quota:", "quota"),
+                    (b"denied the request", "admission"),
+                    (b"denied request", "admission"),
+                    (b"cannot create resource", "rbac"),
+                    (b"violates podsecurity", "pod_security"),
                     (b"(forbidden)", "forbidden"),
                     (b"connection refused", "connection_refused"),
                 )
@@ -92,6 +131,13 @@ def kubectl(state, arguments, value=None, timeout=60, check=True, config=None):
             ),
             "unknown",
         )
+        counts = quota_counts(diagnostic) if category == "quota" else None
+        if counts is not None:
+            print(
+                canonical({"event": "kubernetes-quota-refused", **counts}).decode(),
+                file=sys.stderr,
+                flush=True,
+            )
         raise Rejected(f"kubernetes_request_failed:{operation}:{category}")
     return result
 
