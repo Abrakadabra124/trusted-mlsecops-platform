@@ -196,6 +196,31 @@ def qualify(config, expected):
     return {**summary, "worker_cleanup_verified": True}
 
 
+def locations(failure):
+    """Bounded public call sites, including cleanup context; never error text."""
+    result, seen = [], set()
+    while failure is not None and id(failure) not in seen and len(result) < 4:
+        seen.add(id(failure))
+        line, frame = 0, failure.__traceback__
+        while frame is not None:
+            if frame.tb_frame.f_code.co_filename == __file__:
+                line = frame.tb_lineno
+            frame = frame.tb_next
+        kind = type(failure).__name__
+        result.append(
+            {
+                "exception": kind
+                if kind
+                in {"Rejected", "KeyError", "TypeError", "ValueError", "OSError", "AttributeError"}
+                else "other",
+                "source_file": "mlsecops/security_outage_probe.py" if line else "unknown",
+                "source_line": line,
+            }
+        )
+        failure = failure.__cause__ or failure.__context__
+    return result
+
+
 def main():
     try:
         enforce()
@@ -205,10 +230,15 @@ def main():
         options = parser.parse_args()
         print(canonical(qualify(read_json(options.config), read_json(options.request))).decode())
         return 0
-    except Exception:
+    except Exception as failure:
         print(
             canonical(
-                {"status": "fail", "release_ready": False, "code": "security_green_probe_rejected"}
+                {
+                    "status": "fail",
+                    "release_ready": False,
+                    "code": "security_green_probe_rejected",
+                    "locations": locations(failure),
+                }
             ).decode()
         )
         return 1

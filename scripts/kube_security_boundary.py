@@ -6,13 +6,34 @@ from pathlib import Path
 from mlsecops import kube_promotion, kube_security_resources, kube_storage
 from mlsecops import kube_security_events as audit_state
 from mlsecops.cluster import kubectl
-from mlsecops.contracts import Rejected, decode
+from mlsecops.contracts import Rejected, canonical, decode, safe_child
 from mlsecops.kube_storage_resources import client_pod_spec
 from mlsecops.kube_worker import job_document, verify_running_image, wait_job
 from scripts.kube_privacy_bundle import manifest
+from scripts.kube_privacy_diagnostic import validated
 from scripts.kube_trust_native import hosted
 
 NAMESPACE = "ml-promoter"
+
+
+def failure_diagnostic(content):
+    if len(content) > 65536:
+        return None
+    for line in content.splitlines():
+        try:
+            value = decode(line, 65536)
+        except Rejected:
+            continue
+        if (
+            type(value) is dict
+            and set(value) == {"status", "release_ready", "code", "location"}
+            and value["status"] == "fail"
+            and value["release_ready"] is False
+            and value["code"] == "security_audit_boundary_probe_rejected"
+            and validated(value["location"]) is not None
+        ):
+            return value
+    return None
 
 
 def materials(root, profile, workspace, name):
@@ -23,13 +44,23 @@ def materials(root, profile, workspace, name):
     spec["volumes"].append(
         {
             "name": "qualification-code",
-            "configMap": {"name": bundle["metadata"]["name"], "defaultMode": 292},
+            "configMap": {
+                "name": bundle["metadata"]["name"],
+                "defaultMode": 292,
+                "items": [
+                    {"key": filename, "path": "source/" + filename}
+                    for filename in sorted(bundle["data"])
+                ],
+            },
         }
     )
     spec["containers"][0]["volumeMounts"].append(
         {
             "name": "qualification-code",
             "mountPath": "/app/scripts",
+            # Bind regular entries below AtomicWriter's symlink layer so fixture
+            # __file__.resolve() still locates the image's /app policy and lock.
+            "subPath": "source",
             "readOnly": True,
         }
     )
@@ -60,13 +91,8 @@ def invoke(state, profile):
             if len(statuses) == 1
             else None
         )
-        if (
-            terminal["type"] != "Complete"
-            or type(exit_code) is not int
-            or exit_code != 0
-            or pod["metadata"]["ownerReferences"][0]["uid"] != created[-1][1]
-        ):
-            raise Rejected("audit_boundary_job_failed")
+        if pod["metadata"]["ownerReferences"][0]["uid"] != created[-1][1]:
+            raise Rejected("audit_boundary_job_replaced")
         content = kubectl(
             state,
             [
@@ -79,6 +105,15 @@ def invoke(state, profile):
                 "--limit-bytes=65537",
             ],
         ).stdout
+        if terminal["type"] != "Complete" or type(exit_code) is not int or exit_code != 0:
+            safe_child(state, "evidence/" + name + "-private.log").write_bytes(content)
+            diagnostic = failure_diagnostic(content)
+            if diagnostic is not None:
+                print(
+                    canonical({"stage": "audit-boundary-failed", "probe": diagnostic}).decode(),
+                    flush=True,
+                )
+            raise Rejected("audit_boundary_job_failed")
         report = decode(content, 65536)
         if (
             report.get("status") != "pass"

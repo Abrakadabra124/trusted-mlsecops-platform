@@ -18,6 +18,7 @@ from mlsecops.contracts import (
 )
 from scripts import kube_security_boundary
 from scripts import kube_security_native as audit
+from scripts.kube_privacy_diagnostic import location, validated
 from scripts.kube_privacy_operator import exec_failure
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_trust_native import hosted
@@ -148,6 +149,52 @@ class Coordinator:
         return {}
 
     def observe(self, pod):
+        try:
+            return self._observe(pod)
+        except Exception as failure:
+            # Report before Job deletion and ownership return can mask the cause.
+            # Diagnostic readback is best effort and never turns failure into pass.
+            report = {
+                "status": "fail",
+                "code": "security_outage_operator_rejected",
+                "completed_phases": list(self.phases),
+                "location": location(failure),
+            }
+            try:
+                if self.pod is not None and pod["metadata"]["uid"] == self.pod["metadata"]["uid"]:
+                    raw = kubectl(
+                        self.state,
+                        [
+                            "logs",
+                            pod["metadata"]["name"],
+                            "-n",
+                            "ml-serving",
+                            "-c",
+                            "worker",
+                            "--tail=1",
+                            "--limit-bytes=65537",
+                        ],
+                    ).stdout
+                    if len(raw) <= 65536:
+                        (self.destination / "failed-child-private.log").write_bytes(raw)
+                        value = decode(raw, 65536)
+                        if (
+                            type(value) is dict
+                            and set(value) == {"status", "release_ready", "code", "locations"}
+                            and value["status"] == "fail"
+                            and value["release_ready"] is False
+                            and value["code"] == "security_green_probe_rejected"
+                            and type(value["locations"]) is list
+                            and 1 <= len(value["locations"]) <= 4
+                            and all(validated(item) is not None for item in value["locations"])
+                        ):
+                            report["probe"] = value
+            except Exception:
+                pass
+            print(canonical(report).decode(), flush=True)
+            raise
+
+    def _observe(self, pod):
         if self.pod is None:
             self.pod = decode(canonical(pod))
         if pod["metadata"]["uid"] != self.pod["metadata"]["uid"]:
@@ -192,12 +239,24 @@ class Coordinator:
                 "started_at_ms": time.time_ns() // 1000000,
                 "started_ns": time.monotonic_ns(),
             }
+            print(
+                canonical(
+                    {"stage": "security-outage-action", "phase": phase, "state": "begin"}
+                ).decode(),
+                flush=True,
+            )
             result = self.act(phase, payload)
             if phase != "finish":
                 self.timeline[phase].update(
                     finished_at_ms=time.time_ns() // 1000000,
                     finished_ns=time.monotonic_ns(),
                 )
+            print(
+                canonical(
+                    {"stage": "security-outage-action", "phase": phase, "state": "complete"}
+                ).decode(),
+                flush=True,
+            )
             self.requests[phase], self.results[phase] = reference, result
             self.phases.append(phase)
             write_json(

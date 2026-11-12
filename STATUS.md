@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+T29/M23 на `0a55421`: Security workflow 43279107795 success, 1100 test executions,
+новая actual sequence campaign 25 checks, detection 91.18/90.93 s при пороге 120 s.
+Соседний outage run 43279107452 failed при возврате ownership; SQL/cluster cleanup
+success, healthy ML during audit outage не принят. [Evidence](docs/evidence/m23-sequence-0a55421-2026-11-12.md).
+Исправление причины и общая M23 composition продолжаются; R1 не завершён.
+
 M11 на `56f1a19` / 43266471492 принят: 146 критериев (125 controlled + 21 aggregate),
 746 preflight executions / 18 batches / 0 skips; primary hashes, source/methods,
 HTTP traces и SQL/cluster cleanup отдельно сверены. Job: 29 min 6 s из 30 min.

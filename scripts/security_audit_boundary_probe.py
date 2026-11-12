@@ -12,6 +12,7 @@ from mlsecops import security_event_admission as admission
 from mlsecops.contracts import Rejected, canonical, digest
 from mlsecops.process_privacy import enforce
 from scripts import promotion_qualification as fixtures
+from scripts.kube_privacy_diagnostic import location
 
 CLIENT = "/client"
 AUDIT = "/security/audit.json"
@@ -137,6 +138,17 @@ def main():
         print(canonical(qualify()).decode())
         return 0
     except (Exception, KeyboardInterrupt) as error:
+        print(
+            canonical(
+                {
+                    "status": "fail",
+                    "release_ready": False,
+                    "code": "security_audit_boundary_probe_rejected",
+                    "location": location(error),
+                }
+            ).decode(),
+            flush=True,
+        )
         print("security_audit_boundary_probe_rejected", file=sys.stderr)
         return 130 if isinstance(error, KeyboardInterrupt) else 1
 

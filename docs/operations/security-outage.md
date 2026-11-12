@@ -1,7 +1,8 @@
 # T29: sequence gap и отказ audit при здоровом ML
 
-Статус: код и controlled tests подготовлены, fresh hosted execution ещё не
-подтверждена. Это компонентные проверки [плана M23](../m23-acceptance-plan.md),
+Статус: [sequence campaign на 0a55421](../evidence/m23-sequence-0a55421-2026-11-12.md)
+подтверждена; actual outage завершился отказом и требует повторной проверки.
+Это компонентные проверки [плана M23](../m23-acceptance-plan.md),
 не общий gate M23/M18/R1. Ответственный - оператор disposable CI lab.
 Реальные данные и production в этот профиль не входят.
 
@@ -105,6 +106,18 @@ full M23 остаётся `inconclusive` до отдельной общей пр
 предыдущий failure остаётся частью истории, а не заменяется новым summary.
 
 ## Доказательства и ограничения
+
+ConfigMap использует AtomicWriter symlinks. При монтировании bundle целиком
+qualification fixtures с `Path(__file__).resolve()` искали policy и `uv.lock`
+внутри `scripts`. Pure reproduction подтвердил оба отказа. Теперь immutable
+ConfigMap содержит `source/<filename>`, а `/app/scripts` монтируется через
+`subPath: source`: подкаталог содержит обычные файлы. Отдельный regression test
+воспроизводит представление проекции и выполняет fixture setup/cleanup с запретом
+SQL, socket connect/bind и дочерних процессов внутри fixture. Pod spec проверяет
+точный subPath/items/readOnly; реальный bind mount проверяется в следующем CI.
+Нельзя подменять ROOT в production, обходить policy или считать этот pure test
+доказательством полного native recovery. Ошибки operator и child теперь выводят
+только проверенные public code locations до удаления Job.
 
 При внутреннем review воспроизведены три controlled failure: заранее собранные
 green windows принимались без временной связи с outage; повторный выход из

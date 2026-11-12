@@ -1,5 +1,7 @@
 """Controlled lifecycle checks for the actual-candidate M23 probe."""
 
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,27 @@ from scripts.security_outage_packet_qualification import fixture
 
 
 class ProbeContracts(unittest.TestCase):
+    def test_child_failure_keeps_only_public_locations_without_exception_text(self):
+        with (
+            patch.object(probe, "enforce", side_effect=KeyError("PRIVATE-marker")),
+            patch("sys.stdout", io.StringIO()) as output,
+        ):
+            self.assertEqual(probe.main(), 1)
+        value = json.loads(output.getvalue())
+        self.assertNotIn("PRIVATE-marker", output.getvalue())
+        self.assertEqual(value["locations"][0]["exception"], "KeyError")
+        self.assertEqual(value["locations"][0]["source_file"], "mlsecops/security_outage_probe.py")
+        self.assertGreater(value["locations"][0]["source_line"], 0)
+
+    def test_cleanup_context_is_bounded_and_cycles_do_not_expose_messages(self):
+        first, second = KeyError("PRIVATE-first"), RuntimeError("PRIVATE-second")
+        first.__cause__ = second
+        second.__context__ = first
+        value = probe.locations(first)
+        self.assertEqual(len(value), 2)
+        self.assertEqual([entry["exception"] for entry in value], ["KeyError", "other"])
+        self.assertNotIn("PRIVATE", json.dumps(value))
+
     def test_phase_campaign_keeps_observing_until_ack_and_records_all_fault_boundaries(self):
         value, ref, trace, golden = fixture()
         channel = Mock()

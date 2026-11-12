@@ -269,7 +269,10 @@ class AuditBoundaryProbe(unittest.TestCase):
             redirect_stderr(errors),
         ):
             self.assertEqual(self.module.main(), 1)
-        self.assertEqual(output.getvalue(), "")
+        result = decode(output.getvalue().encode())
+        self.assertEqual(result["code"], "security_audit_boundary_probe_rejected")
+        self.assertEqual(result["location"]["exception"], "other")
+        self.assertNotIn("PRIVATE-CANARY", output.getvalue())
         self.assertEqual(errors.getvalue(), "security_audit_boundary_probe_rejected\n")
 
 
