@@ -332,8 +332,10 @@ evidence; проверить replicas, Pod UID/container restartCount и collect
 переход должен отказать до изменения marker; после успеха старый SQL reader root
 отказывает, новый проходит, одно конкретное событие trust.revoked/key совпадает
 по envelope и receipt с независимым collector, model ledger не меняется.
-Локально проверены123tests/1Windows skip; hosted результат до публикации evidence
-не считается подтверждённым. Полный M11/M23/R1 и включение всех caller paths открыты.
+Hosted переход наe7ec709 подтверждён43125706293; followup4f726f5 прошёл
+security43127559794 и clean checkout133tests/1Windows skip.
+[Точные результаты и ограничения](../evidence/observer-rotation-2026-11-12.md).
+Полный M11/M23/R1 и включение всех caller paths открыты.
 
 Первый security run на e7ec709 /43125649611 выявил недостаточное покрытие новых
 ветвей `kube_security_events.py` в измеряемом наборе. Порог не менялся; добавлена

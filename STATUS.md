@@ -4,9 +4,11 @@ CP4/T29 observer root rotation наe7ec709 прошла hosted run43125706293:
 10cases,9.8959s,heartbeat14->15, сохранный outbox, независимый receipt,
 отказ старого корня и проверка нового, idempotent retry, SQL/cluster cleanup.
 [Evidence и ограничения](docs/evidence/observer-rotation-2026-11-12.md).
-Security43125649611failed: coverage изменённого operator и периодический observer
-recovery45s. Coverage исправлено локальными тестами без снижения95% порога;
-таймаут не объяснён, добавлена read-only диагностика. R1/M18/M23 не завершены.
+Первый Security43125649611failed: coverage operator и periodic observer recovery45s.
+Followup4f726f5/43127559794success:842Linux test executions0skips и25/37/15/46native
+cases; отдельные95% coverage gates выполнены. Runtime fingerprint совпал сe7ec709.
+Clean checkout133tests/1Windows skip. Причина прежнего таймаута не объяснена;
+повторный pass не закрывает эту нестабильность. R1/M18/M23 не завершены.
 
 CP4/T29 persistent HTTP Deployment проверен на88e7c0a:
 [Kubernetes43119250736](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43119250736)

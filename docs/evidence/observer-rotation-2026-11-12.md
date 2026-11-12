@@ -44,8 +44,28 @@ Native security job130876921167 отдельно остановился по45s 
 возврата SQL credentials периодическому observer. Диагностика:2failed checks,
 1event/1receipt в обоих journals. Причина повторявшейся ранее нестабильности
 не установлена. Добавлена безопасная read-only диагностика; нормативы сохранены.
-Это не доказательство исправления таймаута. Новый terminal security результат
-нужен отдельно; успешный Kubernetes run его не заменяет.
+Это не доказательство исправления таймаута; успешный Kubernetes run не заменяет
+security CI.
+
+## Повторная проверка после расширения тестов
+
+Followup `4f726f53fcf1ba0b6309bea11bb15b18dbf1241b`:
+[security43127559794](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43127559794)
+terminal success. Contracts job130883397834 выполнил842test executions без
+skips и подтвердил указанные per-module coverage ratios. Native job130883398202
+выполнил25audit-admission,37trust-history,15periodic-observer и46identity cases.
+Очистка принадлежащих fixtures процессов, SQL, volumes и private files подтверждена.
+
+В periodic observer измерены30.025s между heartbeat, max commit-to-receipt
+29.758074267s, обнаружение остановки90.871880413s при исходных нормативных пределах.
+Read-only диагностика добавлена, но её failure branch в этом успешном native
+run не исполнялась. Причина предыдущего таймаута всё ещё не установлена.
+
+Runtime fingerprint совпадает с e7ec709 выше: production code между commits
+не менялся, расширены tests/diagnostics/docs. Поэтому кластерное доказательство
+остаётся точно привязанным к e7ec709/image выше; новый Kubernetes run не заявляется.
+Чистый checkout4f726f5 с отдельным locked venv воспроизвёл133tests за7.930s,
+1POSIX Windows skip, Git clean. Общая приёмка R1 из этих проверок не следует.
 
 Actual candidate `1fd9d6094ad5cb3b419defb5bc367603b0b93a8db8c45a9f39ed2c6e097be67c`
 не получил admission. `full_M10=inconclusive`, `release_ready=false`.

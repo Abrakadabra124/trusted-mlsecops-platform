@@ -203,3 +203,8 @@ and recurring45s source recovery timeout. Coverage gap corrected by signed-state
 negative tests; new modules now have separate >=95% per-module CI guard. Timeout
 cause remains unknown; read-only failure diagnostics added, thresholds unchanged.
 See [evidence](../docs/evidence/observer-rotation-2026-11-12.md); no full gate closure.
+
+Followup4f726f5 security43127559794 terminal success:842Linux test executions,
+zero skips;25/37/15/46native cases; new per-module coverage gates passed.
+Runtime fingerprint unchanged from e7ec709; clean checkout133tests7.930s1Windows
+skip. Recurring timeout cause remains unexplained despite this successful replay.
