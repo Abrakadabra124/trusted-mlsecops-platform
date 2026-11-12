@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+T29: локально подготовлен один immutable probe bundle вместо2/3ConfigMaps,
+без повышения count/configmaps=4. Harness с тремя постоянными картами сначала
+воспроизвёл отказ, затем прошёл все9режимов; oversized bundle отказан до create.
+38tests/0skips и внутренний review без Critical/Important. Native связь с квотой
+и M11 correction pending. Primarycf01980 /43255745071 fail до первого native case,
+SQL/cluster cleanup success; причина неизвестна, добавлена bounded диагностика.
+[Runbook](docs/operations/trust-acceptance.md#probe-bundle-в-прежнем-бюджете-configmap).
+
 Primaryf85140e /43250411996 success:21aggregate/17controlled/12audit checks;
 owner-return49.255072s теперь включает final UID/receipt validation, все config
 transitions<120s. Source/full reports/SQL+cluster cleanup verified.

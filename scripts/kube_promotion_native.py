@@ -460,6 +460,16 @@ def main(arguments=None):
     except (Exception, KeyboardInterrupt) as error:
         if output is not None:
             with suppress(Rejected, OSError):
+                from mlsecops.cluster import request_failure
+                from scripts.kube_privacy_diagnostic import location, validated
+
+                diagnostics = {
+                    "runtime_failure": validated(location(error))
+                    or {"exception": "other", "source_file": "unknown", "source_line": 0}
+                }
+                request = request_failure(error)
+                if request is not None:
+                    diagnostics["kubernetes_request"] = request
                 write_json(
                     output,
                     {
@@ -467,6 +477,7 @@ def main(arguments=None):
                         if isinstance(error, KeyboardInterrupt)
                         else "fail",
                         "release_ready": False,
+                        "diagnostics": diagnostics,
                     },
                 )
         print("kubernetes_promotion_native_rejected", file=sys.stderr)

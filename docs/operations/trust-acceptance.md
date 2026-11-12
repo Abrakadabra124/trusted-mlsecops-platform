@@ -249,3 +249,43 @@ requested/used/limited. Имена ресурсов, namespace, пользова
 объекты. При admission/RBAC сверяет конкретный manifest и разрешённую роль,
 сохраняя запреты credential/command/privilege. После исправления необходим тот же
 полный M11 с cleanup, а не только успешное создание одного Job.
+
+### Probe bundle в прежнем бюджете ConfigMap
+
+Контролируемый harness воспроизвёл недостаток квоты: при трёх постоянных картах
+(namespace CA, HTTP config, rotated observer) прежние две карты probe требуют
+пятого объекта, а count/configmaps=4. Privacy/CLI probe добавлял ещё карту кода.
+Связь с native create:forbidden требует quota record следующего CI; один unit
+результат не устанавливает причину предыдущего Kubernetes отказа.
+
+Подготовлено объединение временных данных в одну immutable ConfigMap на Job.
+config.json и request.json читаются по прежним read-only subPath. Для privacy/CLI
+Python-файлы находятся в том же объекте, но projection items в /app/scripts
+выбирает только исходные .py. Source annotation сохраняет hash Python bundle;
+JSON-конфигурации не проецируются в каталог кода. Суммарный размер ключей/значений
+ограничен1MiB до первого create; никаких credentials в ConfigMap не добавлено.
+
+Квота остаётся4: три постоянных объекта плюс один временный bundle. Объект имеет
+уникальное имя и прежние ownership labels; cleanup удаляет только зарегистрированные
+Job и bundle после проверки UID. Serving ownership, отдельные Secret/mounts,
+worker isolation и все deadlines остаются прежними. Если реальный inventory
+отличается, это требует отдельной диагностики, а не удаления неизвестных объектов.
+
+Проверка: прежний harness с ограничением реальной quota сначала отказал при втором
+create; после объединения прошли обычные, privacy/CLI, failed/foreign-UID scenarios.
+Oversized bundle отказан до API writes. Общий local suite38tests/0skips pass.
+Native correction и завершение M11 pending.
+
+### Ранний отказ Primary наcf01980
+
+[Run43255745071](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43255745071),
+job131313355091: отказ16:13:47 UTC до первого native case/stage. Source SQL stop и
+owned cluster cleanup success. Имеющийся report содержит только fail/release_ready=false;
+причина не установлена и не отождествляется с M11 create:forbidden.
+
+Failure report Primary теперь использует существующие validated source location
+и finite Kubernetes classification. Исключение, абсолютные пути и private payload
+не печатаются. При следующем отказе оператор сопоставляет относительный файл/строку
+и категорию операции с тем же source; при unknown сохраняет неопределённость.
+Report прежнего успеха по-прежнему заменяется до запуска, error/interrupt не
+создают ложный pass. Native объяснение этого раннего отказа пока pending.

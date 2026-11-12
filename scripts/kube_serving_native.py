@@ -132,14 +132,12 @@ def invoke(
 
     require_probe_slot(state, marker=audit_marker)
     name = "serving-probe-" + uuid.uuid4().hex
-    maps = [
-        kube_promotion.configuration_map(state, name + "-" + field, field, value)
-        for field, value in (("config", config), ("request", expected))
-    ]
-    for document in maps:
-        document["metadata"]["namespace"] = NAMESPACE
+    bundle = kube_promotion.configuration_map(state, name + "-bundle", "config", config)
+    bundle["metadata"]["namespace"] = NAMESPACE
+    bundle["data"]["request.json"] = canonical(expected).decode()
+    maps = [bundle]
     spec = kube_promotion.credential_spec(
-        profile, maps[0]["metadata"]["name"], maps[1]["metadata"]["name"], trust_target=trust_target
+        profile, bundle["metadata"]["name"], bundle["metadata"]["name"], trust_target=trust_target
     )
     spec["serviceAccountName"] = "serving"
     spec = kube_security_resources.serving_spec(spec)
@@ -167,16 +165,26 @@ def invoke(
             workspace_id(state),
             **({"entry": "kube_cli_privacy_probe"} if cli_privacy else {}),
         )
-        maps.append(code)
+        bundle["data"].update(code["data"])
+        bundle["metadata"]["annotations"] = code["metadata"]["annotations"]
         spec["volumes"].append(
             {
                 "name": "qualification-code",
-                "configMap": {"name": code["metadata"]["name"], "defaultMode": 292},
+                "configMap": {
+                    "name": bundle["metadata"]["name"],
+                    "defaultMode": 292,
+                    "items": [{"key": key, "path": key} for key in sorted(code["data"])],
+                },
             }
         )
         spec["containers"][0]["volumeMounts"].append(
             {"name": "qualification-code", "mountPath": "/app/scripts", "readOnly": True}
         )
+    if (
+        sum(len(key.encode()) + len(value.encode()) for key, value in bundle["data"].items())
+        > 1024 * 1024
+    ):
+        raise Rejected("kube_serving_probe_bundle_limit")
     mount_api(spec)
     deadline = 360 if load_operator is not None or monitoring_operator is not None else 240
     job = job_document(name, NAMESPACE, spec, deadline)

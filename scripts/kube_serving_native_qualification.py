@@ -1,5 +1,6 @@
 import copy
 import io
+import json
 import tempfile
 import unittest
 from contextlib import nullcontext
@@ -573,6 +574,14 @@ class NativeContracts(unittest.TestCase):
     def test_harness_uses_real_cli_profile_and_private_failure_logs_with_cleanup(self):
         from unittest.mock import Mock
 
+        from mlsecops.kube_storage_resources import namespace_resources
+
+        quota = next(
+            document
+            for document in namespace_resources("ml-serving", "serving", "a" * 32)
+            if document["kind"] == "ResourceQuota"
+        )["spec"]["hard"]
+
         for success, coordinated, foreign, privacy, cli in [
             (True, False, False, False, False),
             (False, False, False, False, False),
@@ -624,6 +633,13 @@ class NativeContracts(unittest.TestCase):
 
                 def kubectl(state, args, value=None):
                     if args[0] == "create":
+                        # Namespace CA, persistent HTTP config and rotated observer
+                        # coexist with temporary probe configuration/code maps.
+                        maps = 3 + sum(item["kind"] == "ConfigMap" for item in created)
+                        if value["kind"] == "ConfigMap" and maps + 1 > int(
+                            quota["count/configmaps"]
+                        ):
+                            raise Rejected("kubernetes_request_failed:create:quota")
                         observed = copy.deepcopy(value)
                         observed["metadata"]["uid"] = "owned-uid"
                         created.append(observed)
@@ -764,6 +780,20 @@ class NativeContracts(unittest.TestCase):
                             )
                     self.assertEqual(cleanup.call_args.kwargs, {"namespace": "ml-serving"})
                 pod = created[-1]["spec"]["template"]["spec"]
+                bundles = [item for item in created if item["kind"] == "ConfigMap"]
+                self.assertEqual(len(bundles), 1)
+                bundle = bundles[0]
+                self.assertEqual(json.loads(bundle["data"]["config.json"]), config)
+                self.assertIn("request.json", bundle["data"])
+                for volume in pod["volumes"]:
+                    if "configMap" in volume:
+                        self.assertEqual(volume["configMap"]["name"], bundle["metadata"]["name"])
+                        if volume["name"] == "qualification-code":
+                            keys = {item["key"] for item in volume["configMap"]["items"]}
+                            self.assertEqual(
+                                keys, {key for key in bundle["data"] if key.endswith(".py")}
+                            )
+                            self.assertNotIn("config.json", keys)
                 self.assertEqual(pod["serviceAccountName"], "serving")
                 secrets = [v["secret"]["secretName"] for v in pod["volumes"] if "secret" in v]
                 self.assertNotIn("security-promoter", secrets)
@@ -785,6 +815,23 @@ class NativeContracts(unittest.TestCase):
                 self.assertEqual(
                     len(list((state / "evidence").glob("*-private.log"))), 0 if foreign else 1
                 )
+
+    def test_oversized_combined_bundle_refuses_before_any_resource_creation(self):
+        config = {
+            "identity_audit_file": "/security/identity-audit.json",
+            "context": {"policy": {"environment": "local-cpu"}},
+            "trust_root": "root",
+        }
+        bundle = {"metadata": {"name": "owned"}, "data": {"config.json": "x" * (1024 * 1024)}}
+        with (
+            patch.object(native.kube_security_events, "validate"),
+            patch("mlsecops.kube_serving_handoff.require_probe_slot"),
+            patch.object(native.kube_promotion, "configuration_map", return_value=bundle),
+            patch.object(native, "kubectl") as api,
+            self.assertRaisesRegex(Rejected, "bundle_limit"),
+        ):
+            native.invoke(Path("unused"), PROFILE, config, {})
+        api.assert_not_called()
 
     def test_privacy_mode_conflicts_refuse_before_resource_creation(self):
         from unittest.mock import Mock

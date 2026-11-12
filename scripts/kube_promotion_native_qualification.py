@@ -275,7 +275,12 @@ class KubernetesPromotionNativeContracts(unittest.TestCase):
                 redirect_stderr(io.StringIO()) as errors,
             ):
                 self.assertEqual(target.main(["--state", directory]), 1)
-            self.assertEqual(read_json(output), {"status": "fail", "release_ready": False})
+            report = read_json(output)
+            self.assertEqual((report["status"], report["release_ready"]), ("fail", False))
+            from scripts.kube_privacy_diagnostic import validated
+
+            self.assertIsNotNone(validated(report["diagnostics"]["runtime_failure"]))
+            self.assertNotIn("private configuration", canonical(report).decode())
             self.assertEqual(errors.getvalue(), "kubernetes_promotion_native_rejected\n")
             with (
                 patch.object(target, "hosted"),
