@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+На `52cb957` учебная авария аудита завершилась восстановлением. На одном
+обученном кандидате проверены 38 сценариев инвентаризации и 30 000 наблюдений
+inference в 30 окнах. После остановки SQL и удаления кластера runner повторно
+проверил сохранённые пакеты и привязку к кандидату. Компонентный прогон
+security events на этом же commit прошёл 1237 исполнений тестов. Запуски были
+раздельными. Для общей приёмки M23 требуется один отчёт на одном runner с
+закреплённым предложением выпуска. [Проверка сбоя](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43527949640)
+и [проверка источников](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43527949667).
+
 T29 на `c57d3f6`: actual audit-outage component 43282778973 success,
 26000 observations / 26 fresh green windows, refusal/recovery и post-cleanup
 replay подтверждены. Security 43282778885 success, 1100 test executions,

@@ -422,7 +422,7 @@ def invoke(
             wait_pods_absent(state)
 
 
-def prepare(root, state, image):
+def prepare(root, state, image, *, proposal_pin=None):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     if command(["git", "-C", str(root), "status", "--porcelain"]):
@@ -435,7 +435,11 @@ def prepare(root, state, image):
     profile = controller_bootstrap.bootstrap(root, state, image, serving=True)["profile"]
     initialize_campaign(root, state, image)
     print(canonical({"stage": "actual-candidate-refusal"}).decode(), flush=True)
-    actual_result = actual(root, state, image)
+    actual_result = (
+        actual(root, state, image)
+        if proposal_pin is None
+        else actual(root, state, image, proposal_pin=proposal_pin)
+    )
     return {
         "source_revision": revision,
         "source_fingerprint": fingerprint,

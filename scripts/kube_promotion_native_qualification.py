@@ -11,6 +11,22 @@ from scripts import kube_promotion_native as target
 
 
 class ActualStartupOrdering(unittest.TestCase):
+    def test_existing_proposal_requires_owner_pin_and_never_issues_a_replacement(self):
+        proposal = target.release_native.qualify.return_value
+        raw = canonical(proposal) + b"\n"
+        with patch.object(target, "bounded_read", return_value=raw):
+            with self.assertRaisesRegex(Rejected, "proposal_pin"):
+                target.actual(Path("root"), Path("state"), "image", proposal_pin="0" * 64)
+            result = target.actual(
+                Path("root"),
+                Path("state"),
+                "image",
+                authority_root="authority",
+                proposal_pin=digest(raw),
+            )
+        target.release_native.qualify.assert_not_called()
+        self.assertEqual(result["proposal"], "proposal")
+
     def setUp(self):
         from scripts import kube_serving_start_native as serving_start
 

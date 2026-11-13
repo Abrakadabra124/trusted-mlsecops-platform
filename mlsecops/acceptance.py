@@ -352,12 +352,22 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate in {"M11", "M12", "M13", "M14", "M15"}:
+    elif gate in {"M11", "M12", "M13", "M14", "M15", "M23"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
+        if gate == "M23":
+            from mlsecops.security_gate import STAGES
+
+            required = ("storage.json", *(f"evidence/M23-{name}.json" for name in STAGES))
         if not all((state / name).is_file() for name in required):
-            result["residual_risks"] = [
-                f"{gate} requires the owned hosted cluster, source storage and actual evaluated candidate"
-            ]
+            result["residual_risks"] = (
+                [
+                    "M23 requires the three owned capture stages and retained source SQL ownership marker"
+                ]
+                if gate == "M23"
+                else [
+                    f"{gate} requires the owned hosted cluster, source storage and actual evaluated candidate"
+                ]
+            )
             return result
         if gate == "M11":
             from mlsecops.trust_acceptance import qualify
@@ -367,6 +377,8 @@ def report(gate, profile, root, state=None):
             from mlsecops.load_gate import qualify
         elif gate == "M15":
             from mlsecops.monitoring_gate import qualify
+        elif gate == "M23":
+            from mlsecops.security_gate import qualify
         else:
             from mlsecops.inference_gate import qualify
 

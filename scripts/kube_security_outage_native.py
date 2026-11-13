@@ -188,12 +188,12 @@ def reverify(root, state):
     return observation
 
 
-def run(root, state):
+def run(root, state, *, proposal_pin=None):
     hosted()
     destination = state / PUBLIC
     write_json(destination, {"status": "inconclusive", "release_ready": False})
     promotion_state.install(state, backend=kube_storage.binding)
-    prepared = prepare(root, state, "trusted-mlsecops:dev")
+    prepared = prepare(root, state, "trusted-mlsecops:dev", proposal_pin=proposal_pin)
     result = qualify(
         root,
         state,

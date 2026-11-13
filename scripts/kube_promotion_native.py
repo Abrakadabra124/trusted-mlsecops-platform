@@ -18,7 +18,17 @@ from mlsecops import (
     storage_bootstrap,
     trust_authority,
 )
-from mlsecops.contracts import Rejected, canonical, digest, now, read_json, safe_child, write_json
+from mlsecops.contracts import (
+    Rejected,
+    bounded_read,
+    canonical,
+    decode,
+    digest,
+    now,
+    read_json,
+    safe_child,
+    write_json,
+)
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_storage_migration import ledger
 from mlsecops.private_cli import Arguments
@@ -127,10 +137,18 @@ def stage(state, package, policy, assurance=None, approval=None, reports=None):
     }
 
 
-def actual(root, state, image, *, authority_root=None):
+def actual(root, state, image, *, authority_root=None, proposal_pin=None):
     from scripts import kube_serving_start_native as serving_start
 
-    proposal = release_native.qualify(root, state, image)
+    if proposal_pin is None:
+        proposal = release_native.qualify(root, state, image)
+    else:
+        raw = bounded_read(
+            safe_child(state, "evidence/release-native.json"), release_policy.MAX_DOCUMENT
+        )
+        if digest(raw) != proposal_pin:
+            raise Rejected("kube_promotion_proposal_pin")
+        proposal = decode(raw, release_policy.MAX_DOCUMENT)
     campaign = safe_child(state, "release-proposals/" + proposal["campaign_id"])
     envelope = read_json(campaign / "policy-envelope.json")
     demo, public = (read_json(state / n) for n in ("storage-demo.json", "trusted-keys.json"))

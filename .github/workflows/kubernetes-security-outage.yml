@@ -1,8 +1,8 @@
-name: M23 healthy ML during audit outage component
+name: M23 security event acceptance
 on:
   push:
     branches: [codex/cp4-m23-security-events-20261107]
-    paths: ['mlsecops/security_outage*.py', 'mlsecops/security_*evidence.py', 'mlsecops/security_inventory_events.py', 'scripts/security_inventory*.py', 'scripts/security_source_capture.py', 'scripts/kube_security*.py', 'scripts/security_audit_boundary*.py', 'scripts/kube_candidate_native.py', 'scripts/kube_serving_native.py', 'scripts/kube_privacy_bundle.py', '.github/workflows/kubernetes-security-outage.yml', 'Dockerfile', 'pyproject.toml', 'uv.lock']
+    paths: ['mlsecops/acceptance.py', 'mlsecops/security_gate*.py', 'scripts/security_gate*.py', 'scripts/security_event_sequence_native.py', 'scripts/security_identity_events_native.py', 'scripts/security_source_campaign.py', 'scripts/security_trust_service_native.py', 'mlsecops/security_outage*.py', 'mlsecops/security_*evidence.py', 'mlsecops/security_inventory_events.py', 'scripts/security_inventory*.py', 'scripts/security_source_capture.py', 'scripts/kube_security*.py', 'scripts/security_audit_boundary*.py', 'scripts/kube_candidate_native.py', 'scripts/kube_serving_native.py', 'scripts/kube_privacy_bundle.py', '.github/workflows/kubernetes-security-outage.yml', 'Dockerfile', 'pyproject.toml', 'uv.lock']
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,50 +30,62 @@ jobs:
           uv run --locked python scripts/check_docs.py
           uv run --locked python -B -W error -m unittest scripts.security_outage_exchange_qualification scripts.security_outage_packet_qualification scripts.security_outage_probe_qualification scripts.kube_security_boundary_qualification scripts.kube_security_outage_operator_qualification scripts.kube_security_outage_native_qualification scripts.security_audit_boundary_probe_qualification scripts.kube_candidate_qualification scripts.kube_monitoring_native_qualification scripts.kube_serving_native_qualification scripts.kube_privacy_bundle_qualification
           uv run --locked python -B -W error -m unittest scripts.security_inventory_evidence_qualification scripts.security_source_evidence_qualification scripts.security_source_capture_qualification
+      - name: Require per-module coverage for the M23 acceptance path
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/m23.coverage" --source=mlsecops.security_gate,mlsecops.security_gate_sources,mlsecops.security_gate_candidate -m unittest scripts.security_gate_qualification scripts.security_gate_sources_qualification scripts.security_gate_candidate_qualification scripts.security_gate_dispatch_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/m23.coverage" -o "$RUNNER_TEMP/m23-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP'])/'m23-coverage.json').read_bytes())['files']
+          expected = {'mlsecops/' + name + '.py' for name in ('security_gate', 'security_gate_sources', 'security_gate_candidate')}
+          if set(files) != expected:
+              raise SystemExit('M23 method coverage inventory changed')
+          for name, file in sorted(files.items()):
+              stats = file['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] / stats[total] < .95:
+                      raise SystemExit('M23 coverage below threshold: ' + name)
+              print(name, stats)
+          PY
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
           uv run --locked python scripts/install_ci_tools.py
           echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
           uv run --locked python -m mlsecops build
-      - name: Bootstrap owned cluster
-        id: bootstrap
-        run: uv run --locked python -m mlsecops.cluster bootstrap
-      - name: Prepare model storage and owned source SQL
+      - name: Prepare owned source SQL
         id: source_sql
-        run: |
-          uv run --locked python -m mlsecops.kube_storage
-          uv run --locked python -m mlsecops.storage_bootstrap
+        run: uv run --locked python -m mlsecops.storage_bootstrap
       - name: Train and independently evaluate source candidate
         run: uv run --locked python -m mlsecops.storage_pipeline
-      - name: Inventory source decisions for the same trained SQL candidate
-        id: inventory
+      - name: Freeze signed release proposal before collecting gate evidence
+        id: proposal
         run: |
-          mkdir -p .runtime/evidence
-          uv run --locked python -W error -m scripts.security_inventory_events_native --state .runtime > .runtime/evidence/security-inventory-public.json
-          uv run --locked python - <<'PY'
-          import os
-          from pathlib import Path
-          from mlsecops.contracts import canonical, read_json
-          from mlsecops.security_events import hexadecimal
-          result = read_json(Path('.runtime/evidence/security-inventory-public.json'))
-          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as outputs:
-              for name in ('primary_sha256', 'binding_sha256'):
-                  print(f'{name}={hexadecimal(result[name])}', file=outputs)
-          print(canonical(result).decode())
-          PY
-      - name: Actual inference and fresh monitoring during scoped collector outage
-        id: campaign
-        run: |
-          uv run --locked python -W error -m scripts.kube_security_outage_native
+          uv run --locked python -B -W error -m scripts.release_native --state .runtime
           uv run --locked python - <<'PY'
           import os
           from pathlib import Path
           from mlsecops.contracts import bounded_read, digest
-          from scripts.kube_security_outage_native import PUBLIC
-          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as outputs:
-              print('summary_sha256=' + digest(bounded_read(Path('.runtime') / PUBLIC)), file=outputs)
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              print("sha256=" + digest(bounded_read(Path(".runtime/evidence/release-native.json"))), file=output)
           PY
+      - name: Capture signed source and transport evidence
+        id: sources
+        run: uv run --locked python -B -W error -m mlsecops.security_gate sources
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Prepare model storage in the owned cluster
+        run: uv run --locked python -m mlsecops.kube_storage
+      - name: Capture inventory decisions for the trained SQL candidate
+        id: inventory
+        run: uv run --locked python -B -W error -m mlsecops.security_gate inventory
+      - name: Run inference and monitoring during the audit outage
+        id: outage
+        env:
+          M23_PROPOSAL_SHA256: ${{ steps.proposal.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m mlsecops.security_gate outage
       - name: Stop verified owned source SQL
         if: always()
         env:
@@ -104,69 +116,18 @@ jobs:
           kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
           kind get clusters > "$RUNNER_TEMP/remaining-clusters.txt"
           if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/remaining-clusters.txt"; then exit 1; fi
-      - name: Reconcile retained primary packets after infrastructure cleanup
-        if: success() && steps.campaign.outcome == 'success'
-        run: uv run --locked python -m scripts.kube_security_outage_native --reverify
-      - name: Replay inventory and verify shared candidate after cleanup
-        if: success() && steps.campaign.outcome == 'success'
+      - name: Replay all signed source evidence and report M23 after cleanup
         env:
-          INVENTORY_PRIMARY: ${{ steps.inventory.outputs.primary_sha256 }}
-          INVENTORY_BINDING: ${{ steps.inventory.outputs.binding_sha256 }}
-          OUTAGE_SUMMARY: ${{ steps.campaign.outputs.summary_sha256 }}
+          M23_SOURCES_SHA256: ${{ steps.sources.outputs.sha256 }}
+          M23_INVENTORY_SHA256: ${{ steps.inventory.outputs.sha256 }}
+          M23_OUTAGE_SHA256: ${{ steps.outage.outputs.sha256 }}
         run: |
+          result=0
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M23 --output .runtime/evidence/M23.json || result=$?
           uv run --locked python - <<'PY'
-          import os
           from pathlib import Path
-          from mlsecops import security_inventory_evidence as inventory
-          from mlsecops import security_outage_packet
-          from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, safe_child
-          from scripts import kube_security_outage_native as outage
-          root, state = Path.cwd(), Path('.runtime')
-          def read(path, limit):
-              return decode(bounded_read(path, limit), limit)
-          public = read(state / 'evidence/security-inventory-public.json', 32768)
-          primary = read(state / 'evidence/security-inventory-primary.json', inventory.MAX_BYTES)
-          bindings = read(state / 'evidence/security-inventory-primary.bindings.json', 16384)
-          if (public['primary_sha256'] != os.environ['INVENTORY_PRIMARY']
-              or public['binding_sha256'] != os.environ['INVENTORY_BINDING']
-              or digest(canonical(primary)) != public['primary_sha256']
-              or digest(canonical(bindings)) != public['binding_sha256']
-              or public['status'] != 'pass' or public['release_ready'] is not False
-              or public['scope'] != inventory.SCOPE):
-              raise Rejected('security_inventory_retained_changed')
-          expected = bindings['expected']
-          if expected['expected_methods'] != {name: digest(bounded_read(root / name)) for name in inventory.METHODS}:
-              raise Rejected('security_inventory_methods_changed')
-          checked = inventory.verify(primary, **expected)
-          # Outage replay has just checked signatures, retained hashes, source,
-          # method materials and terminal cleanup. Bind its exact objects here.
-          summary_bytes = bounded_read(state / outage.PUBLIC, security_outage_packet.MAX_PACKET)
-          if digest(summary_bytes) != os.environ['OUTAGE_SUMMARY']:
-              raise Rejected('security_outage_summary_changed')
-          summary = decode(summary_bytes, security_outage_packet.MAX_PACKET)
-          candidate_bytes = bounded_read(state / outage.PRIVATE, security_outage_packet.MAX_PACKET)
-          if digest(candidate_bytes) != summary['primary_sha256']:
-              raise Rejected('security_outage_primary_changed')
-          candidate = decode(candidate_bytes, security_outage_packet.MAX_PACKET)
-          binding_path = safe_child(state, 'evidence/security-outage/' + candidate['security_campaign_id'] + '/binding.json')
-          raw = bounded_read(binding_path, security_outage_packet.MAX_PACKET)
-          if digest(raw) != summary['retained_sha256']['binding.json']:
-              raise Rejected('security_outage_retained_changed')
-          binding = decode(raw, security_outage_packet.MAX_PACKET)
-          source = candidate['source']
-          actual = dict(candidate_reference=candidate['candidate_reference'],
-                        evaluation_reference=binding['context']['lineage']['evaluation_sha256'],
-                        model_sha256=candidate['model_sha256'], image_id=source['image_id'],
-                        source_revision=source['source_revision'], source_fingerprint=source['source_fingerprint'])
-          if (expected['expected_candidate'] != actual
-              or expected['expected_source'] != source['source_revision']
-              or expected['expected_fingerprint'] != source['source_fingerprint']
-              or public['candidate_reference'] != actual['candidate_reference']):
-              raise Rejected('security_shared_candidate_mismatch')
-          print(canonical(dict(status='pass', scope='inventory-outage-shared-candidate-after-cleanup',
-              release_ready=False, full_M23='inconclusive', full_M18='inconclusive',
-              bindings=actual, inventory_events=checked['event_count'],
-              inventory_primary_sha256=public['primary_sha256'],
-              inventory_binding_sha256=public['binding_sha256'],
-              outage_primary_sha256=summary['primary_sha256'])).decode())
+          from mlsecops.contracts import canonical, read_json
+          result = read_json(Path('.runtime/evidence/M23.json'))
+          print(canonical(result).decode())
           PY
+          exit "$result"
