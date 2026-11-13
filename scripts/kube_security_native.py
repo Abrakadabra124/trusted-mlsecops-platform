@@ -20,6 +20,7 @@ from scripts.kube_promotion_snapshot import read as ledger
 from scripts.kube_trust_native import hosted
 
 READBACK_BYTES = kube_serving_service.READBACK_BYTES
+PRIVATE_READBACK_BYTES = 8 * 1024 * 1024
 
 HEALTH = """
 import time
@@ -105,9 +106,36 @@ SERVING = READ.replace(
     "    raise SystemExit(1)",
 )
 
+# Separate private interface. Preserve READ/COLLECTOR/PROMOTER hash projections.
+# Store.snapshot already validates the complete journal; never serialize the store,
+# its configuration, signing keys, TLS material, tokens or diagnostic output.
+PRIVATE_READ = (
+    READ[: READ.index("records = []")]
+    + """
+private = canonical({'pin': store.pin, 'snapshot': document})
+if len(private) + 1 > 8 * 1024 * 1024:
+    raise Rejected('security_private_readback_limit')
+print(private.decode())
+"""
+)
+PRIVATE_PROMOTER = PRIVATE_READ.replace(
+    "SETUP",
+    "from mlsecops.security_event_admission import emitter\nstore = emitter('/security/audit.json').store",
+)
+PRIVATE_COLLECTOR = PRIVATE_READ.replace(
+    "SETUP",
+    "from mlsecops.security_event_server import configured\nstore = configured('/security/collector.json')[0].collector.store",
+)
 
-def job(state, profile, code, *, worker=False, serving=False):
+
+def job(state, profile, code, *, worker=False, serving=False, private_readback=False):
     hosted()
+    if (
+        type(private_readback) is not bool
+        or private_readback
+        and (worker or serving or code != PRIVATE_PROMOTER)
+    ):
+        raise Rejected("audit_private_readback_role")
     if type(worker) is not bool or type(serving) is not bool or worker and serving:
         raise Rejected("audit_native_role_conflict")
     if serving and kube_serving_service.directory(state).exists():
@@ -133,6 +161,11 @@ def job(state, profile, code, *, worker=False, serving=False):
     created = []
     try:
         observed = decode(kubectl(state, ["create", "-f", "-", "-o", "json"], document).stdout)
+        if private_readback and (
+            type(observed.get("metadata", {}).get("uid")) is not str
+            or not observed["metadata"]["uid"]
+        ):
+            raise Rejected("audit_private_job_uid")
         created.append((document, observed["metadata"]["uid"]))
         kube_storage.verify_resource(document, observed, created[0][1])
         terminal, pod, _ = wait_job(state, namespace, name, 90)
@@ -151,6 +184,32 @@ def job(state, profile, code, *, worker=False, serving=False):
             or pod["metadata"]["ownerReferences"][0]["uid"] != created[0][1]
         ):
             raise Rejected("audit_native_job_failed")
+        if private_readback:
+
+            def check_pod():
+                metadata = pod["metadata"]
+                if (
+                    type(metadata.get("uid")) is not str
+                    or not metadata["uid"]
+                    or len(metadata["ownerReferences"]) != 1
+                    or metadata["ownerReferences"][0].get("kind") != "Job"
+                    or metadata["ownerReferences"][0].get("controller") is not True
+                ):
+                    raise Rejected("audit_private_pod_uid")
+                current = decode(
+                    kubectl(
+                        state, ["get", "pod", metadata["name"], "-n", namespace, "-o", "json"]
+                    ).stdout
+                )
+                if (
+                    current.get("metadata", {}).get("uid") != metadata["uid"]
+                    or current["metadata"].get("ownerReferences") != metadata["ownerReferences"]
+                    or current["metadata"].get("deletionTimestamp")
+                ):
+                    raise Rejected("audit_private_pod_changed")
+
+            check_pod()
+        limit = PRIVATE_READBACK_BYTES if private_readback else READBACK_BYTES
         content = kubectl(
             state,
             [
@@ -160,14 +219,57 @@ def job(state, profile, code, *, worker=False, serving=False):
                 namespace,
                 "-c",
                 "worker",
-                f"--limit-bytes={READBACK_BYTES + 1}",
+                f"--limit-bytes={limit + 1}",
             ],
         ).stdout
-        return decode(content, READBACK_BYTES)
+        if private_readback:
+            check_pod()
+        return decode(content, limit)
     finally:
         kube_promotion.cleanup(state, created, namespace=namespace)
         if serving:
             kube_serving_handoff.wait_pods_absent(state)
+
+
+def private_outbox(state, profile):
+    """Owned bounded private read; the temporary Job is removed even on rejection."""
+    return job(state, profile, PRIVATE_PROMOTER, private_readback=True)
+
+
+def private_collector(state, marker):
+    """Read the complete journal only while the same validated collector UID owns it."""
+    hosted()
+    document = resources.deployment(marker["workspace_id"], marker["profile"]["image"], "collector")
+    uid = kube_security_events.live(state, document, marker)
+    if type(uid) is not str or not uid:
+        raise Rejected("audit_private_collector_uid")
+    pods = decode(
+        kubectl(
+            state, ["get", "pods", "-n", resources.NAMESPACE, "-l", "app=collector", "-o", "json"]
+        ).stdout
+    )["items"]
+    if len(pods) != 1 or pods[0]["metadata"].get("uid") != uid:
+        raise Rejected("audit_private_collector_changed")
+    # exec has no logs limit flag; the fixed program bounds serialization before
+    # stdout, and the host independently bounds decode. Nothing is printed here.
+    content = kubectl(
+        state,
+        [
+            "exec",
+            pods[0]["metadata"]["name"],
+            "-n",
+            resources.NAMESPACE,
+            "-c",
+            "worker",
+            "--",
+            "python",
+            "-c",
+            PRIVATE_COLLECTOR,
+        ],
+    ).stdout
+    if kube_security_events.live(state, document, marker) != uid:
+        raise Rejected("audit_private_collector_changed")
+    return decode(content, PRIVATE_READBACK_BYTES)
 
 
 def serving_readback(state, profile):

@@ -14,14 +14,73 @@ from mlsecops import (
     security_event_outbox,
     security_event_store,
     security_trust_events,
+    security_trust_evidence,
     signing,
     trust_authority,
 )
-from mlsecops.contracts import Rejected, bounded_read, canonical, decode
+from mlsecops.contracts import Rejected, atomic_write, bounded_read, canonical, decode, digest
 from mlsecops.inventory import command, source_fingerprint
 from scripts import security_event_audit_fixture as audit_fixture
 from scripts.release_reader_native import disposable
 from scripts.security_identity_events_native import readback
+
+
+def method_materials(root):
+    return {
+        name: digest(bounded_read(root / name, 1024 * 1024))
+        for name in security_trust_evidence.METHOD_FILES
+    }
+
+
+def capture_state(fixture, producer_snapshot, collector_snapshot, *, registry_envelope):
+    """Export complete validated store records, including while HTTP is stopped.
+
+    This deliberately exports incidents from the collector Store, not a fabricated
+    HTTP result or a lossy projection. No key/config/log file enters the packet.
+    """
+    queue = producer_snapshot()
+    book = readback(collector_snapshot)
+    return dict(
+        registry=dict(
+            envelope=registry_envelope,
+            root=fixture.fx.publics["root"],
+            pin=fixture.registry.sha256,
+            clock_ms=fixture.now(),
+        ),
+        outboxes=[queue],
+        collector=book,
+        incidents=book["records"],
+    )
+
+
+def retain_packet(root, packet, **pins):
+    """Called only after both owned contexts exited and source cleanup was checked."""
+    report = security_trust_evidence.verify(packet, **pins)
+    content = canonical(packet)
+    binding = canonical(pins)
+    if len(binding) > 65536:
+        raise Rejected("trust_observer_binding_limit")
+    stem = "trust-service-" + uuid.uuid4().hex
+    destination = root / ".runtime/evidence" / (stem + ".primary.json")
+    binding_path = destination.with_name(stem + ".binding.json")
+    atomic_write(destination, content)
+    # Existing public owner pins, exported separately from the primary packet.
+    # The public summary hashes both files; the sidecar creates no new authority.
+    atomic_write(binding_path, binding)
+    retained_binding = bounded_read(binding_path, 65536)
+    if retained_binding != binding:
+        raise Rejected("trust_observer_binding_readback_mismatch")
+    retained = bounded_read(destination, security_trust_evidence.MAX_BYTES)
+    replay = security_trust_evidence.verify(
+        decode(retained, security_trust_evidence.MAX_BYTES), **decode(retained_binding, 65536)
+    )
+    if retained != content or replay != report:
+        raise Rejected("trust_observer_retained_readback_mismatch")
+    return {
+        **replay,
+        "primary_sha256": digest(retained),
+        "binding_sha256": digest(retained_binding),
+    }
 
 
 def collector_reader(settings, registry):
@@ -116,7 +175,14 @@ def qualify():
         raise Rejected("trust_observer_dirty_source")
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     fingerprint = source_fingerprint(root)
+    materials = method_materials(root)
     cases, deliveries = [], []
+    started = time.monotonic()
+    stages, commits, stops = [], [], []
+    observations = {}
+
+    def elapsed():
+        return time.monotonic() - started
 
     def check(name, condition):
         if not condition:
@@ -127,6 +193,16 @@ def qualify():
         with audit_fixture.live(initial_heartbeat=False, heartbeat_roles=("trust",)) as fx:
             authority_key = fx.directory / "authority.pem"
             authority_root = signing.create_key(authority_key)
+            # Pins come from this owning harness, never from the retained packet.
+            pins = dict(
+                expected_source=revision,
+                expected_fingerprint=fingerprint,
+                expected_materials=materials.copy(),
+                expected_registry_root=fx.fx.publics["root"],
+                expected_registry_pin=fx.registry.sha256,
+                expected_trust_root=authority_root,
+            )
+            registry_envelope = decode(bounded_read(fx.directory / "registry.json", 65536), 65536)
             trust_authority.install(state, "local-cpu", authority_root)
             trust_authority.update(state, "a" * 64, authority_key)
             producer = decode(fx.audit_config.read_bytes())
@@ -176,6 +252,25 @@ def qualify():
                 return readback(
                     lambda: security_event_delivery.configured(producer_path).store.snapshot()
                 )
+
+            def capture(name):
+                captured = capture_state(
+                    fx, snapshot, collector.snapshot, registry_envelope=registry_envelope
+                )
+                stage = dict(name=name, at_seconds=elapsed(), state=captured)
+                stages.append(stage)
+                if len(canonical(stages)) > security_trust_evidence.MAX_BYTES:
+                    raise Rejected("trust_observer_evidence_limit")
+                return captured
+
+            def capture_commit(result):
+                history = security_trust_events.read(client, "local-cpu")
+                security_trust_events.project(
+                    history, environment="local-cpu", initial_root=authority_root
+                )
+                if history["head_sha256"] != result["document_sha256"]:
+                    raise Rejected("trust_observer_commit_readback_mismatch")
+                commits.append(dict(at_seconds=elapsed(), result=result, history=history))
 
             def heartbeat():
                 value = snapshot()["heartbeat"]
@@ -236,6 +331,9 @@ def qualify():
                         time.sleep(0.05)
                 process = None
                 check("supervisor-stopped-with-confirmed-child-cleanup", graceful and code == 0)
+                stops.append(
+                    dict(at_seconds=elapsed(), exit_code=code, graceful=graceful, group_absent=True)
+                )
 
             def received_heartbeat():
                 return next(
@@ -256,6 +354,8 @@ def qualify():
                     received_heartbeat()["envelope"] == snapshot()["heartbeat"]
                     and fx.exchange("GET", "/health")[0] == 200,
                 )
+                observations["initial_health"] = 200
+                capture("initial")
                 first = heartbeat()
                 duplicate = subprocess.run(
                     args,
@@ -271,6 +371,11 @@ def qualify():
                     and duplicate.stdout == b""
                     and duplicate.stderr == b"trust_observer_rejected\n",
                 )
+                observations.update(
+                    duplicate_exit_code=duplicate.returncode,
+                    duplicate_stdout_empty=duplicate.stdout == b"",
+                    duplicate_rejection=duplicate.stderr == b"trust_observer_rejected\n",
+                )
                 busy_marker = canonical(
                     dict(
                         state="trust_observer_child_failure",
@@ -285,6 +390,7 @@ def qualify():
                     committed = trust_authority.update(
                         state, "a" * 64, authority_key, revoked_artifacts=["b" * 64]
                     )
+                    capture_commit(committed)
                     wait_for(
                         lambda: (
                             bounded_read(private_log, 65536).splitlines().count(busy_marker)
@@ -296,6 +402,11 @@ def qualify():
                         "confirmed-lock-contention-cannot-publish-heartbeat",
                         received_heartbeat()["envelope"] == first_envelope,
                     )
+                    observations["contention_heartbeat"] = received_heartbeat()["envelope"]
+                    observations["busy_failures"] = (
+                        bounded_read(private_log, 65536).splitlines().count(busy_marker)
+                        - previous_busy
+                    )
                 contention_released = time.monotonic()
                 wait_for(
                     lambda: (
@@ -304,8 +415,14 @@ def qualify():
                     ),
                     seconds=max(0, began + 45 - time.monotonic()),
                 )
-                deliveries.append(time.monotonic() - began)
-                contention_recovery_seconds = time.monotonic() - contention_released
+                delivered_at = time.monotonic()
+                deliveries.append(delivered_at - began)
+                contention_recovery_seconds = delivered_at - contention_released
+                observations.update(
+                    commit_started_seconds=began - started,
+                    contention_released_seconds=contention_released - started,
+                    first_delivery_seconds=delivered_at - started,
+                )
                 check(
                     "confirmed-lock-contention-recovers-within-original-wait", deliveries[-1] <= 45
                 )
@@ -321,9 +438,16 @@ def qualify():
                     and deliveries[-1] <= 60
                     and 25 <= periodic_seconds <= 40,
                 )
+                capture("revoked_b")
                 # Remove only this fixture's credential directory, while the
                 # supervisor stays alive. Missing SQL credentials must not heartbeat.
                 before = snapshot()
+                capture("unavailable_before")
+                previous_failed = (
+                    bounded_read(private_log, 65536)
+                    .splitlines()
+                    .count(b"trust_observer_check_failed")
+                )
                 unavailable = client.with_name("serving-unavailable")
                 client.rename(unavailable)
                 try:
@@ -334,12 +458,24 @@ def qualify():
                         and snapshot() == before
                         and b"trust_observer_check_failed" in bounded_read(private_log, 65536),
                     )
+                    observations.update(
+                        unavailable_observer_alive=process.poll() is None,
+                        source_failed_checks=bounded_read(private_log, 65536)
+                        .splitlines()
+                        .count(b"trust_observer_check_failed")
+                        - previous_failed,
+                    )
+                    capture("unavailable_after")
                 finally:
                     unavailable.rename(client)
                 wait_for(lambda: heartbeat()["sequence"] > first["sequence"] + 1)
                 wait_for(lambda: received_heartbeat()["envelope"] == snapshot()["heartbeat"])
+                capture("restored")
                 fx.stop()
-                trust_authority.update(state, "a" * 64, authority_key, revoked_artifacts=["c" * 64])
+                committed = trust_authority.update(
+                    state, "a" * 64, authority_key, revoked_artifacts=["c" * 64]
+                )
+                capture_commit(committed)
                 wait_for(
                     lambda: (
                         len(snapshot()["records"]) == 2
@@ -351,6 +487,8 @@ def qualify():
                     "collector-outage-keeps-owned-supervisor-and-pending-event",
                     process.poll() is None,
                 )
+                observations["outage_observer_alive"] = process.poll() is None
+                capture("pending_c")
                 fx.start()
                 wait_for(lambda: snapshot()["records"][-1]["receipt"] is not None)
                 check(
@@ -359,6 +497,7 @@ def qualify():
                     and snapshot()["records"][-1]["envelope"] == pending["envelope"]
                     and snapshot()["records"][0] == record,
                 )
+                capture("recovered")
                 old = heartbeat()
                 stop()
                 start()
@@ -368,7 +507,9 @@ def qualify():
                     "supervisor-restart-preserves-history-and-increases-counter",
                     len(snapshot()["records"]) == 2,
                 )
+                capture("restarted")
                 stop()
+                capture("stopped")
                 last = snapshot()["heartbeat"]
                 observed = heartbeat()["observed_at_ms"]
                 anchor = time.monotonic() - (fx.now() - observed) / 1000
@@ -399,10 +540,13 @@ def qualify():
                     and snapshot()["heartbeat"] == last
                     and fx.exchange("GET", "/health")[0] == 503,
                 )
+                observations["final_health"] = 503
+                capture("gap")
                 try:
                     fx.audit.check("a" * 64)
                 except Rejected:
                     check("absent-source-denies-fresh-promotion-audit", True)
+                    observations["promotion_denied"] = True
                 else:
                     raise Rejected("trust_observer_case:missing_source_allowed_audit")
                 check(
@@ -410,6 +554,7 @@ def qualify():
                     fx.ingress.encode() not in bounded_read(private_log, 65536)
                     and b"PRIVATE-CANARY" not in bounded_read(private_log, 65536),
                 )
+                observations["private_output_clean"] = True
             except Exception:
                 print(
                     canonical(
@@ -430,10 +575,11 @@ def qualify():
     check(
         "source-unchanged",
         source_fingerprint(root) == fingerprint
+        and method_materials(root) == materials
         and command(["git", "-C", str(root), "rev-parse", "HEAD"]) == revision
         and not command(["git", "-C", str(root), "status", "--porcelain"]),
     )
-    return dict(
+    summary = dict(
         status="pass",
         source=revision,
         fingerprint=fingerprint,
@@ -445,6 +591,40 @@ def qualify():
         release_ready=False,
         scope="continuous-trust-source-not-full-M23-or-R1",
     )
+    packet = dict(
+        schema_version=1,
+        source=revision,
+        fingerprint=fingerprint,
+        materials=materials,
+        cases=cases,
+        trust=dict(environment="local-cpu", initial_root=authority_root, commits=commits),
+        stages=stages,
+        observations={**observations, "stops": stops},
+        cleanup=dict(
+            at_seconds=elapsed(),
+            collector_stopped=fx.process is None,
+            collector_directory_absent=not fx.directory.exists(),
+            sql_directory_absent=not state.exists(),
+            source_unchanged=True,
+        ),
+    )
+    replay = retain_packet(root, packet, **pins)
+    # Preserve the original public interface and actual harness timing values.
+    for field in ("cases", "source", "fingerprint", "scope", "release_ready"):
+        if replay[field] != summary[field]:
+            raise Rejected("trust_observer_summary_replay_mismatch")
+    for field in (
+        "max_commit_delivery_seconds",
+        "periodic_seconds",
+        "forced_contention_recovery_seconds",
+        "stopped_source_notice_seconds",
+    ):
+        if abs(replay[field] - summary[field]) > 1:
+            raise Rejected("trust_observer_timing_replay_mismatch")
+    return {
+        **summary,
+        **{key: replay[key] for key in ("packet_sha256", "primary_sha256", "binding_sha256")},
+    }
 
 
 if __name__ == "__main__":

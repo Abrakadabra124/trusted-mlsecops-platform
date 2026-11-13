@@ -100,6 +100,65 @@ class NativeAuditContracts(unittest.TestCase):
     def setUp(self):
         self.profile = {"image": "image@sha256:" + "a" * 64, "image_id": "sha256:" + "a" * 64}
 
+    def test_private_collector_rejects_replacement_after_exec_and_bounded_output(self):
+        self.assertTrue(
+            callable(getattr(subject, "private_collector", None)),
+            "full private collector readback is missing",
+        )
+        marker = {"workspace_id": "1" * 32, "profile": self.profile}
+        for changed, content in ((True, b"{}"), (False, b"x" * (8 * 1024 * 1024 + 1))):
+            with (
+                patch.object(subject, "hosted"),
+                patch.object(
+                    subject.kube_security_events,
+                    "live",
+                    side_effect=["owned", "foreign" if changed else "owned"],
+                ),
+                patch.object(
+                    subject,
+                    "kubectl",
+                    side_effect=[
+                        SimpleNamespace(
+                            stdout=canonical(
+                                {"items": [{"metadata": {"name": "pod", "uid": "owned"}}]}
+                            )
+                        ),
+                        SimpleNamespace(stdout=content),
+                    ],
+                ),
+                self.assertRaises(Rejected),
+            ):
+                subject.private_collector("state", marker)
+
+    def test_private_readback_retains_full_document_without_store_secrets(self):
+        self.assertIsInstance(
+            getattr(subject, "PRIVATE_READ", None), str, "private snapshot program is missing"
+        )
+        fixture = ledger_fixtures.LedgerContracts("runTest")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.book.ingest(fixture.envelope(), clock_ms=2100)
+        store = SimpleNamespace(
+            snapshot=fixture.book.document,
+            pin="a" * 64,
+            credentials="PRIVATE-CANARY",
+            key="PRIVATE-CANARY",
+        )
+        with patch.object(process_privacy, "enforce"), redirect_stdout(io.StringIO()) as output:
+            exec(
+                compile(
+                    subject.PRIVATE_READ.replace("SETUP", "store = supplied"),
+                    "<private-readback>",
+                    "exec",
+                ),
+                {"supplied": store},
+            )
+        self.assertEqual(
+            decode(output.getvalue().encode()),
+            {"pin": "a" * 64, "snapshot": fixture.book.document()},
+        )
+        self.assertNotIn("PRIVATE-CANARY", output.getvalue())
+
     def test_http_receipt_requires_a_new_identity_event_same_outbox_and_independent_match(self):
         record = {
             "id": "b" * 64,
@@ -168,6 +227,11 @@ class NativeAuditContracts(unittest.TestCase):
         terminal="Complete",
         multiple=False,
         pod_cleanup_error=False,
+        private=False,
+        replaced=False,
+        missing_uid=False,
+        owner_kind="Job",
+        controller=True,
     ):
         record = {}
 
@@ -177,6 +241,19 @@ class NativeAuditContracts(unittest.TestCase):
                 observed = copy.deepcopy(document)
                 observed["metadata"]["uid"] = "owned"
                 return SimpleNamespace(stdout=canonical(observed))
+            if args[0] == "get":
+                return SimpleNamespace(
+                    stdout=canonical(
+                        {
+                            "metadata": {
+                                "uid": "foreign" if replaced else "pod-owned",
+                                "ownerReferences": [
+                                    {"uid": owner, "kind": owner_kind, "controller": controller}
+                                ],
+                            }
+                        }
+                    )
+                )
             self.assertEqual(args[0], "logs")
             return SimpleNamespace(stdout=content)
 
@@ -186,7 +263,13 @@ class NativeAuditContracts(unittest.TestCase):
                 {"type": terminal},
                 {
                     "spec": record["document"]["spec"]["template"]["spec"],
-                    "metadata": {"name": "proof-pod", "ownerReferences": [{"uid": owner}]},
+                    "metadata": {
+                        "name": "proof-pod",
+                        "ownerReferences": [
+                            {"uid": owner, "kind": owner_kind, "controller": controller}
+                        ],
+                        **({"uid": "pod-owned"} if not missing_uid else {}),
+                    },
                     "status": {"containerStatuses": statuses * (2 if multiple else 1)},
                 },
                 0.1,
@@ -207,7 +290,14 @@ class NativeAuditContracts(unittest.TestCase):
             patch.object(subject.kube_promotion, "cleanup") as cleanup,
         ):
             try:
-                result = subject.job("state", self.profile, "pass", worker=worker, serving=serving)
+                result = subject.job(
+                    "state",
+                    self.profile,
+                    subject.PRIVATE_PROMOTER if private else "pass",
+                    worker=worker,
+                    serving=serving,
+                    private_readback=private,
+                )
             finally:
                 cleanup.assert_called_once()
                 if serving:
@@ -222,6 +312,26 @@ class NativeAuditContracts(unittest.TestCase):
                     "ml-train" if worker else "ml-serving" if serving else "ml-promoter",
                 )
         return result, record["document"]
+
+    def test_private_job_checks_uid_bounds_and_cleanup_without_printing_packet(self):
+        with redirect_stdout(io.StringIO()) as output:
+            result, _ = self.job(private=True, content=canonical({"snapshot": "a" * 700000}))
+        self.assertEqual(len(result["snapshot"]), 700000)
+        self.assertEqual(output.getvalue(), "")
+        for changes in (
+            {"replaced": True},
+            {"missing_uid": True},
+            {"owner": "foreign"},
+            {"content": b"x" * (8 * 1024 * 1024 + 1)},
+            {"code": 1},
+        ):
+            with self.subTest(changes=list(changes)), self.assertRaises(Rejected):
+                self.job(private=True, **changes)
+
+    def test_private_job_requires_controller_job_ownership_even_with_matching_uid(self):
+        for change in ({"owner_kind": "ReplicaSet"}, {"controller": False}):
+            with self.subTest(change=change), self.assertRaises(Rejected):
+                self.job(private=True, **change)
 
     def test_owned_probe_is_removed_and_worker_does_not_receive_audit_secret(self):
         for worker in (False, True):

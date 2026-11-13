@@ -24,6 +24,9 @@ from mlsecops import (
     security_identity_http,
     serving_http,
 )
+from mlsecops import (
+    security_identity_evidence as evidence,
+)
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, require_fields
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.process_privacy import enforce
@@ -120,7 +123,9 @@ def qualify():
         raise Rejected("identity_source_dirty")
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     fingerprint = source_fingerprint(root)
+    materials = evidence.method_materials(root)
     cases, durations = [], []
+    snapshots, observations, http_exits = {}, [], []
 
     def check(name, condition):
         if not condition:
@@ -146,6 +151,20 @@ def qualify():
         collector_config = decode((fx.directory / "collector.json").read_bytes())
         collector_store = security_event_store.Store(
             collector_config["state_directory"], collector_config["state_sha256"], fx.registry
+        )
+        # Owner-pinned public authority only; config paths, keys and tokens stay in the fixture.
+        authority = dict(
+            envelope=decode(bounded_read(producer["registry_file"], 65536)),
+            root=producer["registry_root"],
+            pin=producer["registry_sha256"],
+            clock_ms=fx.now(),
+        )
+        expected = dict(
+            source=revision,
+            fingerprint=fingerprint,
+            method_materials=materials,
+            registry_root=authority["root"],
+            registry_sha256=authority["pin"],
         )
         service = digest(b"controlled-unready-http-service-for-identity-audit")
         fx.write(
@@ -177,6 +196,15 @@ def qualify():
                 lambda: security_event_delivery.configured(producer_path).store.snapshot()
             )["records"]
 
+        def snapshot(phase):
+            snapshots[phase] = evidence.capture(
+                lambda: readback(
+                    lambda: security_event_delivery.configured(producer_path).store.snapshot()
+                ),
+                lambda: readback(collector_store.snapshot),
+                fx.now,
+            )
+
         def heartbeat():
             document = readback(
                 lambda: security_event_delivery.configured(producer_path).store.snapshot()
@@ -192,11 +220,12 @@ def qualify():
                 if stream["producer_id"] == security_event_outbox.key_identity(key)
             )
 
-        def request(path, credential=None):
+        def request(path, credential=None, *, case):
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=8)
             headers = {} if credential is None else {"Authorization": "Bearer " + credential}
             body = b"PRIVATE-CANARY" if path == "/v1/predict" else None
             started = time.monotonic()
+            started_at_ms = fx.now()
             try:
                 connection.request(
                     "POST" if body is not None else "GET", path, body=body, headers=headers
@@ -210,17 +239,29 @@ def qualify():
                     and token.encode() not in content
                     and operator.encode() not in content,
                 )
-                durations.append(time.monotonic() - started)
+                elapsed = time.monotonic() - started
+                durations.append(elapsed)
+                observations.append(
+                    evidence.observation(
+                        case,
+                        path,
+                        response.status,
+                        content,
+                        started_at_ms=started_at_ms,
+                        completed_at_ms=fx.now(),
+                        elapsed_seconds=elapsed,
+                    )
+                )
                 return response.status, content
             finally:
                 connection.close()
 
-        def closed_port():
+        def closed_port(target=port):
             with socket.socket() as sock:
                 sock.settimeout(1)
-                return sock.connect_ex(("127.0.0.1", port)) != 0
+                return sock.connect_ex(("127.0.0.1", target)) != 0
 
-        def stop():
+        def stop(phase="stopped"):
             nonlocal process
             if process is None:
                 return
@@ -236,12 +277,13 @@ def qualify():
             if code != 0 or not port_closed:
                 print(canonical(dict(identity_http_exit=code, port_closed=port_closed)).decode())
             check("owned-http-exit-and-port-closed", code == 0 and port_closed)
+            http_exits.append(dict(phase=phase, exit_code=code, port_closed=port_closed))
             process = None
 
         private_log = fx.directory / "identity-http-private.log"
         with private_log.open("wb") as output:
 
-            def start(*, expect_failure=False):
+            def start(*, expect_failure=False, phase="startup"):
                 nonlocal process
                 process = subprocess.Popen(
                     [
@@ -264,7 +306,11 @@ def qualify():
                 )
                 if expect_failure:
                     code = process.wait(timeout=12)
-                    check("pending-outage-denies-server-startup", code == 1 and closed_port())
+                    port_closed = closed_port()
+                    check("pending-outage-denies-server-startup", code == 1 and port_closed)
+                    http_exits.append(
+                        dict(phase="failed-startup", exit_code=code, port_closed=port_closed)
+                    )
                     process = None
                     return
                 deadline = time.monotonic() + 12
@@ -272,7 +318,7 @@ def qualify():
                     if process.poll() is not None:
                         raise Rejected("identity_http_startup_failed")
                     try:
-                        if request("/livez")[0] == 200:
+                        if request("/livez", case=phase)[0] == 200:
                             return
                     except (OSError, http.client.HTTPException):
                         pass
@@ -293,25 +339,32 @@ def qualify():
                     "live-producer-allows-fresh-audit-challenge",
                     fx.audit.check("a" * 64)["healthy"] is True,
                 )
+                snapshot("startup")
                 expected_reasons, correlations = [], []
-                for path, supplied, reason in (
-                    ("/v1/predict", None, "credential"),
-                    ("/readyz", "PRIVATE-CANARY", "credential"),
-                    ("/v1/predict", operator, "role"),
-                    ("/metrics", token, "role"),
-                    ("/metrics", None, "credential"),
+                for path, supplied, reason, case in (
+                    ("/v1/predict", None, "credential", "predict-missing"),
+                    ("/readyz", "PRIVATE-CANARY", "credential", "ready-invalid"),
+                    ("/v1/predict", operator, "role", "predict-role"),
+                    ("/metrics", token, "role", "metrics-role"),
+                    ("/metrics", None, "credential", "metrics-missing"),
                 ):
-                    status, content = request(path, supplied)
+                    status, content = request(path, supplied, case=case)
                     check("actual-http-identity-denied-after-delivery", status == 401)
                     correlations.append(decode(content)["request_id"])
                     expected_reasons.append(reason)
                 before = records()
                 check(
                     "valid-metrics-does-not-emit-identity-denial",
-                    request("/metrics", operator)[0] == 200 and records() == before,
+                    request("/metrics", operator, case="metrics-authorized")[0] == 200
+                    and records() == before,
                 )
+                outage_process = fx.process
                 fx.stop()
-                status, content = request("/v1/predict")
+                outage_exit_code, outage_port_closed = (
+                    outage_process.returncode,
+                    closed_port(fx.port),
+                )
+                status, content = request("/v1/predict", case="outage-denial")
                 check(
                     "audit-outage-denies-with-503",
                     status == 503
@@ -325,15 +378,18 @@ def qualify():
                     "offline-event-retained-before-child-exit",
                     len(records()) == 6 and pending["receipt"] is None,
                 )
+                snapshot("outage")
                 check(
                     "liveness-and-operator-remain-available",
-                    request("/livez")[0] == 200 and request("/metrics", operator)[0] == 200,
+                    request("/livez", case="outage-live")[0] == 200
+                    and request("/metrics", operator, case="outage-metrics")[0] == 200,
                 )
-                stop()
+                stop("outage")
                 start(expect_failure=True)
                 check("failed-startup-keeps-original-pending", records()[-1] == pending)
+                snapshot("failed-startup")
                 fx.start()
-                start()
+                start(phase="recovered")
                 check(
                     "startup-probe-delivers-original-event",
                     len(records()) == 6
@@ -346,6 +402,7 @@ def qualify():
                     after_restart["sequence"] > before_restart["sequence"]
                     and after_restart["last_event_sequence"] == 6,
                 )
+                snapshot("recovered")
                 check(
                     "operator-retry-is-idempotent",
                     security_event_delivery.configured(producer_path).retry() == 0,
@@ -417,6 +474,7 @@ def qualify():
                     "periodic-heartbeat-reached-collector",
                     collector_heartbeat()["envelope"] == heartbeat()[0],
                 )
+                snapshot("periodic")
             except Exception as failure:
                 reason = str(failure)
                 safe_reason = (
@@ -453,10 +511,12 @@ def qualify():
         notice = None
         while time.monotonic() - gap_began <= 120:
             offset = 0
+            incidents = []
             while offset is not None:
                 status, page = fx.exchange("GET", "/incidents/" + str(offset))
                 if status != 200:
                     raise Rejected("identity_source_case:incident_readback_unavailable")
+                incidents.extend(page["incidents"])
                 for record in page["incidents"]:
                     event = fx.registry.verify(
                         record["envelope"], clock_ms=record["ingested_at_ms"]
@@ -472,13 +532,15 @@ def qualify():
                 break
             time.sleep(0.5)
         stopped_notice_seconds = time.monotonic() - gap_began
+        gap_observed_at_ms = fx.now()
         check(
             "actual-stopped-producer-gap-within-120s",
             notice is not None and 90 <= stopped_notice_seconds <= 120,
         )
+        health_status = fx.exchange("GET", "/health")[0]
         check(
             "stopped-owner-cannot-keep-sending-heartbeats",
-            heartbeat()[0] == last_envelope and fx.exchange("GET", "/health")[0] == 503,
+            heartbeat()[0] == last_envelope and health_status == 503,
         )
         try:
             fx.audit.check("a" * 64)
@@ -497,14 +559,43 @@ def qualify():
             and operator.encode() not in log
             and b"PRIVATE-CANARY" not in log,
         )
+        # Stop the final collector before taking the immutable terminal snapshots;
+        # fixture files still exist here. The context manager deletes them on exit.
+        collector_process = fx.process
+        fx.stop()
+        collector_exit_code, collector_port_closed = (
+            collector_process.returncode,
+            closed_port(fx.port),
+        )
+        snapshot("stopped")
+        authority["clock_ms"] = snapshots["stopped"]["captured_at_ms"]
+        delivery = dict(
+            registry=authority,
+            outboxes=[snapshots["stopped"]["outbox"]],
+            collector=snapshots["stopped"]["collector"],
+            incidents=incidents,
+        )
+        cleanup = dict(
+            http_exits=http_exits,
+            child_cleanup_markers=log.count(b"identity_fixture_cleanup_pass"),
+            collector_exit_code=collector_exit_code,
+            collector_port_closed=collector_port_closed,
+            outage_exit_code=outage_exit_code,
+            outage_port_closed=outage_port_closed,
+            http_owner_reaped=process is None,
+            collector_owner_reaped=fx.process is None,
+            captured_at_ms=snapshots["stopped"]["captured_at_ms"],
+        )
     check("collector-and-private-files-cleaned", fx.process is None and not fx.directory.exists())
+    cleanup.update(fixture_removed=not fx.directory.exists(), confirmed_at_ms=fx.now())
     check(
         "source-unchanged",
         source_fingerprint(root) == fingerprint
+        and evidence.method_materials(root) == materials
         and command(["git", "-C", str(root), "rev-parse", "HEAD"]) == revision
         and not command(["git", "-C", str(root), "status", "--porcelain"]),
     )
-    return dict(
+    summary = dict(
         status="pass",
         source=revision,
         fingerprint=fingerprint,
@@ -515,6 +606,25 @@ def qualify():
         release_ready=False,
         scope="actual-http-and-identity-child-with-controlled-unready-engine-not-M13-M14-M23",
     )
+    packet = dict(
+        schema_version=1,
+        source=revision,
+        fingerprint=fingerprint,
+        method=evidence.SCOPE,
+        method_materials=materials,
+        service_sha256=service,
+        delivery=delivery,
+        snapshots=snapshots,
+        http=observations,
+        cleanup=cleanup,
+        summary=summary,
+        gap=dict(
+            observed_at_ms=gap_observed_at_ms,
+            elapsed_seconds=stopped_notice_seconds,
+            health_status=health_status,
+        ),
+    )
+    return evidence.retain(root, packet, expected=expected)
 
 
 if __name__ == "__main__":

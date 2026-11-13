@@ -3,6 +3,7 @@
 import dataclasses
 import time
 
+from mlsecops import security_events as events
 from mlsecops import security_outage_exchange as exchange
 from mlsecops import security_outage_packet
 from mlsecops.cluster import kubectl
@@ -16,12 +17,212 @@ from mlsecops.contracts import (
     safe_child,
     write_json,
 )
+from mlsecops.security_event_config import Registry
+from mlsecops.security_event_ledger import Ledger
+from mlsecops.security_event_outbox import Outbox
 from scripts import kube_security_boundary
 from scripts import kube_security_native as audit
 from scripts.kube_privacy_diagnostic import location, validated
 from scripts.kube_privacy_operator import exec_failure
 from scripts.kube_promotion_snapshot import read as snapshot
 from scripts.kube_trust_native import hosted
+
+MAX_RECOVERY = 17 * 1024 * 1024
+
+
+def owner_authority(state, *, marker=None, source=None):
+    """Read public authority from the owned runtime, never from the evidence packet.
+
+    Live capture follows kube_security_events.validate. Offline replay deliberately
+    reads only its retained marker/public config, without keys, tokens or a cluster.
+    The runtime owner remains the trust boundary, not a defense against host admin.
+    """
+    local = safe_child(state, "kubernetes-security")
+    current = decode(bounded_read(local / "resources.json", 256 * 1024), 256 * 1024)
+    identity = decode(bounded_read(local / "materials/identity.json", 65536), 65536)
+    raw = bounded_read(local / "materials/registry.json", 32768)
+    try:
+        events.version(current["schema_version"])
+        events.version(identity["schema_version"])
+        if (
+            current["ready"] is not True
+            or current["workspace_id"] != audit.workspace_id(state)
+            or identity["workspace"] != current["workspace_id"]
+            or any(
+                identity[k] != current["context"][k]
+                for k in ("environment", "initial_root", "policy")
+            )
+            or digest(raw) != identity["files"]["registry.json"]
+            or marker is not None
+            and current != marker
+            or source is not None
+            and any(current["profile"][k] != v for k, v in source.items())
+        ):
+            raise Rejected("security_outage_owner_authority_changed")
+        return {
+            "registry": decode(raw, 32768),
+            "registry_root": events.public_key(identity["registry_root"]),
+            "registry_sha256": events.hexadecimal(identity["registry_sha256"]),
+            "policy_sha256": events.hexadecimal(identity["policy"]),
+            "outbox_pin": events.hexadecimal(current["pins"]["promoter"]),
+            "collector_pin": events.hexadecimal(current["pins"]["collector"]),
+        }
+    except (KeyError, TypeError, AttributeError):
+        raise Rejected("security_outage_owner_authority_invalid") from None
+
+
+def verify_recovery(boundary, recovery, authority, *, timeline):
+    """Verify signed recovery; terminal callers supply the completed, checked timeline.
+
+    Capture explicitly passes None while recover is still running. Finish and
+    post-cleanup replay must bind the signed clocks to the completed actions.
+    """
+    try:
+        if len(canonical(recovery)) > MAX_RECOVERY:
+            raise Rejected("security_outage_recovery_limit")
+        events.shape(
+            recovery,
+            (
+                "original_denial",
+                "fault_removed",
+                "fault_removed_at_ms",
+                "SQL_and_CAS_unchanged",
+                "signed_evidence",
+            ),
+        )
+        removed = events.integer(recovery["fault_removed_at_ms"])
+        events.shape(
+            boundary,
+            (
+                "schema_version",
+                "status",
+                "release_ready",
+                "scope",
+                "fixture_bundle_sha256",
+                "audit_checks",
+                "audit_denials",
+                "audit_check_error",
+                "promotion_error",
+                "registry_sha256",
+                "outbox_pin",
+                "pending",
+            ),
+        )
+        events.version(boundary["schema_version"])
+        packet = recovery["signed_evidence"]
+        events.shape(
+            packet,
+            (
+                "schema_version",
+                "registry",
+                "registry_root",
+                "registry_sha256",
+                "outbox",
+                "collector",
+            ),
+        )
+        events.version(packet["schema_version"])
+        for name in ("registry", "registry_root", "registry_sha256"):
+            if packet[name] != authority[name]:
+                raise Rejected("security_outage_untrusted_registry")
+        for name, pin in (("outbox", "outbox_pin"), ("collector", "collector_pin")):
+            events.shape(packet[name], ("pin", "snapshot"))
+            if packet[name]["pin"] != authority[pin]:
+                raise Rejected("security_outage_untrusted_journal")
+            if len(canonical(packet[name])) > audit.PRIVATE_READBACK_BYTES:
+                raise Rejected("security_outage_journal_limit")
+        outbox, collector = packet["outbox"]["snapshot"], packet["collector"]["snapshot"]
+        registry = Registry(
+            packet["registry"],
+            trusted_root=authority["registry_root"],
+            expected_sha256=authority["registry_sha256"],
+            clock_ms=outbox["updated_at_ms"],
+        )
+        if registry.policy_sha256 != authority["policy_sha256"]:
+            raise Rejected("security_outage_registry_policy")
+        box = Outbox(registry, outbox["producer_id"], outbox)
+        book = Ledger(registry, collector)
+        if registry.producer(outbox["producer_id"]).role != "promoter":
+            raise Rejected("security_outage_producer_role")
+        pending = boundary["pending"]
+        events.shape(pending, ("event_id", "envelope_sha256", "kind", "reason", "receipt"))
+        event_id = events.hexadecimal(pending["event_id"])
+        envelope_sha = events.hexadecimal(pending["envelope_sha256"])
+        fixture_bundle = events.hexadecimal(boundary["fixture_bundle_sha256"])
+        matched = []
+        for document, timestamp in (
+            (box.document(), "queued_at_ms"),
+            (book.document(), "ingested_at_ms"),
+        ):
+            records = []
+            for record in document["records"]:
+                event = registry.verify(record["envelope"], clock_ms=record[timestamp])
+                if event.document()["event_id"] == event_id:
+                    records.append((record, event))
+            if len(records) != 1:
+                raise Rejected("security_outage_original_denial_missing")
+            matched.append(records[0])
+        (sent, event), (received, _) = matched
+        value = event.document()
+        if (
+            sent["receipt"] is None
+            or sent["envelope"] != received["envelope"]
+            or sent["receipt"] != received["receipt"]
+            or digest(canonical(sent["envelope"])) != envelope_sha
+            or value["kind"] != "promotion.denied"
+            or value["reason"] != "audit_unavailable"
+            or value["asset_sha256"] != fixture_bundle
+            or value["bundle_sha256"] != fixture_bundle
+            or boundary["status"] != "pass"
+            or boundary["release_ready"] is not False
+            or boundary["scope"] != "controlled-authorization-and-trust-real-sql-audit-boundary"
+            or type(boundary["audit_checks"]) is not int
+            or boundary["audit_checks"] != 1
+            or type(boundary["audit_denials"]) is not int
+            or boundary["audit_denials"] != 1
+            or boundary["audit_check_error"] != "promotion_audit_unavailable"
+            or boundary["promotion_error"] != "promotion_denial_audit_unconfirmed"
+            or boundary["registry_sha256"] != registry.sha256
+            or boundary["outbox_pin"] != authority["outbox_pin"]
+            or pending["kind"] != value["kind"]
+            or pending["reason"] != value["reason"]
+            or pending["receipt"] is not None
+            or recovery["fault_removed"] is not True
+            or recovery["SQL_and_CAS_unchanged"] is not True
+        ):
+            raise Rejected("security_outage_refusal_or_recovery_changed")
+        receipt = registry.receipt(sent["receipt"], event)
+        if timeline is not None:
+            attempt, recover = timeline["attempt"], timeline["recover"]
+            finished = events.integer(recover["finished_at_ms"])
+            # Hosted kind containers and the operator share the Linux wall clock.
+            # floor(ns / 1e6) is inclusive on both ends; no extra skew allowance.
+            # Outbox enforces occurred == observed == queued; Ledger binds ingest.
+            if not (
+                events.integer(attempt["started_at_ms"])
+                <= value["occurred_at_ms"]
+                <= value["observed_at_ms"]
+                <= events.integer(attempt["finished_at_ms"])
+                <= events.integer(recover["started_at_ms"])
+                <= removed
+                <= receipt["ingested_at_ms"]
+                <= receipt["routed_at_ms"]
+                <= outbox["updated_at_ms"]
+                <= finished
+                and collector["updated_at_ms"] <= finished
+            ):
+                raise Rejected("security_outage_recovery_timeline")
+        projection = {
+            "id": event_id,
+            "envelope": envelope_sha,
+            "kind": value["kind"],
+            "receipt": digest(canonical(sent["receipt"])),
+        }
+        if recovery["original_denial"] != projection:
+            raise Rejected("security_outage_denial_projection_changed")
+        return projection
+    except (KeyError, TypeError, AttributeError, IndexError):
+        raise Rejected("security_outage_signed_evidence_invalid") from None
 
 
 class Coordinator:
@@ -72,6 +273,12 @@ class Coordinator:
             if result != payload["summary"]:
                 raise Rejected("security_outage_summary")
             security_outage_packet.verify_timeline(payload["packet"], self.timeline)
+            verify_recovery(
+                self.boundary,
+                self.recovery,
+                owner_authority(self.state, marker=self.marker),
+                timeline=self.timeline,
+            )
             write_json(self.destination / "packet.json", payload["packet"])
             self.packet_hash = digest(
                 bounded_read(self.destination / "packet.json", exchange.MAX_PACKET)
@@ -120,6 +327,7 @@ class Coordinator:
             if self.fault is None or self.boundary is None:
                 raise Rejected("security_outage_missing_refusal")
             self.close()
+            fault_removed_at_ms = time.time_ns() // 1000000
             audit.health(self.state, self.profile)
             marker = audit.kube_security_events.validate(self.state, profile=self.profile)
             if marker != self.marker:
@@ -139,11 +347,25 @@ class Coordinator:
                 or snapshot(self.state) != self.before
             ):
                 raise Rejected("security_outage_recovery_binding")
-            self.recovery = {
+            recovery = {
                 "original_denial": sent[0],
                 "SQL_and_CAS_unchanged": True,
                 "fault_removed": True,
+                "fault_removed_at_ms": fault_removed_at_ms,
             }
+            authority = owner_authority(self.state, marker=marker)
+            recovery = {
+                **recovery,
+                "signed_evidence": {
+                    "schema_version": 1,
+                    **{k: authority[k] for k in ("registry", "registry_root", "registry_sha256")},
+                    "outbox": audit.private_outbox(self.state, self.profile),
+                    "collector": audit.private_collector(self.state, marker),
+                },
+            }
+            verify_recovery(self.boundary, recovery, authority, timeline=None)
+            write_json(self.destination / "recovery.json", recovery)
+            self.recovery = recovery
         else:
             raise Rejected("security_outage_phase")
         return {}
@@ -300,6 +522,17 @@ class Coordinator:
         if result != self.summary:
             raise Rejected("security_outage_summary_changed")
         security_outage_packet.verify_timeline(decode(content, exchange.MAX_PACKET), self.timeline)
+        recovery = decode(
+            bounded_read(self.destination / "recovery.json", MAX_RECOVERY), MAX_RECOVERY
+        )
+        if recovery != self.recovery:
+            raise Rejected("security_outage_recovery_changed")
+        verify_recovery(
+            self.boundary,
+            recovery,
+            owner_authority(self.state, marker=self.marker),
+            timeline=self.timeline,
+        )
         return result
 
     def finish(self, report, raw):

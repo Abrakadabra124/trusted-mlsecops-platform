@@ -1,9 +1,11 @@
 """Fresh actual-candidate green ML during an owned audit outage; not full M23."""
 
+import math
 import sys
 from pathlib import Path
 
 from mlsecops import audit_lineage, kube_storage, promotion_state, security_outage_packet
+from mlsecops import security_events as events
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -21,6 +23,7 @@ from mlsecops.serving_context import QualificationTrace
 from mlsecops.trust_acceptance import materials
 from scripts.kube_candidate_native import qualify
 from scripts.kube_load_native import failure_site
+from scripts.kube_security_outage_operator import MAX_RECOVERY, owner_authority, verify_recovery
 from scripts.kube_serving_native import prepare
 from scripts.kube_trust_native import hosted
 
@@ -28,12 +31,80 @@ PUBLIC = "evidence/kubernetes-security-outage-public.json"
 PRIVATE = "evidence/kubernetes-security-outage-private.json"
 
 
+def ownership_return(value):
+    """Replay the parent's terminal ownership contract, not a live health claim."""
+    events.shape(
+        value,
+        (
+            "transfer",
+            "observation",
+            "heartbeat_before",
+            "heartbeat_after",
+            "return_seconds",
+            "identity_events_delivered",
+            "outbox_retained",
+            "release_ready",
+        ),
+    )
+    transfer = value["transfer"]
+    events.shape(transfer, ("before", "after", "release_ready"))
+    for name in ("before", "after"):
+        if type(transfer[name]) is not str or not 1 <= len(transfer[name]) <= 128:
+            raise Rejected("security_outage_ownership_uid")
+    before = events.integer(value["heartbeat_before"])
+    after = events.integer(value["heartbeat_after"])
+    events.integer(value["identity_events_delivered"], 0)
+    seconds = value["return_seconds"]
+    if (
+        transfer["before"] == transfer["after"]
+        or transfer["release_ready"] is not False
+        or value["release_ready"] is not False
+        or value["outbox_retained"] is not True
+        or value["observation"] is not None
+        or after <= before
+        or type(seconds) not in (int, float)
+        or not math.isfinite(seconds)
+        or not 0 <= seconds <= 120
+    ):
+        raise Rejected("security_outage_ownership_return")
+
+
 def reverify(root, state):
     public = read_json(state / PUBLIC)
+    events.shape(
+        public,
+        (
+            "schema_version",
+            "status",
+            "scope",
+            "source",
+            "method_materials",
+            "primary_sha256",
+            "retained_sha256",
+            "release_ready",
+            "full_M23",
+            *(("observation",) if "observation" in public else ()),
+        ),
+    )
+    events.version(public["schema_version"])
+    if (
+        public["status"] != "pass"
+        or public["scope"] != "actual-candidate-ML-and-monitoring-during-audit-outage"
+        or public["release_ready"] is not False
+        or public["full_M23"] != "inconclusive"
+    ):
+        raise Rejected("security_outage_public_status")
     content = bounded_read(state / PRIVATE, security_outage_packet.MAX_PACKET)
     if digest(content) != public["primary_sha256"]:
         raise Rejected("security_outage_primary_changed")
     result = decode(content, security_outage_packet.MAX_PACKET)
+    events.version(result.get("schema_version"))
+    if (
+        result.get("status") != "pass"
+        or result.get("scope") != "actual-candidate-kubernetes-inference"
+    ):
+        raise Rejected("security_outage_private_status")
+    ownership_return(result.get("native", {}).get("ownership_return"))
     source = public["source"]
     if (
         result["source"] != source
@@ -85,10 +156,10 @@ def reverify(root, state):
         or set(operator["results"]) != set(PHASES)
         or binding["summary"] != summary
         or result["native"]["operator_retained_reverified"] != summary
-        or any(result["native"].get(key) != value for key, value in summary.items())
+        or canonical({key: result["native"].get(key) for key in summary}) != canonical(summary)
         or result["native"]["worker_cleanup_verified"] is not True
         or result["native"]["audit_boundary"] != binding["boundary"]
-        or result["native"]["recovery"] != binding["recovery"]
+        or canonical(result["native"]["recovery"]) != canonical(binding["recovery"])
         or result["base_snapshot_sha256"] != binding["base_snapshot_sha256"]
         or binding["packet_hash"] != public["retained_sha256"]["packet.json"]
     ):
@@ -102,30 +173,16 @@ def reverify(root, state):
         if operator["requests"][phase] != expected or operator["results"][phase] != ack:
             raise Rejected("security_outage_exchange_changed")
     boundary, recovery = binding["boundary"], binding["recovery"]
-    pending = boundary["pending"]
-    received = recovery["original_denial"]
-    if (
-        boundary["status"] != "pass"
-        or boundary["release_ready"] is not False
-        or boundary["scope"] != "controlled-authorization-and-trust-real-sql-audit-boundary"
-        or type(boundary["audit_checks"]) is not int
-        or boundary["audit_checks"] != 1
-        or type(boundary["audit_denials"]) is not int
-        or boundary["audit_denials"] != 1
-        or boundary["audit_check_error"] != "promotion_audit_unavailable"
-        or boundary["promotion_error"] != "promotion_denial_audit_unconfirmed"
-        or pending["reason"] != "audit_unavailable"
-        or pending["receipt"] is not None
-        or received["id"] != pending["event_id"]
-        or received["envelope"] != pending["envelope_sha256"]
-        or received["kind"] != pending["kind"]
-        or received["kind"] != "promotion.denied"
-        or received["receipt"] is None
-        or recovery["fault_removed"] is not True
-        or recovery["SQL_and_CAS_unchanged"] is not True
-    ):
-        raise Rejected("security_outage_refusal_or_recovery_changed")
-    return {**summary, "retained_primary_reverified": True, "full_M23": "inconclusive"}
+    retained = decode(bounded_read(directory / "recovery.json", MAX_RECOVERY), MAX_RECOVERY)
+    if canonical(retained) != canonical(recovery):
+        raise Rejected("security_outage_recovery_changed")
+    verify_recovery(
+        boundary, retained, owner_authority(state, source=source), timeline=operator["timeline"]
+    )
+    observation = {**summary, "retained_primary_reverified": True, "full_M23": "inconclusive"}
+    if "observation" in public and canonical(public["observation"]) != canonical(observation):
+        raise Rejected("security_outage_public_observation_changed")
+    return observation
 
 
 def run(root, state):

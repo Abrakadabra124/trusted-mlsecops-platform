@@ -65,8 +65,29 @@ jobs:
               print(json.dumps({'source': os.environ['GITHUB_SHA'], 'module': name, 'coverage': stats}, sort_keys=True))
           print('Authenticated contracts only. No durable collector, runtime delivery, promotion outage or full M23/R1 acceptance claimed.')
           PY
+      - name: Primary source records and independent signed replay
+        run: |
+          uv run --locked coverage run --branch --data-file="$RUNNER_TEMP/security-primary.coverage" --source=mlsecops.security_source_evidence,mlsecops.security_intake_evidence,mlsecops.security_identity_evidence,mlsecops.security_trust_evidence,mlsecops.security_inventory_evidence,scripts.security_source_capture -m unittest scripts.security_source_evidence_qualification scripts.security_source_capture_qualification scripts.security_source_campaign_qualification scripts.security_identity_evidence_qualification scripts.security_trust_evidence_qualification scripts.security_inventory_evidence_qualification
+          uv run --locked coverage json --data-file="$RUNNER_TEMP/security-primary.coverage" -o "$RUNNER_TEMP/security-primary.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'security-primary.json').read_text())['files']
+          expected = {'mlsecops/security_' + name + '_evidence.py' for name in ('source', 'intake', 'identity', 'trust', 'inventory')}
+          expected.add('scripts/security_source_capture.py')
+          if set(files) != expected:
+              raise SystemExit('security_primary_coverage_inventory')
+          for name, report in sorted(files.items()):
+              stats = report['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if not stats[total] or stats[covered] / stats[total] < .95:
+                      raise SystemExit('security_primary_coverage_incomplete:' + name)
+              print(json.dumps({'module': name, **stats}, sort_keys=True))
+          PY
       - name: Existing signature and monitoring domain regressions
         run: uv run --locked python -m unittest scripts.key_files_qualification scripts.monitoring_alerts_qualification scripts.release_policy_qualification
+      - name: Retained actual intake and controller source decisions
+        run: uv run --locked python -B -W error -m scripts.security_source_campaign
       - name: Durable journal, actual filesystem faults and restart
         run: |
           uv run --locked ruff check mlsecops/security_event_ledger.py mlsecops/security_event_store.py mlsecops/security_event_health.py scripts/security_event_ledger_qualification.py scripts/security_event_store_qualification.py scripts/security_event_health_qualification.py

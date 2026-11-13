@@ -1,5 +1,9 @@
 # Эксплуатационные процедуры
 
+- [T29: первичные signed evidence и replay](operations/security-primary-evidence.md):
+  registry pins, полные outbox/collector/incidents, source bindings и восстановление
+  после неполного retention. Общий M23 остаётся обязательным отдельным gate.
+
 - [T29: sequence gap и здоровый ML при audit outage](operations/security-outage.md):
   fixed phases, actual monitoring windows, controlled audit boundary, original-event
   recovery, owned cleanup; component sequence/outage на c57d3f6 подтверждены,
