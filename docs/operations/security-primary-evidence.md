@@ -89,6 +89,14 @@ evaluation, model, image, source revision и source fingerprint. Несовпа�
 
 ## Ветви восстановления
 
+В [запуске на 2915be7](../evidence/m23-source-replay-2915be7.md) inventory
+прошёл, а подготовка actual candidate остановилась на запросе Kubernetes.
+Для разбора нужно сохранить `request.operation`, `request.category` и
+последние проверенные исходные файлы и строки `callers`. Если категория
+неизвестна, точная причина остаётся открытой. До повтора оператор проверяет
+результаты двух шагов очистки. Успешное завершение inventory само по себе
+недостаточно для приёмки связанного outage.
+
 При review до публикации воспроизведены signed counterexamples: online-вызов
 заканчивался раньше указанного в receipt route; вручную созданный transport
 control подменялся событием другого зарегистрированного producer; старый

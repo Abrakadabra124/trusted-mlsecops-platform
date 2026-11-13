@@ -2,10 +2,12 @@
 
 import math
 import sys
+import traceback
 from pathlib import Path
 
 from mlsecops import audit_lineage, kube_storage, promotion_state, security_outage_packet
 from mlsecops import security_events as events
+from mlsecops.cluster import request_failure
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -23,6 +25,7 @@ from mlsecops.serving_context import QualificationTrace
 from mlsecops.trust_acceptance import materials
 from scripts.kube_candidate_native import qualify
 from scripts.kube_load_native import failure_site
+from scripts.kube_privacy_diagnostic import validated
 from scripts.kube_security_outage_operator import MAX_RECOVERY, owner_authority, verify_recovery
 from scripts.kube_serving_native import prepare
 from scripts.kube_trust_native import hosted
@@ -226,6 +229,32 @@ def run(root, state):
     return public
 
 
+def failure_report(error):
+    root = Path(__file__).resolve().parents[1]
+    callers = []
+    for frame in traceback.extract_tb(error.__traceback__):
+        path = Path(frame.filename).resolve()
+        if path.parent.parent == root:
+            site = validated(
+                dict(
+                    source_file=path.relative_to(root).as_posix(),
+                    source_line=frame.lineno,
+                    exception="other",
+                )
+            )
+            if site is not None:
+                callers.append(site)
+    return dict(
+        status="fail",
+        release_ready=False,
+        full_M23="inconclusive",
+        code="security_outage_native_rejected",
+        site=failure_site(error),
+        request=request_failure(error),
+        callers=callers[-12:],
+    )
+
+
 def main():
     try:
         if sys.argv[1:] not in ([], ["--reverify"]):
@@ -235,18 +264,7 @@ def main():
         print(canonical(result).decode(), flush=True)
         return 0
     except Exception as error:
-        print(
-            canonical(
-                {
-                    "status": "fail",
-                    "release_ready": False,
-                    "full_M23": "inconclusive",
-                    "code": "security_outage_native_rejected",
-                    "site": failure_site(error),
-                }
-            ).decode(),
-            flush=True,
-        )
+        print(canonical(failure_report(error)).decode(), flush=True)
         return 1
 
 

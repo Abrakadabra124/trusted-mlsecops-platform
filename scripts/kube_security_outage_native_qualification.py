@@ -23,6 +23,31 @@ from scripts.security_outage_packet_qualification import fixture, timeline
 
 
 class OutageCompositionContracts(unittest.TestCase):
+    def test_runtime_request_failure_keeps_callers_and_never_private_error_text(self):
+        from scripts import kube_security_outage_native as native
+
+        def failing(*_):
+            try:
+                raise RuntimeError("PRIVATE CANARY")
+            except RuntimeError as error:
+                raise Rejected("kubernetes_request_failed:apply:unknown") from error
+
+        with (
+            patch.object(native, "run", side_effect=failing),
+            patch.object(sys, "argv", ["probe"]),
+            patch.object(sys, "stdout", io.StringIO()) as output,
+        ):
+            self.assertEqual(native.main(), 1)
+        result = decode(output.getvalue().encode())
+        self.assertEqual(result["request"], {"operation": "apply", "category": "unknown"})
+        self.assertTrue(
+            any(
+                site["source_file"].endswith("kube_security_outage_native_qualification.py")
+                for site in result["callers"]
+            )
+        )
+        self.assertNotIn("PRIVATE", output.getvalue())
+
     def test_native_entrypoint_rejects_unowned_host_without_disclosing_exception(self):
         from scripts import kube_security_outage_native as native
 
