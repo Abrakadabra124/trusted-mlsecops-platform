@@ -712,6 +712,14 @@ class FinalEvidenceContracts(unittest.TestCase):
     def run_report(self):
         return acceptance.report("M18", "local-cpu", self.root, self.state)
 
+    def test_full_gate_rejects_summary_only_m06(self):
+        self.build()
+        report = acceptance.report("M18", "local-cpu", self.root, self.state)
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["metrics"]["verified_gates"], 21)
+        self.assertTrue(any(r.startswith("M06/") for r in report["residual_risks"]))
+        self.assertFalse(report["production_authorized"])
+
     def test_live_freeze_and_offline_replay_share_original_signed_bytes(self):
         from scripts import m18_delivery_freeze as driver
 
@@ -760,6 +768,9 @@ class FinalEvidenceContracts(unittest.TestCase):
                 "proposal_reference",
             ):
                 self.assertEqual(result[key], self.values[key])
+            for option in ("reproducibility_pin", "promotion_pin"):
+                with self.subTest(option=option), self.assertRaisesRegex(Rejected, "report-digest"):
+                    driver.replay(self.root, self.state, pin, **{option: "0" * 64})
             with self.assertRaises(Rejected):
                 driver.replay(self.root, self.state, "a" * 64)
             write_json(self.state / "evidence/M18-objects" / result["evaluation_reference"], {})
@@ -780,7 +791,9 @@ class FinalEvidenceContracts(unittest.TestCase):
         self.assertNotIn("do-not-echo", str(report))
         self.assertIn("index", report["residual_risks"][0])
 
-    def test_complete_real_signatures_and_native_shapes_are_lab_only(self):
+    def test_orchestrator_with_scoped_m06_stub_is_lab_only(self):
+        # Isolate the outer join from this suite's two-case M06 fixture.
+        self.enterContext(patch("mlsecops.reproducibility_offline.verify"))
         self.build()
         report = self.run_report()
         self.assertEqual(report["status"], "pass", report["residual_risks"])
@@ -809,6 +822,8 @@ class FinalEvidenceContracts(unittest.TestCase):
                 self.assertTrue(any(r.startswith("M10/") for r in result["residual_risks"]))
 
     def test_missing_and_foreign_children_are_all_diagnosed(self):
+        # Isolate the outer join from this suite's two-case M06 fixture.
+        self.enterContext(patch("mlsecops.reproducibility_offline.verify"))
         self.build()
         for gate in ("M01", "M04"):
             del self.index["reports"][gate]
@@ -824,6 +839,8 @@ class FinalEvidenceContracts(unittest.TestCase):
         self.assertFalse(report["production_authorized"])
 
     def test_missing_files_inconclusive_and_changed_bytes_fail(self):
+        # Isolate the outer join from this suite's two-case M06 fixture.
+        self.enterContext(patch("mlsecops.reproducibility_offline.verify"))
         self.build()
         path = self.state / "evidence/M07.json"
         original = path.read_bytes()
@@ -856,6 +873,8 @@ class FinalEvidenceContracts(unittest.TestCase):
         self.assertIn("plan-gates", " ".join(self.run_report()["residual_risks"]))
 
     def test_independent_cases_artifacts_and_negative_reasons_are_frozen(self):
+        # Isolate the outer join from this suite's two-case M06 fixture.
+        self.enterContext(patch("mlsecops.reproducibility_offline.verify"))
         self.build()
         report = self.reports["M02"]
         report["cases"].append(

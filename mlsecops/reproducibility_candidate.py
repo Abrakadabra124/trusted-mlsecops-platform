@@ -86,6 +86,7 @@ def bind(root, state, evidence, result, demo_pin):
         path,
         dict(
             candidate=actual,
+            scores=scores,
             protocol=proof,
             reference_runs=[r["run_id"] for r in repeats],
             split_materials=metadata["materials"],
