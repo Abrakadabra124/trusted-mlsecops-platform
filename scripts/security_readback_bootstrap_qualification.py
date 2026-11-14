@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import time
 import unittest
 
 from mlsecops.contracts import canonical, decode, digest
@@ -31,7 +32,6 @@ class SlowHTTP(importlib.abc.MetaPathFinder):
             time.sleep(3.1)
         return None
 sys.meta_path.insert(0, SlowHTTP())
-started = time.monotonic()
 try:
     exec(sys.stdin.read(), {})
 except Rejected as error:
@@ -92,24 +92,46 @@ class ColdCollector(unittest.TestCase):
             ),
         }
         for kind, program in programs.items():
-            with self.subTest(kind=kind):
-                result = child(COLD, source=program.encode())
-                category = "complete" if result.returncode == 0 else "other"
-                lines = result.stdout.splitlines()
-                if result.returncode and len(lines) == 1:
-                    report = decode(lines[0], 4096)
-                    if report == {"status": "rejected", "category": "readback_deadline"}:
-                        category = "readback_deadline"
-                print(canonical({"reader": kind, "status": category}).decode(), flush=True)
-                self.assertEqual(result.returncode, 0, category)
-                report = decode(result.stdout, native.PRIVATE_READBACK_BYTES)
-                self.assertEqual(
-                    report["pin"],
-                    decode((self.fx.directory / "collector.json").read_bytes())["state_sha256"],
-                )
-                self.assertEqual(
-                    {p.name: digest(p.read_bytes()) for p in self.state.iterdir()}, self.before
-                )
+            for mode in ("cold", "slow-unrelated-import"):
+                with self.subTest(kind=kind, mode=mode):
+                    self.check_reader(kind, program, mode)
+
+    def check_reader(self, kind, program, mode):
+        from scripts import kube_security_native as native
+
+        preamble = (
+            COLD
+            if mode == "slow-unrelated-import"
+            else COLD.replace("sys.meta_path.insert(0, SlowHTTP())", "")
+        )
+        began = time.monotonic()
+        result = child(preamble, source=program.encode())
+        category = "complete" if result.returncode == 0 else "other"
+        lines = result.stdout.splitlines()
+        if result.returncode and len(lines) == 1:
+            report = decode(lines[0], 4096)
+            if report == {"status": "rejected", "category": "readback_deadline"}:
+                category = "readback_deadline"
+        print(
+            canonical(
+                {
+                    "reader": kind,
+                    "mode": mode,
+                    "status": category,
+                    "elapsed_seconds": round(time.monotonic() - began, 6),
+                }
+            ).decode(),
+            flush=True,
+        )
+        self.assertEqual(result.returncode, 0, category)
+        report = decode(result.stdout, native.PRIVATE_READBACK_BYTES)
+        self.assertEqual(
+            report["pin"],
+            decode((self.fx.directory / "collector.json").read_bytes())["state_sha256"],
+        )
+        self.assertEqual(
+            {p.name: digest(p.read_bytes()) for p in self.state.iterdir()}, self.before
+        )
 
 
 if __name__ == "__main__":
