@@ -9,14 +9,14 @@ RUN apk add --no-cache \
         'cyrus-sasl-heimdal-libs=2.1.28-r58' \
         'ecpg-18=18.6-r5' \
         'gdbm=1.26-r7' \
-        'glibc-2.44=2.44-r8' \
-        'glibc-2.44-locale-posix=2.44-r8' \
+        'glibc-2.44=2.44-r17' \
+        'glibc-2.44-locale-posix=2.44-r17' \
         'heimdal-libs=7.8.0-r54' \
         'icu78-data-full=78.3-r4' \
         'keyutils-libs=1.6.3-r41' \
         'krb5-conf=1.0-r10' \
         'krb5-libs=1.22.2-r5' \
-        'ld-linux-2.44=2.44-r8' \
+        'ld-linux-2.44=2.44-r17' \
         'libacl1=2.4.0-r4' \
         'libattr1=2.6.0-r4' \
         'libLLVM=19.1.7-r8' \
@@ -24,7 +24,7 @@ RUN apk add --no-cache \
         'libbrotlidec1=1.2.1-r2' \
         'libbrotlienc1=1.2.1-r2' \
         'libcom_err=1.47.4-r3' \
-        'libcrypt1-2.44=2.44-r8' \
+        'libcrypt1-2.44=2.44-r17' \
         'libcrypto3=3.6.5-r5' \
         'libedit=3.1-r20' \
         'libffi=3.8.0-r2' \
