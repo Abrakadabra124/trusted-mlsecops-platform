@@ -230,6 +230,7 @@ class PinnedWindowTests(unittest.TestCase):
         with (
             patch.object(staged, "hosted"),
             patch.object(staged, "owner"),
+            patch.object(staged.promotion_state, "install") as install,
             patch.object(
                 staged.kube_serving_native, "prepare", return_value={"profile": {}, "actual": {}}
             ) as prepare,
@@ -244,5 +245,6 @@ class PinnedWindowTests(unittest.TestCase):
         ):
             staged.finish("root", "state", "image", "original", None)
         prepare.assert_called_once_with("root", "state", "image", proposal_pin="original")
+        install.assert_called_once_with("state", backend=staged.kube_storage.binding)
         actual.assert_called_once_with("root", "state", "image", prepared=({}, {}), pinned_m12=True)
         controlled.assert_not_called()
