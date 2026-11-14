@@ -1,5 +1,6 @@
 """M12 executes both approved-release and genuine candidate HTTP on one image."""
 
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -198,7 +199,9 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "data.lock",
     ]
     materials = {path: digest(bounded_read(root / path)) for path in paths}
-    prepared = kube_serving_native.prepare(root, state, image)
+    prepared = kube_serving_native.prepare(
+        root, state, image, proposal_pin=os.environ.get("M12_PROPOSAL_SHA256")
+    )
     started = now()
     controlled = contracts(root)
     native = kube_serving_native.qualify(
@@ -241,6 +244,7 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
             "model": actual["model_sha256"],
             "release_subject": actual["subject_sha256"],
             "candidate_reference": actual["candidate_reference"],
+            "evaluation_reference": actual["evaluation_reference"],
             "proposal_reference": actual["proposal_reference"],
         },
         "artifact_hashes": {

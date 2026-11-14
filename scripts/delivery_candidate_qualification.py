@@ -60,7 +60,7 @@ class Delivery(unittest.TestCase):
         self.reports = {}
         write_json(Path("data.lock"), dict(output=dict(sha256=h("data"))))
         lock = digest(bounded_read(Path("data.lock")))
-        for gate in ("M02", "M03", "M06", "M07", "M08", "M09", "M16", "M17"):
+        for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M12", "M16", "M17"):
             common = dict(
                 candidate_reference=h("candidate"),
                 evaluation_reference=h("evaluation"),
@@ -83,6 +83,16 @@ class Delivery(unittest.TestCase):
                     qualified_candidate_subject=h("subject"),
                     proposal_reference=h("proposal"),
                 )
+            elif gate == "M12":
+                inputs = dict(
+                    **self.source,
+                    model=h("model"),
+                    release_subject=h("subject"),
+                    proposal_reference=h("proposal"),
+                )
+            elif gate == "M01":
+                common = dict(source_fingerprint=h("tree"))
+                inputs = dict(worker_image=self.source["image_id"])
             elif gate == "M02":
                 common = dict(source_fingerprint=h("tree"))
                 inputs = dict(data_lock=lock, source=h("data"))

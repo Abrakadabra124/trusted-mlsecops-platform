@@ -439,6 +439,7 @@ def qualify(
         "started_at": started,
         "finished_at": now(),
         "candidate_reference": refusal["candidate"],
+        "evaluation_reference": context["evaluation_reference"],
         "proposal_reference": refusal["proposal"],
         "model_sha256": refusal["model"],
         "subject_sha256": verified["subject_sha256"],
@@ -458,7 +459,6 @@ def qualify(
             {
                 "full_M13": "inconclusive",
                 "privacy_campaign_id": campaign,
-                "evaluation_reference": context["evaluation_reference"],
             }
             if privacy
             else {}

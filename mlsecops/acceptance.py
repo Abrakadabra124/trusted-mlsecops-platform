@@ -59,6 +59,7 @@ def report(gate, profile, root, state=None):
                 cases=evidence["cases"],
                 exit_code=0,
                 metrics={"checks": evidence["checks"]},
+                source_dirty=evidence["inventory"]["source_dirty"],
                 residual_risks=evidence["limitations"],
                 artifact_hashes={
                     "foundation_qualification": digest(

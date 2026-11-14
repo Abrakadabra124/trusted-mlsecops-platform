@@ -75,6 +75,7 @@ class InferenceGateContracts(unittest.TestCase):
                 "status": "pass",
                 "release_ready": False,
                 "candidate_reference": "c" * 64,
+                "evaluation_reference": "f" * 64,
                 "proposal_reference": "d" * 64,
                 "model_sha256": "e" * 64,
                 "subject_sha256": "b" * 64,
@@ -237,10 +238,13 @@ class InferenceGateContracts(unittest.TestCase):
                     return self.native
 
                 def contracts(root):
-                    preparation.assert_called_once()
+                    preparation.assert_called_once_with(
+                        root, state.resolve(), "trusted-mlsecops:dev", proposal_pin="9" * 64
+                    )
                     return controlled
 
                 with (
+                    patch.dict(gate.os.environ, M12_PROPOSAL_SHA256="9" * 64),
                     patch.object(gate, "hosted"),
                     patch.object(
                         gate.kube_serving_native, "prepare", return_value={"prepared": True}

@@ -7,6 +7,9 @@ on:
       - 'infra/systemd/mlsecops-daily-backup.*'
       - 'mlsecops/acceptance.py'
       - 'mlsecops/evaluation_gate.py'
+      - 'mlsecops/foundation.py'
+      - 'mlsecops/inference_gate.py'
+      - 'scripts/kube_candidate_native.py'
       - 'mlsecops/data_qualification.py'
       - 'mlsecops/reproducibility*.py'
       - 'scripts/reproducibility*.py'
@@ -35,7 +38,7 @@ permissions:
 jobs:
   recovery:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -69,7 +72,18 @@ jobs:
       - name: Prepare pinned CPU runtime
         run: |
           uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
           uv run --locked python -B -m mlsecops build
+      - name: Start the owned disposable cluster and its private storage
+        id: cluster
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -B -m mlsecops.cluster bootstrap
+          uv run --locked python -B -m mlsecops.kube_storage
       - name: Start owned source storage
         id: sql
         run: |
@@ -81,6 +95,8 @@ jobs:
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
               print("workspace=" + validate(Path(".runtime"))["workspace_id"], file=out)
           PY
+      - name: Verify the actual cluster, worker, pinned tools and clean bootstrap
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M01 --output .runtime/evidence/M01.json
       - name: Verify intake, quarantine and locked training source
         run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
       - name: Verify SQL integrity and role isolation, then evaluate the same training run
@@ -118,6 +134,10 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
+      - name: Serve the frozen proposal through the Kubernetes HTTP worker and verify admission refusals
+        env:
+          M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json
       - name: Measure canary traffic on the frozen proposal before taking its storage offline
         id: canary
         env:
@@ -143,6 +163,20 @@ jobs:
         run: |
           if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
           uv run --locked python -B -m scripts.m17_recovery_native stop
+      - name: Remove the owned cluster and verify its absence
+        if: always() && steps.cluster.outputs.started_empty == 'true'
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
       - name: Verify M16 and M17 against the original candidate after cleanup
         env:
           T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
@@ -161,7 +195,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
           evidence = Path(".runtime/evidence")
-          for gate in ("M02", "M03", "M06", "M07", "M08", "M09", "M16", "M17"):
+          for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M12", "M16", "M17"):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())

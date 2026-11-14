@@ -338,7 +338,7 @@ class FoundationContracts(unittest.TestCase):
             "checks": 1,
             "limitations": ["controlled-unit-test"],
             "image_id": "sha256:" + "c" * 64,
-            "inventory": {},
+            "inventory": {"source_dirty": False},
             "materials": {},
         }
         write_json(state / "evidence/foundation-qualification.json", evidence)
