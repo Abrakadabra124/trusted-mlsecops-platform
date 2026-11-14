@@ -48,6 +48,9 @@ jobs:
                       raise SystemExit('M23 coverage below threshold: ' + name)
               print(name, stats)
           PY
+      - name: Freeze M23 criteria before native measurements
+        id: security_plan
+        run: uv run --locked python -B -W error -m scripts.m18_security_driver case-inventory
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -118,6 +121,7 @@ jobs:
           if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/remaining-clusters.txt"; then exit 1; fi
       - name: Replay all signed source evidence and report M23 after cleanup
         env:
+          M23_CASES_SHA256: ${{ steps.security_plan.outputs.expected_cases_sha256 }}
           M23_SOURCES_SHA256: ${{ steps.sources.outputs.sha256 }}
           M23_INVENTORY_SHA256: ${{ steps.inventory.outputs.sha256 }}
           M23_OUTAGE_SHA256: ${{ steps.outage.outputs.sha256 }}
@@ -125,9 +129,12 @@ jobs:
           result=0
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M23 --output .runtime/evidence/M23.json || result=$?
           uv run --locked python - <<'PY'
+          import os
           from pathlib import Path
-          from mlsecops.contracts import canonical, read_json
+          from mlsecops.contracts import canonical, digest, read_json
           result = read_json(Path('.runtime/evidence/M23.json'))
           print(canonical(result).decode())
+          if digest(canonical(sorted(row['id'] for row in result['cases']))) != os.environ['M23_CASES_SHA256']:
+              raise SystemExit('M23 cases differ from the independently frozen source criteria')
           PY
           exit "$result"
