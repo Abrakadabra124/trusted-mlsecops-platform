@@ -1,10 +1,12 @@
 import re
+import time
 from pathlib import Path
 
 import psycopg
 from psycopg import sql
 
 from mlsecops.contracts import Rejected, bounded_read, decode, digest, require_fields, safe_child
+from mlsecops.storage_connection_diagnostics import ConnectionRejected, describe
 from mlsecops.storage_pki import CLUSTER_HOST, ROLES, TRUST_HOST
 from mlsecops.storage_schema import DATABASE, MAX_BYTES, TABLES
 from mlsecops.trust_targets import HOSTS as TRUST_HOSTS
@@ -92,11 +94,13 @@ def table_name(name):
 
 
 def connect(directory, *, expected_host=None):
+    options = {} if expected_host is None else {"expected_host": expected_host}
+    parameters = connection_parameters(directory, **options)
+    started = time.monotonic_ns()
     try:
-        options = {} if expected_host is None else {"expected_host": expected_host}
-        return psycopg.connect(**connection_parameters(directory, **options))
+        return psycopg.connect(**parameters)
     except psycopg.Error as error:
-        raise Rejected("storage_connection_rejected") from error
+        raise ConnectionRejected(describe(error, time.monotonic_ns() - started)) from error
 
 
 def put(directory, table, content):

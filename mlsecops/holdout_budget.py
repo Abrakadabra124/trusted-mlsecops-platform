@@ -36,7 +36,12 @@ def reserve(client, holdout_digest):
     storage.object_id(holdout_digest)
     for slot in range(1, LIMIT + 1):
         content = reservation(holdout_digest, slot)
-        if storage.claim(client, "evaluations", content):
+        try:
+            claimed = storage.claim(client, "evaluations", content)
+        except storage.ConnectionRejected as error:
+            error.slot = slot
+            raise
+        if claimed:
             return {
                 "holdout_digest": holdout_digest,
                 "slot": slot,

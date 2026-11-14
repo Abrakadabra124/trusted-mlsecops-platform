@@ -13,12 +13,22 @@ from mlsecops.contracts import Rejected, canonical, digest, now, read_json, writ
 from mlsecops.holdout_diagnostics import CLAIM_CASES, ClaimFailure, check_claims
 from mlsecops.inventory import source_fingerprint
 from mlsecops.storage_bootstrap import bootstrap, docker, validate
+from mlsecops.storage_connection_diagnostics import ConnectionRejected
 
 
 def attempt(arguments):
     client, holdout_digest = arguments
     try:
         return holdout_budget.reserve(client, holdout_digest)
+    except ConnectionRejected as error:
+        return {
+            "rejected": str(error),
+            "connection_failure": {
+                **error.diagnostic,
+                "slot": error.slot,
+                "prior_conflicts": error.slot - 1,
+            },
+        }
     except Rejected as error:
         return {"rejected": str(error)}
 

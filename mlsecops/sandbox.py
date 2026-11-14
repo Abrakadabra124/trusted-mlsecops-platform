@@ -73,15 +73,16 @@ def run_worker(image, request, timeout=600):
     oversized = threading.Event()
 
     def collect_output():
-        content = process.stdout.read(MAX_PROTOCOL + 1)
+        with process.stdout:
+            content = process.stdout.read(MAX_PROTOCOL + 1)
         if len(content) > MAX_PROTOCOL:
             oversized.set()
         captured.append(content)
 
     def provide_input():
         try:
-            process.stdin.write(payload)
-            process.stdin.close()
+            with process.stdin:
+                process.stdin.write(payload)
         except (OSError, BrokenPipeError):
             pass
 

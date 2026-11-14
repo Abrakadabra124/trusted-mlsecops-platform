@@ -1,5 +1,6 @@
 from mlsecops import holdout_budget, storage
 from mlsecops.contracts import Rejected, canonical, digest
+from mlsecops.storage_connection_diagnostics import checked as checked_connection
 
 CLAIM_CASES = ("four-process-unique-atomic-claims", "concurrent-over-budget-denied")
 RECEIPT_FIELDS = {"holdout_digest", "slot", "reservation", "policy_digest"}
@@ -54,6 +55,14 @@ def check_claims(receipts, holdout_digest):
     }
     accepted, refused = [], []
     for item in receipts[: holdout_budget.LIMIT] if type(receipts) is list else []:
+        if type(item) is dict and set(item) == {"rejected", "connection_failure"}:
+            if item["rejected"] != "storage_connection_rejected" or not checked_connection(
+                item["connection_failure"], holdout_budget.LIMIT
+            ):
+                observed["invalid_receipts"] += 1
+                continue
+            observed.setdefault("connection_failures", []).append(dict(item["connection_failure"]))
+            item = {"rejected": item["rejected"]}
         if type(item) is dict and set(item) == {"rejected"}:
             raw = item["rejected"]
             code = (
