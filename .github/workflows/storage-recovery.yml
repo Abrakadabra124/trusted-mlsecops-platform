@@ -16,6 +16,7 @@ on:
       - 'scripts/promotion_gate_native.py'
       - 'scripts/promotion_entrypoint_native.py'
       - 'scripts/kube_candidate_native.py'
+      - 'scripts/m12_pinned*.py'
       - 'mlsecops/data_qualification.py'
       - 'mlsecops/reproducibility*.py'
       - 'scripts/reproducibility*.py'
@@ -71,6 +72,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.m12_pinned_qualification scripts.kube_candidate_campaign_qualification scripts.inference_gate_qualification
           uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_live_freeze_and_offline_replay_share_original_signed_bytes scripts.final_evidence_qualification.FinalEvidenceContracts.test_foundation_and_intake_replay_uses_pre_run_outcomes_and_pinned_primaries scripts.final_evidence_qualification.FinalEvidenceContracts.test_inventory_delivery_requires_canonical_keys_and_the_original_file_registry
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
           modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate,mlsecops.inventory_fleet,mlsecops.inventory_gate,scripts.inventory_fleet_native,scripts.inventory_fleet_materials,scripts.inventory_deployment_native
@@ -170,6 +172,12 @@ jobs:
           M19_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
           M19_FLEET_INPUTS_SHA256: ${{ steps.inventory_inputs.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.inventory_deployment_native
+      - name: Capture actual M12 inference and refusal during the original permit window
+        if: env.DELIVERY_SERVING_GATE == 'M12'
+        id: actual_m12
+        env:
+          M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m scripts.m12_pinned_native capture
       - name: Verify signed promotion refusal and authorized control before serving
         env:
           M10_STORAGE_DEMO_SHA256: ${{ steps.source.outputs.demo }}
@@ -194,15 +202,6 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
-      - name: Serve the frozen proposal through the Kubernetes HTTP worker and verify admission refusals
-        if: env.DELIVERY_SERVING_GATE == 'M12'
-        env:
-          M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
-        run: |
-          if ! uv run --locked python -B -W error -m mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json; then
-            uv run --locked python -c 'from pathlib import Path; from mlsecops.contracts import canonical, read_json; print(canonical(read_json(Path(".runtime/evidence/M12.json")).get("diagnostics", {})).decode())'
-            exit 1
-          fi
       - name: Verify private inference and operator observations on the frozen proposal
         if: env.DELIVERY_SERVING_GATE == 'M13'
         env:
@@ -235,6 +234,16 @@ jobs:
         run: |
           if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
           uv run --locked python -B -m scripts.m17_recovery_native stop
+      - name: Complete M12 controlled rotations and verify the early packet with source SQL offline
+        if: always() && env.DELIVERY_SERVING_GATE == 'M12' && steps.actual_m12.outcome == 'success' && steps.stop_sql.outcome == 'success'
+        env:
+          M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M12_EARLY_SHA256: ${{ steps.actual_m12.outputs.sha256 }}
+        run: |
+          if ! uv run --locked python -B -W error -m mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json; then
+            uv run --locked python -c 'from pathlib import Path; from mlsecops.contracts import canonical, read_json; print(canonical(read_json(Path(".runtime/evidence/M12.json")).get("diagnostics", {})).decode())'
+            exit 1
+          fi
       - name: Remove the owned cluster and verify its absence
         id: stop_cluster
         if: always() && steps.cluster.outputs.started_empty == 'true'
