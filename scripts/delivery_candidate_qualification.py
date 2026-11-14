@@ -220,6 +220,40 @@ class Delivery(unittest.TestCase):
                     frozen_reports(self.root, profile=profile, **pins)
                 write_json(self.path(gate), self.reports[gate])
 
+    def test_combined_parent12_requires_early_capture_and_all_fifteen_hashes(self):
+        from scripts import controller_delivery as collector
+        from scripts.m12_pinned_native import PACKET
+
+        capture = self.root / PACKET
+        write_json(capture, {"attempt": "one"})
+        capture_pin = digest(bounded_read(capture))
+        report = self.reports["M12"] | {"artifact_hashes": {"pinned_actual": capture_pin}}
+        write_json(self.path("M12"), report)
+        scoped = {g: digest(bounded_read(self.path(g))) for g in ("M03", "M07")}
+        scoped.update({g: digest(g.encode()) for g in ("M04", "M05", "M20")})
+        with (
+            patch.object(collector, "reconcile", return_value=scoped),
+            patch.object(sys, "argv", ["controller_delivery", "--include-recovery", "parent12"]),
+            patch.dict(os.environ, M12_EARLY_SHA256=capture_pin),
+            redirect_stdout(io.StringIO()) as buffer,
+        ):
+            collector.main()
+            result = decode(buffer.getvalue().encode())
+            self.assertEqual(set(result["reports"]), set(collector.GATES))
+            self.assertEqual(len(result["reports"]), 15)
+            self.assertIs(result["release_ready"], False)
+            self.assertEqual(result["reports"]["M12"], digest(bounded_read(self.path("M12"))))
+            with patch.dict(os.environ, M19_PRIMARY_SHA256=self.env["M17_PRIMARY_SHA256"]):
+                with self.assertRaisesRegex(Rejected, "capture_reused"):
+                    collector.main()
+            write_json(self.path("M12"), report | {"artifact_hashes": {"pinned_actual": "a" * 64}})
+            with self.assertRaisesRegex(Rejected, "m12_capture_mismatch"):
+                collector.main()
+            write_json(self.path("M12"), report)
+            write_json(capture, {"attempt": "two"})
+            with self.assertRaises(Rejected):
+                collector.main()
+
     def test_cli_hashes_all_original_bytes(self):
         direct = reconcile(
             self.root,
