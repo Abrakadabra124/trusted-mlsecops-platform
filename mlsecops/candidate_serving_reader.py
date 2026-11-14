@@ -16,6 +16,24 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, canonical, decode, digest, require_fields
 
 KIND = "candidate-serving-qualification"
+FLEET_KIND = "inventory-qualification-fleet"
+
+
+def fleet_policy(envelope, public, campaign, permit):
+    roster = release_policy.checked(envelope, FLEET_KIND, public)
+    require_fields(roster, ("schema_version", "environment", "campaign_id", "permits"))
+    require_fields(roster["permits"], ("previous", "current", "independent"))
+    members = {storage.object_id(value) for value in roster["permits"].values()}
+    if (
+        type(roster["schema_version"]) is not int
+        or roster["schema_version"] != 1
+        or roster["environment"] != "local-cpu"
+        or roster["campaign_id"] != campaign
+        or len(members) != 3
+        or permit not in members
+    ):
+        raise Rejected("qualification_fleet_binding")
+    return digest(canonical(roster))
 
 
 @dataclass(frozen=True)
@@ -57,6 +75,7 @@ class CandidateReader:
         expected_campaign,
         trust_lease,
         trust_root_public=None,
+        fleet_envelope=None,
     ):
         self.client = client
         self.context = copy.deepcopy(context)
@@ -88,6 +107,11 @@ class CandidateReader:
         ):
             raise Rejected("qualification_trust_binding")
         self.trust = trust_lease
+        self.lease_policy = (
+            self.policy
+            if fleet_envelope is None
+            else fleet_policy(fleet_envelope, self.public, self.campaign, self.policy)
+        )
         self.current = None
         self.lock = threading.RLock()
 
@@ -189,7 +213,7 @@ class CandidateReader:
             if self.clock() >= loaded.expires_at:
                 raise Rejected("qualification_expired")
             self.trust.check(
-                policy_sha256=self.policy, artifacts=tuple(artifacts), keys=tuple(keys)
+                policy_sha256=self.lease_policy, artifacts=tuple(artifacts), keys=tuple(keys)
             )
             self.current = loaded
             return loaded
@@ -210,7 +234,7 @@ class CandidateReader:
                 if self.clock() >= loaded.expires_at:
                     raise Rejected("qualification_expired")
                 return self.trust.check(
-                    policy_sha256=self.policy,
+                    policy_sha256=self.lease_policy,
                     artifacts=tuple(loaded.artifacts),
                     keys=tuple(loaded.keys),
                 )

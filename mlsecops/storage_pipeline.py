@@ -31,7 +31,17 @@ from mlsecops.sandbox import run_worker
 from mlsecops.signing import sign, verify
 
 
-def train(client, reference, policy, image, trust, executor=run_worker, provenance=None):
+def train(
+    client,
+    reference,
+    policy,
+    image,
+    trust,
+    executor=run_worker,
+    provenance=None,
+    *,
+    previous_half_sample=False,
+):
     splits, manifest, statement = storage_dataset.read_dataset(
         client,
         reference,
@@ -40,6 +50,8 @@ def train(client, reference, policy, image, trust, executor=run_worker, provenan
         trust["source_approval_digest"],
         ("train", "validation"),
     )
+    if previous_half_sample:
+        splits = {**splits, "train": splits["train"][::2]}
     metadata, model, scores = train_verified_dataset(
         statement["dataset_id"],
         statement["lineage_id"],
@@ -50,6 +62,13 @@ def train(client, reference, policy, image, trust, executor=run_worker, provenan
         executor,
         provenance,
     )
+    if previous_half_sample:
+        metadata["execution"]["training_view"] = {
+            "method": "even-index-train-rows",
+            "parent_sha256": manifest["objects"]["train.json"]["sha256"],
+            "rows": len(splits["train"]),
+            "sha256": digest(canonical(splits["train"])),
+        }
     record = {
         "schema_version": 1,
         "dataset_reference": reference,

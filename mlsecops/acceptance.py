@@ -446,6 +446,10 @@ def report(gate, profile, root, state=None):
                 artifact_hashes=evidence["artifact_hashes"],
             )
             result["input_digests"].update(evidence["input_digests"])
+            if gate == "M19" and evidence["status"] == "pass":
+                from mlsecops.inventory_fleet import SCOPE as fleet_scope
+
+                result["scope"] = fleet_scope
         except (
             Rejected,
             OSError,

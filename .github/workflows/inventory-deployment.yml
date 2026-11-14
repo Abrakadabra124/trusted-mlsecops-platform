@@ -8,7 +8,7 @@ permissions:
 jobs:
   inventory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -21,27 +21,37 @@ jobs:
       - name: Verify controlled contracts and prepare the hosted worker
         run: |
           uv sync --locked --no-build --python 3.12.15
-          uv run --locked python -B -W error -m unittest scripts.inventory_gate_qualification scripts.asset_graph_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification
+          uv run --locked python -B -W error -m unittest scripts.inventory_delivery_qualification scripts.inventory_gate_qualification scripts.inventory_fleet_qualification scripts.inventory_fleet_evidence_qualification scripts.inventory_materials_qualification scripts.asset_graph_qualification scripts.candidate_serving_reader_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification scripts.release_native_qualification
           uv run --locked python -B -m mlsecops bootstrap
           uv run --locked python -B -m mlsecops build
       - name: Start owned source storage
         id: sql
         run: uv run --locked python -B -m mlsecops.storage_bootstrap
-      - name: Train, evaluate and pin the original release proposal and public keys
+      - name: Freeze the existing delivery candidate and source ownership
         run: |
           uv run --locked python -B -m mlsecops.storage_pipeline
           uv run --locked python -B -m scripts.release_native --state .runtime
           uv run --locked python - <<'PY'
           import os
           from pathlib import Path
-          from mlsecops.contracts import bounded_read, digest
+          from mlsecops.contracts import bounded_read, canonical, digest, read_json
           from mlsecops.inventory_gate import OWNER_FILES
+          from mlsecops.storage_bootstrap import validate
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as out:
               for variable, relative in OWNER_FILES.items():
-                  print(variable + "=" + digest(bounded_read(Path(".runtime") / relative)), file=out)
+                  raw = bounded_read(Path(".runtime") / relative)
+                  pin = digest(canonical(read_json(Path(".runtime") / relative))) if variable == "M19_KEYS_SHA256" else digest(raw)
+                  print(variable + "=" + pin, file=out)
+              print("M19_TRUST_SHA256=" + digest(bounded_read(Path(".runtime/storage-trust.json"))), file=out)
+              print("M19_WORKSPACE_ID=" + validate(Path(".runtime"))["workspace_id"], file=out)
           PY
+      - name: Prepare previous and independent scenarios for the pinned original
+        id: materials
+        run: uv run --locked python -B -W error -m scripts.inventory_fleet_materials --existing
       - name: Capture actual candidate and exercise controlled promotion and rollback
         id: capture
+        env:
+          M19_FLEET_INPUTS_SHA256: ${{ steps.materials.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.inventory_deployment_native
       - name: Stop the owned source and verify its state
         if: always()
@@ -52,26 +62,30 @@ jobs:
           if test -f .runtime/storage.json; then
             uv run --locked python -c 'from pathlib import Path; from scripts.r1_walkthrough import stop_owned; stop_owned(Path(".runtime"))'
           fi
-      - name: Replay M19 after cleanup and verify the measured component inventory
+      - name: Replay M19 after cleanup and verify the full observed inventory
         env:
           M19_PRIMARY_SHA256: ${{ steps.capture.outputs.sha256 }}
+          M19_FLEET_INPUTS_SHA256: ${{ steps.materials.outputs.sha256 }}
         run: |
-          rc=0
-          uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json || rc=$?
-          test "$rc" -eq 2
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json
           uv run --locked python - <<'PY'
           import os
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
-          from mlsecops.inventory_gate import SCOPE
+          from mlsecops.inventory_fleet import SCOPE
           raw = bounded_read(Path(".runtime/evidence/M19.json"))
           report = decode(raw)
-          if not (report["status"] == "inconclusive" and report["scope"] == SCOPE
-                  and report["gate"] == "M19" and report["exit_code"] == 2 and report["release_ready"] is False
+          if not (report["status"] == "pass" and report["scope"] == SCOPE
+                  and report["gate"] == "M19" and report["exit_code"] == 0 and report["release_ready"] is False
                   and report["source_revision"] == os.environ["GITHUB_SHA"] and report["source_dirty"] is False
                   and report["artifact_hashes"]["primary"] == os.environ["M19_PRIMARY_SHA256"]
-                  and report["metrics"]["checks"] == len(report["cases"]) == 9
+                  and report["artifact_hashes"]["fleet_inputs"] == os.environ["M19_FLEET_INPUTS_SHA256"]
+                  and report["artifact_hashes"]["proposal_packet"] == os.environ["M19_PROPOSAL_SHA256"]
+                  and report["artifact_hashes"]["source_trust"] == os.environ["M19_TRUST_SHA256"]
+                  and len(report["metrics"]["deployment_snapshot"]["deployments"]) == 4
+                  and len(report["metrics"]["expected"]) == len(report["metrics"]["actual"]) == 10
+                  and report["metrics"]["checks"] == len(report["cases"]) == 14
                   and all(c["status"] == "pass" for c in report["cases"])):
-              raise SystemExit("M19 component replay incomplete")
+              raise SystemExit("M19 observed deployment replay incomplete")
           print(canonical({**report, "report_sha256": digest(raw)}).decode())
           PY
