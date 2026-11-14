@@ -24,7 +24,7 @@ from mlsecops.contracts import (
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import image_document
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
-from scripts import image_candidates, image_scope, tracking_spike
+from scripts import image_candidates, image_kubernetes_inventory, image_scope, tracking_spike
 from scripts.image_archive import identity
 from scripts.image_audit_contract import (
     GO_CONTROL_ADVISORIES,
@@ -484,6 +484,11 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                     }
                 )
                 component["package_observation"] = observe_packages(sbom, config_id)
+                version_diagnostic = image_kubernetes_inventory.diagnose(
+                    component["package_observation"]
+                )
+                if version_diagnostic is not None:
+                    component["application_inventory"] = version_diagnostic
                 if observed is not None and coredns_inventory_matches(
                     component["package_observation"]
                 ):
@@ -658,7 +663,9 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 report_digest=file_hash(scan_path),
             )
             if component["coverage_profile"] == "unapproved-system":
-                component["reason"] = "image_audit_runtime_application_coverage_unapproved"
+                component["reason"] = component.get("application_inventory", {}).get(
+                    "reason", "image_audit_runtime_application_coverage_unapproved"
+                )
                 if component["status"] == "pass":
                     component["status"] = "inconclusive"
         except Rejected as error:
