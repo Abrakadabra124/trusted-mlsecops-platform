@@ -2,6 +2,9 @@
 
 ## Замороженный proposal для M14 и M15
 
+Совместный hosted job прошёл оба gate на `e59a06c`.
+[Измерения, cleanup и хеши отчётов](../evidence/m14-m15-frozen-proposal-2026-11-14.md)
+
 Самостоятельные workflows `kubernetes-load.yml` и `kubernetes-monitoring.yml` сохраняют обычные входы.
 В [load workflow](../../.github/workflows/kubernetes-load.yml) параметр `mode` принимает
 `frozen-m14`, `frozen-m15` или `frozen-pair`. В последнем режиме один runner готовит
