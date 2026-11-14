@@ -30,10 +30,12 @@ from scripts.image_audit_contract import (
     GO_CONTROL_ADVISORIES,
     GO_CONTROLS,
     assess,
+    coredns_inventory_matches,
     database,
     detection_control,
     go_detection_control,
     inventory,
+    local_path_inventory_matches,
     observe_packages,
     wolfi_detection_control,
 )
@@ -338,6 +340,12 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     sboms = {}
     required = {
         ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
+        ("debian", "coredns"): {"github.com/coredns/coredns", "stdlib", "base-files"},
+        ("debian", "local-path-provisioner"): {
+            "github.com/rancher/local-path-provisioner",
+            "stdlib",
+            "base-files",
+        },
         ("debian", "storage"): {"libc6", "postgresql-18"},
         ("debian", "tracking"): {"libc6", "mlflow", "mlflow-skinny", "psycopg", "uvicorn"},
         ("wolfi", "worker"): {
@@ -476,6 +484,14 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                     }
                 )
                 component["package_observation"] = observe_packages(sbom, config_id)
+                if observed is not None and coredns_inventory_matches(
+                    component["package_observation"]
+                ):
+                    component["coverage_profile"] = "coredns"
+                elif observed is not None and local_path_inventory_matches(
+                    component["package_observation"]
+                ):
+                    component["coverage_profile"] = "local-path-provisioner"
                 declared = sbom.get("distro")
                 distro = declared.get("id") if isinstance(declared, dict) else None
                 component["distro"] = distro

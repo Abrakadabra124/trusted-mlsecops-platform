@@ -384,6 +384,7 @@ class RuntimeImageScopeContracts(unittest.TestCase):
             lambda rows: rows[0].update(sbom_validated=False),
             lambda rows: rows[0].update(status="inconclusive"),
             lambda rows: rows[0].update(coverage_profile="unapproved-system"),
+            lambda rows: rows[0].update(coverage_profile="coredns"),
             lambda rows: rows[plain].update(runtime_image_id=sha("f")),
             lambda rows: rows[0].update(catalogued_packages=0),
             lambda rows: rows[bound].update(image_config_id=sha("f")),
@@ -394,6 +395,32 @@ class RuntimeImageScopeContracts(unittest.TestCase):
                 self.assertEqual(image_scope.coverage(snapshot, changed)["status"], "inconclusive")
         components[0]["status"] = "fail"
         self.assertEqual(image_scope.coverage(snapshot, components)["status"], "pass")
+
+    def test_local_path_coverage_requires_the_observed_config_and_exact_inventory(self):
+        from scripts.image_package_observation_qualification import local_path_observation
+
+        observation = local_path_observation()
+        config = observation["image_id"]
+        snapshot = {"targets": [{"name": "runtime-012", "config_id": config}]}
+        component = {
+            "name": "runtime-012",
+            "image_config_id": config,
+            "scan_executed": True,
+            "sbom_validated": True,
+            "coverage_profile": "local-path-provisioner",
+            "package_observation": observation,
+            "catalogued_packages": 61,
+            "status": "fail",
+        }
+        self.assertEqual(image_scope.coverage(snapshot, [component])["covered_images"], 1)
+        self.assertEqual(
+            image_scope.coverage(snapshot, [{**component, "package_observation": {}}])[
+                "covered_images"
+            ],
+            0,
+        )
+        snapshot["targets"][0]["config_id"] = sha("0")
+        self.assertEqual(image_scope.coverage(snapshot, [component])["covered_images"], 0)
 
 
 if __name__ == "__main__":
