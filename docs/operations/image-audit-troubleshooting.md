@@ -1,5 +1,36 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Ноябрьский отказ после неполного переноса исправлений
+
+В [43560835791](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43560835791)
+обновлённый PostgreSQL проходил audit, а worker и candidate Dockerfile сохраняли
+уязвимые пакеты. Перенос одного storage digest не обновляет остальные образы.
+В исправлении `b4fa42e` перенесён ранее проверенный состав APK: glibc 2.44-r17,
+libexpat1 2.10.0-r0, py3-pip-wheel 26.2.2-r2 и worker Python 3.12.16-r3.
+Host Python остаётся 3.12.15; совместимость этого сочетания проверяется отдельно.
+
+[Свежий audit 43622143656](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43622143656/job/132529968042)
+подтвердил по 0 Critical, High и Unknown для worker, storage, tracking и двух
+candidate images. Scanner, SBOM и привязка пакетов к образам проверены во всех
+пяти случаях; detection controls прошли. Worker и worker-candidate сохраняют
+2 Medium/1 Low, tracking 1 Medium/1 Low. Канонический hash отчёта:
+`a3a2b10364fcad3513958c3533696b0c7c6dc742b6fc1cccdbd03d3554d35154`.
+Порог High, обработка Unknown и запрет исключений не изменены.
+
+Весь workflow завершился `failure`: совместимость worker остановилась на
+`qualification_failed:acceptance-dispatch-M02`, signed storage restore был
+пропущен. Сам этот журнал не устанавливает более глубокую причину M02.
+Исправленные рецепты соединены с явным обновлением source lock в основной
+рабочей ветке. До свежего успешного compatibility/restore/scan на общей ревизии
+не считать перенос полностью принятым. Полный runtime inventory включает
+14 образов; этот отчёт покрывает только пять и не закрывает B02/M18.
+
+Порядок проверки: сверить все три Dockerfile и tracking recipe с закреплённым
+составом пакетов, запустить `python -m scripts.image_candidates_qualification`,
+затем workflow `image-audit.yml` на чистой опубликованной ревизии. Проверить
+отдельно compatibility, signed restore и audit, source revision и digest каждого
+образа. Успешный scanner при пропущенном restore не разрешает adoption.
+
 Ответственные: platform operator и security reviewer. Процедура относится к scanner evidence лаборатории, не к production-инциденту. Рабочие SQL volumes, runtime tags и foundation не меняются.
 
 ## CP2: Brotli в закреплённых Wolfi images
