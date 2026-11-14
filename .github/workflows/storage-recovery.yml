@@ -21,6 +21,7 @@ on:
       - 'scripts/kube_candidate_native.py'
       - 'scripts/m12_pinned*.py'
       - 'scripts/shared_serving*.py'
+      - 'scripts/m23_delivery*.py'
       - 'mlsecops/trust_acceptance.py'
       - 'mlsecops/trust_delivery.py'
       - 'mlsecops/data_qualification.py'
@@ -84,6 +85,20 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.security_gate_qualification scripts.security_gate_sources_qualification scripts.security_gate_candidate_qualification scripts.security_gate_dispatch_qualification scripts.shared_serving_qualification scripts.serving_campaign_qualification
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/m23-delivery.coverage" --source=scripts.m23_delivery -m unittest scripts.m23_delivery_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/m23-delivery.coverage" -o "$RUNNER_TEMP/m23-delivery-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "m23-delivery-coverage.json").read_bytes())["files"]
+          assert set(files) == {"scripts/m23_delivery.py"}
+          summary = files["scripts/m23_delivery.py"]["summary"]
+          for covered, total in (("covered_lines", "num_statements"), ("covered_branches", "num_branches")):
+              if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
+                  raise SystemExit("M23 delivery coverage below policy")
+          print(summary)
+          PY
           uv run --locked python -B -W error -m unittest scripts.promotion_gate_qualification scripts.final_evidence_qualification.FinalEvidenceContracts.test_final_index_requires_signed_promotion_denials_even_after_report_and_index_are_resealed
           uv run --locked python -B -W error -m unittest scripts.controller_intake_qualification scripts.intake_gate_qualification scripts.controller_delivery_qualification scripts.m12_pinned_qualification scripts.kube_candidate_campaign_qualification scripts.inference_gate_qualification
           uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_live_freeze_and_offline_replay_share_original_signed_bytes scripts.final_evidence_qualification.FinalEvidenceContracts.test_foundation_and_intake_replay_uses_pre_run_outcomes_and_pinned_primaries scripts.final_evidence_qualification.FinalEvidenceContracts.test_inventory_delivery_requires_canonical_keys_and_the_original_file_registry
@@ -196,6 +211,7 @@ jobs:
               print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
               print("keys_file=" + digest(bounded_read(state / "trusted-keys.json")), file=out)
               print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
+              print("sql=" + digest(bounded_read(state / "storage.json")), file=out)
           PY
       - name: Retain signed proposal and evaluation for offline M18 verification
         id: m18_freeze
@@ -244,6 +260,59 @@ jobs:
           M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
         run: uv run --locked python -B -W error -m scripts.controller_serving_handoff
+      # Source SQL must remain online: outage prepare reads the original signed proposal.
+      - name: Capture existing defensive source events for the original joint candidate
+        if: env.DELIVERY_SERVING_GATE == 'M11-M12'
+        id: m23_sources
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
+          M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
+        run: uv run --locked python -B -W error -m scripts.m23_delivery capture sources
+      - name: Capture existing inventory audit decisions on the same candidate
+        if: env.DELIVERY_SERVING_GATE == 'M11-M12'
+        id: m23_inventory
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
+          M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_SOURCES_DELIVERY_SHA256: ${{ steps.m23_sources.outputs.delivery }}
+        run: uv run --locked python -B -W error -m scripts.m23_delivery capture inventory
+      - name: Capture defensive audit outage and recovery before source SQL shutdown
+        if: env.DELIVERY_SERVING_GATE == 'M11-M12'
+        id: m23_outage
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
+          M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_SOURCES_DELIVERY_SHA256: ${{ steps.m23_sources.outputs.delivery }}
+          M23_INVENTORY_SHA256: ${{ steps.m23_inventory.outputs.sha256 }}
+          M23_INVENTORY_DELIVERY_SHA256: ${{ steps.m23_inventory.outputs.delivery }}
+        run: uv run --locked python -B -W error -m scripts.m23_delivery capture outage
+      - name: Retire M23 mutable authorities and prepare a fresh joint serving cluster
+        if: env.DELIVERY_SERVING_GATE == 'M11-M12'
+        id: m23_transition
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
+          M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_SOURCES_DELIVERY_SHA256: ${{ steps.m23_sources.outputs.delivery }}
+          M23_INVENTORY_SHA256: ${{ steps.m23_inventory.outputs.sha256 }}
+          M23_INVENTORY_DELIVERY_SHA256: ${{ steps.m23_inventory.outputs.delivery }}
+          M23_OUTAGE_SHA256: ${{ steps.m23_outage.outputs.sha256 }}
+          M23_OUTAGE_DELIVERY_SHA256: ${{ steps.m23_outage.outputs.delivery }}
+        run: uv run --locked python -B -W error -m scripts.m23_delivery transition
       - name: Prepare inventory branches around the fresh original proposal
         id: inventory_inputs
         env:
@@ -329,6 +398,10 @@ jobs:
             uv run --locked python -c 'from pathlib import Path; from mlsecops.contracts import canonical, read_json; print(canonical(read_json(Path(".runtime/evidence/M12.json")).get("diagnostics", {})).decode())'
             exit 1
           fi
+      - name: Pin the stopped source before any late joint serving work
+        if: always() && env.DELIVERY_SERVING_GATE == 'M11-M12' && steps.stop_sql.outcome == 'success'
+        id: m23_offline
+        run: uv run --locked python -B -W error -m scripts.m23_delivery offline
       - name: Finish shared controlled rotations after source storage shutdown
         if: ${{ !cancelled() && steps.joint_actual.outcome == 'success' && steps.stop_sql.outcome == 'success' }}
         id: joint_controlled
@@ -424,6 +497,24 @@ jobs:
           M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
           M06_REPORT_SHA256: ${{ steps.repeated.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m06
+      - name: Replay the original M23 defensive evidence after SQL and cluster cleanup
+        if: env.DELIVERY_SERVING_GATE == 'M11-M12'
+        id: m23_gate
+        env:
+          SOURCE_OFFLINE_SHA256: ${{ steps.m23_offline.outputs.sha256 }}
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
+          M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_SOURCES_DELIVERY_SHA256: ${{ steps.m23_sources.outputs.delivery }}
+          M23_INVENTORY_SHA256: ${{ steps.m23_inventory.outputs.sha256 }}
+          M23_INVENTORY_DELIVERY_SHA256: ${{ steps.m23_inventory.outputs.delivery }}
+          M23_OUTAGE_SHA256: ${{ steps.m23_outage.outputs.sha256 }}
+          M23_OUTAGE_DELIVERY_SHA256: ${{ steps.m23_outage.outputs.delivery }}
+          M23_TRANSITION_SHA256: ${{ steps.m23_transition.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.m23_delivery gate
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery
         env:
@@ -432,6 +523,20 @@ jobs:
           M21_GATE_SHA256: ${{ steps.full_intake.outputs.gate }}
           M12_EARLY_SHA256: ${{ steps.actual_m12.outputs.sha256 }}
           M11_M12_RECEIPT_SHA256: ${{ steps.joint_receipt.outputs.sha256 }}
+          SOURCE_OFFLINE_SHA256: ${{ steps.m23_offline.outputs.sha256 }}
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
+          M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_SOURCES_DELIVERY_SHA256: ${{ steps.m23_sources.outputs.delivery }}
+          M23_INVENTORY_SHA256: ${{ steps.m23_inventory.outputs.sha256 }}
+          M23_INVENTORY_DELIVERY_SHA256: ${{ steps.m23_inventory.outputs.delivery }}
+          M23_OUTAGE_SHA256: ${{ steps.m23_outage.outputs.sha256 }}
+          M23_OUTAGE_DELIVERY_SHA256: ${{ steps.m23_outage.outputs.delivery }}
+          M23_TRANSITION_SHA256: ${{ steps.m23_transition.outputs.sha256 }}
+          M23_REPORT_SHA256: ${{ steps.m23_gate.outputs.sha256 }}
           T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
           T19_ROLLBACK_SHA256: ${{ steps.rollback.outputs.sha256 }}
@@ -452,13 +557,13 @@ jobs:
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json
           set -o pipefail
-          uv run --locked python -B -W error -m scripts.controller_delivery --with-intake "$DELIVERY_SERVING_GATE" | tee .runtime/evidence/delivery-candidate.json
+          uv run --locked python -B -W error -m scripts.m23_delivery receipt | tee .runtime/evidence/delivery-candidate.json
           echo "receipt=$(sha256sum .runtime/evidence/delivery-candidate.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           uv run --locked python - <<'PY'
           from pathlib import Path
           import os
           from mlsecops.contracts import bounded_read, canonical, decode, digest
-          from scripts.controller_delivery import intake_gates
+          from scripts.m23_delivery import gates as intake_gates
           evidence = Path(".runtime/evidence")
           for gate in intake_gates(os.environ["DELIVERY_SERVING_GATE"]):
               raw = bounded_read(evidence / (gate + ".json"))
@@ -477,7 +582,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import canonical, read_json
           from mlsecops.final_evidence import CHILDREN
-          from scripts.controller_delivery import intake_gates
+          from scripts.m23_delivery import gates as intake_gates
           gates = intake_gates(os.environ["DELIVERY_SERVING_GATE"])
           report = read_json(Path(".runtime/evidence/M18-gap.json"))
           observed = report["diagnostics"]
