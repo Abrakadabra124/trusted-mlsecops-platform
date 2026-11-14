@@ -44,7 +44,7 @@ BINDINGS = {
     "M02": "source data_lock",
     "M03": "source data_lock dataset_reference candidate_reference evaluation_reference worker_image",
     "M04": "worker_image dataset_reference candidate_reference evaluation_reference model_digest",
-    "M05": "worker_image",
+    "M05": "worker_image candidate_reference evaluation_reference model_sha256 subject_sha256 proposal_reference",
     "M06": "request policy source environment golden worker_image candidate_reference evaluation_reference dataset_reference model_digest candidate_training_input frozen_demo",
     "M07": "candidate_reference evaluation_reference dataset_reference dataset_source model holdout training_request evaluation_policy worker_image data_lock",
     "M08": "source image train validation data_lock candidate_reference evaluation_reference model_digest candidate_training_input",

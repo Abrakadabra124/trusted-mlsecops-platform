@@ -49,6 +49,16 @@ class ReplayCli(unittest.TestCase):
             ),
             ("replay-m06", {"M06_REPORT_SHA256": repeat}, {"reproducibility_pin": repeat}),
             ("replay-m04", {"M04_REPORT_SHA256": digest(b"M04")}, {"access_pin": digest(b"M04")}),
+            (
+                "replay-m05",
+                {"M05_REPORT_SHA256": digest(b"M05")},
+                {"training_pin": digest(b"M05"), "retain_training_files": False},
+            ),
+            (
+                "retain-m05",
+                {"M05_REPORT_SHA256": digest(b"M05")},
+                {"training_pin": digest(b"M05"), "retain_training_files": True},
+            ),
         ):
             with (
                 self.subTest(command=command, env=env),
@@ -65,6 +75,8 @@ class ReplayCli(unittest.TestCase):
             ("replay", {**inputs, "M10_OUTCOME": "success"}, "M10_REPORT_SHA256"),
             ("replay-m06", {}, "M06_REPORT_SHA256"),
             ("replay-m04", {}, "M04_REPORT_SHA256"),
+            ("replay-m05", {}, "M05_REPORT_SHA256"),
+            ("retain-m05", {}, "M05_REPORT_SHA256"),
         ):
             with (
                 self.subTest(missing=field),

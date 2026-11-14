@@ -790,6 +790,54 @@ class FinalEvidenceContracts(unittest.TestCase):
         with self.assertRaisesRegex(final.Missing, "material-missing"):
             driver.verify_access(self.state, self.values, pin)
 
+    def test_teardown_replay_retains_original_m05_files_and_denies_substitution(self):
+        from scripts import m18_delivery_freeze as driver
+
+        self.build()
+        report = self.reports["M05"]
+        refs = report["artifact_hashes"]
+        refs["serving_qualification"] = self.put({"scope": "controlled-serving-fixture"})
+        self.seal()
+        for key, filename in driver.TRAINING_FILES.items():
+            raw = final.blob(self.state, refs[key])
+            if key != "isolation_qualification":
+                raw = canonical(decode(raw)) + b"\n"
+            (self.state / "evidence" / filename).write_bytes(raw)
+        pin = self.index["reports"]["M05"]
+        for ref in set(refs.values()):
+            (self.state / "evidence/M18-objects" / ref).unlink()
+        driver.retain_training(self.state, self.values, pin)
+        driver.verify_training(self.state, self.values, pin)
+        for ref in refs.values():
+            self.assertEqual(digest(final.blob(self.state, ref)), ref)
+        path = self.state / "evidence/training-serving.json"
+        raw = path.read_bytes()
+        path.write_bytes(raw + b"\n")
+        with self.assertRaisesRegex(Rejected, "training-file-format"):
+            driver.retain_training(self.state, self.values, pin)
+        write_json(path, {"scope": "different-serving"})
+        with self.assertRaisesRegex(Rejected, "training-component-digest"):
+            driver.retain_training(self.state, self.values, pin)
+        path.write_bytes(raw)
+        driver.verify_training(self.state, self.values, pin)
+        for field in ("candidate_reference", "evaluation_reference", "proposal_reference"):
+            saved = report["input_digests"][field]
+            report["input_digests"][field] = "0" * 64
+            self.seal()
+            with self.subTest(field=field), self.assertRaises(Rejected):
+                driver.verify_training(self.state, self.values, self.index["reports"]["M05"])
+            report["input_digests"][field] = saved
+        self.seal()
+        path.unlink()
+        with self.assertRaisesRegex(final.Missing, "training-material-missing"):
+            driver.retain_training(self.state, self.values, self.index["reports"]["M05"])
+
+        driver.verify_training(self.state, self.values, self.index["reports"]["M05"])
+        retained = self.state / "evidence/M18-objects" / refs["serving_qualification"]
+        retained.write_bytes(b"changed")
+        with self.assertRaisesRegex(Rejected, "digest-mismatch"):
+            driver.verify_training(self.state, self.values, self.index["reports"]["M05"])
+
     def test_full_gate_rejects_summary_only_m06(self):
         self.build()
         report = acceptance.report("M18", "local-cpu", self.root, self.state)

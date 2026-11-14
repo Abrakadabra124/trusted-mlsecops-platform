@@ -215,5 +215,6 @@ def qualify(root, state, image):
             "Concurrent samples prove availability/correctness, not absence of all latency effects",
         ],
     }
+    write_json(safe_child(state, "evidence/training-serving.json"), serving)
     write_json(safe_child(state, "evidence/training-isolation.json"), result)
     return result

@@ -29,6 +29,12 @@ ACCESS_FILES = {
     "authority": "authority-qualification.json",
     "isolation_qualification": "access-qualification.json",
 }
+TRAINING_FILES = {
+    "isolation_qualification": "training-isolation.json",
+    "serving_qualification": "training-serving.json",
+    "access": "access-qualification.json",
+    "isolation": "M20-isolation.json",
+}
 
 
 def capture(root, state, freeze, revision):
@@ -81,6 +87,8 @@ def replay(
     promotion_pin=None,
     reproducibility_pin=None,
     access_pin=None,
+    training_pin=None,
+    retain_training_files=False,
 ):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
@@ -123,7 +131,52 @@ def replay(
     if access_pin is not None:
         verify_access(state, values, access_pin)
         summary.setdefault("verified_source_reports", {})["M04"] = access_pin
+    if training_pin is not None:
+        if retain_training_files:
+            retain_training(state, values, training_pin)
+        else:
+            verify_training(state, values, training_pin)
+        summary.setdefault("verified_source_reports", {})["M05"] = training_pin
     return summary
+
+
+def retain_training(state, values, pin):
+    report = final_evidence.published_report(state, "M05", pin)
+    refs = report["artifact_hashes"]
+    final_evidence.same(sorted(refs), sorted(TRAINING_FILES), "training-artifacts")
+    materials = {}
+    for name, filename in TRAINING_FILES.items():
+        path = safe_child(state, "evidence/" + filename)
+        if not path.exists():
+            raise final_evidence.Missing("training-material-missing")
+        raw = bounded_read(path)
+        if name == "isolation_qualification":
+            final_evidence.pinned(path, refs[name])
+        else:
+            content = canonical(decode(raw))
+            final_evidence.need(raw == content + b"\n", "training-file-format")
+            final_evidence.same(digest(content), refs[name], "training-component-digest")
+            raw = content
+        materials[refs[name]] = raw
+    check_training(report, values, materials.__getitem__)
+    for raw in materials.values():
+        final_evidence.retain(state, raw)
+
+
+def verify_training(state, values, pin):
+    report = final_evidence.published_report(state, "M05", pin)
+    check_training(report, values, lambda ref: final_evidence.blob(state, ref))
+
+
+def check_training(report, values, obj):
+    refs = report["artifact_hashes"]
+    final_evidence.same(sorted(refs), sorted(TRAINING_FILES), "training-artifacts")
+    for reference in refs.values():
+        obj(reference)
+    qualified = decode(obj(refs["isolation_qualification"]))
+    inventory = digest(canonical(sorted(c["id"] for c in qualified["cases"])))
+    final_evidence.check_gate("M05", report, values, final_evidence.timestamp(now()), inventory)
+    final_evidence.primary("M05", report, obj, values)
 
 
 def verify_access(state, values, pin):
@@ -311,6 +364,15 @@ def main():
     elif sys.argv[1:] == ["replay-m04"]:
         result = replay(
             root, state, os.environ["M18_FREEZE_SHA256"], access_pin=os.environ["M04_REPORT_SHA256"]
+        )
+        print(canonical(result).decode())
+    elif sys.argv[1:] in (["retain-m05"], ["replay-m05"]):
+        result = replay(
+            root,
+            state,
+            os.environ["M18_FREEZE_SHA256"],
+            training_pin=os.environ["M05_REPORT_SHA256"],
+            retain_training_files=sys.argv[1] == "retain-m05",
         )
         print(canonical(result).decode())
     elif sys.argv[1:] == ["replay-m06"]:

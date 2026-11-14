@@ -269,6 +269,7 @@ jobs:
           TRUST: ${{ steps.source.outputs.trust }}
         run: uv run --locked python -B -W error -m scripts.serving_retention retain
       - name: Run M05 with the original frozen proposal and verify all five gates
+        id: isolated
         env:
           M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
           M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
@@ -277,6 +278,12 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M05 --output .runtime/evidence/M05.json
           uv run --locked python -B -W error -m scripts.controller_delivery
+          echo "sha256=$(sha256sum .runtime/evidence/M05.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Retain the original M05 observation before replacing its cluster
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M05_REPORT_SHA256: ${{ steps.isolated.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze retain-m05
       - name: Reconcile frozen M06 and scoped reports before the serving campaign
         env:
           M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
@@ -608,6 +615,12 @@ jobs:
           M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
           M04_REPORT_SHA256: ${{ steps.evaluated.outputs.access }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m04
+      - name: Replay the retained M05 observation after teardown
+        if: always() && steps.isolated.outcome == 'success' && steps.m18_freeze.outcome == 'success' && steps.stop_sql.outcome == 'success' && steps.stop_cluster.outcome == 'success'
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M05_REPORT_SHA256: ${{ steps.isolated.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m05
       - name: Verify the original M11 and M12 reports after both cleanups
         if: ${{ !cancelled() && steps.joint_gates.outcome == 'success' && steps.stop_cluster.outcome == 'success' }}
         id: joint_receipt

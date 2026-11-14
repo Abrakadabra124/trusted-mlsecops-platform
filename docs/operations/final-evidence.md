@@ -188,7 +188,7 @@ evidence, даже если сам hash выглядит корректно.
 | M02 | Source digest и data.lock, совпадающие с подписанной lineage candidate |
 | M03 | Source/data.lock, dataset/candidate/evaluation, worker, storage configuration |
 | M04, M20 | M04 сверяет кандидата, оценку и модель с исходным контроллером, перечитывает матрицу доступа и проверяет общие с M20 материалы, namespace и том |
-| M05 | Candidate/model и serving-under-fault bundle subject, ссылки на M04/M20 |
+| M05 | Candidate/evaluation/model/proposal и serving-under-fault subject, исходный результат inference под сбоями и ссылки на M04/M20 |
 | M06 | Frozen candidate replay, signed evaluator protocol, одинаковые split bytes и request, три отдельных training runs, численные tolerances |
 | M07 | Candidate/evaluation, dataset, source, model, holdout, training request и evaluation policy |
 | M08, M09 | Candidate/evaluation и actual model, training input, source/image и действующие statistical schemas |
@@ -308,3 +308,34 @@ python scripts/check_docs.py
 Положительные unit fixtures проверяют криптографический reader, native schema
 adapters и диагностические отказы. Полный hosted M18, production assurance,
 явный promotion approval и pilot governance остаются отдельными результатами.
+
+## Сохранение M05 до удаления среды
+
+Шаг `isolated` фиксирует hash успешного `M05.json`. Сразу после него
+`python -m scripts.m18_delivery_freeze retain-m05` сохраняет четыре исходных
+материала в локальный content-addressed каталог `evidence/M18-objects`:
+`training-isolation.json`, `training-serving.json`,
+`access-qualification.json` и `M20-isolation.json`.
+Второй файл содержит возвращённый штатным native runner результат inference
+во время fault-проверки, а не пересозданное описание после teardown.
+
+Primary M05 закреплён по точным байтам файла. Три вложенных component refs
+штатный producer вычисляет по canonical JSON без LF; collector проверяет
+содержимое и ожидаемый формат файла, затем сохраняет именно эти preimages.
+Внешние `M05_REPORT_SHA256` и `M18_FREEZE_SHA256` приходят от предыдущих шагов
+той же попытки. Отчёт дополнительно связывается с исходными candidate,
+evaluation, model, subject и proposal.
+
+После подтверждённой остановки SQL и удаления кластера команда
+`python -m scripts.m18_delivery_freeze replay-m05` читает сохранённые объекты.
+Исходные runtime-каталоги для этого больше не нужны. Replay не запускает модель,
+SQL или Kubernetes и не разрешает release. Отсутствующий объект или несовпадение
+digest останавливает проверку. Нельзя восстановить доказательство, нарисовав
+новый JSON или подставив результаты другой кампании.
+
+Регрессионный тест сначала воспроизвёл отсутствие отдельного сохранённого
+serving report. После исправления проверены сохранение всех четырёх preimages,
+отказ при изменении формата/содержимого, подмене candidate/evaluation/proposal,
+чтение после удаления исходного файла и отказ при повреждении сохранённого
+объекта. Общий локальный набор M18/M06/isolation/workflow прошёл 56 тестов.
+Это проверка сборщика; новый hosted replay M05 ещё требуется.

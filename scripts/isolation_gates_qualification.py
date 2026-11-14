@@ -210,6 +210,11 @@ class AccessGateContracts(unittest.TestCase):
         ):
             result = isolation_gates.qualify_training(state, state, "image")
             self.assertEqual(read_json(state / "evidence/training-isolation.json"), result)
+            retained = read_json(state / "evidence/training-serving.json")
+            self.assertEqual(retained, serving)
+            self.assertEqual(
+                digest(canonical(retained)), result["artifact_hashes"]["serving_qualification"]
+            )
             self.assertFalse(serving["release_ready"])
             release.assert_called_once()
             with (
