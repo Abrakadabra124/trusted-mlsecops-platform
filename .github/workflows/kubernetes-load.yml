@@ -7,7 +7,7 @@ on:
       mode:
         description: Select the standalone load gate or frozen proposal gates
         type: choice
-        options: [standalone, frozen-m14, frozen-m15, frozen-pair]
+        options: [standalone, frozen-m14, frozen-m15, frozen-pair, frozen-trio]
         default: standalone
 permissions:
   contents: read
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   load-baseline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: ${{ inputs.mode == 'frozen-trio' && 55 || 40 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -72,6 +72,9 @@ jobs:
           uv run --locked coverage report --data-file="$RUNNER_TEMP/performance.coverage" --fail-under=100
           uv run --locked coverage run --branch --source=mlsecops.monitoring_gate,scripts.monitoring_contracts --data-file="$RUNNER_TEMP/monitoring-gate.coverage" -m unittest scripts.monitoring_gate_qualification
           uv run --locked coverage report --data-file="$RUNNER_TEMP/monitoring-gate.coverage" --fail-under=100
+      - name: Shared source and cluster boundary regressions
+        if: inputs.mode == 'frozen-trio'
+        run: uv run --locked python -m unittest scripts.serving_campaign_qualification scripts.privacy_gate_qualification
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -90,7 +93,20 @@ jobs:
         run: |
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
-          uv run --locked python -m mlsecops.storage_pipeline > /dev/null
+      - name: Train the standalone performance candidate
+        if: inputs.mode != 'frozen-trio'
+        run: uv run --locked python -m mlsecops.storage_pipeline > /dev/null
+      - name: Qualify source and train once in the owned empty SQL
+        if: inputs.mode == 'frozen-trio'
+        id: train
+        run: |
+          echo "sql=$(sha256sum .runtime/storage.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
+          export M07_FRESH_WORKSPACE_ID="$(uv run --locked python -c 'from pathlib import Path; from mlsecops.storage_bootstrap import validate; print(validate(Path(".runtime"))["workspace_id"])')"
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+          for gate in M02 M03 M07; do
+            echo "$gate=$(sha256sum ".runtime/evidence/$gate.json" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          done
       - name: Freeze original proposal and exact owner inputs once
         if: startsWith(inputs.mode, 'frozen-')
         id: freeze
@@ -100,11 +116,30 @@ jobs:
             read -r key file <<< "$item"
             echo "$key=$(sha256sum ".runtime/$file" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           done
+      - name: Capture M13 on the frozen proposal
+        if: inputs.mode == 'frozen-trio'
+        id: m13
+        env:
+          M13_PROPOSAL_SHA256: ${{ steps.freeze.outputs.proposal }}
+          M13_DEMO_SHA256: ${{ steps.freeze.outputs.demo }}
+        run: |
+          uv run --locked python -m mlsecops.acceptance --gate M13 --state .runtime --output .runtime/evidence/M13.json
+          echo "report=$(sha256sum .runtime/evidence/M13.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          admission=$(sha256sum .runtime/evidence/privacy-gate-private.json | cut -d' ' -f1)
+          echo "::add-mask::$admission"
+          echo "admission=$admission" >> "$GITHUB_OUTPUT"
+      - name: Retire privacy cluster and verify fresh load cluster
+        if: inputs.mode == 'frozen-trio'
+        id: privacy_to_load
+        uses: ./.github/actions/serving-campaign-transition
+        with:
+          phase: M13
+          source_sql: ${{ steps.train.outputs.sql }}
       - name: Fresh M14 acceptance and independent resource observation
         if: ${{ !startsWith(inputs.mode, 'frozen-') }}
         run: uv run --locked python -m mlsecops.acceptance --gate M14 --profile local-cpu --state .runtime --output .runtime/evidence/M14.json
       - name: Capture M14 on the frozen proposal
-        if: inputs.mode == 'frozen-m14' || inputs.mode == 'frozen-pair'
+        if: inputs.mode == 'frozen-m14' || inputs.mode == 'frozen-pair' || inputs.mode == 'frozen-trio'
         id: m14
         env:
           M14_PROPOSAL_SHA256: ${{ steps.freeze.outputs.proposal }}
@@ -131,8 +166,15 @@ jobs:
           done
           uv run --locked python -m mlsecops.cluster bootstrap
           uv run --locked python -m mlsecops.kube_storage
+      - name: Retire load cluster and verify fresh monitoring cluster
+        if: inputs.mode == 'frozen-trio'
+        id: load_to_monitoring
+        uses: ./.github/actions/serving-campaign-transition
+        with:
+          phase: M14
+          source_sql: ${{ steps.train.outputs.sql }}
       - name: Capture M15 on the frozen proposal
-        if: inputs.mode == 'frozen-m15' || inputs.mode == 'frozen-pair'
+        if: inputs.mode == 'frozen-m15' || inputs.mode == 'frozen-pair' || inputs.mode == 'frozen-trio'
         id: m15
         env:
           M15_PROPOSAL_SHA256: ${{ steps.freeze.outputs.proposal }}
@@ -160,13 +202,19 @@ jobs:
           PY
       - name: Stop verified owned source SQL
         if: always()
+        env:
+          SOURCE_SQL: ${{ steps.train.outputs.sql }}
         run: |
           if test -f .runtime/storage.json; then
             uv run --locked python - <<'PY'
           from pathlib import Path
+          import os
           from mlsecops.contracts import Rejected
+          from mlsecops.performance_delivery import pinned
           from mlsecops.storage_bootstrap import docker, inspect, validate
           state = Path('.runtime')
+          if os.environ.get('SOURCE_SQL'):
+              pinned(state / 'storage.json', os.environ['SOURCE_SQL'])
           marker = validate(state)
           docker(['stop', '--time', '20', marker['container_id']])
           marker = validate(state)
@@ -207,6 +255,14 @@ jobs:
         if: startsWith(inputs.mode, 'frozen-')
         env:
           MODE: ${{ inputs.mode }}
+          M02_REPORT: ${{ steps.train.outputs.M02 }}
+          M03_REPORT: ${{ steps.train.outputs.M03 }}
+          M07_REPORT: ${{ steps.train.outputs.M07 }}
+          M13_REPORT: ${{ steps.m13.outputs.report }}
+          M13_ADMISSION: ${{ steps.m13.outputs.admission }}
+          SOURCE_SQL: ${{ steps.train.outputs.sql }}
+          PRIVACY_TO_LOAD: ${{ steps.privacy_to_load.outputs.transition }}
+          LOAD_TO_MONITORING: ${{ steps.load_to_monitoring.outputs.transition }}
           M14_REPORT: ${{ steps.m14.outputs.report }}
           M14_ADMISSION: ${{ steps.m14.outputs.admission }}
           M15_REPORT: ${{ steps.m15.outputs.report }}
@@ -225,6 +281,18 @@ jobs:
           state = Path('.runtime')
           confirm_cleanup(state)
           pins = {p:os.environ[key] for p,key in delivery.FILES.items()}
+          if os.environ['MODE'] == 'frozen-trio':
+              import json
+              from scripts import serving_campaign
+              summary, proofs = serving_campaign.replay(Path.cwd(), state, pins=pins,
+                  reports={g:os.environ[g+'_REPORT'] for g in serving_campaign.GATES},
+                  admissions={g:os.environ[g+'_ADMISSION'] for g in ('M13','M14','M15')},
+                  transitions=[json.loads(os.environ[k]) for k in ('PRIVACY_TO_LOAD','LOAD_TO_MONITORING')],
+                  source_pin=os.environ['SOURCE_SQL'],revision=os.environ['GITHUB_SHA'])
+              for proof in proofs:
+                  print(canonical(proof).decode())
+              print(canonical(summary).decode())
+              raise SystemExit(0)
           gates = {'frozen-m14':['M14'], 'frozen-m15':['M15'], 'frozen-pair':['M14','M15']}[os.environ['MODE']]
           proofs = [delivery.replay(Path.cwd(),state,gate,pins=pins,report_pin=os.environ[gate+'_REPORT'],
                     admission_pin=os.environ[gate+'_ADMISSION']) for gate in gates]

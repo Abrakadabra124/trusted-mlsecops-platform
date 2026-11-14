@@ -120,7 +120,7 @@ def signed_inputs(root, state, gate, index, value):
     values, keys, _ = frozen(root, state, index)
     require(value["source"] == {k: values[k] for k in SOURCE})
     require(all(value[k] == values[k] for k in IDENTITY))
-    mode = MODES[gate]
+    mode = {"M13": "privacy", **MODES}[gate]
     epoch = value[mode + "_campaign_id"]
     require(
         type(epoch) is str
