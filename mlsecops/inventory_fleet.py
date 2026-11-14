@@ -77,7 +77,19 @@ def reconcile(branches, observations):
     return graph, snapshot, ancestor, sorted(expected)
 
 
-def source(item, report, keys, qualification_root, campaign, owner_source, policy, clock, label):
+def source(
+    item,
+    report,
+    keys,
+    qualification_root,
+    campaign,
+    owner_source,
+    policy,
+    clock,
+    label,
+    *,
+    current_sequence=2,
+):
     require_fields(item, ("proposal", "projection", "lineage_envelope", "permit", "golden"))
     manifest = release_bundle.index(item["proposal"], keys["approver"])
     materials = manifest["materials"]
@@ -89,7 +101,7 @@ def source(item, report, keys, qualification_root, campaign, owner_source, polic
         and report["source_dirty"] is False
         and report["release_ready"] is False
         and type(manifest["sequence"]) is int
-        and manifest["sequence"] == (2 if label == "current" else 1)
+        and manifest["sequence"] == (current_sequence if label == "current" else 1)
         and manifest["release_id"] == report["campaign_id"]
         and sha(manifest) == report["subject_sha256"]
         and sha(item["proposal"]) == report["proposal_reference"]
@@ -255,7 +267,10 @@ def replay(state, fleet, *, inputs, files, owner, campaign, policy, features):
             "finished",
         ),
     )
-    require_fields(inputs, ("qualification_root", "reports"))
+    delivery = "delivery" in files
+    require_fields(inputs, ("qualification_root", "reports", *(("delivery",) if delivery else ())))
+    if delivery:
+        require(inputs["delivery"] == files["delivery"])
     require_fields(inputs["reports"], set(ROLES.values()))
     require_fields(fleet["sources"], set(ROLES.values()))
     observations = fleet["deployments"]
@@ -266,6 +281,13 @@ def replay(state, fleet, *, inputs, files, owner, campaign, policy, features):
     require(signing.decode64(root) not in {signing.decode64(v) for v in keys.values()})
     reports = inputs["reports"]
     require(reports["current"] == files["evidence/release-native.json"])
+    current_sequence = 2
+    if delivery:
+        current_sequence = release_policy.integer(
+            release_bundle.index(fleet["sources"]["current"]["proposal"], keys["approver"])[
+                "sequence"
+            ]
+        )
     directory = safe_child(state, "evidence/M19-fleet-" + campaign)
     start, committed, finished = (fleet[k] for k in ("start", "committed", "finished"))
     for t in (start, committed, finished):
@@ -290,7 +312,16 @@ def replay(state, fleet, *, inputs, files, owner, campaign, policy, features):
     for role, label in ROLES.items():
         item = fleet["sources"][label]
         binding, trace, golden = source(
-            item, reports[label], keys, root, campaign, owner["source"], policy, clock, label
+            item,
+            reports[label],
+            keys,
+            root,
+            campaign,
+            owner["source"],
+            policy,
+            clock,
+            label,
+            current_sequence=current_sequence,
         )
         source_bytes[label] = trace["source_sha256"]
         require(

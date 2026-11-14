@@ -15,11 +15,13 @@ class SourcePreparation(unittest.TestCase):
     def test_hosted_entry_rejects_unowned_runner_before_storage_access(self):
         import os
         import runpy
+        import sys
 
         from mlsecops.contracts import Rejected
 
         with (
             patch.dict(os.environ, GITHUB_ACTIONS="false"),
+            patch.object(sys, "argv", [materials.__file__]),
             self.assertRaisesRegex(Rejected, "trust_hosted_runner_required"),
         ):
             runpy.run_path(materials.__file__, run_name="__main__")

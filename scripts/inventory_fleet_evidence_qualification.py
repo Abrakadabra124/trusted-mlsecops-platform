@@ -222,6 +222,20 @@ class FourDeployments(unittest.TestCase):
             {"dangling", "cycle", "owner", "digest"},
         )
 
+    def test_pinned_delivery_owner_is_required_for_extended_fleet_schema(self):
+        owner = dict(workspace_id="a" * 32, source_trust="b" * 64)
+        inputs = {**self.arguments["inputs"], "delivery": owner}
+        files = {**self.files, "delivery": owner}
+        args = {**self.arguments, "inputs": inputs, "files": files}
+        self.assertEqual(evidence.replay(self.state, self.packet, **args), self.verify(self.packet))
+        for delta in (
+            dict(inputs=self.arguments["inputs"]),
+            dict(files=self.files),
+            dict(inputs={**inputs, "delivery": {**owner, "workspace_id": "c" * 32}}),
+        ):
+            with self.subTest(delta=delta.keys()), self.assertRaises(Rejected):
+                evidence.replay(self.state, self.packet, **(args | delta))
+
     def test_lease_boundary_measured_from_before_sql_write(self):
         packet = self.packet
         ob = copy.deepcopy(packet["deployments"]["previous"])
@@ -382,6 +396,48 @@ class FourDeployments(unittest.TestCase):
                     self.assertEqual(
                         acceptance.report("M19", "local-cpu", root, state)["exit_code"], code
                     )
+            marker = dict(container_id="owned", workspace_id="a" * 32)
+            delivery_env = dict(
+                M19_KEYS_SHA256=digest(canonical(self.files["trusted-keys.json"])),
+                M19_WORKSPACE_ID=marker["workspace_id"],
+                M19_TRUST_SHA256=digest((state / "storage-trust.json").read_bytes()),
+                GITHUB_SHA=self.owner["source"]["source_revision"],
+            )
+            fleet_path = state / native.materials.FILE
+            raw = fleet_path.read_bytes()
+            try:
+                with (
+                    patch.dict(os.environ, delivery_env),
+                    patch.object(gate.storage_bootstrap, "validate", return_value=marker),
+                ):
+                    _, _, delivery_files = gate.inputs(root, state)
+                    write_json(fleet_path, {**decode(raw), "delivery": delivery_files["delivery"]})
+                    shared = dict(record, storage_sha256=evidence.sha(marker))
+                    write_json(path, shared)
+                    with patch.dict(
+                        os.environ,
+                        M19_FLEET_INPUTS_SHA256=digest(fleet_path.read_bytes()),
+                        M19_PRIMARY_SHA256=digest(path.read_bytes()),
+                    ):
+                        delivered = acceptance.report("M19", "local-cpu", root, state)
+                    self.assertEqual(delivered["exit_code"], 0)
+                    self.assertEqual(
+                        delivered["artifact_hashes"]["proposal_packet"], self.owner["proposal_pin"]
+                    )
+                    self.assertEqual(
+                        delivered["artifact_hashes"]["source_trust"],
+                        delivery_env["M19_TRUST_SHA256"],
+                    )
+                    self.assertEqual(
+                        delivered["input_digests"]["evaluation_reference"],
+                        item["projection"]["bindings"]["evaluation_reference"],
+                    )
+                    self.assertEqual(
+                        delivered["input_digests"]["qualified_candidate_model"],
+                        current["model_sha256"],
+                    )
+            finally:
+                fleet_path.write_bytes(raw)
 
     def test_resealed_foreign_or_incomplete_observations_refused(self):
         for fault in (
