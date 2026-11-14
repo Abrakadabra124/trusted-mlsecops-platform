@@ -393,12 +393,17 @@ class Workflow(unittest.TestCase):
             return blocks.index(matches[0]), matches[0]
 
         source, _ = step("-m scripts.release_native --state")
+        m05, _ = step("--gate M05 --output")
+        checkpoint, _ = step("-m scripts.controller_delivery --m06-checkpoint")
+        handoff, _ = step("-m scripts.controller_serving_handoff")
         materials, prepare = step("-m scripts.inventory_fleet_materials --existing")
         capture, inventory = step("-m scripts.inventory_deployment_native")
         promotion, _ = step("--gate M10 --output")
         canary, traffic = step("-m scripts.canary_rollout_native capture")
         rollback, durable = step("-m scripts.canary_rollout_native rollback")
         recovery, _ = step("-m scripts.m17_recovery_native capture")
+        actual, early = step("-m scripts.m12_pinned_native capture")
+        m12, late = step("--gate M12 --output")
         stop, _ = step("-m scripts.m17_recovery_native stop")
         cluster, _ = step("kind delete cluster")
         replay, public = step("--gate M19 --output")
@@ -430,6 +435,19 @@ class Workflow(unittest.TestCase):
                 }
             ),
         )
+        self.assertLess(source, m05)
+        self.assertLess(m05, checkpoint)
+        self.assertLess(checkpoint, handoff)
+        self.assertLess(handoff, materials)
+        self.assertLess(promotion, actual)
+        self.assertLess(actual, canary)
+        self.assertLess(recovery, m12)
+        self.assertLess(m12, cluster)
+        self.assertLess(replay, step("--gate M18 --output")[0])
+        for block in (early, late):
+            self.assertIn("M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}", block)
+        for block in (late, public):
+            self.assertIn("M12_EARLY_SHA256: ${{ steps.m12_actual.outputs.sha256 }}", block)
         for block in (prepare, inventory, public):
             for key, value in (
                 ("M19_PROPOSAL_SHA256", "steps.source.outputs.proposal"),
