@@ -253,12 +253,17 @@ def authority(root, state, env):
             atomic_write(safe_child(state, "kubernetes-security/" + name), raw)
         yield
     finally:
+        failed = False
         for name, raw in current.items():
-            atomic_write(safe_child(state, "kubernetes-security/" + name), raw)
-        for name, raw in current.items():
-            same(
-                digest(bounded_read(safe_child(state, "kubernetes-security/" + name))), digest(raw)
-            )
+            try:
+                target = safe_child(state, "kubernetes-security/" + name)
+                atomic_write(target, raw)
+                same(digest(bounded_read(target)), digest(raw))
+            except (OSError, Rejected):
+                # One unavailable file must not prevent restoring the other owners.
+                failed = True
+        if failed:
+            raise Rejected("M23_delivery_owner_restore") from None
         same(shared_serving_receipt.offline_pin(state), offline)
 
 

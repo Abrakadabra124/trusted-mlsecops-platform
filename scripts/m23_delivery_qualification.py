@@ -530,6 +530,31 @@ class DeliveryContracts(unittest.TestCase):
                 {"late": name},
             )
 
+    def test_failed_restore_attempts_every_owner_file_and_never_returns_receipt(self):
+        self.make_receipt()
+        write = delivery.atomic_write
+        attempted = []
+
+        def fail_first_restore(path, raw):
+            value = delivery.decode(raw)
+            if "late" in value:
+                attempted.append(value["late"])
+                if value["late"] == delivery.OWNER_FILES[0]:
+                    raise OSError("private filesystem detail")
+            return write(path, raw)
+
+        with (
+            patch.object(delivery, "atomic_write", side_effect=fail_first_restore),
+            self.assertRaisesRegex(Rejected, "^M23_delivery_owner_restore$"),
+        ):
+            self.receipt()
+        self.assertEqual(attempted, list(delivery.OWNER_FILES))
+        for name in delivery.OWNER_FILES[1:]:
+            self.assertEqual(
+                delivery.decode((self.state / "kubernetes-security" / name).read_bytes()),
+                {"late": name},
+            )
+
     def test_cli_gate_uses_ordinary_acceptance_and_refuses_inconclusive(self):
         from contextlib import nullcontext
 
