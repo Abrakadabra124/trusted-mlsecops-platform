@@ -42,7 +42,7 @@ def reconcile(state, *, demo_pin, proposal_pin, revision):
     raw_lock = bounded_read(state.parent / "data.lock")
     data_lock = digest(raw_lock)
     dataset_source = decode(raw_lock)["output"]["sha256"]
-    for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M12", "M16", "M17"):
+    for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "M17"):
         raw = bounded_read(evidence / (gate + ".json"))
         report = decode(raw)
         if gate in ("M16", "M17"):
@@ -52,7 +52,12 @@ def reconcile(state, *, demo_pin, proposal_pin, revision):
             ):
                 raise Rejected("delivery_recovery_proposal_mismatch")
             expected = common | runtime
-        elif gate == "M12":
+        elif gate in ("M10", "M12"):
+            if gate == "M10" and (
+                report["release_ready"] is not False
+                or report["artifact_hashes"]["actual_proposal_report"] != proposal_pin
+            ):
+                raise Rejected("delivery_promotion_proposal_mismatch")
             expected = common | dict(
                 image_id=source["image_id"],
                 source_revision=revision,

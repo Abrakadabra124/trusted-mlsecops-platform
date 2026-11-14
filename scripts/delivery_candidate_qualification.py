@@ -60,7 +60,7 @@ class Delivery(unittest.TestCase):
         self.reports = {}
         write_json(Path("data.lock"), dict(output=dict(sha256=h("data"))))
         lock = digest(bounded_read(Path("data.lock")))
-        for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M12", "M16", "M17"):
+        for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "M17"):
             common = dict(
                 candidate_reference=h("candidate"),
                 evaluation_reference=h("evaluation"),
@@ -83,7 +83,11 @@ class Delivery(unittest.TestCase):
                     qualified_candidate_subject=h("subject"),
                     proposal_reference=h("proposal"),
                 )
-            elif gate == "M12":
+            elif gate in ("M10", "M12"):
+                if gate == "M10":
+                    result.update(
+                        release_ready=False, artifact_hashes=dict(actual_proposal_report=pin)
+                    )
                 inputs = dict(
                     **self.source,
                     model=h("model"),
@@ -177,6 +181,15 @@ class Delivery(unittest.TestCase):
                     write_json(self.path(gate), result)
                     with self.assertRaisesRegex(Rejected, "recovery_proposal_mismatch"):
                         self.run_cli()
+            if gate == "M10":
+                for change in [
+                    dict(release_ready=True),
+                    dict(artifact_hashes={"actual_proposal_report": "9" * 64}),
+                ]:
+                    with patch.dict(result, change):
+                        write_json(self.path(gate), result)
+                        with self.assertRaisesRegex(Rejected, "promotion_proposal_mismatch"):
+                            self.run_cli()
             write_json(self.path(gate), result)
 
     def test_changed_originals_or_foreign_revision_refuse(self):

@@ -9,6 +9,8 @@ on:
       - 'mlsecops/evaluation_gate.py'
       - 'mlsecops/foundation.py'
       - 'mlsecops/inference_gate.py'
+      - 'scripts/promotion_gate_native.py'
+      - 'scripts/promotion_entrypoint_native.py'
       - 'scripts/kube_candidate_native.py'
       - 'mlsecops/data_qualification.py'
       - 'mlsecops/reproducibility*.py'
@@ -116,7 +118,15 @@ jobs:
               for label, name in (("proposal", "evidence/release-native.json"), ("demo", "storage-demo.json")):
                   print(label + "=" + digest(bounded_read(state / name)), file=out)
               print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
+              print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
           PY
+      - name: Verify signed promotion refusal and authorized control before serving
+        env:
+          M10_STORAGE_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M10_RELEASE_REPORT_SHA256: ${{ steps.source.outputs.proposal }}
+          M10_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M10_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M10 --output .runtime/evidence/M10.json
       - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
         env:
           M06_DEMO_SHA256: ${{ steps.source.outputs.demo }}
@@ -195,7 +205,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
           evidence = Path(".runtime/evidence")
-          for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M12", "M16", "M17"):
+          for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "M17"):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())
