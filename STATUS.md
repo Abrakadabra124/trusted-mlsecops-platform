@@ -1,5 +1,16 @@
 # Статус и границы доказательств
 
+На `983db0c` [отдельный M23 run 43627872607](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43627872607)
+завершился success после очистки. Исходный отчёт содержит 161 pass case,
+29 000 observations и семь event routes; максимальная доставка 14 ms,
+heartbeat notice 91,006 s. SHA-256 canonical JSON с LF:
+`b9b5e4a2732b40e90fecb0f6cd63319765cba387ccd9650b98b387b759a8d7c4`.
+Это прежний перечень с отдельными case ID на каждое окно, а не hosted доказательство
+новых 136 фиксированных критериев и M18 retention. Общий запуск на том же source
+остановился на M07: один из 32 конкурентных запросов получил
+`storage_connection_rejected`, все owned cleanup steps прошли. Причина исследуется;
+отказ подключения не засчитывается как корректный отказ по бюджету holdout.
+
 Единый ownership scope для root rotation и всех actual M11 probes объединён с текущей веткой; 37 родительских tests прошли. [Serving primary collector](docs/operations/m18-serving-primary.md) подключён после offline trio replay, оригинальные report/admission pins сохранены. [M23 driver](docs/operations/m18-security-primary.md) подключён к общему workflow: 136 критериев фиксируются до измерений, исходные stage/owner pins сохраняются, retained replay требует проверенной очистки. 40 родительских driver/candidate/workflow tests прошли. Новый native M23/M18 join ещё не подтверждён; эти изменения не закрывают M18.
 
 14 ноября: [M08/M09 retention](docs/operations/final-evidence.md#исходные-материалы-m08-и-m09) подключён к общей цепочке: исходные 251/28 файлов сохраняются по прежним hashes и перечитываются после очистки. Локально 12 targeted checks и 21 смежная проверка прошли, новый helper 89/89 statements и 24/24 branches. Native replay нового collector ещё ожидается. [Совместный M11/M12 на a48f441](docs/operations/shared-serving.md#отказ-из-за-окна-qualification-permit-14-ноября-2026) завершился failure: перед key revocation осталось менее 180 секунд исходного 600-секундного qualification permit. Cleanup и офлайн M04/M06 прошли; устранение временного блокера продолжается без продления разрешений. M22 independent 0/2, system-image findings и полный R1/M18 остаются открытыми.

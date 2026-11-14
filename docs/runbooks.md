@@ -6,6 +6,11 @@
 Исходные M23 stage/owner packets, заранее закреплённый перечень критериев и
 повторная проверка после teardown: [security primary](operations/m18-security-primary.md).
 
+Подготовка приватного переноса того же frozen candidate между заданиями:
+[точный пакет и verifier](operations/frozen-candidate-transfer.md),
+[аутентифицированное шифрование](operations/ci-transfer.md).
+Это проверенные локальные компоненты; hosted handoff ещё не подключён.
+
 Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
 [serving primary](operations/m18-serving-primary.md). Отказ по времени
 qualification permit и порядок возврата serving identity:

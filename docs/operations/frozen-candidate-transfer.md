@@ -51,12 +51,18 @@ Library API:
 ```python
 result = export(root, source_state, **authority, clock=current_epoch_seconds)
 summary = verify(
-    root, Path(result["path"]), manifest_pin=trusted_manifest_pin,
-    **authority, clock=current_epoch_seconds,
+    root,
+    Path(result["path"]),
+    manifest_pin=trusted_manifest_pin,
+    **authority,
+    clock=current_epoch_seconds,
 )
 with materialize(
-    root, archive_path, manifest_pin=trusted_manifest_pin,
-    **authority, clock=current_epoch_seconds,
+    root,
+    archive_path,
+    manifest_pin=trusted_manifest_pin,
+    **authority,
+    clock=current_epoch_seconds,
 ) as (temporary_state, summary):
     # Only approved files exist here; ordinary offline readers can use this state.
     # The context manager removes its own temporary state on exit or failure.
