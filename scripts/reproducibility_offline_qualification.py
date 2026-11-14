@@ -59,6 +59,17 @@ class ReplayCli(unittest.TestCase):
                 {"M05_REPORT_SHA256": digest(b"M05")},
                 {"training_pin": digest(b"M05"), "retain_training_files": True},
             ),
+            *(
+                (
+                    command,
+                    {g + "_REPORT_SHA256": digest(g.encode()) for g in ("M08", "M09")},
+                    {
+                        "adversarial_pins": {g: digest(g.encode()) for g in ("M08", "M09")},
+                        "retain_adversarial_files": command == "retain-m08-m09",
+                    },
+                )
+                for command in ("retain-m08-m09", "replay-m08-m09")
+            ),
         ):
             with (
                 self.subTest(command=command, env=env),
@@ -77,6 +88,8 @@ class ReplayCli(unittest.TestCase):
             ("replay-m04", {}, "M04_REPORT_SHA256"),
             ("replay-m05", {}, "M05_REPORT_SHA256"),
             ("retain-m05", {}, "M05_REPORT_SHA256"),
+            ("retain-m08-m09", {}, "M08_REPORT_SHA256"),
+            ("replay-m08-m09", {"M08_REPORT_SHA256": digest(b"M08")}, "M09_REPORT_SHA256"),
         ):
             with (
                 self.subTest(missing=field),

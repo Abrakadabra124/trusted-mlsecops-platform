@@ -1,5 +1,31 @@
 # M11 и M12 на одном исходном proposal
 
+## Отказ из-за окна qualification permit, 14 ноября 2026
+
+[Запуск 43622475622](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43622475622/job/132530989069)
+на `a48f441` завершился failure в общем actual M11/M12. Последний stack site
+`scripts/kube_candidate_faults.py:42` соответствует `candidate_trust_window`:
+перед key revocation осталось менее требуемых 180 секунд qualification permit.
+Это отдельное разрешение с максимумом 600 секунд, не увеличение срока исходного
+release proposal. В этом запуске M07 concurrency failure не воспроизвёлся.
+
+Наблюдавшиеся UTC отметки: root rotation 18:12:06, HTTP matrix 18:13:54,
+outage 18:14:55, blackhole 18:16:25, policy change 18:17:58,
+model revocation 18:18:44, отказ перед key revocation 18:19:48.
+Stack site и порядок показывают исчерпание запаса времени. Они не доказывают,
+что вся задержка вызвана единственным сервисом или что достаточно увеличить timeout.
+
+SQL, tracking и кластер успешно очищены. После очистки успешно выполнены
+чтение исходных подписанных материалов, M04 replay и M06 replay. M11/M12 reports
+этого запуска не приняты; общая сводка skipped и полный R1 не завершён.
+
+Плейбук: проверить статус именно этого job и его cleanup steps; сохранить raw
+log только приватно; сопоставить последний исходный stack site с revision job;
+сравнить отметки стадий с исходным permit. После отказа не перевыпускать permit
+внутри той же кампании и не ослаблять пороги. Устранение лишних передач ownership
+требует отдельной проверки всех denial/cleanup сценариев и свежего native run.
+Повторный успешный компонент не превращает этот неуспешный запуск в pass.
+
 В [сквозном запуске 43561580336](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43561580336/job/132346238429)
 M02 остановил выполнение с `source_lock_mismatch_explicit_update_required`.
 Причина установлена: добавление времени проверки в `mlsecops/datasets.py` для

@@ -96,6 +96,18 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/m18-adversarial.coverage" --source=scripts.m18_adversarial_retention -m unittest scripts.m18_adversarial_retention_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/m18-adversarial.coverage" -o "$RUNNER_TEMP/m18-adversarial-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "m18-adversarial-coverage.json").read_bytes())["files"]
+          assert set(files) == {"scripts/m18_adversarial_retention.py"}
+          summary = files["scripts/m18_adversarial_retention.py"]["summary"]
+          for covered, total in (("covered_lines", "num_statements"), ("covered_branches", "num_branches")):
+              if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
+                  raise SystemExit("M18 adversarial retention coverage below policy")
+          PY
           uv run --locked python -B -W error -m unittest scripts.security_gate_qualification scripts.security_gate_sources_qualification scripts.security_gate_candidate_qualification scripts.security_gate_dispatch_qualification scripts.shared_serving_qualification scripts.serving_campaign_qualification
           uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/m23-delivery.coverage" --source=scripts.m23_delivery -m unittest scripts.m23_delivery_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/m23-delivery.coverage" -o "$RUNNER_TEMP/m23-delivery-coverage.json"
@@ -224,9 +236,12 @@ jobs:
             uv run --locked python -B -m scripts.tracking_service stop
           fi
       - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
+        id: adversarial
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
+          echo "m08=$(sha256sum .runtime/evidence/M08.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "m09=$(sha256sum .runtime/evidence/M09.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Freeze evaluated candidate and original owner
         id: source
         env:
@@ -268,6 +283,12 @@ jobs:
           KEYS: ${{ steps.source.outputs.keys_file }}
           TRUST: ${{ steps.source.outputs.trust }}
         run: uv run --locked python -B -W error -m scripts.serving_retention retain
+      - name: Retain all original M08 and M09 attack materials for offline replay
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M08_REPORT_SHA256: ${{ steps.adversarial.outputs.m08 }}
+          M09_REPORT_SHA256: ${{ steps.adversarial.outputs.m09 }}
+        run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze retain-m08-m09
       - name: Run M05 with the original frozen proposal and verify all five gates
         id: isolated
         env:
@@ -621,6 +642,13 @@ jobs:
           M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
           M05_REPORT_SHA256: ${{ steps.isolated.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m05
+      - name: Replay original M08 and M09 attack materials after both cleanups
+        if: always() && steps.adversarial.outcome == 'success' && steps.m18_freeze.outcome == 'success' && steps.stop_sql.outcome == 'success' && steps.stop_cluster.outcome == 'success'
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M08_REPORT_SHA256: ${{ steps.adversarial.outputs.m08 }}
+          M09_REPORT_SHA256: ${{ steps.adversarial.outputs.m09 }}
+        run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m08-m09
       - name: Verify the original M11 and M12 reports after both cleanups
         if: ${{ !cancelled() && steps.joint_gates.outcome == 'success' && steps.stop_cluster.outcome == 'success' }}
         id: joint_receipt

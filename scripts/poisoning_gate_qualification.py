@@ -1,9 +1,7 @@
-import contextlib
 import copy
-import io
-import runpy
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops import acceptance, candidate_subject, poisoning_gate
-from mlsecops.contracts import Rejected, canonical, digest, now, read_json, write_json
+from mlsecops.contracts import Rejected, canonical, decode, digest, now, read_json, write_json
 from mlsecops.prediction_protocol import response
 from scripts import poisoning, poisoning_contracts, poisoning_native
 from scripts.poisoning_evidence_qualification import IMAGE, ROOT, worker
@@ -305,16 +303,26 @@ class ContractRunnerChecks(unittest.TestCase):
             self.assertEqual(actual["status"], "pass" if mode == "pass" else "fail")
 
     def test_contract_cli_refuses_an_empty_suite(self):
-        with (
-            patch.object(
-                unittest.defaultTestLoader, "loadTestsFromNames", return_value=unittest.TestSuite()
-            ),
-            contextlib.redirect_stdout(io.StringIO()) as output,
-            self.assertRaises(SystemExit) as stopped,
-        ):
-            runpy.run_module("scripts.poisoning_contracts", run_name="__main__")
-        self.assertEqual(stopped.exception.code, 1)
-        self.assertIn('"status":"fail"', output.getvalue())
+        # Exercise a fresh CLI interpreter. Reexecuting an imported module via
+        # runpy in this process raises RuntimeWarning before reaching the guard.
+        script = """import runpy, unittest
+from unittest.mock import patch
+with patch.object(unittest.defaultTestLoader, 'loadTestsFromNames', return_value=unittest.TestSuite()):
+    runpy.run_module('scripts.poisoning_contracts', run_name='__main__')
+"""
+        result = subprocess.run(
+            [sys.executable, "-B", "-W", "error", "-c", script],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, b"")
+        self.assertEqual(
+            decode(result.stdout),
+            dict(status="fail", scope=poisoning_contracts.SCOPE, checks=0, cases=[]),
+        )
 
     def test_missing_skipped_failed_and_foreign_contracts_rejected(self):
         expected = poisoning_gate.case_ids(

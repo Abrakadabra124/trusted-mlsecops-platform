@@ -85,6 +85,20 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('phase == "M15" and not retention', action)
         self.assertEqual(action.count("preflight(root, state, retention"), 2)
 
+    def test_adversarial_retention_precedes_cluster_replacement_and_replay_requires_cleanup(self):
+        capture = next(s for s in self.steps if "scripts.m18_delivery_freeze retain-m08-m09" in s)
+        replay = next(s for s in self.steps if "scripts.m18_delivery_freeze replay-m08-m09" in s)
+        self.assertLess(self.text.index(capture), self.text.index("id: m23_sources"))
+        self.assertGreater(self.text.index(replay), self.text.index("id: stop_cluster"))
+        for step in (capture, replay):
+            for gate in ("M08", "M09"):
+                self.assertIn(
+                    gate + "_REPORT_SHA256: ${{ steps.adversarial.outputs." + gate.lower() + " }}",
+                    step,
+                )
+        self.assertIn("steps.stop_sql.outcome == 'success'", replay)
+        self.assertIn("steps.stop_cluster.outcome == 'success'", replay)
+
 
 if __name__ == "__main__":
     unittest.main()

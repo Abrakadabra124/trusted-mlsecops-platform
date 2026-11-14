@@ -89,6 +89,8 @@ def replay(
     access_pin=None,
     training_pin=None,
     retain_training_files=False,
+    adversarial_pins=None,
+    retain_adversarial_files=False,
 ):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
@@ -137,6 +139,20 @@ def replay(
         else:
             verify_training(state, values, training_pin)
         summary.setdefault("verified_source_reports", {})["M05"] = training_pin
+    if adversarial_pins is not None:
+        from scripts import m18_adversarial_retention
+
+        final_evidence.same(sorted(adversarial_pins), ["M08", "M09"], "adversarial-gates")
+        action = (
+            m18_adversarial_retention.retain
+            if retain_adversarial_files
+            else m18_adversarial_retention.verify
+        )
+        summary["adversarial_materials"] = {
+            gate: action(root, state, values, gate, report_pin)
+            for gate, report_pin in adversarial_pins.items()
+        }
+        summary.setdefault("verified_source_reports", {}).update(adversarial_pins)
     return summary
 
 
@@ -373,6 +389,15 @@ def main():
             os.environ["M18_FREEZE_SHA256"],
             training_pin=os.environ["M05_REPORT_SHA256"],
             retain_training_files=sys.argv[1] == "retain-m05",
+        )
+        print(canonical(result).decode())
+    elif sys.argv[1:] in (["retain-m08-m09"], ["replay-m08-m09"]):
+        result = replay(
+            root,
+            state,
+            os.environ["M18_FREEZE_SHA256"],
+            adversarial_pins={g: os.environ[g + "_REPORT_SHA256"] for g in ("M08", "M09")},
+            retain_adversarial_files=sys.argv[1] == "retain-m08-m09",
         )
         print(canonical(result).decode())
     elif sys.argv[1:] == ["replay-m06"]:
