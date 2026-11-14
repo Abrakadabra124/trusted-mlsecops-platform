@@ -235,6 +235,10 @@ def qualify_access(root, state, image="trusted-mlsecops:dev"):
         "cluster_namespace_uid": cluster["namespace_uid"],
         "storage_volume_uid": storage["volume_uid"],
         "dataset_reference": authority["dataset_reference"],
+        **{
+            field: components["controller"][field]
+            for field in ("candidate_reference", "evaluation_reference", "model_digest")
+        },
         "cases": cases,
         "checks": len(cases),
         "artifact_hashes": {**hashes, "authority": digest(bounded_read(authority_path))},

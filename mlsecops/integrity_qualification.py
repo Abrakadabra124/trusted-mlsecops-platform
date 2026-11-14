@@ -1,3 +1,4 @@
+import os
 import subprocess
 import uuid
 from pathlib import Path
@@ -104,7 +105,14 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
 
     before = snapshot()
     storage = qualify_storage(state)
-    pipeline = qualify_pipeline(root, state, image)
+    if os.environ.get("R1_SCOPED_TRAINING") == "1":
+        from mlsecops.controller_delivery import train
+
+        pipeline = qualify_pipeline(
+            root, state, image, demo=lambda: train(root, state, dataset, resolve_image(image))
+        )
+    else:
+        pipeline = qualify_pipeline(root, state, image)
     after = snapshot()
     if before != after or pipeline["dataset_reference"] != dataset["dataset_reference"]:
         raise Rejected("integrity_approved_sql_dataset_changed")

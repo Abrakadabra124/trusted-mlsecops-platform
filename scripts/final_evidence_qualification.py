@@ -807,6 +807,8 @@ class FinalEvidenceContracts(unittest.TestCase):
         self,
     ):
         self.build()
+        baseline = self.run_report()
+        self.assertIn("M10", baseline["artifact_hashes"])
         report = self.reports["M10"]
         packet = decode(final.blob(self.state, report["artifact_hashes"]["promotion_primary"]))
         audit = packet["actual"]["audit"]
@@ -818,7 +820,10 @@ class FinalEvidenceContracts(unittest.TestCase):
                 result = self.run_report()
                 self.assertEqual(result["status"], "fail")
                 self.assertEqual(result["exit_code"], 1)
-                self.assertEqual(result["metrics"]["verified_gates"], len(final.CHILDREN) - 1)
+                self.assertEqual(
+                    result["metrics"]["verified_gates"], baseline["metrics"]["verified_gates"] - 1
+                )
+                self.assertNotIn("M10", result["artifact_hashes"])
                 self.assertTrue(any(r.startswith("M10/") for r in result["residual_risks"]))
 
     def test_missing_and_foreign_children_are_all_diagnosed(self):

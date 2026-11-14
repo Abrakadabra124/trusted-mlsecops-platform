@@ -1,7 +1,7 @@
 name: T20 scheduled backup and independent recovery
 on:
   push:
-    branches: [codex/cp4-m23-security-events-20261107, qualify/t25-delivery]
+    branches: [codex/cp4-m23-security-events-20261107, qualify/t25-delivery, qualify/r1-controller-trust-intake]
     paths:
       - '.github/workflows/storage-recovery.yml'
       - 'infra/systemd/mlsecops-daily-backup.*'
@@ -43,6 +43,10 @@ on:
       - 'scripts/recovery_*qualification.py'
       - 'scripts/restore_negative*.py'
       - 'scripts/delivery_candidate*.py'
+      - 'scripts/controller_*.py'
+      - 'mlsecops/controller_delivery.py'
+      - 'mlsecops/controller_intake.py'
+      - 'mlsecops/intake_gate.py'
       - 'mlsecops/poisoning_gate.py'
       - 'mlsecops/robustness_gate.py'
       - 'scripts/canary_rollout_native.py'
@@ -62,7 +66,7 @@ permissions:
 jobs:
   recovery:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       DELIVERY_SERVING_GATE: ${{ inputs.serving_gate || 'M11-M12' }}
     steps:
@@ -80,8 +84,8 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -B -W error -m unittest scripts.promotion_gate_qualification
-          uv run --locked python -B -W error -m unittest scripts.m12_pinned_qualification scripts.kube_candidate_campaign_qualification scripts.inference_gate_qualification
+          uv run --locked python -B -W error -m unittest scripts.promotion_gate_qualification scripts.final_evidence_qualification.FinalEvidenceContracts.test_final_index_requires_signed_promotion_denials_even_after_report_and_index_are_resealed
+          uv run --locked python -B -W error -m unittest scripts.controller_intake_qualification scripts.intake_gate_qualification scripts.controller_delivery_qualification scripts.m12_pinned_qualification scripts.kube_candidate_campaign_qualification scripts.inference_gate_qualification
           uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_live_freeze_and_offline_replay_share_original_signed_bytes scripts.final_evidence_qualification.FinalEvidenceContracts.test_foundation_and_intake_replay_uses_pre_run_outcomes_and_pinned_primaries scripts.final_evidence_qualification.FinalEvidenceContracts.test_inventory_delivery_requires_canonical_keys_and_the_original_file_registry
           uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_full_gate_rejects_summary_only_m06
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
@@ -114,6 +118,7 @@ jobs:
           echo 'started_empty=true' >> "$GITHUB_OUTPUT"
           uv run --locked python -B -m mlsecops.cluster bootstrap
           uv run --locked python -B -m mlsecops.kube_storage
+          uv run --locked python -B -m mlsecops.controller_bootstrap
       - name: Start owned source storage
         id: sql
         run: |
@@ -135,17 +140,47 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
           echo "sha256=$(sha256sum .runtime/evidence/M02.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Begin M21 on the empty owned source before the controller training
+        id: intake_start
+        run: uv run --locked python -B -W error -m scripts.controller_intake begin
       - name: Verify SQL integrity and role isolation, then evaluate the same training run
         id: evaluated
         env:
+          M21_START_SHA256: ${{ steps.intake_start.outputs.start }}
+          R1_SCOPED_TRAINING: "1"
           M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
           echo "sha256=$(sha256sum .runtime/evidence/M07.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "integrity=$(sha256sum .runtime/evidence/M03.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
+        id: repeated
+        env:
+          M06_DEMO_SHA256: ${{ steps.evaluated.outputs.demo }}
+        run: |
+          uv run --locked python -B -m scripts.tracking_spike build
+          uv run --locked python -B -m scripts.tracking_service up
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M06 --output .runtime/evidence/M06.json
+          echo "sha256=$(sha256sum .runtime/evidence/M06.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Stop and verify the owned tracking services
+        id: stop_tracking
+        if: always()
+        run: |
+          if test "${{ steps.repeated.outcome }}" = success; then test -f .runtime/tracking-service/resources.json; fi
+          if test -f .runtime/tracking-service/resources.json; then
+            uv run --locked python -B -m scripts.tracking_service stop
+          fi
+      - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
       - name: Freeze evaluated candidate and original owner
         id: source
+        env:
+          EVALUATED_DEMO_SHA256: ${{ steps.evaluated.outputs.demo }}
         run: |
+          printf '%s  %s\n' "$EVALUATED_DEMO_SHA256" .runtime/storage-demo.json | sha256sum --check --status
           uv run --locked python -B -m scripts.release_native --state .runtime
           uv run --locked python - <<'PY'
           import os
@@ -155,6 +190,8 @@ jobs:
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
               for label, name in (("proposal", "evidence/release-native.json"), ("demo", "storage-demo.json")):
                   print(label + "=" + digest(bounded_read(state / name)), file=out)
+              if digest(bounded_read(state / "storage-demo.json")) != os.environ["EVALUATED_DEMO_SHA256"]:
+                  raise SystemExit("Evaluated demo changed during freeze")
               print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
               print("keys_file=" + digest(bounded_read(state / "trusted-keys.json")), file=out)
               print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
@@ -167,6 +204,45 @@ jobs:
           M18_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
           M18_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze capture
+      - name: Run M05 with the original frozen proposal and verify all five gates
+        env:
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          R1_ISOLATION_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M05 --output .runtime/evidence/M05.json
+          uv run --locked python -B -W error -m scripts.controller_delivery
+      - name: Reconcile frozen M06 and scoped reports before the serving campaign
+        env:
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.controller_delivery --m06-checkpoint
+      - name: Verify the ordinary M21 contract on the transferred original evaluation
+        id: full_intake
+        env:
+          M21_START_SHA256: ${{ steps.intake_start.outputs.start }}
+          M21_CAPTURE_SHA256: ${{ steps.evaluated.outputs.capture }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M21 --output .runtime/evidence/M21.json
+          echo "gate=$(sha256sum .runtime/evidence/M21.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Verify the original M21 report and refusal of a substituted digest
+        env:
+          M21_START_SHA256: ${{ steps.intake_start.outputs.start }}
+          M21_CAPTURE_SHA256: ${{ steps.evaluated.outputs.capture }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M21_GATE_SHA256: ${{ steps.full_intake.outputs.gate }}
+        run: |
+          uv run --locked python -B -W error -m scripts.controller_intake verify
+          uv run --locked python -B -W error -m scripts.controller_intake check-substitution
+      - name: Replace fenced training cluster with a fresh private serving SQL
+        env:
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.controller_serving_handoff
       - name: Prepare inventory branches around the fresh original proposal
         id: inventory_inputs
         env:
@@ -210,27 +286,6 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M10 --output .runtime/evidence/M10.json
           echo "sha256=$(sha256sum .runtime/evidence/M10.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-      - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
-        id: repeated
-        env:
-          M06_DEMO_SHA256: ${{ steps.source.outputs.demo }}
-        run: |
-          uv run --locked python -B -m scripts.tracking_spike build
-          uv run --locked python -B -m scripts.tracking_service up
-          uv run --locked python -B -W error -m mlsecops.acceptance --gate M06 --output .runtime/evidence/M06.json
-          echo "sha256=$(sha256sum .runtime/evidence/M06.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-      - name: Stop and verify the owned tracking services
-        id: stop_tracking
-        if: always()
-        run: |
-          if test "${{ steps.repeated.outcome }}" = success; then test -f .runtime/tracking-service/resources.json; fi
-          if test -f .runtime/tracking-service/resources.json; then
-            uv run --locked python -B -m scripts.tracking_service stop
-          fi
-      - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
-        run: |
-          uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
-          uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
       - name: Verify private inference and operator observations on the frozen proposal
         if: env.DELIVERY_SERVING_GATE == 'M13'
         env:
@@ -315,6 +370,23 @@ jobs:
       - name: Reverify retained private monitoring and feedback observations after teardown
         if: success() && env.DELIVERY_SERVING_GATE == 'M13'
         run: uv run --locked python -B -W error -c 'from pathlib import Path; from mlsecops.privacy_gate import ingress_retained; from mlsecops.contracts import canonical; print(canonical(ingress_retained(Path(".runtime"))).decode())'
+      - name: Summarize measured failures after owned cleanup
+        if: failure()
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          evidence = Path(".runtime/evidence")
+          for gate in ("M01","M02","M03","M04","M05","M06","M07","M08","M09","M10","M11","M12","M20","M21"):
+              path = evidence / (gate + ".json")
+              if path.is_file():
+                  raw = path.read_bytes()
+                  report = json.loads(raw)
+                  print(json.dumps(dict(gate=gate, status=report.get("status"), exit_code=report.get("exit_code"),
+                                        report_sha256=hashlib.sha256(raw).hexdigest(),
+                                        failed_cases=[c["id"] for c in report.get("cases", []) if c.get("status") == "fail"],
+                                        residual_risks=report.get("residual_risks", []))))
+          PY
       - name: Reopen original signed model and evaluation with SQL and Kubernetes offline
         if: always() && steps.m18_freeze.outcome == 'success' && steps.stop_sql.outcome == 'success' && steps.stop_cluster.outcome == 'success'
         env:
@@ -348,6 +420,10 @@ jobs:
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery
         env:
+          M21_START_SHA256: ${{ steps.intake_start.outputs.start }}
+          M21_CAPTURE_SHA256: ${{ steps.evaluated.outputs.capture }}
+          M21_GATE_SHA256: ${{ steps.full_intake.outputs.gate }}
+          M12_EARLY_SHA256: ${{ steps.actual_m12.outputs.sha256 }}
           M11_M12_RECEIPT_SHA256: ${{ steps.joint_receipt.outputs.sha256 }}
           T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
@@ -369,15 +445,15 @@ jobs:
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json
           set -o pipefail
-          uv run --locked python -B -W error -m scripts.delivery_candidate | tee .runtime/evidence/delivery-candidate.json
+          uv run --locked python -B -W error -m scripts.controller_delivery --with-intake "$DELIVERY_SERVING_GATE" | tee .runtime/evidence/delivery-candidate.json
           echo "receipt=$(sha256sum .runtime/evidence/delivery-candidate.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           uv run --locked python - <<'PY'
           from pathlib import Path
           import os
           from mlsecops.contracts import bounded_read, canonical, decode, digest
-          from scripts.delivery_candidate import campaign_gates
+          from scripts.controller_delivery import intake_gates
           evidence = Path(".runtime/evidence")
-          for gate in campaign_gates(os.environ["DELIVERY_SERVING_GATE"]):
+          for gate in intake_gates(os.environ["DELIVERY_SERVING_GATE"]):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())
@@ -394,8 +470,8 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import canonical, read_json
           from mlsecops.final_evidence import CHILDREN
-          from scripts.delivery_candidate import campaign_gates
-          gates = campaign_gates(os.environ["DELIVERY_SERVING_GATE"])
+          from scripts.controller_delivery import intake_gates
+          gates = intake_gates(os.environ["DELIVERY_SERVING_GATE"])
           report = read_json(Path(".runtime/evidence/M18-gap.json"))
           observed = report["diagnostics"]
           if (report["gate"] != "M18" or report["scope"] != "delivery-receipt-gap-map"
@@ -407,5 +483,7 @@ jobs:
                   or observed["unavailable"] or sorted(observed["receipt_matched"]) != sorted(gates)
                   or sorted(observed["missing_receipts"]) != sorted(set(CHILDREN) - set(gates))):
               raise SystemExit("M18 delivery evidence mismatch")
-          print(canonical({"M18": report["status"], **observed}).decode())
+          from mlsecops.contracts import bounded_read, digest
+          gap_hash = digest(bounded_read(Path(".runtime/evidence/M18-gap.json")))
+          print(canonical({"M18": report["status"], "report_sha256": gap_hash, **observed}).decode())
           PY

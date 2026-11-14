@@ -456,6 +456,31 @@ class IntakeGateContracts(unittest.TestCase):
                         self.assertFalse(result["release_ready"])
                 stop.assert_called_once()
 
+    def test_controller_mode_consumes_pinned_data_without_starting_or_stopping_sql(self):
+        import os
+
+        from mlsecops.intake_probe import CASE_IDS
+        from mlsecops.kube_intake_qualification import HOST_CASES
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict(os.environ, {"M21_CAPTURE_SHA256": "a" * 64}),
+        ):
+            state = Path(tmp)
+            stop = self.campaign_fixture(state)
+            demo = self.sql_fixture()[0]
+            matrix = {
+                "status": "pass",
+                "candidate_reference": demo["candidate"]["candidate_reference"],
+                "cases": [{"id": name, "status": "pass"} for name in sorted(CASE_IDS | HOST_CASES)],
+            }
+            with patch("mlsecops.controller_intake.resume", return_value=(now(), demo, matrix)):
+                report = intake_gate.qualify(ROOT, state)
+            self.assertEqual(report["artifact_hashes"]["controller_capture"], "a" * 64)
+            intake_gate.storage_pipeline.demo.assert_not_called()
+            intake_gate.bootstrap.assert_not_called()
+            stop.assert_not_called()
+
     def test_foreign_cleanup_identity_is_never_stopped(self):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary)

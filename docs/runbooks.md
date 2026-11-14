@@ -304,3 +304,7 @@ bounded owned child,503 при недоступном аудите, pending retr
 перед перезапуском serving.
 
 Время, тип инцидента, затронутые dataset/model/bundle digest, исполнители и права, выполненные действия, разрешённый следующий state, влияние на пользователей, ссылки на redacted evidence, остаточный риск и owner follow-up. Пароли, signing keys и исходные payloads сюда не включаются.
+
+[T07. Общий scoped candidate и перенос SQL-истории](operations/controller-delivery.md)
+
+[M21 on the controller candidate](operations/controller-intake.md)

@@ -10,7 +10,7 @@ from mlsecops.signing import decode64, encode64, sign, verify
 from mlsecops.storage_bootstrap import admin, validate
 
 
-def qualify(root, state, image):
+def qualify(root, state, image, *, demo=None):
     root, state = Path(root), Path(state)
     marker = validate(state)
     reads, cases, temporary_objects = [], [], []
@@ -50,7 +50,7 @@ def qualify(root, state, image):
         return identifier
 
     with patch("mlsecops.storage.get", tracked_get):
-        result = storage_pipeline.demo(root, state, image)
+        result = storage_pipeline.demo(root, state, image) if demo is None else demo()
     policy = read_json(root / "policies/local-cpu.json")
     trust = read_json(state / "storage-trust.json")
     publisher, scorer = state / "storage-clients/publisher", state / "storage-clients/scorer"
