@@ -6,7 +6,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from mlsecops import load_clock, load_diagnostics, load_measurement, load_monitoring
+from mlsecops import (
+    load_clock,
+    load_diagnostics,
+    load_measurement,
+    load_monitoring,
+    performance_delivery,
+)
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -203,7 +209,8 @@ def retained(state, value):
     return hashes
 
 
-def qualify(root, state):
+@performance_delivery.diagnostic
+def qualify(root, state, *, pins=None):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     started = now()
@@ -213,8 +220,11 @@ def qualify(root, state):
         write_json(path, {"status": "inconclusive", "release_ready": False})
     before = materials(root)
     expected_source = source(root, "trusted-mlsecops:dev")
+    index = performance_delivery.start(
+        root, state, expected_source, performance_delivery.owner("M14", pins)
+    )
     controlled = contracts(root)
-    observed = kube_load_native.run(root, state)
+    observed = kube_load_native.run(root, state, **performance_delivery.prepare_args(index))
     content = bounded_read(private, 4 * 1024**2)
     value = decode(content, 4 * 1024**2)
     require(observed["status"] == "pass" and observed["source"] == expected_source)
@@ -282,5 +292,6 @@ def qualify(root, state):
         ],
     }
     write_json(safe_child(state, "evidence/load-contracts.json"), controlled)
+    performance_delivery.seal(root, state, "M14", index, value, digest(content), packets, result)
     write_json(output, result)
     return result

@@ -1,5 +1,8 @@
 # T18/M15: мониторинг распределений и качества
 
+Для запуска M15 на замороженном предложении, отдельно или вместе с M14, используйте
+[четыре owner pins и post-cleanup replay](load-profile.md#замороженный-proposal-для-m14-и-m15).
+
 Ответственные: platform-owner за сбор/доставку, model-owner за reference/quality,
 data-owner за проверенные labels. Scope: [ADR 0057](../decisions/0057-fixed-monitoring-contract.md).
 Реализованы статистическое ядро, HTTP collector, scheduler, подписанная доставка,

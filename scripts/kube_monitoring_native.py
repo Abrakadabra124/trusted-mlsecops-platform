@@ -70,12 +70,17 @@ def reverify(state):
     }
 
 
-def run(root, state):
+def run(root, state, *, proposal_pin=None):
     hosted()
     destination = state / "evidence/kubernetes-monitoring-public.json"
     write_json(destination, {"status": "inconclusive", "release_ready": False})
     promotion_state.install(state, backend=kube_storage.binding)
-    prepared = prepare(root, state, "trusted-mlsecops:dev")
+    prepared = prepare(
+        root,
+        state,
+        "trusted-mlsecops:dev",
+        **({} if proposal_pin is None else {"proposal_pin": proposal_pin}),
+    )
     result = qualify(
         root,
         state,
