@@ -1,7 +1,7 @@
 name: Joint frozen M11 and M12 native qualification
 on:
   push:
-    branches: [fix/m11-m12-common-native]
+    branches: [fix/m11-m12-common-native, fix/r1-m11-window-native]
 permissions:
   contents: read
 jobs:
@@ -20,7 +20,7 @@ jobs:
       - name: Check shared evidence lookup
         run: |
           uv sync --locked --no-build --python 3.12.15
-          uv run --locked python -B -W error -m unittest scripts.shared_serving_qualification
+          uv run --locked python -B -W error -m unittest scripts.shared_serving_qualification scripts.kube_candidate_campaign_qualification scripts.kube_candidate_root_qualification scripts.kube_candidate_faults_qualification
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
