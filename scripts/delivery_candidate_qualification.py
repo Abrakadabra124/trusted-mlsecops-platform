@@ -58,7 +58,9 @@ class Delivery(unittest.TestCase):
         )
         self.enterContext(patch.dict(os.environ, self.env))
         self.reports = {}
-        for gate in ("M07", "M08", "M09", "M16", "M17"):
+        write_json(Path("data.lock"), dict(output=dict(sha256=h("data"))))
+        lock = digest(bounded_read(Path("data.lock")))
+        for gate in ("M02", "M07", "M08", "M09", "M16", "M17"):
             common = dict(
                 candidate_reference=h("candidate"),
                 evaluation_reference=h("evaluation"),
@@ -81,8 +83,13 @@ class Delivery(unittest.TestCase):
                     qualified_candidate_subject=h("subject"),
                     proposal_reference=h("proposal"),
                 )
+            elif gate == "M02":
+                common = dict(source_fingerprint=h("tree"))
+                inputs = dict(data_lock=lock, source=h("data"))
             elif gate == "M07":
                 inputs = dict(
+                    data_lock=lock,
+                    dataset_source=h("data"),
                     model=h("model"),
                     training_request=h("training"),
                     worker_image=self.source["image_id"],

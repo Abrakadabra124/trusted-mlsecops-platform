@@ -91,6 +91,7 @@ def report(gate, profile, root, state=None):
             evidence = qualify(root, state)
             result.update(
                 status=evidence["status"],
+                source_dirty=bool(command(["git", "-C", str(root), "status", "--porcelain"])),
                 cases=evidence["cases"],
                 exit_code=0,
                 metrics={"rows": evidence["rows"]},

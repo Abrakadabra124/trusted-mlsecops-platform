@@ -39,7 +39,10 @@ def reconcile(state, *, demo_pin, proposal_pin, revision):
         candidate_training_input=demo["candidate"]["metadata"]["input_digest"],
     )
     reports = {}
-    for gate in ("M07", "M08", "M09", "M16", "M17"):
+    raw_lock = bounded_read(state.parent / "data.lock")
+    data_lock = digest(raw_lock)
+    dataset_source = decode(raw_lock)["output"]["sha256"]
+    for gate in ("M02", "M07", "M08", "M09", "M16", "M17"):
         raw = bounded_read(evidence / (gate + ".json"))
         report = decode(raw)
         if gate in ("M16", "M17"):
@@ -49,8 +52,16 @@ def reconcile(state, *, demo_pin, proposal_pin, revision):
             ):
                 raise Rejected("delivery_recovery_proposal_mismatch")
             expected = common | runtime
+        elif gate == "M02":
+            expected = dict(
+                source_fingerprint=source["source_fingerprint"],
+                data_lock=data_lock,
+                source=dataset_source,
+            )
         elif gate == "M07":
             expected = common | dict(
+                dataset_source=dataset_source,
+                data_lock=data_lock,
                 model=proposal["model_sha256"],
                 training_request=statistical["candidate_training_input"],
                 worker_image=source["image_id"],

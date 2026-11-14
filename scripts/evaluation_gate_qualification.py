@@ -38,7 +38,15 @@ class EvaluationGateContracts(unittest.TestCase):
                 for name, split in cls.splits.items()
             }
         }
-        cls.statement = {"dataset_id": "2" * 64, "lineage_id": "3" * 64}
+        cls.statement = {
+            "dataset_id": "2" * 64,
+            "lineage_id": "3" * 64,
+            "quarantine_object": digest(
+                canonical(
+                    [row for name in ("train", "validation", "holdout") for row in cls.splits[name]]
+                )
+            ),
+        }
         cls.record = {"dataset_reference": "4" * 64}
         cls.metadata = {
             **cls.statement,
@@ -137,6 +145,13 @@ class EvaluationGateContracts(unittest.TestCase):
         result = self.reconcile()
         self.assertEqual(result["status"], "pass")
         self.assertEqual(result["input_digests"]["model"], digest(self.model))
+        self.assertEqual(
+            result["input_digests"]["dataset_source"], self.statement["quarantine_object"]
+        )
+
+    def test_signed_intake_with_different_bytes_is_refused(self):
+        with patch.dict(self.statement, quarantine_object="0" * 64), self.assertRaises(Rejected):
+            self.reconcile()
 
     def test_replayed_or_modified_evidence_rejected(self):
         for field, value in (

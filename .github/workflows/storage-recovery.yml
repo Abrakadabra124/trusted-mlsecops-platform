@@ -7,6 +7,8 @@ on:
       - 'infra/systemd/mlsecops-daily-backup.*'
       - 'mlsecops/acceptance.py'
       - 'mlsecops/evaluation_gate.py'
+      - 'mlsecops/data_qualification.py'
+      - 'data.lock'
       - 'mlsecops/daily_backup.py'
       - 'mlsecops/recovery_*.py'
       - 'mlsecops/storage_backup.py'
@@ -73,6 +75,8 @@ jobs:
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
               print("workspace=" + validate(Path(".runtime"))["workspace_id"], file=out)
           PY
+      - name: Verify intake, quarantine and locked training source
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
       - name: Train once and verify the independent evaluation and holdout budget
         env:
           M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
@@ -138,7 +142,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
           evidence = Path(".runtime/evidence")
-          for gate in ("M07", "M08", "M09", "M16", "M17"):
+          for gate in ("M02", "M07", "M08", "M09", "M16", "M17"):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())

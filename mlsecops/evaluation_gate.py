@@ -175,8 +175,12 @@ def reconcile(root, state, evidence, image, started):
             "features": [row["features"] for row in splits["validation"]],
         }
         report = bound["report"]
+        source_digest = digest(
+            canonical([row for split in storage_dataset.SPLITS for row in splits[split]])
+        )
         if (
             evidence["scope"] != "native-frozen-evaluation-component-not-full-M07"
+            or source_digest != statement["quarantine_object"]
             or evidence["source_fingerprint"] != source_fingerprint(root)
             or metadata["source_fingerprint"] != evidence["source_fingerprint"]
             or metadata["source_revision"] != command(["git", "-C", str(root), "rev-parse", "HEAD"])
@@ -222,6 +226,7 @@ def reconcile(root, state, evidence, image, started):
                 "candidate_reference": candidate,
                 "evaluation_reference": evidence["evaluation_reference"],
                 "dataset_reference": bound["dataset_reference"],
+                "dataset_source": source_digest,
                 "model": digest(model),
                 "holdout": report["holdout_digest"],
                 "training_request": metadata["input_digest"],
