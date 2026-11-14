@@ -36,6 +36,7 @@ jobs:
           echo 'started_empty=true' >> "$GITHUB_OUTPUT"
           uv run --locked python -m mlsecops.cluster bootstrap
       - name: Prepare model storage and actual source candidate
+        id: sql
         run: |
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
@@ -53,6 +54,15 @@ jobs:
           M12_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
           M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
         run: uv run --locked python -m scripts.shared_serving_native actual
+      - name: Stop owned source SQL before late qualification
+        id: offline
+        if: always() && steps.sql.outcome != 'skipped'
+        run: |
+          uv run --locked python -B -m scripts.m17_recovery_native stop
+          if test -f .runtime/storage.json; then
+            uv run --locked python -c 'from pathlib import Path; from scripts.shared_serving_receipt import offline_pin; print("sha256=" + offline_pin(Path(".runtime")))' >> "$GITHUB_OUTPUT"
+          fi
+          if test "${{ steps.actual.outcome }}" = success; then test -f .runtime/storage.json; fi
       - name: Complete ordinary serving and controlled rotation
         id: native
         env:
@@ -87,22 +97,12 @@ jobs:
           uv run --locked python -m mlsecops.acceptance --gate M12 --state .runtime --output .runtime/evidence/M12.json > "$RUNNER_TEMP/M12.log" || status=$?
           uv run --locked python -c 'import json; r=json.load(open(".runtime/evidence/M12.json")); print(r["gate"],r["status"],r["metrics"].get("checks"),r.get("diagnostics",{}))'
           exit "$status"
-      - name: Stop verified owned source SQL
-        if: always()
+      - name: Recheck same stopped source after both consumers
+        if: always() && steps.offline.outputs.sha256 != ''
+        env:
+          OFFLINE_SHA256: ${{ steps.offline.outputs.sha256 }}
         run: |
-          if test -f .runtime/storage.json; then
-            uv run --locked python - <<'PY'
-          from pathlib import Path
-          from mlsecops.contracts import Rejected
-          from mlsecops.storage_bootstrap import docker, inspect, validate
-          state = Path('.runtime')
-          marker = validate(state)
-          docker(['stop', '--time', '20', marker['container_id']])
-          marker = validate(state)
-          if inspect('container', marker['container_id'])['State']['Running']:
-              raise Rejected('promotion_source_cleanup_incomplete')
-          PY
-          fi
+          uv run --locked python -c 'import os; from pathlib import Path; from scripts.shared_serving_receipt import offline_pin; from scripts.shared_serving_native import require; p=offline_pin(Path(".runtime")); require(p == os.environ["OFFLINE_SHA256"], "source_restart"); print("source_sql_stayed_stopped", p)'
       - name: Remove verified owned disposable cluster
         if: always() && steps.bootstrap.outputs.started_empty == 'true'
         run: |

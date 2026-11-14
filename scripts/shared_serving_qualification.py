@@ -15,6 +15,27 @@ from scripts import shared_serving_native as shared
 
 
 class SharedServingTests(unittest.TestCase):
+    def test_offline_source_pin_detects_restart_or_container_replacement(self):
+        from scripts import shared_serving_receipt as receipts
+
+        marker = dict(container_id="owned")
+        observed = dict(
+            State=dict(Running=False, Status="exited", StartedAt="start", FinishedAt="stop"),
+            RestartCount=0,
+        )
+        with (
+            patch.object(receipts.storage_bootstrap, "validate", return_value=marker),
+            patch.object(receipts.storage_bootstrap, "inspect", return_value=observed),
+        ):
+            original = receipts.offline_pin(Path(".runtime"))
+            for field, value in (("StartedAt", "next start"), ("FinishedAt", "next stop")):
+                with patch.dict(observed["State"], {field: value}):
+                    self.assertNotEqual(original, receipts.offline_pin(Path(".runtime")))
+            with patch.dict(marker, {"container_id": "other"}):
+                self.assertNotEqual(original, receipts.offline_pin(Path(".runtime")))
+            with patch.dict(observed["State"], {"Running": True}), self.assertRaises(Rejected):
+                receipts.offline_pin(Path(".runtime"))
+
     def test_proposal_pin_pair_must_be_present_and_equal(self):
         for pins in (
             {},

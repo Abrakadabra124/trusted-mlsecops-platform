@@ -1,5 +1,7 @@
 # M11: сквозная проверка trust lifecycle
 
+Для M11 и M12 в одной попытке порядок раннего actual, поздних ротаций и передачи SHA-256 описан в [runbook общей native-кампании](shared-serving.md).
+
 Текущий принятый source: [56f1a19 / 43266471492](../evidence/serving-profile-56f1a19-2026-11-12.md#m11-свежая-приёмка-trust-lifecycle),
 146 критериев, 746 preflight executions / 0 skips, проверенные primary hashes/traces и
 terminal SQL/cluster cleanup. Общий job 29 min 6 s уложился в 30 min; резерв 54 s относится
