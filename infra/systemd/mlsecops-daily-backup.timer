@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily owned local-cpu backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+AccuracySec=1s
+Persistent=true
+Unit=mlsecops-daily-backup.service
+
+[Install]
+WantedBy=timers.target

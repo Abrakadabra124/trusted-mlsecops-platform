@@ -209,6 +209,8 @@ def main():
                 "policies/local-cpu.json",
                 "images/tracking/Dockerfile.dockerignore",
                 "images/tracking/requirements.in",
+                "infra/systemd/mlsecops-daily-backup.service",
+                "infra/systemd/mlsecops-daily-backup.timer",
             }
         ):
             fail(f"unexpected publication file: {relative}")

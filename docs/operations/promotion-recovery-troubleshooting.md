@@ -12,7 +12,7 @@
 uv run --locked python -m mlsecops.storage_backup --state .runtime --include-promotion
 ```
 
-Команда читает SQL snapshot и создаёт новые локальные backup files. Она не мигрирует schema, не переключает модель и не меняет source journal. Сохранить полученный backup_id в отдельном доверенном recovery inventory вместе с source revision, временем и разрешённой потерей изменений после snapshot. Архив содержит данные, хранить приватно; не коммитить `.runtime` или signing keys. Возраст принимаемой копии ограничен 24 часами, но ежедневное расписание пока отсутствует.
+Команда читает SQL snapshot и создаёт новые локальные backup files. Она не мигрирует schema, не переключает модель и не меняет source journal. Сохранить полученный backup_id в отдельном доверенном recovery inventory вместе с source revision, временем и разрешённой потерей изменений после snapshot. Архив содержит данные, хранить приватно; не коммитить `.runtime` или signing keys. Для ежедневной копии с измеренной точкой восстановления предусмотрены [host timer и проверка свежести](daily-storage-backup.md). Фактическая периодичность требует наблюдения на работающем хосте.
 
 Восстановление меняет **новый** target: создаёт container/volume/network, новые credentials/CA, imports data и сохраняет receipt. `BACKUP_ID` брать из доверенной записи владельца backup, не вычислять автоматически из полученного неизвестного архива. Public trust bundle получать по независимому доверенному каналу.
 
