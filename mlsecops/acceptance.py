@@ -352,9 +352,14 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate in {"M11", "M12", "M13", "M14", "M15", "M23"}:
+    elif gate in {"M11", "M12", "M13", "M14", "M15", "M16", "M23"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
-        if gate == "M23":
+        if gate == "M16":
+            from mlsecops.canary_gate import SCOPE
+
+            result.update(scope=SCOPE, release_ready=False)
+            required = ()  # qualify checks the retained packets and workflow pins after cleanup.
+        elif gate == "M23":
             from mlsecops.security_gate import STAGES
 
             required = ("storage.json", *(f"evidence/M23-{name}.json" for name in STAGES))
@@ -377,6 +382,8 @@ def report(gate, profile, root, state=None):
             from mlsecops.load_gate import qualify
         elif gate == "M15":
             from mlsecops.monitoring_gate import qualify
+        elif gate == "M16":
+            from mlsecops.canary_gate import qualify
         elif gate == "M23":
             from mlsecops.security_gate import qualify
         else:
@@ -384,6 +391,12 @@ def report(gate, profile, root, state=None):
 
         try:
             evidence = qualify(root, state)
+            if gate == "M16" and (
+                evidence["input_digests"]["source_revision"] != result["source_revision"]
+                or evidence["input_digests"]["source_fingerprint"]
+                != result["input_digests"]["source_fingerprint"]
+            ):
+                raise Rejected("canary_acceptance_source_changed")
             result.update(
                 status=evidence["status"],
                 started_at=evidence["started_at"],
@@ -411,7 +424,9 @@ def report(gate, profile, root, state=None):
                 status="inconclusive" if unavailable else "fail",
                 exit_code=2 if unavailable else 1,
                 residual_risks=[
-                    f"{gate} prerequisites unavailable"
+                    "M16 needs both retained packets, their workflow pins and the stopped owned store"
+                    if unavailable and gate == "M16"
+                    else f"{gate} prerequisites unavailable"
                     if unavailable
                     else f"{gate} runtime verification rejected"
                 ],

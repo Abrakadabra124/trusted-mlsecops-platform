@@ -216,6 +216,8 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 
 ## 5. Canary failure и rollback
 
+Запуск из чистого checkout, измерения и разбор отклонений описаны в [ранбуке M16](operations/canary-rollout.md).
+
 **Ответственный:** platform operator + release approver.
 
 1. Остановить дальнейшее увеличение traffic при превышении error/latency threshold.

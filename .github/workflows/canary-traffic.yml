@@ -1,11 +1,13 @@
-name: T19 canary traffic components
+name: T19 canary traffic and whole-bundle recovery
 on:
   push:
     branches: [codex/cp4-m23-security-events-20261107]
     paths:
       - 'mlsecops/canary_*.py'
+      - 'mlsecops/acceptance.py'
       - 'mlsecops/manual_review.py'
       - 'scripts/canary_*_qualification.py'
+      - 'scripts/canary_*_native.py'
       - 'scripts/manual_review_qualification.py'
       - '.github/workflows/canary-traffic.yml'
   workflow_dispatch:
@@ -31,14 +33,15 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
           export COVERAGE_FILE="$RUNNER_TEMP/t19.coverage"
-          uv run --locked python -B -W error -m coverage run --branch --source=mlsecops.canary_probe,mlsecops.canary_evaluation,mlsecops.canary_campaign,mlsecops.manual_review -m unittest scripts.canary_probe_qualification scripts.canary_evaluation_qualification scripts.canary_campaign_qualification scripts.manual_review_qualification
+          export MODULES=mlsecops.canary_probe,mlsecops.canary_evaluation,mlsecops.canary_campaign,mlsecops.manual_review,mlsecops.canary_journal,mlsecops.canary_gate,mlsecops.canary_native_evidence,scripts.canary_candidate_native,scripts.canary_stable_native,scripts.canary_rollback_native,scripts.canary_rollout_native
+          uv run --locked python -B -W error -m coverage run --branch --source="$MODULES" -m unittest scripts.canary_probe_qualification scripts.canary_evaluation_qualification scripts.canary_campaign_qualification scripts.manual_review_qualification scripts.canary_candidate_native_qualification scripts.canary_stable_native_qualification scripts.canary_rollback_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollout_native_qualification scripts.canary_gate_qualification
           uv run --locked python -m coverage json -o "$RUNNER_TEMP/t19-coverage.json"
           uv run --locked python - <<'PY'
           import json, os
           from pathlib import Path
-          modules = ("canary_probe", "canary_evaluation", "canary_campaign", "manual_review")
+          modules = os.environ["MODULES"].split(",")
           files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "t19-coverage.json").read_bytes())["files"]
-          if files.keys() != {"mlsecops/" + module + ".py" for module in modules}:
+          if files.keys() != {module.replace(".", "/") + ".py" for module in modules}:
               raise SystemExit("T19 module inventory changed")
           for module, report in sorted(files.items()):
               stats = report["summary"]
@@ -46,4 +49,84 @@ jobs:
                   if stats[total] <= 0 or stats[covered] * 100 < stats[total] * 95:
                       raise SystemExit("T19 coverage below threshold in " + module)
               print(module, stats)
+          PY
+  native:
+    needs: traffic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Prepare a private hosted lab and pinned CPU image
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B -m mlsecops build
+      - name: Start owned source storage
+        id: sql
+        run: uv run --locked python -B -m mlsecops.storage_bootstrap
+      - name: Train, evaluate and freeze the original proposal
+        id: proposal
+        run: |
+          uv run --locked python -B -m mlsecops.storage_pipeline
+          uv run --locked python -B -m scripts.release_native --state .runtime
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, digest
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
+              print("sha256=" + digest(bounded_read(Path(".runtime/evidence/release-native.json"))), file=out)
+          PY
+      - name: Run HTTP traffic on authorized stable and qualification candidate
+        id: traffic
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.proposal.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native capture
+      - name: Revoke the active controlled release and recover the exact authorized bundle
+        id: rollback
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.proposal.outputs.sha256 }}
+          T19_PRIMARY_SHA256: ${{ steps.traffic.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native rollback
+      - name: Stop owned source storage and verify the container state
+        if: always()
+        env:
+          BOOTSTRAP: ${{ steps.sql.outcome }}
+        run: |
+          if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path(".runtime")
+          marker = validate(state)
+          docker(["stop", "--time", "20", marker["container_id"]])
+          if inspect("container", validate(state)["container_id"])["State"]["Running"] is not False:
+              raise Rejected("canary_cleanup_failed")
+          PY
+          fi
+      - name: Replay pinned observations after cleanup
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.proposal.outputs.sha256 }}
+          T19_PRIMARY_SHA256: ${{ steps.traffic.outputs.sha256 }}
+          T19_ROLLBACK_SHA256: ${{ steps.rollback.outputs.sha256 }}
+        run: |
+          uv run --locked python -B -W error -m scripts.canary_rollout_native replay
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, canonical, decode, digest
+          raw = bounded_read(Path(".runtime/evidence/M16.json"))
+          report = decode(raw)
+          print(canonical({key: report[key] for key in (
+              "gate", "scope", "release_ready", "status", "source_revision", "input_digests",
+              "artifact_hashes", "cases", "metrics", "started_at", "finished_at", "residual_risks"
+          )} | {"report_sha256": digest(raw)}).decode())
           PY
