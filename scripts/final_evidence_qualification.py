@@ -942,6 +942,54 @@ class FinalEvidenceContracts(unittest.TestCase):
                 self.source["source_fingerprint"],
             )
 
+    def test_inventory_delivery_requires_canonical_keys_and_the_original_file_registry(self):
+        self.build()
+        art = self.reports["M19"]["artifact_hashes"]
+        proposal = self.freeze["evidence/release-native.json"]
+        packet = dict(
+            files=self.freeze.copy(),
+            owner=dict(proposal_pin=proposal),
+            storage_sha256=self.placeholder,
+        )
+        art.update(
+            proposal_packet=proposal,
+            source_trust=self.freeze["storage-trust.json"],
+            public_keys=self.put(self.keys),
+            storage_marker=self.placeholder,
+            delivery_source=self.put(packet),
+            fleet_inputs=self.put(dict(delivery=packet)),
+        )
+
+        def check():
+            final.links(
+                self.reports, self.freeze, lambda ref: final.blob(self.state, ref), self.keys
+            )
+
+        check()
+        with patch.dict(art, fleet_inputs=self.put(dict(delivery={}))), self.assertRaises(Rejected):
+            check()
+        for key in ("public_keys", "proposal_packet", "source_trust", "storage_marker"):
+            with (
+                self.subTest(key=key),
+                patch.dict(art, {key: self.freeze["trusted-keys.json"]}),
+                self.assertRaises(Rejected),
+            ):
+                check()
+        for key in self.freeze:
+            with (
+                self.subTest(key=key),
+                patch.dict(packet["files"], {key: self.placeholder}),
+                patch.dict(art, delivery_source=self.put(packet)),
+                self.assertRaises(Rejected),
+            ):
+                check()
+        with (
+            patch.dict(packet["owner"], proposal_pin=self.placeholder),
+            patch.dict(art, delivery_source=self.put(packet)),
+            self.assertRaises(Rejected),
+        ):
+            check()
+
     def test_governance_requires_independent_signature_complete_materials_and_bindings(self):
         self.build()
         args = (

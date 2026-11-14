@@ -973,7 +973,21 @@ def links(reports, freeze, obj, keys):
     for g in ("M17", "M19"):
         same(artifacts[g]["demo"], freeze["storage-demo.json"], "demo-capture-" + g)
     same(artifacts["M17"]["public_keys"], digest(canonical(keys)), "recovery-keys")
-    same(artifacts["M19"]["public_keys"], freeze["trusted-keys.json"], "inventory-keys")
+    inventory_artifacts = artifacts["M19"]
+    # The standalone collector pins the file including LF. Delivery additionally
+    # pins all four original files and the canonical registry used by M17.
+    if {"proposal_packet", "source_trust", "delivery_source"} & inventory_artifacts.keys():
+        same(inventory_artifacts["public_keys"], digest(canonical(keys)), "inventory-keys")
+        same(inventory_artifacts["proposal_packet"], proposal, "inventory-proposal")
+        same(inventory_artifacts["source_trust"], freeze["storage-trust.json"], "inventory-trust")
+        owner = decode(obj(inventory_artifacts["delivery_source"]))
+        fleet_inputs = decode(obj(inventory_artifacts["fleet_inputs"]))
+        same(fleet_inputs["delivery"], owner, "inventory-fleet-owner")
+        same(owner["files"], freeze, "inventory-source-files")
+        same(owner["owner"]["proposal_pin"], proposal, "inventory-owner-proposal")
+        same(owner["storage_sha256"], inventory_artifacts["storage_marker"], "inventory-storage")
+    else:
+        same(inventory_artifacts["public_keys"], freeze["trusted-keys.json"], "inventory-keys")
     inventory = decode(obj(artifacts["M19"]["primary"]))
     need(
         inventory["schema_version"] == 2
