@@ -2,10 +2,13 @@
 
 import math
 import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from mlsecops import release_authorization, release_bundle
+from mlsecops import release_authorization, release_bundle, storage
 from mlsecops.contracts import (
     Rejected,
+    atomic_write,
     bounded_read,
     canonical,
     decode,
@@ -50,11 +53,34 @@ def verify(root, origin, target, image, *, proposal_pin, keys_pin, demo_pin):
     )
     image_source = source(root, image)
     clock = math.ceil(time.time())
-    package = release_bundle.load(
-        safe_child(target, "storage-clients/serving"),
-        report["proposal_reference"],
-        publisher_public=public["approver"],
-    )
+    # load() reconnects per object. Keep its verified credentials private and
+    # fixed for the entire read, including libpq's later opens of TLS files.
+    exported = safe_child(target, "storage-clients/serving")
+    if (exported / ".no-passwords").exists():
+        raise Rejected("recovered_proposal_serving_client")
+    with TemporaryDirectory() as temporary:
+        client = Path(temporary).resolve()
+        for name in ("connection.json", "client.crt", "client.key", "ca.crt"):
+            atomic_write(client / name, bounded_read(safe_child(exported, name), 4096))
+        params, files = storage.connection_materials(client)
+        if (
+            (params["host"], params["port"], params["user"])
+            != ("127.0.0.1", new["port"], "ml_serving")
+            or any(
+                files[name]
+                != digest(bounded_read(safe_child(target, "storage-pki/" + owned), 4096))
+                for name, owned in (
+                    ("ca.crt", "ca.crt"),
+                    ("client.crt", "ml_serving.crt"),
+                    ("client.key", "ml_serving.key"),
+                )
+            )
+            or validate(target) != new
+        ):
+            raise Rejected("recovered_proposal_serving_client")
+        package = release_bundle.load(
+            client, report["proposal_reference"], publisher_public=public["approver"]
+        )
     context, checked = bind_proposal(
         report,
         package,
