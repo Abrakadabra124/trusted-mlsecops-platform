@@ -185,7 +185,6 @@ def reconcile(value, expected_source, *, started, finished, methods):
 def retained(root, state, value):
     current = value["source"]
     actual_campaign = campaign(value["privacy_campaign_id"])
-    cli_campaign = campaign(value["controlled_cli"]["privacy_campaign_id"])
     audit = value["native"]["audit"]
     result = {
         **{
@@ -218,6 +217,14 @@ def retained(root, state, value):
         + "/report.json",
     )
     require(canonical(checked) == canonical(audit))
+    return retained_windows(state, value)
+
+
+def retained_windows(state, value):
+    """Reread campaign packets without a live release store."""
+    actual_campaign = campaign(value["privacy_campaign_id"])
+    cli_campaign = campaign(value["controlled_cli"]["privacy_campaign_id"])
+    audit = value["native"]["audit"]
     artifact_names = ARTIFACTS
     require_fields(value["artifact_hashes"], artifact_names)
     for name in artifact_names:

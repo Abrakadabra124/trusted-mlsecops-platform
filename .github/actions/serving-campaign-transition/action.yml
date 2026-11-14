@@ -1,0 +1,36 @@
+name: Replace an owned serving cluster
+description: Recheck the source SQL and both live cluster identities across deletion and bootstrap
+inputs:
+  phase:
+    description: Completed gate
+    required: true
+  source_sql:
+    description: Owner hash of the source SQL marker
+    required: true
+outputs:
+  transition:
+    description: Observed public identity hashes on either side of the transition
+    value: ${{ steps.rotate.outputs.transition }}
+runs:
+  using: composite
+  steps:
+    - id: rotate
+      shell: bash
+      env:
+        PHASE: ${{ inputs.phase }}
+        SOURCE_SQL: ${{ inputs.source_sql }}
+      run: |
+        uv run --locked python - <<'PY'
+        import os
+        from pathlib import Path
+        from mlsecops.contracts import canonical
+        from scripts.kube_trust_native import hosted
+        from scripts.serving_campaign import transition
+        hosted()
+        phase = os.environ["PHASE"]
+        if phase not in {"M13","M14"}:
+            raise SystemExit("unknown serving phase")
+        packet = transition(Path(".runtime").resolve(), Path(os.environ["RUNNER_TEMP"]) / (phase+"-retired"), os.environ["SOURCE_SQL"])
+        with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+            print("transition="+canonical(packet).decode(), file=out)
+        PY

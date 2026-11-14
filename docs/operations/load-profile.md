@@ -7,7 +7,17 @@
 
 Самостоятельные workflows `kubernetes-load.yml` и `kubernetes-monitoring.yml` сохраняют обычные входы.
 В [load workflow](../../.github/workflows/kubernetes-load.yml) параметр `mode` принимает
-`frozen-m14`, `frozen-m15` или `frozen-pair`. В последнем режиме один runner готовит
+`frozen-m14`, `frozen-m15`, `frozen-pair` или `frozen-trio`. Для совместной проверки
+`gh workflow run kubernetes-load.yml --ref qualify/m13-m14-m15-shared -f mode=frozen-trio`
+запускает M02, M03 внутри M07 и одну оценку в пустой SQL владельца. После однократной
+фиксации proposal M13, M14 и M15 выполняются последовательно. Между ними runner
+проверяет владельца SQL, удаление кластера, новые UID namespace и тома. После
+подтверждения остановки SQL и отсутствия кластера последний шаг повторно проверяет
+подписи, первичные пакеты и связи шести отчётов. В журнале доступны исходные
+публичные отчёты и их SHA-256. При отказе этапа используйте новый запуск с чистым
+runner и новым proposal. Это evidence шести gates синтетического профиля.
+
+В режиме `frozen-pair` один runner готовит
 один proposal, выполняет M14, удаляет свой Kubernetes-кластер и проверяет его отсутствие.
 Он переносит старые cluster markers в закрытый каталог runner и создаёт новый кластер для M15.
 Исходная host SQL остаётся доступна до завершения обоих gate. Каждый сценарий получает свой
