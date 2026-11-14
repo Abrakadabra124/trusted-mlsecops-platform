@@ -352,13 +352,18 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate in {"M11", "M12", "M13", "M14", "M15", "M16", "M23"}:
+    elif gate in {"M11", "M12", "M13", "M14", "M15", "M16", "M17", "M23"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
         if gate == "M16":
             from mlsecops.canary_gate import SCOPE
 
             result.update(scope=SCOPE, release_ready=False)
             required = ()  # qualify checks the retained packets and workflow pins after cleanup.
+        elif gate == "M17":
+            from mlsecops.recovery_gate import SCOPE
+
+            result.update(scope=SCOPE, release_ready=False)
+            required = ()
         elif gate == "M23":
             from mlsecops.security_gate import STAGES
 
@@ -384,6 +389,8 @@ def report(gate, profile, root, state=None):
             from mlsecops.monitoring_gate import qualify
         elif gate == "M16":
             from mlsecops.canary_gate import qualify
+        elif gate == "M17":
+            from mlsecops.recovery_gate import qualify
         elif gate == "M23":
             from mlsecops.security_gate import qualify
         else:
@@ -391,12 +398,12 @@ def report(gate, profile, root, state=None):
 
         try:
             evidence = qualify(root, state)
-            if gate == "M16" and (
+            if gate in {"M16", "M17"} and (
                 evidence["input_digests"]["source_revision"] != result["source_revision"]
                 or evidence["input_digests"]["source_fingerprint"]
                 != result["input_digests"]["source_fingerprint"]
             ):
-                raise Rejected("canary_acceptance_source_changed")
+                raise Rejected("acceptance_source_changed")
             result.update(
                 status=evidence["status"],
                 started_at=evidence["started_at"],
@@ -420,7 +427,7 @@ def report(gate, profile, root, state=None):
                 isinstance(error, (OSError, subprocess.TimeoutExpired))
                 or str(error) == "trust_hosted_runner_required"
                 or (
-                    gate == "M16"
+                    gate in {"M16", "M17"}
                     and str(error).startswith(
                         ("storage_docker_unavailable", "storage_resource_missing:")
                     )
