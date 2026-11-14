@@ -121,6 +121,8 @@ def qualify(root, state):
         and hexadecimal(control["source_workspace"], 32) != target
         and re.fullmatch(r"sha256:[0-9a-f]{64}", sql["image_id"])
         and control["image"] == sql["image_id"]
+        and control["model_sha256"] == sql["model_sha256"]
+        and control["release_subject"] != proposal["subject_sha256"]
         and canonical(control["approved_sequences"]) == b"[1,2]"
         and canonical(
             [control[k] for k in ("healthy_status", "cold_ready_status", "cold_predict_status")]
@@ -189,7 +191,7 @@ def qualify(root, state):
             "Synthetic local-cpu recovery in independent storage on one hosted machine.",
             "The daily calendar was configured and the service was activated by a controlled timer trigger. "
             "Successive daily runs, offsite recovery and high availability remain unmeasured.",
-            "Golden predictions cover the evaluated candidate. Restored serving and revocation use "
-            "controlled signed approvals in the same backup. M18 and release authorization remain open.",
+            "Restored HTTP serving uses the evaluated candidate's ONNX bytes under controlled signed "
+            "approvals in the same snapshot. The original proposal still requires M18 and release authorization.",
         ],
     )

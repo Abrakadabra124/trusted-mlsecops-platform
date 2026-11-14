@@ -120,7 +120,7 @@ class Gate(unittest.TestCase):
             selected_request_sha256=pin("selection"),
             approval_sha256=pin("approval"),
             release_subject=pin("controlled subject"),
-            model_sha256=pin("controlled model"),
+            model_sha256=refs["model_sha256"],
             revoked_approver_sha256=pin("revoked"),
             healthy_status=200,
             cold_ready_status=503,
@@ -176,6 +176,8 @@ class Gate(unittest.TestCase):
             (self.result["owner"], dict(source_fingerprint="0" * 64)),
             (self.proposal, dict(candidate_reference=pin("other"))),
             (self.control, dict(target_workspace="e" * 32)),
+            (self.control, dict(model_sha256=pin("other-trained-model"))),
+            (self.control, dict(release_subject=self.proposal["subject_sha256"])),
             (self.schedule, dict(backup_id=pin("other"))),
         ):
             with self.subTest(change=change), patch.dict(part, change):

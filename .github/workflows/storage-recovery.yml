@@ -1,0 +1,105 @@
+name: T20 scheduled backup and independent recovery
+on:
+  push:
+    branches: [codex/cp4-m23-security-events-20261107]
+    paths:
+      - '.github/workflows/storage-recovery.yml'
+      - 'infra/systemd/mlsecops-daily-backup.*'
+      - 'mlsecops/acceptance.py'
+      - 'mlsecops/daily_backup.py'
+      - 'mlsecops/recovery_*.py'
+      - 'mlsecops/storage_backup.py'
+      - 'mlsecops/storage_restore.py'
+      - 'mlsecops/storage_snapshot.py'
+      - 'scripts/daily_backup*.py'
+      - 'scripts/m17_*.py'
+      - 'scripts/recovery_*qualification.py'
+      - 'scripts/restore_negative*.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify recovery contracts and documentation
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
+          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native
+          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification
+          uv run --locked python -m coverage json -o "$RUNNER_TEMP/m17-coverage.json"
+          uv run --locked python - "$modules" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "m17-coverage.json").read_bytes())["files"]
+          assert set(files) == {m.replace(".", "/") + ".py" for m in sys.argv[1].split(",")}
+          for name, report in sorted(files.items()):
+              summary = report["summary"]
+              print(name, summary["covered_lines"], summary["num_statements"], summary["covered_branches"], summary["num_branches"])
+              if summary["covered_branches"] * 100 < 95 * summary["num_branches"]:
+                  raise SystemExit("Recovery branch coverage below policy: " + name)
+          PY
+      - name: Prepare pinned CPU runtime
+        run: |
+          uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B -m mlsecops build
+      - name: Start owned source storage
+        id: sql
+        run: uv run --locked python -B -m mlsecops.storage_bootstrap
+      - name: Freeze evaluated candidate and original owner
+        id: source
+        run: |
+          uv run --locked python -B -m mlsecops.storage_pipeline > /dev/null
+          uv run --locked python -B -m scripts.release_native --state .runtime
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, canonical, digest, read_json
+          state = Path(".runtime")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
+              for label, name in (("proposal", "evidence/release-native.json"), ("demo", "storage-demo.json")):
+                  print(label + "=" + digest(bounded_read(state / name)), file=out)
+              print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
+          PY
+      - name: Trigger the timer and restore its exact snapshot into fresh storage
+        id: recovery
+        env:
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.m17_recovery_native capture
+      - name: Stop and verify owned storage
+        if: always() && steps.sql.outcome != 'skipped'
+        env:
+          BOOTSTRAP: ${{ steps.sql.outcome }}
+        run: |
+          if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
+          uv run --locked python -B -m scripts.m17_recovery_native stop
+      - name: Verify M17 from retained evidence after cleanup
+        env:
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M17_PRIMARY_SHA256: ${{ steps.recovery.outputs.sha256 }}
+        run: |
+          uv run --locked python -B -W error -m scripts.m17_recovery_native replay
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, canonical, decode, digest
+          raw = bounded_read(Path(".runtime/evidence/M17.json"))
+          print(canonical(decode(raw) | {"report_sha256": digest(raw)}).decode())
+          PY

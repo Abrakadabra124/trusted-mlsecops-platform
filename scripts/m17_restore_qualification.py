@@ -233,6 +233,24 @@ class Restore(unittest.TestCase):
             keys_pin=self.keys_pin,
         )
 
+    def test_controlled_release_uses_pinned_sql_model_and_training_reference(self):
+        from scripts import m17_recovery_native, serving_native
+
+        fixture = object()
+        bind = self.mock(serving_native, "bind_model")
+        args = (self.root, self.state, 15439)
+        first, scores = m17_recovery_native.bind_evaluated_model(
+            *args, self.demo_pin, fixture, self.image
+        )
+        self.assertEqual(first, [[0.1] * 6])
+        self.assertEqual(scores, self.training_scores[:1])
+        bind.assert_called_once_with(fixture, self.image, self.model, self.evaluation["report"])
+        self.load.assert_called_once()
+        self.worker.assert_not_called()
+        with self.assertRaises(Rejected):
+            m17_recovery_native.bind_evaluated_model(*args, "0" * 64, fixture, self.image)
+        bind.assert_called_once()
+
     def replay(self, packet):
         return adapter.replay(
             packet,

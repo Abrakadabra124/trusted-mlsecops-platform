@@ -37,7 +37,8 @@ def require(condition, reason):
         raise Rejected("m17_restore_" + reason)
 
 
-def _readback(state, port, demo, policy, trust, image):
+def evaluated_materials(state, port, demo, policy, trust, image):
+    """Read the evaluated ONNX, signed evaluation and validation reference from this SQL."""
     publisher = safe_child(state, "storage-clients/publisher")
     promoter = safe_child(state, "storage-clients/promoter")
     for client in (publisher, promoter):
@@ -87,19 +88,22 @@ def _readback(state, port, demo, policy, trust, image):
         == meta["validation_probability_digest"],
         "evaluated_scores",
     )
-    evaluated = validate_scores(saved, len(splits["validation"]))
+    validate_scores(saved, len(splits["validation"]))
+    return model, features, saved
+
+
+def _readback(state, port, demo, policy, trust, image):
+    model, features, saved = evaluated_materials(state, port, demo, policy, trust, image)
     batch = PredictionBatch(model, features)
     output, execution = sandbox.run_worker(image, batch.request)
     scores, _, proof = batch.consume(output)
     require(execution["image_id"] == image, "worker_image")
-    require(
-        float(abs(scores - evaluated[:ROWS]).max()) <= policy["repeat_tolerance"], "golden_parity"
-    )
+    require(float(abs(scores - saved[:ROWS]).max()) <= policy["repeat_tolerance"], "golden_parity")
     return dict(
         prediction_receipt=proof,
-        dataset_reference=record["dataset_reference"],
-        candidate_reference=reference,
-        evaluation_reference=evaluation_ref,
+        dataset_reference=demo["dataset"]["dataset_reference"],
+        candidate_reference=demo["candidate"]["candidate_reference"],
+        evaluation_reference=demo["evaluation_reference"],
         model_sha256=proof["model_digest"],
         image_id=image,
         features_sha256=digest(canonical(features)),
