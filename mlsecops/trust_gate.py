@@ -1,7 +1,10 @@
 """Fresh M11 evidence reconciliation. A mechanism pass never grants release approval."""
 
-from mlsecops import trust_trace
-from mlsecops.contracts import Rejected, canonical, require_fields
+from datetime import datetime
+
+from mlsecops import release_policy, trust_trace
+from mlsecops.candidate_serving_reader import KIND
+from mlsecops.contracts import Rejected, canonical, digest, require_fields
 from mlsecops.release_policy import integer
 from mlsecops.storage import object_id
 
@@ -45,6 +48,101 @@ def rejected(value, reason=None):
     )
     if reason is not None:
         require(value["reason"] == reason)
+
+
+def delivery(value, binding, config):
+    """Join the actual frozen subject and signed permit to its separate controlled history."""
+    actual = value["actual_inference"]
+    fixed = (
+        "candidate_reference",
+        "evaluation_reference",
+        "proposal_reference",
+        "subject_sha256",
+        "model_sha256",
+    )
+    require(canonical({k: actual[k] for k in fixed}) == canonical({k: binding[k] for k in fixed}))
+    require(
+        actual["source"] == binding["source"]
+        and canonical(config["context"]) == canonical(binding["context"])
+        and config["publisher_public"] == binding["publisher_public"]
+        and config["proposal_reference"] == binding["proposal_reference"]
+    )
+    permit = release_policy.checked(config["permit_envelope"], KIND, config["permit_public"])
+    expected = dict(
+        schema_version=1,
+        purpose=KIND,
+        campaign_id=actual["qualification_campaign_id"],
+        environment=binding["context"]["policy"]["environment"],
+        proposal_sha256=binding["proposal_reference"],
+        subject_sha256=binding["subject_sha256"],
+        model_sha256=binding["model_sha256"],
+        **binding["source"],
+    )
+    require_fields(permit, (*expected, "issued_at", "expires_at"))
+    require(canonical({k: permit[k] for k in expected}) == canonical(expected))
+    release_policy.window(permit, integer(permit["issued_at"]), maximum=600)
+    start, finish = (datetime.fromisoformat(actual[k]) for k in ("started_at", "finished_at"))
+    require(
+        start.utcoffset() is not None
+        and finish.utcoffset() is not None
+        and int(start.timestamp()) <= permit["issued_at"] <= finish.timestamp()
+        and digest(canonical(permit))
+        == config["expected_permit"]
+        == actual["qualification_permit_sha256"]
+    )
+    typed(
+        actual["native"],
+        {
+            "qualification-permit-payload": digest(canonical(permit)),
+            "qualification-permit-envelope": digest(canonical(config["permit_envelope"])),
+        },
+    )
+    refusal = value["actual"]
+    require(
+        actual["actual_refusal"] == refusal
+        and refusal["candidate"] == binding["candidate_reference"]
+        and refusal["proposal"] == binding["proposal_reference"]
+        and refusal["model"] == binding["model_sha256"]
+        and refusal["parent_refusal"] == "release_assurance_required"
+        and refusal["job_outcome"] == "rejected"
+    )
+    startup = refusal["serving_before_admission"]
+    observation = startup["observation"]
+    require(
+        startup["release_ready"] is False
+        and observation["release_ready"] is False
+        and observation["existing_process"] is True
+        and observation["pod_uid"] == startup["pod_uid"]
+        and integer(startup["heartbeat_after"]) > integer(startup["heartbeat_before"], minimum=0)
+        and 0 <= trust_trace.number(startup["elapsed_seconds"]) <= 120
+        and {
+            "existing-HTTP-process-live",
+            "unapproved-or-revoked-ready-503",
+            "unapproved-or-revoked-predict-503",
+            "no-inference-worker",
+        }.issubset(observation["cases"])
+    )
+    rollback = value["authorized_rollback"]
+    for receipt in (
+        rollback["target_receipt"],
+        rollback["from_receipt"],
+        rollback["admitted"]["receipt"],
+    ):
+        require(
+            object_id(receipt["subject_sha256"]) != binding["subject_sha256"]
+            and object_id(receipt["proposal_reference"]) != binding["proposal_reference"]
+            and receipt["release_ready"] is False
+        )
+    return {
+        "actual_release_authorization": "inconclusive",
+        "actual_production_refusal": refusal["parent_refusal"],
+        "actual_job_outcome": refusal["job_outcome"],
+        "controlled_subjects": [
+            rollback[k]["subject_sha256"] for k in ("target_receipt", "from_receipt")
+        ],
+        "qualification_permit_sha256": actual["qualification_permit_sha256"],
+        "release_ready": False,
+    }
 
 
 def probe(actual, value, *, target="primary", fault=None, extra=None, cold=False):

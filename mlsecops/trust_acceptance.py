@@ -1,11 +1,14 @@
 """Run one fresh M11 campaign on the explicitly authorized disposable hosted lab."""
 
+import os
 import subprocess
 import sys
+import uuid
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 
-from mlsecops import trust_gate
+from mlsecops import trust_delivery, trust_gate
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -21,9 +24,11 @@ from scripts import (
     kube_serving_native,
     release_key_native,
     release_key_serving_native,
+    serving_output_native,
     trust_contracts,
 )
 from scripts.kube_trust_native import hosted
+from scripts.release_reader_native import disposable
 
 
 def materials(root):
@@ -74,14 +79,27 @@ def controlled_contracts(root):
     return value
 
 
-def qualify(root, state, image="trusted-mlsecops:dev"):
+def qualify(root, state, image="trusted-mlsecops:dev", *, proposal_pin=None, demo_pin=None):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     preparation_started = now()
     output = safe_child(state, "evidence/trust-gate.json")
     write_json(output, {"status": "inconclusive", "release_ready": False})
+    proposal_pin = (
+        proposal_pin if proposal_pin is not None else os.environ.get("M11_PROPOSAL_SHA256") or None
+    )
+    demo_pin = demo_pin if demo_pin is not None else os.environ.get("M11_DEMO_SHA256") or None
+    trust_delivery.check_pins(proposal_pin, demo_pin)
     before = materials(root)
-    prepared = kube_serving_native.prepare(root, state, image)
+    frozen = None
+    if proposal_pin is not None:
+        trust_delivery.clean_campaign(state)
+        frozen = trust_delivery.freeze(
+            root, state, serving_output_native.source(root, image), proposal_pin, demo_pin
+        )
+    prepared = kube_serving_native.prepare(
+        root, state, image, **({} if frozen is None else {"proposal_pin": proposal_pin})
+    )
     source = {k: prepared[k] for k in ("source_revision", "source_fingerprint")}
     source["image_id"] = prepared["profile"]["image_id"]
     started = now()
@@ -97,22 +115,31 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
     )
     write_json(safe_child(state, "evidence/kubernetes-serving.json"), native)
     metrics = trust_gate.reconcile(native, source)
-    rotation = release_key_native.qualify(root, state)
+    # Rotation history is synthetic. Keep the owner's source SQL available for
+    # subsequent gates and backup when qualifying an externally frozen proposal.
+    rotation_state = (
+        nullcontext(state)
+        if frozen is None
+        else disposable(root, state, uuid.uuid4().hex, "M11-rotations", 15446)
+    )
+    with rotation_state as isolated:
+        rotation = release_key_native.qualify(root, isolated)
+        trust_gate.passed(rotation)
+        trust_gate.require(
+            {k: rotation[k] for k in ("source_revision", "source_fingerprint")}
+            == {k: source[k] for k in ("source_revision", "source_fingerprint")}
+            and len(rotation["cases"]) == len(set(rotation["cases"])) == 37
+            and rotation["head_sequence"] == rotation["policy_version"] == 4
+            and len(set(rotation["rotations"])) == 3
+        )
+        signers = release_key_serving_native.qualify(root, isolated, image)
+    if frozen is not None:
+        trust_gate.require(not isolated.exists())
     write_json(safe_child(state, "evidence/release-key-native.json"), rotation)
-    trust_gate.passed(rotation)
-    trust_gate.require(
-        {k: rotation[k] for k in ("source_revision", "source_fingerprint")}
-        == {k: source[k] for k in ("source_revision", "source_fingerprint")}
-    )
-    trust_gate.require(
-        len(rotation["cases"]) == len(set(rotation["cases"])) == 37
-        and rotation["head_sequence"] == rotation["policy_version"] == 4
-        and len(set(rotation["rotations"])) == 3
-    )
-    signers = release_key_serving_native.qualify(root, state, image)
     write_json(safe_child(state, "evidence/release-key-serving.json"), signers)
     metrics["signer_first_503_seconds"] = trust_gate.release_signers(signers, source)
     actual = native["actual_inference"]
+    joins = {} if frozen is None else trust_delivery.retained(state, native, frozen)
     finished = now()
     times = [
         datetime.fromisoformat(t)
@@ -138,6 +165,16 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         or materials(root) != before
     ):
         raise Rejected("M11_inputs_changed")
+    frozen_hashes = {}
+    if frozen is not None:
+        binding_path = safe_child(state, "evidence/trust-frozen.json")
+        write_json(binding_path, {"binding": frozen, "joins": joins})
+        frozen_hashes = {
+            "frozen_binding": digest(bounded_read(binding_path)),
+            "proposal_packet": proposal_pin,
+            "storage_demo": demo_pin,
+            "signed_evaluation": frozen["evaluation_reference"],
+        }
     write_json(safe_child(state, "evidence/trust-contracts.json"), controlled)
     criteria = {
         "actual-candidate-binding",
@@ -150,6 +187,15 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "signer-sql-policy-history",
         *metrics["first_503_seconds"],
         *("signer-" + role for role in metrics["signer_first_503_seconds"]),
+        *(
+            (
+                "frozen-proposal-signed-evaluation",
+                "production-refusal-controlled-subject-separation",
+                "isolated-rotation-cleanup",
+            )
+            if frozen is not None
+            else ()
+        ),
     }
     cases = controlled["cases"] + [
         {"id": "M11-" + name, "status": "pass", "expected": True, "actual": True}
@@ -167,17 +213,27 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "source_revision": source["source_revision"],
         "cases": cases,
         "checks": len(cases),
-        "metrics": metrics,
+        "metrics": {**metrics, **joins},
         "input_digests": {
             **source,
             "candidate_reference": actual["candidate_reference"],
             "proposal_reference": actual["proposal_reference"],
             "model": actual["model_sha256"],
             "release_subject": actual["subject_sha256"],
+            **(
+                {}
+                if frozen is None
+                else {
+                    "evaluation_reference": frozen["evaluation_reference"],
+                    "qualified_candidate_subject": frozen["subject_sha256"],
+                    "qualified_candidate_model": frozen["model_sha256"],
+                }
+            ),
         },
         "artifact_hashes": {
             **actual["artifact_hashes"],
             "method_materials": digest(canonical(before)),
+            **frozen_hashes,
             **{
                 name: digest(bounded_read(safe_child(state, "evidence/" + name + ".json")))
                 for name in (
