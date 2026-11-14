@@ -39,12 +39,20 @@ on:
       - 'mlsecops/inventory_gate.py'
       - 'scripts/inventory_*.py'
   workflow_dispatch:
+    inputs:
+      serving_gate:
+        description: Kubernetes campaign to exercise on this attempt's frozen proposal
+        type: choice
+        default: M12
+        options: [M12, M13]
 permissions:
   contents: read
 jobs:
   recovery:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      DELIVERY_SERVING_GATE: ${{ inputs.serving_gate || 'M12' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -169,6 +177,7 @@ jobs:
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
       - name: Serve the frozen proposal through the Kubernetes HTTP worker and verify admission refusals
+        if: env.DELIVERY_SERVING_GATE == 'M12'
         env:
           M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
         run: |
@@ -176,6 +185,12 @@ jobs:
             uv run --locked python -c 'from pathlib import Path; from mlsecops.contracts import canonical, read_json; print(canonical(read_json(Path(".runtime/evidence/M12.json")).get("diagnostics", {})).decode())'
             exit 1
           fi
+      - name: Verify private inference and operator observations on the frozen proposal
+        if: env.DELIVERY_SERVING_GATE == 'M13'
+        env:
+          M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M13 --output .runtime/evidence/M13.json
       - name: Measure canary traffic on the frozen proposal before taking its storage offline
         id: canary
         env:
@@ -215,7 +230,10 @@ jobs:
           fi
           kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
           if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
-      - name: Replay M16 M17 M19 and reconcile twelve reports after verified cleanup
+      - name: Reverify retained private monitoring and feedback observations after teardown
+        if: success() && env.DELIVERY_SERVING_GATE == 'M13'
+        run: uv run --locked python -B -W error -c 'from pathlib import Path; from mlsecops.privacy_gate import ingress_retained; from mlsecops.contracts import canonical; print(canonical(ingress_retained(Path(".runtime"))).decode())'
+      - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery
         env:
           T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
@@ -242,10 +260,11 @@ jobs:
           echo "receipt=$(sha256sum .runtime/evidence/delivery-candidate.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           uv run --locked python - <<'PY'
           from pathlib import Path
+          import os
           from mlsecops.contracts import bounded_read, canonical, decode, digest
-          from scripts.delivery_candidate import GATES
+          from scripts.delivery_candidate import campaign_gates
           evidence = Path(".runtime/evidence")
-          for gate in GATES:
+          for gate in campaign_gates(os.environ["DELIVERY_SERVING_GATE"]):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())
@@ -262,7 +281,8 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import canonical, read_json
           from mlsecops.final_evidence import CHILDREN
-          from scripts.delivery_candidate import GATES
+          from scripts.delivery_candidate import campaign_gates
+          gates = campaign_gates(os.environ["DELIVERY_SERVING_GATE"])
           report = read_json(Path(".runtime/evidence/M18-gap.json"))
           observed = report["diagnostics"]
           if (report["gate"] != "M18" or report["scope"] != "delivery-receipt-gap-map"
@@ -271,8 +291,8 @@ jobs:
                   or report["source_revision"] != os.environ["GITHUB_SHA"]
                   or observed["delivery_source_revision"] != os.environ["GITHUB_SHA"]
                   or report["artifact_hashes"]["delivery_receipt"] != os.environ["M18_DELIVERY_SHA256"]
-                  or observed["unavailable"] or sorted(observed["receipt_matched"]) != sorted(GATES)
-                  or sorted(observed["missing_receipts"]) != sorted(set(CHILDREN) - set(GATES))):
+                  or observed["unavailable"] or sorted(observed["receipt_matched"]) != sorted(gates)
+                  or sorted(observed["missing_receipts"]) != sorted(set(CHILDREN) - set(gates))):
               raise SystemExit("M18 delivery evidence mismatch")
           print(canonical({"M18": report["status"], **observed}).decode())
           PY

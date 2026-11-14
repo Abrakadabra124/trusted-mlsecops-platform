@@ -256,6 +256,33 @@ class Delivery(unittest.TestCase):
                             self.run_cli()
             write_json(self.path(gate), result)
 
+    def test_privacy_campaign_checks_frozen_proposal_and_never_counts_m12(self):
+        # Both files can exist. Only the campaign selected by the job may be credited.
+        report = self.reports["M12"].copy()
+        inputs = report["input_digests"].copy()
+        inputs["model_sha256"] = inputs.pop("model")
+        inputs["subject_sha256"] = inputs.pop("release_subject")
+        artifacts = dict(
+            proposal_packet=self.env["M17_PROPOSAL_SHA256"], frozen_demo=self.env["M17_DEMO_SHA256"]
+        )
+        report.update(gate="M13", artifact_hashes=artifacts, input_digests=inputs)
+        with patch.dict(os.environ, DELIVERY_SERVING_GATE="M13"):
+            write_json(self.path("M13"), report)
+            receipt = self.run_cli()
+            self.assertEqual(set(receipt["reports"]), (set(self.reports) - {"M12"}) | {"M13"})
+            self.assertEqual(receipt["reports"]["M13"], digest(bounded_read(self.path("M13"))))
+            for fields in (inputs, artifacts):
+                for key in fields:
+                    with self.subTest(key=key), patch.dict(fields, {key: "9" * 64}):
+                        write_json(self.path("M13"), report)
+                        with self.assertRaises(Rejected):
+                            self.run_cli()
+            self.path("M13").unlink()
+            with self.assertRaises((OSError, Rejected)):
+                self.run_cli()
+        with patch.dict(os.environ, DELIVERY_SERVING_GATE="M18"), self.assertRaises(Rejected):
+            self.run_cli()
+
     def test_changed_originals_or_foreign_revision_refuse(self):
         for key in (
             "M17_DEMO_SHA256",
@@ -395,8 +422,15 @@ class Workflow(unittest.TestCase):
         self.assertLess(
             public.index("--gate M19 --output"), public.index("-m scripts.delivery_candidate")
         )
-        self.assertIn("from scripts.delivery_candidate import GATES", public)
-        self.assertIn("for gate in GATES:", public)
+        self.assertIn('for gate in campaign_gates(os.environ["DELIVERY_SERVING_GATE"]):', public)
+        privacy, capture_privacy = step("--gate M13 --output")
+        offline, _ = step("ingress_retained(Path(")
+        self.assertLess(promotion, privacy)
+        self.assertLess(privacy, canary)
+        self.assertLess(cluster, offline)
+        self.assertLess(offline, replay)
+        self.assertIn("M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}", capture_privacy)
+        self.assertIn("M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}", capture_privacy)
 
     def test_normal_entrypoints_write_distinct_private_packets(self):
         from scripts import canary_rollout_native as canary

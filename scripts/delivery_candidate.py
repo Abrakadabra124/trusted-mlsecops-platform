@@ -10,7 +10,15 @@ from mlsecops.security_events import hexadecimal
 GATES = ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "M17", "M19")
 
 
-def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, revision):
+def campaign_gates(serving_gate):
+    if serving_gate not in {"M12", "M13"}:
+        raise Rejected("delivery_unknown_serving_gate")
+    return tuple(serving_gate if gate == "M12" else gate for gate in GATES)
+
+
+def reconcile(
+    state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, revision, serving_gate="M12"
+):
     evidence = state / "evidence"
     demo = decode(read_pinned(state / "storage-demo.json", demo_pin))
     proposal = decode(read_pinned(evidence / "release-native.json", proposal_pin))
@@ -64,7 +72,7 @@ def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, r
     raw_lock = bounded_read(state.parent / "data.lock")
     data_lock = digest(raw_lock)
     dataset_source = decode(raw_lock)["output"]["sha256"]
-    for gate in GATES:
+    for gate in campaign_gates(serving_gate):
         raw = bounded_read(evidence / (gate + ".json"))
         report = decode(raw)
         if gate in ("M16", "M17", "M19"):
@@ -92,6 +100,21 @@ def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, r
                 expected |= dict(
                     release_subject=proposal["subject_sha256"], model=proposal["model_sha256"]
                 )
+        elif gate == "M13":
+            if (
+                report["artifact_hashes"].get("proposal_packet") != proposal_pin
+                or report["artifact_hashes"].get("frozen_demo") != demo_pin
+            ):
+                raise Rejected("delivery_privacy_proposal_mismatch")
+            expected = (
+                common
+                | source
+                | dict(
+                    model_sha256=proposal["model_sha256"],
+                    subject_sha256=proposal["subject_sha256"],
+                    proposal_reference=proposal["proposal_reference"],
+                )
+            )
         elif gate in ("M10", "M12"):
             if gate == "M10" and (
                 report["release_ready"] is not False
@@ -185,6 +208,7 @@ if __name__ == "__main__":
                     fleet=os.environ["M19_FLEET_INPUTS_SHA256"],
                 ),
                 revision=os.environ["GITHUB_SHA"],
+                serving_gate=os.environ.get("DELIVERY_SERVING_GATE", "M12"),
             )
         ).decode()
     )
