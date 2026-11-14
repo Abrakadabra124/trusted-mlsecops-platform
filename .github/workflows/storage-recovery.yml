@@ -1,7 +1,7 @@
 name: T20 scheduled backup and independent recovery
 on:
   push:
-    branches: [codex/cp4-m23-security-events-20261107]
+    branches: [codex/cp4-m23-security-events-20261107, qualify/t25-delivery]
     paths:
       - '.github/workflows/storage-recovery.yml'
       - 'infra/systemd/mlsecops-daily-backup.*'
@@ -34,6 +34,9 @@ on:
       - 'mlsecops/robustness_gate.py'
       - 'scripts/canary_rollout_native.py'
       - 'mlsecops/canary_gate.py'
+      - 'mlsecops/inventory_fleet.py'
+      - 'mlsecops/inventory_gate.py'
+      - 'scripts/inventory_*.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -57,8 +60,8 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
-          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate
-          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification scripts.reproducibility_candidate_qualification
+          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate,mlsecops.inventory_fleet,mlsecops.inventory_gate,scripts.inventory_fleet_native,scripts.inventory_fleet_materials,scripts.inventory_deployment_native
+          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification scripts.reproducibility_candidate_qualification scripts.inventory_delivery_qualification scripts.inventory_fleet_qualification scripts.inventory_fleet_evidence_qualification scripts.inventory_materials_qualification scripts.inventory_gate_qualification scripts.asset_graph_qualification scripts.candidate_serving_reader_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification scripts.release_native_qualification
           uv run --locked python -m coverage json -o "$RUNNER_TEMP/m17-coverage.json"
           uv run --locked python - "$modules" <<'PY'
           import json, os, sys
@@ -121,6 +124,25 @@ jobs:
               print("keys_file=" + digest(bounded_read(state / "trusted-keys.json")), file=out)
               print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
           PY
+      - name: Prepare inventory branches around the fresh original proposal
+        id: inventory_inputs
+        env:
+          M19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M19_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M19_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M19_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M19_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
+        run: uv run --locked python -B -W error -m scripts.inventory_fleet_materials --existing
+      - name: Observe four deployments and capture M19 while the original proposal is valid
+        id: inventory_capture
+        env:
+          M19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M19_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M19_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M19_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M19_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
+          M19_FLEET_INPUTS_SHA256: ${{ steps.inventory_inputs.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.inventory_deployment_native
       - name: Verify signed promotion refusal and authorized control before serving
         env:
           M10_STORAGE_DEMO_SHA256: ${{ steps.source.outputs.demo }}
@@ -192,7 +214,7 @@ jobs:
           fi
           kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
           if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
-      - name: Verify M16 and M17 against the original candidate after cleanup
+      - name: Replay M16 M17 M19 and reconcile twelve reports after verified cleanup
         env:
           T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
@@ -201,16 +223,25 @@ jobs:
           M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
           M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
           M17_PRIMARY_SHA256: ${{ steps.recovery.outputs.sha256 }}
+          M19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M19_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M19_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M19_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+          M19_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
+          M19_FLEET_INPUTS_SHA256: ${{ steps.inventory_inputs.outputs.sha256 }}
+          M19_PRIMARY_SHA256: ${{ steps.inventory_capture.outputs.sha256 }}
         run: |
           uv run --locked python -B -W error -m scripts.m17_recovery_native replay
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json
           uv run --locked python -B -W error -m scripts.delivery_candidate
           uv run --locked python - <<'PY'
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
+          from scripts.delivery_candidate import GATES
           evidence = Path(".runtime/evidence")
-          for gate in ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "M17"):
+          for gate in GATES:
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())
