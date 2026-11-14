@@ -26,6 +26,22 @@ uv run --locked python -m mlsecops.promotion_controller \
 
 CLI предназначен для Linux и включает существующий process privacy guard: запрет core dumps и dumpable. Ошибки имеют постоянный stderr `promotion_rejected`, exit 1; interruption - exit 130. Для повторного запроса используются те же immutable references. Неоднозначный commit требует readback, а не выдачи нового sequence.
 
+## Приёмка T13 до выдачи release approval
+
+В [workflow promotion-entrypoint](../.github/workflows/promotion-entrypoint.yml) выберите `workflow_dispatch` с `mode=t13-m10`. На hosted runner обычный storage pipeline создаёт candidate и evaluation, а `scripts.release_native` публикует его подписанное предложение. Владелец передаёт SHA-256 исходных файлов через `M10_STORAGE_DEMO_SHA256`, `M10_KEYS_SHA256`, `M10_TRUST_SHA256` и `M10_RELEASE_REPORT_SHA256`. Тот же [runner](../scripts/promotion_gate_native.py) можно вызвать в течение срока действия уже существующего предложения на таком runner.
+
+```sh
+uv run --locked python -m mlsecops.acceptance --gate M10 --state .runtime --output .runtime/evidence/M10.json
+```
+
+1. Из исходного SQL читаются подписанное предложение, capsule и материалы. Верификатор заново проверяет подписи, связи, source, образ и модель. В отдельную временную базу копируются те же байты под исходным proposal reference. Для этого subject подаются пустые assurance и approval. Обычный verifier возвращает `release_assurance_required`, а отдельный процесс CLI возвращает штатный отказ. Для обоих вызовов проверяются подписанные события и receipts в их собственных временных интервалах. Head, журнал и множество объектов до и после каждого вызова совпадают.
+2. Вторая временная база получает другой subject и собственный набор signing keys. Модель содержит те же оценённые байты. Все обязательные gate reports здесь контролируемые. Проверяются семь отказов M10, а также approval с чужим policy digest, неверным issuer, ключом publisher и отсутствующий approval. Каждый случай должен вернуть ожидаемую причину через SDK и отказ через CLI при неизменном состоянии. Затем разрешённый CLI записывает sequence 1, serving-роль читает selection и proof. Точный повтор возвращает прежний receipt и оставляет одну запись журнала.
+3. После удаления временных model/trust stores и проверки исходного хранилища сохраняется private `.runtime/evidence/M10-promotion-primary.json`. В M10 попадают SHA-256 первичных данных, исходные привязки, ожидаемые и наблюдаемые результаты. Hosted workflow выводит отчёт после проверки остановки owned source SQL.
+
+Статус `pass` у M10 относится к перечисленным критериям механизма T13. При отсутствии полномочий для исходного предложения отчёт сохраняет `metrics.actual_release_authorization=inconclusive` и `release_ready=false`. Для production сначала собираются реальные отчёты для этого же descriptor и модели, включая M10 и итоговый M18. Независимые assessor и approver подписывают соответственно `release-assurance` и `release-approval` в действующем окне policy. В целевом хранилище публикуются точные report bytes и canonical envelopes в `ml.releases`. Оператор передаёт четыре immutable references обычному `mlsecops.promotion_controller` с independently pinned config, настроенным SQL head, online trust и audit. Повтор использует исходный request. Для нового descriptor после expiry нужны привязанные к нему свидетельства.
+
+При наличии настоящего разрешённого комплекта оператор может выполнить ту же проверку перехода в подготовленной временной model SQL через `scripts.promotion_gate_native.authorized_transition(root, models, config, request, directory=private_dir, proposal_reference=actual_reference, subject=actual_subject)`. Требуются исходный sequence 0, новые каталоги для двух вызовов CLI и отдельные pins от владельца descriptor. Функция использует supplied reports и подписи через обычный controller, читает durable selection и proof и возвращает первичные наблюдения. Этот последующий шаг не является входом для генерации отчёта M10.
+
 ## Проверка и ограничения
 
 Локально 11 negative/positive contract tests новой команды прошли, 73/73 statements и 24/24 branches. Проверены signed references, exact retry, отсутствующие reports/assurance/approval, чужая identity, подмена pins, noncanonical/forged envelopes, revocation/outage и transport budgets. Fixtures имеют искусственные all-pass reports и явно не являются приёмкой настоящей модели. 38 adjacent/controller tests и 6 probe tests также прошли; группы пересекаются и не складываются в число уникальных проверок.
