@@ -262,6 +262,9 @@ def frozen(root, state, index, revision, fingerprint):
         trust["evaluator"],
     )
     splits = decode(package["documents"]["split_manifest"])["objects"]
+    dataset_statement = release_policy.checked(
+        decode(objects["manifests", refs["dataset_manifest"]]), "stored-dataset", trust["curator"]
+    )
     projection = decode(package["documents"]["asset_projection"])["bindings"]
     lineage = release_policy.checked(
         decode(objects["lineage", projection["lineage_object"]]), "data-lineage", trust["curator"]
@@ -350,6 +353,13 @@ def frozen(root, state, index, revision, fingerprint):
         split_materials=metadata["materials"],
         prediction_protocol=signed_eval["report"]["prediction_protocol"],
         evaluation_auprc=signed_eval["report"]["auprc"],
+        integrity_snapshot={
+            **{k: splits[k + ".json"]["sha256"] for k in ("train", "validation", "holdout")},
+            "manifest": refs["split_manifest"],
+            "index": refs["dataset_manifest"],
+            "lineage": dataset_statement["lineage_object"],
+            "approval": dataset_statement["approval_object"],
+        },
         evaluation_metrics={
             k: signed_eval["report"][k]
             for k in (

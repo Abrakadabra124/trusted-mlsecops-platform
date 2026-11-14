@@ -62,7 +62,7 @@ def capture(root, state, freeze, revision):
     return pin
 
 
-def replay(root, state, pin, *, early_reports=None, evaluation_pin=None):
+def replay(root, state, pin, *, early_reports=None, evaluation_pin=None, integrity_pin=None):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
     final_evidence.clean(root, revision, fingerprint)
@@ -88,7 +88,54 @@ def replay(root, state, pin, *, early_reports=None, evaluation_pin=None):
     if evaluation_pin is not None:
         verify_evaluation(root, state, values, evaluation_pin)
         summary.setdefault("verified_source_reports", {})["M07"] = evaluation_pin
+    if integrity_pin is not None:
+        verify_integrity(root, state, values, integrity_pin)
+        summary.setdefault("verified_source_reports", {})["M03"] = integrity_pin
     return summary
+
+
+def verify_integrity(root, state, values, pin):
+    contract = decode(bounded_read(root / "policies/m18-integrity.json"))
+    report = final_evidence.published_report(state, "M03", pin)
+    refs = final_evidence.check_gate(
+        "M03", report, values, final_evidence.timestamp(now()), contract["case_inventory"]
+    )
+    components = ("filesystem", "storage", "pipeline")
+    final_evidence.same(
+        sorted(refs), sorted([*components, "integrity_qualification"]), "integrity-artifacts"
+    )
+
+    def retain_file(filename, ref):
+        raw = final_evidence.pinned(safe_child(state, "evidence/" + filename), ref)
+        final_evidence.retain(state, raw)
+        return decode(raw)
+
+    packet = retain_file("integrity-qualification.json", refs["integrity_qualification"])
+    expected_cases = {}
+    counts = {"integration": 2}
+    for name in components:
+        content = retain_file("M03-" + name + ".json", refs[name])
+        final_evidence.same(content["status"], "pass", "integrity-component")
+        final_evidence.check_cases("M03", content["cases"])
+        pairs = {c["id"]: [c["expected"], c["actual"]] for c in content["cases"]}
+        final_evidence.same(digest(canonical(pairs)), contract[name], "integrity-outcomes")
+        expected_cases.update({name + ":" + k: v for k, v in pairs.items()})
+        counts[name] = len(pairs)
+    snapshot = values["integrity_snapshot"]
+    for field in ("approved_sql_hashes_before", "approved_sql_hashes_after"):
+        final_evidence.same(packet[field], snapshot, "integrity-snapshot")
+    expected_cases["integration:approved-sql-hashes-unchanged"] = [snapshot, snapshot]
+    expected_cases["integration:idempotent-sql-publication"] = [values["dataset_reference"]] * 2
+    final_evidence.same(
+        {c["id"]: [c["expected"], c["actual"]] for c in report["cases"]},
+        expected_cases,
+        "integrity-cases",
+    )
+    final_evidence.same(packet["component_checks"], counts, "integrity-count")
+    final_evidence.same(
+        report["metrics"], {"checks": sum(counts.values()), **counts}, "integrity-count"
+    )
+    final_evidence.primary("M03", report, lambda ref: final_evidence.blob(state, ref), values)
 
 
 def verify_evaluation(root, state, values, pin):
@@ -178,6 +225,7 @@ def main():
                     os.environ["M18_FREEZE_SHA256"],
                     early_reports=pins,
                     evaluation_pin=os.environ["M07_REPORT_SHA256"],
+                    integrity_pin=os.environ["M03_REPORT_SHA256"],
                 )
             ).decode()
         )

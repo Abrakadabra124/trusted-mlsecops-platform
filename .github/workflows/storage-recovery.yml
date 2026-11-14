@@ -12,6 +12,7 @@ on:
       - 'mlsecops/final_evidence.py'
       - 'scripts/m18_delivery_freeze.py'
       - 'policies/m18-foundation-intake.json'
+      - 'policies/m18-integrity.json'
       - 'scripts/final_evidence_qualification.py'
       - 'scripts/promotion_gate_native.py'
       - 'scripts/promotion_entrypoint_native.py'
@@ -132,6 +133,7 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
           echo "sha256=$(sha256sum .runtime/evidence/M07.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "integrity=$(sha256sum .runtime/evidence/M03.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Freeze evaluated candidate and original owner
         id: source
         run: |
@@ -272,6 +274,7 @@ jobs:
           M01_REPORT_SHA256: ${{ steps.foundation.outputs.sha256 }}
           M02_REPORT_SHA256: ${{ steps.intake.outputs.sha256 }}
           M07_REPORT_SHA256: ${{ steps.evaluated.outputs.sha256 }}
+          M03_REPORT_SHA256: ${{ steps.evaluated.outputs.integrity }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery

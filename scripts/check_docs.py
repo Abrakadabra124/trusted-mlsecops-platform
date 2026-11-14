@@ -208,6 +208,7 @@ def main():
                 DECISION_FILE,
                 "policies/local-cpu.json",
                 "policies/m18-foundation-intake.json",
+                "policies/m18-integrity.json",
                 "images/tracking/Dockerfile.dockerignore",
                 "images/tracking/requirements.in",
                 "infra/systemd/mlsecops-daily-backup.service",

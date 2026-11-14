@@ -1157,6 +1157,66 @@ class FinalEvidenceContracts(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "digest-mismatch"):
             verify()
 
+    def test_integrity_replay_binds_component_outcomes_and_signed_split_snapshot(self):
+        from scripts.m18_delivery_freeze import verify_integrity
+
+        self.build()
+        values, report, packet = self.values, self.reports["M03"], self.primaries["M03"]
+        expected = {}
+        components = {}
+        cases = []
+        for name in ("filesystem", "storage", "pipeline"):
+            case = dict(id="controlled", status="pass", expected="reject", actual="denied")
+            document = dict(status="pass", cases=[case])
+            components[name] = document
+            expected[name] = digest(canonical({"controlled": ["reject", "denied"]}))
+            cases.append(case | {"id": name + ":controlled"})
+        snapshot = values["integrity_snapshot"]
+        for name, value in (
+            ("approved-sql-hashes-unchanged", snapshot),
+            ("idempotent-sql-publication", values["dataset_reference"]),
+        ):
+            cases.append(
+                dict(id="integration:" + name, status="pass", actual=value, expected=value)
+            )
+        report.update(
+            cases=cases,
+            metrics=dict(checks=len(cases), integration=2, filesystem=1, storage=1, pipeline=1),
+        )
+        packet.update(
+            cases=cases,
+            approved_sql_hashes_before=snapshot,
+            approved_sql_hashes_after=snapshot,
+            component_checks={k: v for k, v in report["metrics"].items() if k != "checks"},
+        )
+        expected["case_inventory"] = digest(canonical(sorted(c["id"] for c in cases)))
+        write_json(self.root / "policies/m18-integrity.json", expected)
+
+        def verify():
+            refs = {
+                n: self.pinfile("evidence/M03-" + n + ".json", d) for n, d in components.items()
+            }
+            packet["artifact_hashes"] = refs
+            report["artifact_hashes"] = refs | {
+                "integrity_qualification": self.pinfile(
+                    "evidence/integrity-qualification.json", packet
+                )
+            }
+            verify_integrity(
+                self.root, self.state, values, self.pinfile("evidence/M03.json", report)
+            )
+
+        verify()
+        with (
+            patch.dict(components["storage"]["cases"][0], actual="unrelated_rejection"),
+            patch.dict(cases[1], actual="unrelated_rejection"),
+        ):
+            with self.assertRaisesRegex(Rejected, "integrity-outcomes"):
+                verify()
+        with patch.dict(packet, approved_sql_hashes_after=snapshot | {"train": self.placeholder}):
+            with self.assertRaisesRegex(Rejected, "integrity-snapshot"):
+                verify()
+
     def test_governance_requires_independent_signature_complete_materials_and_bindings(self):
         self.build()
         args = (
