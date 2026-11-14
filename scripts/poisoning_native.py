@@ -64,9 +64,21 @@ def materials(root):
 
 
 def execute(
-    root, directory, case, train, validation, views, profile, image, *, experiment_policy=None
+    root,
+    directory,
+    case,
+    train,
+    validation,
+    views,
+    profile,
+    image,
+    *,
+    experiment_policy=None,
+    prepared_mutation=None,
 ):
-    if case["family"] == "clean":
+    if prepared_mutation is not None:
+        mutated, receipt = prepared_mutation
+    elif case["family"] == "clean":
         mutated = train
         receipt = {
             "family": "clean",

@@ -77,6 +77,7 @@ def case_materials(
     finished,
     *,
     experiment_policy=None,
+    prepared_mutation=None,
 ):
     try:
         return _case_materials(
@@ -92,6 +93,7 @@ def case_materials(
             started,
             finished,
             experiment_policy=experiment_policy,
+            prepared_mutation=prepared_mutation,
         )
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         if isinstance(error, Rejected):
@@ -113,6 +115,7 @@ def _case_materials(
     finished,
     *,
     experiment_policy=None,
+    prepared_mutation=None,
 ):
     record = decode(bounded_read(safe_child(directory, "result.json")))
     equal({name: record[name] for name in case}, case, "case_identity")
@@ -136,7 +139,9 @@ def _case_materials(
     model = contents["model"]
     if len(model) > profile["model_limit_bytes"]:
         raise Rejected("poisoning_evidence_model_limit")
-    if case["family"] == "clean":
+    if prepared_mutation is not None:
+        mutated, receipt = prepared_mutation
+    elif case["family"] == "clean":
         mutated = train
         receipt = {
             "family": "clean",

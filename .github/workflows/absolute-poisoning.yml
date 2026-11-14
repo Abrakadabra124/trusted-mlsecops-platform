@@ -28,7 +28,9 @@ jobs:
           uv run --locked ruff format --check mlsecops/absolute_poisoning_gate.py mlsecops/acceptance.py scripts/absolute_poisoning*.py scripts/poisoning*.py
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.poisoning_native_qualification scripts.poisoning_evidence_qualification
-          uv run --locked coverage run --branch --data-file=.coverage-absolute --source=mlsecops.absolute_poisoning_gate,scripts.absolute_poisoning -m unittest scripts.absolute_poisoning_gate_qualification scripts.absolute_poisoning_qualification
+          uv run --locked ruff check mlsecops/m22_methods.py mlsecops/m22_review.py scripts/m22_review_qualification.py
+          uv run --locked ruff format --check mlsecops/m22_methods.py mlsecops/m22_review.py scripts/m22_review_qualification.py
+          uv run --locked coverage run --branch --data-file=.coverage-absolute --source=mlsecops.absolute_poisoning_gate,scripts.absolute_poisoning -m unittest scripts.absolute_poisoning_gate_qualification scripts.absolute_poisoning_qualification scripts.m22_review_qualification
           uv run --locked coverage report --data-file=.coverage-absolute --fail-under=95
           uv run --locked coverage json --data-file=.coverage-absolute -o .coverage-absolute.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-absolute.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"

@@ -288,6 +288,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 - Проверка: unsupported/zero-scanned/crash/timeout/stale report, подмена digest и mutation после conversion блокируются; разрешённый clean ONNX проходит полный intake.
 
 ## T28
+- Добавлен [intake и replay для двух сопоставимых challenges](../docs/reviewer/intake-replay.md). Проверка механизма проведена на контролируемых входах. Реальных независимых кейсов 0/2.
 - [ ] Absolute-budget и независимые attack challenges. Зависимости: T10, T11, T12. Gate: M22.
 - Реализован и native проверен [частичный M22](../docs/absolute-poisoning.md#native-результат-2026-10-29-мск): [40788141737](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40788141737), `e063998`, 36+6 trainings, 42/42 nonviolating, 300 primary files, actual-candidate replay 0.0, cleanup success. Component pass, полный M22 inconclusive. Reviewer handoff и ранбук подготовлены, independent challenges 0/2. T28 не закрыта.
 - Результат: 36 poisoned runs + 6 clean controls, не менее двух отложенных reviewer challenges, заранее заданные attacker capabilities и корректная единица статистического анализа.

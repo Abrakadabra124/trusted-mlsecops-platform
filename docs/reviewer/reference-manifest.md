@@ -50,4 +50,4 @@ Model bytes совпали с reference M12, но source/image/evaluation/candid
 
 ## Что считается отсутствующим
 
-Identity/независимость reviewer, две frozen спецификации, agreed query/time budgets, execution adapter и verifier независимых challenges, новые primary materials и итоговое решение. Ничего из этого не заполняется именем ассистента или искусственным pass. Текущие изменения serving на development branch также не включаются в freeze без явной новой версии manifest.
+Нужны подтверждённая независимость reviewer, две заранее зафиксированные спецификации с декларациями, новые связанные primary materials и итоговое решение. [Исполняемый адаптер и порядок подписания](intake-replay.md) предусмотрены для фиксированного профиля. Исторические hashes этой страницы не переносятся в новый freeze.

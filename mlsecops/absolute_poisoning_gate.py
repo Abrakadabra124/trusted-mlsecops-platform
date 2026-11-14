@@ -61,6 +61,7 @@ def materials_digest(root):
         "scripts/robustness_native.py",
         "scripts/absolute_poisoning_qualification.py",
         "scripts/absolute_poisoning_gate_qualification.py",
+        "scripts/m22_review_qualification.py",
     )
     return digest(canonical({n: digest(bounded_read(root / n)) for n in names}))
 
@@ -158,12 +159,8 @@ def _reconcile(root, campaign, candidate, inputs, revision, started, finished):
         raise Rejected("M22_candidate_model_binding")
     features = [row["features"] for view in (probes, triggered) for row in view]
     evidence.equal(request["features"], features, "M22_candidate_features")
-    scan = output["scan"]
-    validate_scan(scan)
-    scores = [row["score"] for row in output["predictions"]]
+    scores = control_scores(request, output, proof["execution"], inputs["image"])
     actual = validate_scores(scores, len(features))
-    evidence.equal(output, response(request, scores, scan), "M22_candidate_response")
-    evidence.execution(proof["execution"], inputs["image"])
     seed = candidate["policy"]["training_seed"]
     if seed not in protocol.policy()["seeds"]:
         raise Rejected("M22_candidate_seed")
@@ -186,6 +183,15 @@ def _reconcile(root, campaign, candidate, inputs, revision, started, finished):
     return bound, error, snapshot
 
 
+def control_scores(request, output, execution, image):
+    scan = output["scan"]
+    validate_scan(scan)
+    scores = [row["score"] for row in output["predictions"]]
+    evidence.equal(output, response(request, scores, scan), "M22_candidate_response")
+    evidence.execution(execution, image)
+    return scores
+
+
 def qualify(root, state, image="trusted-mlsecops:dev"):
     try:
         return _qualify(root, state, image)
@@ -203,6 +209,13 @@ def _qualify(root, state, image):
     output = safe_child(state, "evidence/absolute-poisoning-gate.json")
     write_json(output, {"status": "inconclusive", "started_at": started, "release_ready": False})
     image = resolve_image(image)
+    review = safe_child(state, "m22-review")
+    if review.exists():
+        from mlsecops.m22_review import replay
+
+        result = replay(root, state, image)
+        write_json(output, result)
+        return result
     candidate = subject(root, state, image)
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     profile, train, validation, probes, triggered = native.materials(root)
@@ -268,6 +281,28 @@ def _qualify(root, state, image):
     records, error, snapshot = reconcile(
         root, campaign, candidate, inputs, revision, started, finished
     )
+    result = matrix_report(
+        root,
+        state,
+        campaign,
+        candidate,
+        inputs,
+        revision,
+        started,
+        finished,
+        records,
+        error,
+        snapshot,
+    )
+    write_json(campaign / "report.json", result)
+    write_json(output, result)
+    return result
+
+
+def matrix_report(
+    root, state, campaign, candidate, inputs, revision, started, finished, records, error, snapshot
+):
+    image = inputs["image"]
     summary = protocol.summarize(records)
     if (
         subject(root, state, image) != candidate
@@ -285,7 +320,7 @@ def _qualify(root, state, image):
         "component_status": summary["status"],
         "release_ready": False,
         "started_at": started,
-        "finished_at": now(),
+        "finished_at": finished,
         "source_revision": revision,
         "source_dirty": bool(command(["git", "-C", str(root), "status", "--porcelain"])),
         "campaign_id": campaign.name,
@@ -316,6 +351,4 @@ def _qualify(root, state, image):
             "Trusted controller and source; consistent host forgery is outside this boundary",
         ],
     }
-    write_json(campaign / "report.json", result)
-    write_json(output, result)
     return result

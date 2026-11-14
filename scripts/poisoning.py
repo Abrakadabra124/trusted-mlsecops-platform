@@ -79,10 +79,7 @@ def poison(records, family, count, seed):
         or not 0 <= seed < 2**32
     ):
         raise Rejected("poisoning_capability_invalid")
-    eligible = [index for index, row in enumerate(records) if row["label"] == 1]
-    if len(eligible) < count:
-        raise Rejected("poisoning_insufficient_train_selection")
-    selected = sorted(np.random.default_rng(seed).choice(eligible, count, replace=False).tolist())
+    selected = selected_indices(records, count, seed)
     altered = copy.deepcopy(records)
     for index in selected:
         altered[index]["label"] = 0
@@ -101,6 +98,13 @@ def poison(records, family, count, seed):
         "after_digest": digest(canonical(altered)),
         "capability": "labels-only" if family == "label-flip" else "labels-and-change_entropy",
     }
+
+
+def selected_indices(records, count, seed):
+    eligible = [index for index, row in enumerate(records) if row["label"] == 1]
+    if len(eligible) < count:
+        raise Rejected("poisoning_insufficient_train_selection")
+    return sorted(np.random.default_rng(seed).choice(eligible, count, replace=False).tolist())
 
 
 def wilson(successes, count):

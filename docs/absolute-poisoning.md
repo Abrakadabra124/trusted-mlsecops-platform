@@ -27,7 +27,7 @@
 
 ## Исполнение и доказательства
 
-Реализован [controller](../mlsecops/absolute_poisoning_gate.py), frozen [protocol](../scripts/absolute_poisoning.py) и частичный dispatch M22 в [acceptance](../mlsecops/acceptance.py). Он всегда оставляет полный M22 inconclusive при отсутствии independent challenges; statistical violation имеет приоритет и даёт fail. Это 11 существующих полных dispatch paths плюс один частичный, не 12 принятых gates. Оставшиеся 11 placeholders: M10-M19 и M23.
+[Controller](../mlsecops/absolute_poisoning_gate.py) использует [frozen protocol](../scripts/absolute_poisoning.py) через [acceptance](../mlsecops/acceptance.py). Без reviewer intake gate выполняет матрицу и оставляет M22 inconclusive при component pass. При наличии intake тот же dispatch проверяет сохранённую матрицу и [связанные исходы](reviewer/intake-replay.md). Нарушение статистического порога даёт fail.
 
 Нативная проверка выполняется только в [disposable hosted workflow](../.github/workflows/absolute-poisoning.yml). Локальные Docker/WSL/Kubernetes/SQL запрещены владельцем. Workflow собирает текущий worker из locked sources, создаёт отдельную owned SQL БД и evaluated candidate, запускает все 42 fits и отдельный prediction replay. Каждый из 300 primary files перечитывается; count, fraction, mutation, metadata, protocol и metrics сверяются независимо от summary. В controller не загружаются ONNX/ONNX Runtime.
 
@@ -78,7 +78,7 @@ Component pass. Полный **M22=inconclusive, exit_code=2**, cases=43: 42 sta
 
 1. Инженер передаёт exact source/candidate/image/protocol digests и перечисленные выше design-документы после freeze. Raw credentials, signing keys и final labels исключены.
 2. Reviewer фиксирует своё имя/роль, отсутствие участия в разработке защиты, новую стратегию для каждого семейства, ограничения доступа, бюджет строк/запросов/времени, metric и severity до reveal и исполнения. Записывается timestamp и digest спецификации. Digest сам по себе не подтверждает независимость человека.
-3. Инженер реализует согласованные сценарии без изменения frozen защиты; reviewer проверяет соответствие спецификации. Новые стратегии не подменяются известными M08/M22 probes. При необходимости уточнения attack capability или статистики результат остаётся inconclusive.
+3. Для v1 reviewer до запуска сверяет декларации с фиксированным интерпретатором и подтверждает это отдельной подписью. Гипотезы за пределами v1 требуют предварительного согласования методики и новой версии.
 4. Исполнение и разбор сохраняют все исходы. Любой подтверждённый hard-boundary bypass блокирует release. Для нового воздействия нельзя задним числом менять threshold/severity или объявлять честный refusal полным passing R1.
 
-Этот handoff подготовлен, но reviewer ещё не назначен, независимые спецификации не получены и challenge execution не реализовано. Self-review и controlled tests не закрывают эти шаги.
+Для сопоставимых train-only методов реализован [поэтапный intake и replay](reviewer/intake-replay.md). Первичные файлы матрицы и текущий evaluated candidate нужны при каждом полном readback. Реальные независимые спецификации, исполнение и подписанное решение пока отсутствуют, 0/2.
