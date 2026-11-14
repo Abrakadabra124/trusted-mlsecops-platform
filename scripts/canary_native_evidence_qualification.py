@@ -350,6 +350,23 @@ class Native(unittest.TestCase):
                 self.verify()
             proof["after"] = envelope
 
+    def test_model_and_dataset_campaigns_cannot_substitute_for_each_other(self):
+        dataset = digest(b"dataset-ancestor")
+
+        def check():
+            return evidence.replay(self.state, self.record, **self.inputs, revoked_dataset=dataset)
+
+        with self.assertRaises(Rejected):
+            check()
+        proof = self.record["recovery"]["trust"]
+        payload = signing.verify(proof["after"], "trust-policy", proof["root"])
+        proof["after"] = signing.sign(
+            {**payload, "revoked_artifacts": [dataset]}, "trust-policy", self.state / "key.pem"
+        )
+        self.assertEqual(check()["requests"], 400)
+        with self.assertRaises(Rejected):
+            self.verify()
+
     def test_trust_cannot_postdate_the_successful_candidate_traffic(self):
         proof = self.record["recovery"]["trust"]
         initial = signing.verify(proof["before"], "trust-policy", proof["root"])

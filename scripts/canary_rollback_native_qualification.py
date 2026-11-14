@@ -131,6 +131,8 @@ class Recovery(unittest.TestCase):
 
 
 class SignedDrill(unittest.TestCase):
+    dataset_mode = False
+
     @classmethod
     def setUpClass(cls):
         # The owner/orchestrator and cryptographic paths are real. Replace the external
@@ -238,7 +240,9 @@ class SignedDrill(unittest.TestCase):
                 doc = decode(signing.decode64(args["package"]["envelope"]["payload"]))
                 model = doc["materials"]["model"]
                 count = denied_counts.get(seq, 0)
-                if model in trust_states[-1][0]["revoked_artifacts"]:
+                if set((model, doc["materials"]["split_manifest"])).intersection(
+                    trust_states[-1][0]["revoked_artifacts"]
+                ):
                     denied_counts[seq] = count + 1
                 if denied_counts.get(seq, 0) > 1:
                     status, reply = (
@@ -375,7 +379,18 @@ class SignedDrill(unittest.TestCase):
             stub(recovery, "manual", side_effect=manual)
             stub(recovery, "completed", side_effect=lambda models, seq: server_rows[seq])
             stub(recovery.promotion_state, "state", side_effect=lambda *_: history[-1])
-            cls.packet = recovery.drill(root, root, "image", "a" * 32, [[0.5] * 6])
+            cls.packet = recovery.drill(
+                root,
+                root,
+                "image",
+                "a" * 32,
+                [[0.5] * 6],
+                **(
+                    {"revoke_datasets": True, "check_inventory_head": cls.inventory_head}
+                    if cls.dataset_mode
+                    else {}
+                ),
+            )
             restored = cls.packet["events"]["rollback_a"]["value"]
             args = args_by_seq[3]
             cls.restored_context = audit_correlation_probe.release(

@@ -352,9 +352,14 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate in {"M11", "M12", "M13", "M14", "M15", "M16", "M23"}:
+    elif gate in {"M11", "M12", "M13", "M14", "M15", "M16", "M19", "M23"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
-        if gate == "M16":
+        if gate == "M19":
+            from mlsecops.inventory_gate import SCOPE
+
+            result.update(scope=SCOPE, release_ready=False)
+            required = ()
+        elif gate == "M16":
             from mlsecops.canary_gate import SCOPE
 
             result.update(scope=SCOPE, release_ready=False)
@@ -384,6 +389,8 @@ def report(gate, profile, root, state=None):
             from mlsecops.monitoring_gate import qualify
         elif gate == "M16":
             from mlsecops.canary_gate import qualify
+        elif gate == "M19":
+            from mlsecops.inventory_gate import qualify
         elif gate == "M23":
             from mlsecops.security_gate import qualify
         else:
@@ -391,18 +398,18 @@ def report(gate, profile, root, state=None):
 
         try:
             evidence = qualify(root, state)
-            if gate == "M16" and (
+            if gate in {"M16", "M19"} and (
                 evidence["input_digests"]["source_revision"] != result["source_revision"]
                 or evidence["input_digests"]["source_fingerprint"]
                 != result["input_digests"]["source_fingerprint"]
             ):
-                raise Rejected("canary_acceptance_source_changed")
+                raise Rejected("acceptance_source_changed")
             result.update(
                 status=evidence["status"],
                 started_at=evidence["started_at"],
                 source_dirty=evidence["source_dirty"],
                 cases=evidence["cases"],
-                exit_code=0,
+                exit_code={"pass": 0, "fail": 1, "inconclusive": 2}[evidence["status"]],
                 metrics={"checks": evidence["checks"], **evidence["metrics"]},
                 residual_risks=evidence["limitations"],
                 artifact_hashes=evidence["artifact_hashes"],
@@ -415,12 +422,14 @@ def report(gate, profile, root, state=None):
             KeyError,
             TypeError,
             ValueError,
+            IndexError,
+            OverflowError,
         ) as error:
             unavailable = (
                 isinstance(error, (OSError, subprocess.TimeoutExpired))
                 or str(error) == "trust_hosted_runner_required"
                 or (
-                    gate == "M16"
+                    gate in {"M16", "M19"}
                     and str(error).startswith(
                         ("storage_docker_unavailable", "storage_resource_missing:")
                     )

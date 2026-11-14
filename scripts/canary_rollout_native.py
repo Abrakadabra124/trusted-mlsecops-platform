@@ -48,7 +48,7 @@ def require(condition):
         raise Rejected("canary_rollout_native")
 
 
-def capture_inputs(root):
+def capture_inputs(root, proposal_variable="T19_PROPOSAL_SHA256"):
     require(not command(["git", "-C", str(root), "status", "--porcelain"]))
     return dict(
         source=dict(
@@ -57,7 +57,7 @@ def capture_inputs(root):
         ),
         methods=digest(canonical(materials(root))),
         runner={k: os.environ[k] for k in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")},
-        proposal_pin=hexadecimal(os.environ["T19_PROPOSAL_SHA256"]),
+        proposal_pin=hexadecimal(os.environ[proposal_variable]),
     )
 
 
@@ -132,11 +132,12 @@ async def recover(targets, goldens, revoke, candidate_access):
     )
 
 
-def traffic(root, state):
+def traffic(root, state, *, inventory=False):
     from scripts.canary_candidate_native import actual_candidate
     from scripts.canary_stable_native import stable_release
 
-    inputs = capture_inputs(root)
+    proposal_variable = "M19_PROPOSAL_SHA256" if inventory else "T19_PROPOSAL_SHA256"
+    inputs = capture_inputs(root, proposal_variable)
     campaign, started = uuid.uuid4().hex, now()
     directory = safe_child(state, "evidence/canary-native-" + campaign)
     directory.mkdir(parents=True, mode=0o700, exist_ok=False)
@@ -147,7 +148,15 @@ def traffic(root, state):
             stable_release(root, state, IMAGE, campaign, features)
         )
         b, candidate, b_binding, revoke = stack.enter_context(
-            actual_candidate(root, state, IMAGE, campaign, inputs["proposal_pin"], features)
+            actual_candidate(
+                root,
+                state,
+                IMAGE,
+                campaign,
+                inputs["proposal_pin"],
+                features,
+                **({"revoke_dataset": True} if inventory else {}),
+            )
         )
         goldens = dict(stable=stable, candidate=candidate)
         endpoints = {
@@ -155,6 +164,15 @@ def traffic(root, state):
             for role, engine in (("stable", a), ("candidate", b))
         }
         targets = {role: endpoint[0] for role, endpoint in endpoints.items()}
+        if inventory:
+            with b.lock:
+                observation = dict(
+                    permit_sha256=b.loaded.permit_sha256,
+                    subject_sha256=b.loaded.subject_sha256,
+                    model_sha256=b.worker.binding["model_sha256"],
+                    image_id=b.worker.image,
+                    evaluation_policy_sha256=digest(canonical(b.reader.context["policy"])),
+                )
         print(canonical(dict(stage="live-canary-traffic")).decode(), flush=True)
         measured = asyncio.run(
             canary_campaign.run(
@@ -167,7 +185,15 @@ def traffic(root, state):
             )
             raise Rejected("canary_traffic_held")
         fault = asyncio.run(recover(targets, goldens, revoke, endpoints["candidate"][1]))
-    require(inputs == capture_inputs(root))
+        if inventory:
+            try:
+                b.reader.load()
+            except Rejected as error:
+                require(str(error) == "trust_artifact_revoked")
+                reader_refusal = str(error)
+            else:
+                raise Rejected("M19_revoked_dataset_admitted")
+    require(inputs == capture_inputs(root, proposal_variable))
     record = dict(
         schema_version=1,
         campaign=campaign,
@@ -184,6 +210,13 @@ def traffic(root, state):
         recovery=fault,
         journals={k: digest(bounded_read(directory / (k + ".jsonl"))) for k in goldens},
     )
+    if inventory:
+        return dict(
+            traffic=record,
+            observation=observation,
+            reader_refusal=reader_refusal,
+            inventory_source_sha256=digest(bounded_read(directory / "inventory-source.json")),
+        )
     return record
 
 

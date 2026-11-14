@@ -1,0 +1,77 @@
+name: T25 inventory deployment and ancestor replay
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/t25-inventory]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify controlled contracts and prepare the hosted worker
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked python -B -W error -m unittest scripts.inventory_gate_qualification scripts.asset_graph_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification
+          uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B -m mlsecops build
+      - name: Start owned source storage
+        id: sql
+        run: uv run --locked python -B -m mlsecops.storage_bootstrap
+      - name: Train, evaluate and pin the original release proposal and public keys
+        run: |
+          uv run --locked python -B -m mlsecops.storage_pipeline
+          uv run --locked python -B -m scripts.release_native --state .runtime
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, digest
+          from mlsecops.inventory_gate import OWNER_FILES
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as out:
+              for variable, relative in OWNER_FILES.items():
+                  print(variable + "=" + digest(bounded_read(Path(".runtime") / relative)), file=out)
+          PY
+      - name: Capture actual candidate and exercise controlled promotion and rollback
+        id: capture
+        run: uv run --locked python -B -W error -m scripts.inventory_deployment_native
+      - name: Stop the owned source and verify its state
+        if: always()
+        env:
+          BOOTSTRAP: ${{ steps.sql.outcome }}
+        run: |
+          if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
+          if test -f .runtime/storage.json; then
+            uv run --locked python -c 'from pathlib import Path; from scripts.r1_walkthrough import stop_owned; stop_owned(Path(".runtime"))'
+          fi
+      - name: Replay M19 after cleanup and verify the measured component inventory
+        env:
+          M19_PRIMARY_SHA256: ${{ steps.capture.outputs.sha256 }}
+        run: |
+          rc=0
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json || rc=$?
+          test "$rc" -eq 2
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, canonical, decode, digest
+          from mlsecops.inventory_gate import SCOPE
+          raw = bounded_read(Path(".runtime/evidence/M19.json"))
+          report = decode(raw)
+          if not (report["status"] == "inconclusive" and report["scope"] == SCOPE
+                  and report["gate"] == "M19" and report["exit_code"] == 2 and report["release_ready"] is False
+                  and report["source_revision"] == os.environ["GITHUB_SHA"] and report["source_dirty"] is False
+                  and report["artifact_hashes"]["primary"] == os.environ["M19_PRIMARY_SHA256"]
+                  and report["metrics"]["checks"] == len(report["cases"]) == 9
+                  and all(c["status"] == "pass" for c in report["cases"])):
+              raise SystemExit("M19 component replay incomplete")
+          print(canonical({**report, "report_sha256": digest(raw)}).decode())
+          PY
