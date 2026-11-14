@@ -235,7 +235,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 - Проверка: failure injection с измерением времени, запрет отозванного previous release, отсутствие смешанных preprocessing/model.
 
 ## T20
-- [ ] Backup и независимый restore. Зависимость: T19. Gate: M17.
+- [x] Backup и независимый restore в лабораторном профиле. T19 завершён, M17 прошёл на `e9883eb`. [Отчёт о восстановлении и результатах отрицательных проверок](../docs/evidence/m17-recovery-e9883eb.md).
 - Increment 2026-10-14: [signed snapshot v2 CAS + promotion journal](../docs/decisions/0028-promotion-recovery.md), [PB-22/RB-42/RB-43](../docs/operations/promotion-recovery-troubleshooting.md), [evidence](../docs/evidence/promotion-recovery-2026-10-14.md). External backup pin, exact readback, maintenance и неизменяющий retry; 36 source-offline native checks и 1 000 golden predictions/error=0.0 на `8f94e2e`, отдельно 125 local methods pass. Автоматический pre-receipt resume, current trust/serving recovery и расписание ещё не приняты; T20/M17 остаются открытыми.
 - Прогресс: native consistent SQL backup, signed manifest, fresh storage restore, 430 component checks и 1 000 golden predictions работают. Нет полного release/serving recovery, актуального trust-service revocation и ежедневного расписания, поэтому задача и M17 остаются открытыми.
 - Результат: metadata/artifact backup manifest, recovery runbook и evidence из нового namespace/storage.

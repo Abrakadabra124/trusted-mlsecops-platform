@@ -95,6 +95,9 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 **Canary и rollback целого bundle.** В lab провести staged traffic 10% -> 50% -> 100% с минимум 100 валидными наблюдениями на стадии, без увеличения ошибок >1 процентного пункта и нарушения latency gate. При fixture отказа возврат к разрешённому compatible bundle <= 120 s; model/preprocessing/config не смешиваются. Отозванная previous model не используется; manual-review fallback остаётся доступен без ML. T19.
 
 ## M17
+
+На `e9883eb` пройдены 10 лабораторных критериев, включая HTTP-прогноз восстановленной оценённой модели, отказ испорченного архива и отзыв ключа. [Измерения RTO/RPO и границы эксперимента](evidence/m17-recovery-e9883eb.md).
+
 **Независимый restore.** В новом namespace/storage восстановить metadata, artifacts и approvals из согласованной резервной копии; провести digest verification и golden predictions. Target lab RTO <=15 min, RPO <=24 h при ежедневной копии. Negative: corrupt/missing artifact и revoked key выявляются до ready. Измерять от начала recovery, не только SQL import. Offsite/HA lab не доказывает. T20.
 
 ## M18
