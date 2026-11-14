@@ -12,6 +12,18 @@ from scripts import inventory_fleet_materials as materials
 
 
 class SourcePreparation(unittest.TestCase):
+    def test_hosted_entry_rejects_unowned_runner_before_storage_access(self):
+        import os
+        import runpy
+
+        from mlsecops.contracts import Rejected
+
+        with (
+            patch.dict(os.environ, GITHUB_ACTIONS="false"),
+            self.assertRaisesRegex(Rejected, "trust_hosted_runner_required"),
+        ):
+            runpy.run_path(materials.__file__, run_name="__main__")
+
     def test_owner_pins_the_three_reports_with_the_original_demo_still_current(self):
         with ExitStack() as stack:
             root = Path(stack.enter_context(TemporaryDirectory()))

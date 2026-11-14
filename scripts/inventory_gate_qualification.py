@@ -330,7 +330,7 @@ class Acceptance(unittest.TestCase):
             )
 
         self.enterContext(patch.object(native.canary_rollback_native, "drill", side_effect=drill))
-        self.packet = native.capture(self.root, self.state)
+        self.packet = native.capture(self.root, self.state, full=False)
 
     def seal(self, packet):
         path = self.state / gate.PACKET
@@ -416,7 +416,10 @@ class Acceptance(unittest.TestCase):
         from io import StringIO
 
         path = self.root / "outputs"
-        with patch.dict(os.environ, GITHUB_OUTPUT=str(path)):
+        with (
+            patch.dict(os.environ, GITHUB_OUTPUT=str(path)),
+            patch.object(native, "capture", return_value=self.packet),
+        ):
             self.assertEqual(native.main(self.root), 0)
         self.assertEqual(
             path.read_text().strip(), "sha256=" + digest((self.state / gate.PACKET).read_bytes())
