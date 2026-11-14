@@ -78,7 +78,11 @@ class CandidateCampaign(unittest.TestCase):
                 native,
                 "bind_proposal",
                 return_value=(
-                    {"policy": {"environment": "local-cpu"}},
+                    {
+                        "policy": {"environment": "local-cpu"},
+                        "candidate_reference": self.refusal["candidate"],
+                        "evaluation_reference": digest(b"signed evaluation"),
+                    },
                     {
                         "model": b"model",
                         "subject_sha256": self.subject,
@@ -336,6 +340,7 @@ class CandidateCampaign(unittest.TestCase):
             600,
         )
         self.assertEqual(report["model_sha256"], self.model)
+        self.assertEqual(report["evaluation_reference"], digest(b"signed evaluation"))
         self.assertEqual(report["subject_sha256"], self.subject)
         owner = report["trust_lifecycle_ownership_return"]
         self.assertGreater(owner["heartbeat_after"], owner["heartbeat_before"])
