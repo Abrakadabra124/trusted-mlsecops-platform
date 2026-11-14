@@ -27,6 +27,16 @@ INVENTORY_PRIMARY = "evidence/security-inventory-primary.json"
 INVENTORY_BINDING = "evidence/security-inventory-primary.bindings.json"
 PROPOSAL = "evidence/release-native.json"
 OUTAGE_LIMIT = security_outage_packet.MAX_PACKET
+# Criteria are fixed before measurement; multiplicity remains in phase_windows.
+# replay() may emit these only after ordinary reverify has checked every window.
+OUTAGE_PHASE_CASES = tuple(
+    f"outage:{phase}:all-signed-windows-verified" for phase in security_outage_packet.PHASES
+)
+OUTAGE_FINAL_CASES = (
+    "outage:controlled-authorization-audit-refusal-and-recovery",
+    "outage:actual-candidate-assurance-refusal",
+    "outage:shared-candidate-after-cleanup",
+)
 # Historical qualify emits the same CLI assertion for several distinct invocations.
 INVENTORY_CASES = Counter(
     {
@@ -294,18 +304,8 @@ def replay(root, state, *, inventory_pin, outage_pin):
         registry, box["records"], {boundary["pending"]["event_id"]}, "promotion.denied"
     )
     windows = observation["phase_windows"]
-    cases.extend(
-        f"outage:{phase}:window:{n}"
-        for phase in security_outage_packet.PHASES
-        for n in range(1, windows[phase] + 1)
-    )
-    cases.extend(
-        (
-            "outage:controlled-authorization-audit-refusal-and-recovery",
-            "outage:actual-candidate-assurance-refusal",
-            "outage:shared-candidate-after-cleanup",
-        )
-    )
+    cases.extend(OUTAGE_PHASE_CASES)
+    cases.extend(OUTAGE_FINAL_CASES)
     return dict(
         candidate=actual,
         release_subject=subject,

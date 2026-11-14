@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from mlsecops import monitoring, monitoring_stream, signing
 from mlsecops import security_inventory_evidence as inventory
-from mlsecops import signing
 from mlsecops.contracts import Rejected, canonical, decode, digest, write_json
 from mlsecops.security_event_ledger import Ledger
 from mlsecops.security_event_outbox import Outbox, key_identity
@@ -138,6 +138,89 @@ class CandidateGate(unittest.TestCase):
     def repin_outage(self):
         self.out.publish()
         self.outage_pin = self.gate.capture_outage(ROOT, self.state)
+
+    def multiple_windows(self):
+        """Two genuine raw windows per phase, with the original signed recovery."""
+        _, ref, trace, golden = window_fixtures.fixture()
+        ref_pin = digest(canonical(ref))
+        evaluator = monitoring.Evaluator(ref, ref_pin)
+        windows = []
+        for original in self.out.packet["windows"]:
+            for offset in (0, 500):
+                item = copy.deepcopy(original)
+                sequence = len(windows) + 1
+                start = original["document"]["started_at_ms"] + offset
+                stream = monitoring_stream.Accumulator(ref, ref_pin, started_at_ms=start)
+                for batch, row in enumerate(item["http"]):
+                    response = row["response"]
+                    response["request_id"] = f"{sequence * 100 + batch:032x}"
+                    stream.add(
+                        trace, row["features"], response["predictions"], response["request_id"]
+                    )
+                closed = stream.close(sequence=sequence, ended_at_ms=start + 500)
+                item.update(
+                    document=closed.document(),
+                    predictions=closed.predictions,
+                    observation_started_at_ms=start + 50,
+                    observed_at_ms=start + 510,
+                )
+                item["monitor"].update(
+                    observations=sequence * 1000,
+                    windows_evaluated=sequence,
+                    reports=[evaluator.evaluate(closed.document())],
+                )
+                windows.append(item)
+        self.out.packet["windows"] = windows
+        self.out.summary = self.gate.security_outage_packet.verify(
+            self.out.packet, reference=ref, context=trace, golden=golden, campaign="1" * 32
+        )
+        self.out.binding["summary"] = self.out.summary
+        self.out.primary["native"].update(self.out.summary)
+        self.out.primary["native"]["operator_retained_reverified"] = self.out.summary
+        self.out.operator["requests"]["finish"] = digest(
+            canonical(
+                dict(
+                    phase="finish",
+                    campaign="1" * 32,
+                    payload=dict(packet=self.out.packet, summary=self.out.summary),
+                )
+            )
+        )
+        self.out.operator["results"]["finish"] = {
+            "packet_sha256": self.out.summary["packet_sha256"]
+        }
+        self.out.public.pop("observation")
+        self.out.publish()
+        self.out.public["observation"] = outage.reverify(ROOT, self.state)
+        self.repin_outage()
+
+    def test_all_phase_criteria_are_fixed_while_every_measured_window_is_counted(self):
+        before = self.replay()
+        self.multiple_windows()
+        after = self.replay()
+        self.assertEqual(before["cases"], after["cases"])
+        phases = [
+            f"outage:{phase}:all-signed-windows-verified" for phase in window_fixtures.packet.PHASES
+        ]
+        self.assertTrue(set(phases) <= set(after["cases"]))
+        self.assertFalse(any(":window:" in name for name in after["cases"]))
+        self.assertEqual(after["metrics"]["observations"], 8000)
+        self.assertEqual(
+            after["metrics"]["phase_windows"], dict.fromkeys(window_fixtures.packet.PHASES, 2)
+        )
+
+    def test_non_first_window_corruption_is_refused_after_outer_pins_are_recomputed(self):
+        self.multiple_windows()
+        self.replay()
+        original = copy.deepcopy(self.out.packet)
+        for index in (1, 3, 5, 7):
+            self.out.packet = copy.deepcopy(original)
+            self.out.packet["windows"][index]["http"][0]["response"]["predictions"][0]["score"] = (
+                0.8
+            )
+            self.repin_outage()
+            with self.subTest(window=index), self.assertRaisesRegex(Rejected, "security_green_"):
+                self.replay()
 
     def test_original_files_replay_after_teardown(self):
         self.qualify.assert_called_once_with(self.state, "trusted-mlsecops:dev")
@@ -339,7 +422,7 @@ class CandidateGate(unittest.TestCase):
         ):
             self.replay()
 
-    def test_extra_recover_window_counts_and_receives_its_own_id(self):
+    def test_extra_recover_window_counts_under_the_same_phase_criterion(self):
         packet_module = window_fixtures.packet
         with patch.object(packet_module, "PHASES", (*packet_module.PHASES, "recover")):
             packet, reference, trace, golden = window_fixtures.fixture()
@@ -371,7 +454,8 @@ class CandidateGate(unittest.TestCase):
         report = self.replay()
         self.assertEqual(report["metrics"]["observations"], 5000)
         self.assertEqual(report["metrics"]["phase_windows"]["recover"], 2)
-        self.assertIn("outage:recover:window:2", report["cases"])
+        self.assertIn("outage:recover:all-signed-windows-verified", report["cases"])
+        self.assertFalse(any(":window:" in name for name in report["cases"]))
 
     def test_rehashed_corrupt_window_rejects(self):
         self.out.packet["windows"][2]["http"][-1]["response"]["predictions"][-1]["score"] = 0.001

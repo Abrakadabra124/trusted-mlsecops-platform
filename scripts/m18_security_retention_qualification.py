@@ -427,6 +427,39 @@ class OriginalSourceVerifier(unittest.TestCase):
             actual = retention.replay_sources(fixture.root, fixture.state, fixture.manifest)
         self.assertEqual(actual, expected)
 
+    def test_pre_run_source_inventory_equals_one_and_multi_window_ordinary_replay(self):
+        # Compute before opening any report/capture. No tested result enters the pin.
+        frozen_cases = retention.case_inventory(ROOT)
+        fixture = source_fixtures.GateSources
+        source = retention.sources.replay(fixture.root, fixture.state, fixture.manifest)
+        candidate_fixtures.CandidateGate.setUpClass()
+        self.addCleanup(candidate_fixtures.CandidateGate.doClassCleanups)
+        candidate = candidate_fixtures.CandidateGate()
+        candidate.setUp()
+        self.addCleanup(candidate.doCleanups)
+        for multiple in (False, True):
+            if multiple:
+                candidate.multiple_windows()
+            result = candidate.replay()
+            cases = source["cases"] + result["cases"]
+            with self.subTest(multiple=multiple):
+                self.assertEqual(len(cases), len(set(cases)))
+                self.assertEqual(frozen_cases, digest(canonical(sorted(cases))))
+                self.assertEqual(frozen_cases, retention.case_inventory(ROOT))
+
+    def test_case_inventory_rejects_foreign_checkout_and_colliding_source_criteria(self):
+        with self.assertRaises(Rejected):
+            retention.case_inventory(ROOT / "foreign")
+        with (
+            patch.object(
+                retention.candidate,
+                "OUTAGE_FINAL_CASES",
+                (retention.candidate.OUTAGE_PHASE_CASES[0],),
+            ),
+            self.assertRaises(Rejected),
+        ):
+            retention.case_inventory(ROOT)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -32,6 +32,49 @@ SOURCE_FIELDS = ("source_revision", "source_fingerprint")
 LIMIT = max(candidate.OUTAGE_LIMIT, 17 * 1024 * 1024)
 
 
+def case_inventory(root):
+    """Pre-run M23 case hash from this checkout's immutable verifier criteria.
+
+    No report, measurement or runtime file supplies expected cases. Identity's
+    fixed repetitions mirror the exact Counter enforced by identity.verify.
+    Ordinary signed source/candidate replay is qualified against this inventory.
+    """
+    final.need(Path(root).resolve() == Path(__file__).resolve().parents[1], "security-case-root")
+    identity = [*sources.identity.SINGLE_CASES]
+    identity.extend(f"signed-identity-subject-and-route-{i}" for i in range(1, 7))
+    for label, count in (
+        ("bounded-private-http-output", 11),
+        ("actual-http-identity-denied-after-delivery", 5),
+        ("owned-http-exit-and-port-closed", 2),
+    ):
+        identity.extend([label] * count)
+    cases = []
+    for name, labels in (
+        ("intake", [row[0] for row in sources.intake.CASES]),
+        ("identity", identity),
+        ("trust", list(sources.trust.CASES)),
+        (
+            "sequence",
+            [
+                f"{mode}:{label}"
+                for mode in sources.sequence.MODES
+                for label in sources.sequence.CASE_NAMES
+            ]
+            + ["source-unchanged"],
+        ),
+    ):
+        cases.extend(sources._case_ids(name, labels))
+    cases.extend(
+        f"inventory:{label}:{index}" if count > 1 else f"inventory:{label}"
+        for label, count in candidate.INVENTORY_CASES.items()
+        for index in range(1, count + 1)
+    )
+    cases.extend(candidate.OUTAGE_PHASE_CASES)
+    cases.extend(candidate.OUTAGE_FINAL_CASES)
+    final.same(len(cases), len(set(cases)), "security-case-duplicates")
+    return digest(canonical(sorted(cases)))
+
+
 def object_bytes(state, pin):
     # Match the full M18 child verifier, including native outage packets >16 MiB.
     return final.blob(state, pin, 64 * final.LIMIT)
