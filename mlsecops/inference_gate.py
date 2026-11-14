@@ -82,6 +82,78 @@ NATIVE_CASES = {
 }
 
 
+def joint_cases(actual, permit_envelope):
+    """Select original M12 rows from the richer baseline Job, checking their typed values."""
+    rows = actual["native"]["cases"]
+    model, bundle = actual["model_sha256"], actual["subject_sha256"]
+    expected = {
+        "verified-ready": 200,
+        "ready-model": model,
+        "ready-bundle": bundle,
+        "golden-status": 200,
+        "golden-model": model,
+        "golden-bundle": bundle,
+        "golden-parity-1e-6": True,
+        "finite-bounded-scores": True,
+        "unauthorized-401": 401,
+        "initial-worker-absence": 0,
+        "final-worker-absence": 0,
+        "413-over-64KiB": 413,
+        "64KiB-accepted": 200,
+        "100-rows-status": 200,
+        "100-rows-count": 100,
+        "outside-support-status": 200,
+        "outside-support-abstains": "abstain",
+        "outside-support-no-score": None,
+        "429-busy": 429,
+        "ready-after-invalid": 200,
+        "one-persistent-worker": 1,
+        "actual-candidate-not-release": False,
+        "qualification-audit-context": "candidate-qualification",
+        "qualification-permit-payload": actual["qualification_permit_sha256"],
+        "qualification-permit-envelope": digest(canonical(permit_envelope)),
+        "stopped-worker-503": 503,
+        "stopped-worker-not-ready": 503,
+        "unsigned-permit-signature-reason": "unexpected_fields",
+        "unsigned-proposal-signature-reason": "invalid_signature_count",
+        **{name: 422 for name in NATIVE_CASES if name.startswith("422-")},
+    }
+    for fault in (
+        "unsigned-permit",
+        "unsigned-proposal",
+        "changed-model",
+        "mutable-model",
+        "malformed-model",
+    ):
+        expected.update(
+            {
+                fault + "-ready-503": 503,
+                fault + "-predict-503": 503,
+                fault + "-cleanup": 0,
+                fault + "-worker-constructions": int(fault == "malformed-model"),
+            }
+        )
+    selected = [r for r in rows if r["id"] in expected]
+    if (
+        len({r["id"] for r in rows}) != len(rows)
+        or set(expected) != NATIVE_CASES
+        or {r["id"] for r in selected} != NATIVE_CASES
+        or any(
+            canonical(r)
+            != canonical(
+                dict(
+                    id=r["id"], status="pass", actual=expected[r["id"]], expected=expected[r["id"]]
+                )
+            )
+            for r in selected
+        )
+        or actual["native"]["authority_target"] != "primary"
+        or not 0 <= actual["native"]["max_golden_error"] <= 1e-6
+    ):
+        raise Rejected("M12_joint_native_cases")
+    return selected
+
+
 def contracts(root):
     process = subprocess.run(
         [sys.executable, "-m", "scripts.inference_contracts"],
@@ -205,7 +277,23 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "data.lock",
     ]
     materials = {path: digest(bounded_read(root / path)) for path in paths}
-    if proposal_pin is not None:
+    joint_pin = os.environ.get("M11_M12_NATIVE_SHA256")
+    if joint_pin is None and "M11_M12_ACTUAL_SHA256" in os.environ:
+        raise Rejected("M12_joint_native_required")
+    view = None
+    if joint_pin is not None:
+        from scripts import shared_serving_native
+
+        binding, native, config = shared_serving_native.lookup(root, state, image)
+        actual = native["actual_inference"]
+        selected = joint_cases(actual, config["permit_envelope"])
+        view = {
+            **native,
+            "actual_inference": {**actual, "native": {**actual["native"], "cases": selected}},
+        }
+        preparation_started, started = native["started_at"], actual["started_at"]
+        controlled = contracts(root)
+    elif proposal_pin is not None:
         from scripts import m12_pinned_native
 
         started, native = m12_pinned_native.finish(root, state, image, proposal_pin, early_pin)
@@ -223,7 +311,7 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "source_fingerprint": source_fingerprint(root),
         "image_id": native["image_id"],
     }
-    cases = reconcile(native, source)
+    cases = reconcile(native if view is None else view, source)
     if command(["git", "-C", str(root), "status", "--porcelain"]) or any(
         digest(bounded_read(root / path)) != value for path, value in materials.items()
     ):
@@ -247,6 +335,11 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "cases": controlled["cases"] + cases,
         "checks": len(controlled["cases"]) + len(cases),
         "metrics": {
+            **(
+                {"qualification_permit_sha256": actual["qualification_permit_sha256"]}
+                if joint_pin is not None
+                else {}
+            ),
             "native_cases": len(cases),
             "max_golden_error": actual["native"]["max_golden_error"],
         },
@@ -259,6 +352,15 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
             "proposal_reference": actual["proposal_reference"],
         },
         "artifact_hashes": {
+            **(
+                {
+                    "shared_native": joint_pin,
+                    "pinned_actual": os.environ["M11_M12_ACTUAL_SHA256"],
+                    "proposal_packet": binding["input_files"]["evidence/release-native.json"],
+                }
+                if joint_pin is not None
+                else {}
+            ),
             **({"pinned_actual": early_pin} if early_pin is not None else {}),
             "native": digest(bounded_read(state / "evidence/inference-native.json")),
             "contracts": digest(bounded_read(state / "evidence/inference-contracts.json")),

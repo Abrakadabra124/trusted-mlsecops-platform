@@ -92,27 +92,45 @@ def qualify(root, state, image="trusted-mlsecops:dev", *, proposal_pin=None, dem
     trust_delivery.check_pins(proposal_pin, demo_pin)
     before = materials(root)
     frozen = None
-    if proposal_pin is not None:
-        trust_delivery.clean_campaign(state)
-        frozen = trust_delivery.freeze(
-            root, state, serving_output_native.source(root, image), proposal_pin, demo_pin
+    joint_pin = os.environ.get("M11_M12_NATIVE_SHA256")
+    if joint_pin is None and "M11_M12_ACTUAL_SHA256" in os.environ:
+        raise Rejected("M11_joint_native_required")
+    if joint_pin is not None:
+        from scripts import shared_serving_native
+
+        frozen, native, _ = shared_serving_native.lookup(root, state, image)
+        trust_gate.require(
+            frozen["input_files"]["evidence/release-native.json"] == proposal_pin
+            and frozen["input_files"]["storage-demo.json"] == demo_pin
         )
-    prepared = kube_serving_native.prepare(
-        root, state, image, **({} if frozen is None else {"proposal_pin": proposal_pin})
-    )
-    source = {k: prepared[k] for k in ("source_revision", "source_fingerprint")}
-    source["image_id"] = prepared["profile"]["image_id"]
-    started = now()
-    controlled = controlled_contracts(root)
-    native = kube_serving_native.qualify(
-        root,
-        state,
-        image,
-        prepared=prepared,
-        include_candidate=True,
-        include_key_revocation=True,
-        include_trust_lifecycle=True,
-    )
+        source = frozen["source"]
+        preparation_started, started = (
+            native["started_at"],
+            native["actual_inference"]["started_at"],
+        )
+        controlled = controlled_contracts(root)
+    else:
+        if proposal_pin is not None:
+            trust_delivery.clean_campaign(state)
+            frozen = trust_delivery.freeze(
+                root, state, serving_output_native.source(root, image), proposal_pin, demo_pin
+            )
+        prepared = kube_serving_native.prepare(
+            root, state, image, **({} if frozen is None else {"proposal_pin": proposal_pin})
+        )
+        source = {k: prepared[k] for k in ("source_revision", "source_fingerprint")}
+        source["image_id"] = prepared["profile"]["image_id"]
+        started = now()
+        controlled = controlled_contracts(root)
+        native = kube_serving_native.qualify(
+            root,
+            state,
+            image,
+            prepared=prepared,
+            include_candidate=True,
+            include_key_revocation=True,
+            include_trust_lifecycle=True,
+        )
     write_json(safe_child(state, "evidence/kubernetes-serving.json"), native)
     metrics = trust_gate.reconcile(native, source)
     # Rotation history is synthetic. Keep the owner's source SQL available for
@@ -232,6 +250,11 @@ def qualify(root, state, image="trusted-mlsecops:dev", *, proposal_pin=None, dem
         },
         "artifact_hashes": {
             **actual["artifact_hashes"],
+            **(
+                {"shared_native": joint_pin, "pinned_actual": os.environ["M11_M12_ACTUAL_SHA256"]}
+                if joint_pin is not None
+                else {}
+            ),
             "method_materials": digest(canonical(before)),
             **frozen_hashes,
             **{

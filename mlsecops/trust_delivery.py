@@ -57,6 +57,8 @@ def freeze(root, state, source, proposal_pin, demo_pin):
         proposal_reference=report["proposal_reference"],
         subject_sha256=verified["subject_sha256"],
         model_sha256=digest(verified["model"]),
+        proposal_issued_at=verified["manifest"]["issued_at"],
+        proposal_expires_at=verified["manifest"]["expires_at"],
         input_files={
             "evidence/release-native.json": proposal_pin,
             "storage-demo.json": demo_pin,

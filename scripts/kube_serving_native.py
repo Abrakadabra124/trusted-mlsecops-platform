@@ -458,6 +458,7 @@ def qualify(
     prepared=None,
     include_key_revocation=False,
     include_trust_lifecycle=False,
+    continued_authority=None,
 ):
     from scripts.kube_approval_campaign import qualify as approval_campaign
     from scripts.kube_owned_probe import invoke
@@ -482,7 +483,11 @@ def qualify(
         features, scores = serving_native.bind_real_runtime(fixture, profile["image_id"])
         arguments = fixture.arguments
         previous = copy.deepcopy(arguments)
-        authority_key, authority_public = initialize_campaign(root, state, image)
+        if continued_authority is None:
+            authority_key, authority_public = initialize_campaign(root, state, image)
+        else:
+            authority_key, authority_public = continued_authority
+            kube_security_events.validate(state, profile=profile, authority_root=authority_public)
         promotion = configuration("/client", "/trust-client", arguments, authority_public)
         trust_authority.update(
             state,
@@ -570,7 +575,9 @@ def qualify(
         rollback.update(target_model=model, from_model=renewed_model)
         after = ledger(state)
         print(canonical({"stage": "planned-authority-root-rotation"}).decode(), flush=True)
-        next_key = authority_key.with_name("rotated-authority.pem")
+        next_key = authority_key.with_name(
+            "rotated-authority.pem" if continued_authority is None else "controlled-authority.pem"
+        )
         rotation = exercise_root_rotation(state, authority_key, next_key)
         from scripts.kube_controlled_trust_campaign import qualify as controlled_trust
 
