@@ -26,6 +26,12 @@ log только приватно; сопоставить последний и�
 требует отдельной проверки всех denial/cleanup сценариев и свежего native run.
 Повторный успешный компонент не превращает этот неуспешный запуск в pass.
 
+[Изменение ownership кампании](candidate-campaign-ownership.md) удаляет
+промежуточный return/suspend между root rotation и остальными actual probes.
+Все отдельные Jobs, audit/preflight, отказ при остатке 179 секунд и проверенный
+финальный возврат сохраняются. Родительская проверка объединённых изменений:
+37 tests pass. Native достаточность временного запаса пока не подтверждена.
+
 В [сквозном запуске 43561580336](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43561580336/job/132346238429)
 M02 остановил выполнение с `source_lock_mismatch_explicit_update_required`.
 Причина установлена: добавление времени проверки в `mlsecops/datasets.py` для

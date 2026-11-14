@@ -15,6 +15,13 @@ inventory, image policy, coverage и governance. Все эти материал�
 
 ## Порядок и существующие контракты
 
+Для M13/M14/M15 [collector исходных serving packets](m18-serving-primary.md)
+подключён после обычного offline replay всей тройки: capture сохраняет оригиналы,
+следующий шаг replay использует только content-addressed объекты и те же внешние
+pins. Native результат этого подключения ещё ожидается. Сборщик M23 добавлен
+отдельным модулем; его подключение к workflow и независимый pre-run case inventory
+ещё не завершены.
+
 ### Исходные материалы M08 и M09
 
 Сборщик [m18_adversarial_retention.py](../../scripts/m18_adversarial_retention.py)

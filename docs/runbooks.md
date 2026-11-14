@@ -3,6 +3,12 @@
 Финальное сведение одного frozen candidate описано в
 [процедуре M18](operations/final-evidence.md).
 
+Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
+[serving primary](operations/m18-serving-primary.md). Отказ по времени
+qualification permit и порядок возврата serving identity:
+[единый цикл ownership](operations/candidate-campaign-ownership.md) и
+[проверенный неуспешный запуск](operations/shared-serving.md#отказ-из-за-окна-qualification-permit-14-ноября-2026).
+
 - [T29: первичные signed evidence и replay](operations/security-primary-evidence.md):
   registry pins, полные outbox/collector/incidents, source bindings и восстановление
   после неполного retention. Общий M23 остаётся обязательным отдельным gate.

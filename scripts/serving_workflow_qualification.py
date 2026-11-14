@@ -49,6 +49,7 @@ class WorkflowTests(unittest.TestCase):
             "m23_gate",
             "delivery",
             "trio_delivery",
+            "serving_primary",
         )
         positions = [ids.index(i) for i in ordered]
         self.assertEqual(positions, sorted(positions))
@@ -98,6 +99,31 @@ class WorkflowTests(unittest.TestCase):
                 )
         self.assertIn("steps.stop_sql.outcome == 'success'", replay)
         self.assertIn("steps.stop_cluster.outcome == 'success'", replay)
+
+    def test_serving_primary_retention_and_replay_keep_independent_original_pins(self):
+        capture = next(s for s in self.steps if "id: serving_primary\n" in s)
+        replay = next(s for s in self.steps if "scripts.m18_serving_retention replay" in s)
+        self.assertLess(self.text.index("id: trio_delivery"), self.text.index(capture))
+        self.assertLess(self.text.index(capture), self.text.index(replay))
+        self.assertIn(
+            "M18_SERVING_PRIMARY_SHA256: ${{ steps.serving_primary.outputs.sha256 }}", replay
+        )
+        for step in (capture, replay):
+            self.assertNotIn("always()", step)
+            self.assertIn("M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}", step)
+            for gate in ("M13", "M14", "M15"):
+                for kind in ("REPORT", "ADMISSION"):
+                    self.assertIn(
+                        gate
+                        + "_"
+                        + kind
+                        + ": ${{ steps.trio_"
+                        + gate.lower()
+                        + ".outputs."
+                        + kind.lower()
+                        + " }}",
+                        step,
+                    )
 
 
 if __name__ == "__main__":

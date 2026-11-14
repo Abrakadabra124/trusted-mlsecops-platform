@@ -96,6 +96,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.m18_security_retention_qualification scripts.m18_serving_retention_qualification
           uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/m18-adversarial.coverage" --source=scripts.m18_adversarial_retention -m unittest scripts.m18_adversarial_retention_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/m18-adversarial.coverage" -o "$RUNNER_TEMP/m18-adversarial-coverage.json"
           uv run --locked python - <<'PY'
@@ -763,6 +764,30 @@ jobs:
           LOAD_TO_MONITORING: ${{ steps.load_to_monitoring.outputs.transition }}
           MONITORING_TO_JOINT: ${{ steps.monitoring_to_joint.outputs.transition }}
         run: uv run --locked python -B -W error -m scripts.serving_retention replay
+      - name: Retain original serving trio primaries after their ordinary replay
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: serving_primary
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M13_REPORT: ${{ steps.trio_m13.outputs.report }}
+          M14_REPORT: ${{ steps.trio_m14.outputs.report }}
+          M15_REPORT: ${{ steps.trio_m15.outputs.report }}
+          M13_ADMISSION: ${{ steps.trio_m13.outputs.admission }}
+          M14_ADMISSION: ${{ steps.trio_m14.outputs.admission }}
+          M15_ADMISSION: ${{ steps.trio_m15.outputs.admission }}
+        run: uv run --locked python -B -W error -m scripts.m18_serving_retention capture
+      - name: Replay original serving trio from content addressed objects
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        env:
+          M18_SERVING_PRIMARY_SHA256: ${{ steps.serving_primary.outputs.sha256 }}
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M13_REPORT: ${{ steps.trio_m13.outputs.report }}
+          M14_REPORT: ${{ steps.trio_m14.outputs.report }}
+          M15_REPORT: ${{ steps.trio_m15.outputs.report }}
+          M13_ADMISSION: ${{ steps.trio_m13.outputs.admission }}
+          M14_ADMISSION: ${{ steps.trio_m14.outputs.admission }}
+          M15_ADMISSION: ${{ steps.trio_m15.outputs.admission }}
+        run: uv run --locked python -B -W error -m scripts.m18_serving_retention replay
       - name: Identify missing evidence for final M18 acceptance
         env:
           M18_DELIVERY_SHA256: ${{ steps.trio_delivery.outputs.receipt || steps.delivery.outputs.receipt }}
