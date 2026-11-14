@@ -127,6 +127,7 @@ def probe(target, golden):
 def capture(root, state, owner, files, campaign):
     rollout.hosted()
     inputs = pinned(state)
+    require(inputs.get("delivery") == files.get("delivery"))
     hexadecimal(campaign, 32)
     features = [[0.1] * len(FEATURES)]
     expected = {

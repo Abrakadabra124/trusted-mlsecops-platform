@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from mlsecops import asset_graph, canary_native_evidence, release_bundle, storage_bootstrap
 from mlsecops.contracts import (
     Rejected,
+    bounded_read,
     canonical,
     decode,
     digest,
@@ -191,15 +192,40 @@ def fixture_impact():
 
 def inputs(root, state):
     require(state.resolve() == safe_child(root, ".runtime") and not state.is_symlink())
-    if not all(os.environ.get(k) for k in (*OWNER_FILES, "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")):
+    delivery = any(k in os.environ for k in ("M19_TRUST_SHA256", "M19_WORKSPACE_ID"))
+    additional = ("M19_TRUST_SHA256", "M19_WORKSPACE_ID", "GITHUB_SHA") if delivery else ()
+    if not all(
+        os.environ.get(k)
+        for k in (*OWNER_FILES, *additional, "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
+    ):
         raise FileNotFoundError("M19 owner pins unavailable")
     canary_rollout_native.hosted()
     marker = storage_bootstrap.validate(state)
     owner = canary_rollout_native.capture_inputs(root, "M19_PROPOSAL_SHA256")
-    files = {
-        path: decode(canary_native_evidence.read_pinned(safe_child(state, path), os.environ[var]))
-        for var, path in OWNER_FILES.items()
-    }
+    files, raw_pins = {}, {}
+    paths = {**OWNER_FILES, **({"M19_TRUST_SHA256": "storage-trust.json"} if delivery else {})}
+    for variable, path in paths.items():
+        content = bounded_read(safe_child(state, path))
+        files[path] = decode(content)
+        raw_pins[path] = digest(content)
+        measured = (
+            digest(canonical(files[path]))
+            if delivery and variable == "M19_KEYS_SHA256"
+            else raw_pins[path]
+        )
+        require(measured == hexadecimal(os.environ[variable]))
+    if delivery:
+        require(
+            marker["workspace_id"] == hexadecimal(os.environ["M19_WORKSPACE_ID"], 32)
+            and owner["source"]["source_revision"] == hexadecimal(os.environ["GITHUB_SHA"], 40)
+        )
+        files["delivery"] = dict(
+            schema_version=1,
+            owner=owner,
+            workspace_id=marker["workspace_id"],
+            storage_sha256=digest(canonical(marker)),
+            files=raw_pins,
+        )
     return owner, marker, files
 
 
@@ -406,6 +432,15 @@ def qualify(root, state):
             public_keys=hexadecimal(os.environ["M19_KEYS_SHA256"]),
             **(
                 dict(
+                    proposal_packet=owner["proposal_pin"],
+                    source_trust=files["delivery"]["files"]["storage-trust.json"],
+                    delivery_source=digest(canonical(files["delivery"])),
+                )
+                if "delivery" in files
+                else {}
+            ),
+            **(
+                dict(
                     fleet_inputs=hexadecimal(os.environ["M19_FLEET_INPUTS_SHA256"]),
                     fleet=digest(canonical(fleet)),
                     **{r + "_fleet_journal": o["journal"] for r, o in fleet["deployments"].items()},
@@ -421,7 +456,15 @@ def qualify(root, state):
             dataset=ancestor["sha256"],
             qualified_subject=replay["release_subject"],
             **(
-                dict(release_subject=replay["release_subject"], model=replay["model"])
+                dict(
+                    release_subject=replay["release_subject"],
+                    model=replay["model"],
+                    evaluation_reference=traffic["candidate"]["evaluation_reference"],
+                    proposal_reference=traffic["candidate"]["proposal_reference"],
+                    image_id=traffic["candidate"]["image_id"],
+                    qualified_candidate_subject=replay["release_subject"],
+                    qualified_candidate_model=replay["model"],
+                )
                 if full
                 else {}
             ),

@@ -78,6 +78,33 @@ uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .r
 
 Для повторного чтения в этом job нужны исходная `.runtime`, тот же checkout и значения `M19_PROPOSAL_SHA256`, `M19_KEYS_SHA256`, `M19_DEMO_SHA256`, `M19_FLEET_INPUTS_SHA256`, `M19_PRIMARY_SHA256` из шагов владельца. Файловый digest включает завершающий перевод строки. Поля `graph_sha256` и `snapshot_sha256` считаются по canonical JSON. Приватный пакет, ключи и журналы остаются на runner. В лог поступает публичный отчёт с digest, версионированным графом, наблюдаемым snapshot, временем отказа каждого deployment и точными expected/actual sets. После удаления runner для нового прогона нужен новый захват.
 
-Для полного профиля workflow требует 14 успешных случаев, `pass`, exit 0 и `release_ready=false`. Все три кандидата работают под временными qualification permits. Тесты durable rollback и promotion используют отдельно одобренные контролируемые releases. До успешного hosted replay полного профиля M19 остаётся открытым.
+Для полного профиля workflow требует 14 успешных случаев, `pass`, exit 0 и `release_ready=false`. Все три кандидата работают под временными qualification permits. Тесты durable rollback и promotion используют отдельно одобренные контролируемые releases. На `06f28fd8d0d3f856690e716627ea1fa3240814c9` полный observed профиль получил `pass` в [GitHub run 43547590994, job 132302404422](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43547590994/job/132302404422). SHA-256 публичного отчёта `77ad82826f6d3300754c0e00807782d754648b87141674c5cf7719ff4636eb85`. Общий delivery требует отдельного replay на своём исходном кандидате.
 
 На `1d582c6` владелец проверил срез с одним deployment. Все девять компонентных случаев прошли, обычный M19 вернул `inconclusive`, SHA-256 публичного отчёта `657bf6f8cecea0b23135bcc07832ec869df6fbf2e5603a2c10d5a1ee408f1b30`, GitHub run `43543502530`, job `132289237698`. Исторические SQL и inventory-event прогоны описаны в [evidence](../evidence/inventory-security-events-2026-11-11.md).
+
+## M19 на исходном кандидате общего delivery
+
+Адаптер `scripts.inventory_fleet_materials --existing` читает уже выпущенный proposal из source SQL и проверяет его подпись, runtime, source commit, dataset, training metadata и evaluation reference по исходным файлам владельца. Он создаёт два дополнительных сценария previous и independent через обычные trainer, evaluator и publisher. Данные дописываются в content-addressed SQL. Публикация исходного кандидата сохраняет свой подписанный sequence, включая обычное значение 1. Порядок previous/current в этой квалификации подтверждается последовательностью реальных активаций и HTTP-запросов.
+
+До подготовки, при завершении и последующем replay проверяются исходные pins. На всех этапах нужны следующие переменные из шага владельца.
+
+| Переменная | Значение |
+| --- | --- |
+| `M19_PROPOSAL_SHA256` | SHA-256 полных байтов `evidence/release-native.json` |
+| `M19_DEMO_SHA256` | SHA-256 полных байтов `storage-demo.json` |
+| `M19_KEYS_SHA256` | SHA-256 canonical JSON `trusted-keys.json`, как `source.outputs.keys` общего delivery |
+| `M19_TRUST_SHA256` | SHA-256 полных байтов `storage-trust.json` |
+| `M19_WORKSPACE_ID` | `sql.outputs.workspace`, проверенный при создании source SQL |
+
+GitHub задаёт `GITHUB_SHA`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT` и hosted runner identity. Путь state фиксирован как `root/.runtime`. Валидатор проверяет workspace, labels, container/network/volume identity и конфигурацию source SQL. Перед дополнительной публикацией все шесть SQL clients сверяются с его loopback-портом и исходными сертификатами и ключами. Чистый checkout и методы кампании входят в owner binding. Публичный ключ qualification берётся из отдельно закреплённого результата подготовки.
+
+Последовательность общего workflow выполняется в одном job.
+
+1. Пока исходный SQL работает, выполнить `uv run --locked python -B -W error -m scripts.inventory_fleet_materials --existing`. Шаг возвращает `outputs.sha256` для `evidence/M19-fleet-inputs.json`. Python-вход `existing(root, state)` возвращает этот JSON-объект, публикацию выполняет CLI.
+2. Передать этот digest как `M19_FLEET_INPUTS_SHA256` и выполнить `uv run --locked python -B -W error -m scripts.inventory_deployment_native`. Шаг возвращает `outputs.sha256` приватного capture.
+3. Последовательно провести M17 и принадлежащий orchestration cleanup source SQL.
+4. Передать digest capture как `M19_PRIMARY_SHA256`, сохранить `M19_FLEET_INPUTS_SHA256` и пять входных переменных, затем вызвать `uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json`.
+
+Дополнительные сценарии используют отдельные файлы `evidence/M19-previous-demo.json` и `evidence/M19-independent-demo.json`. Подготовка сравнивает байты исходных demo, release report, source trust и публичных ключей, а также исходный promotion-policy envelope. Эта проверка выполняется и при исключении. Дополнительная оценка занимает обычные holdout-budget reservations. Срок действия исходного proposal проверяется штатным verifier. При прерывании подготовки повторять кампанию в свежем job с новым захватом владельца.
+
+Для общего сборщика отчёт содержит `artifact_hashes.proposal_packet`, `source_trust` и `delivery_source`. В `input_digests` входят `candidate_reference`, `evaluation_reference`, `proposal_reference`, `image_id`, `source_revision`, `source_fingerprint`, `qualified_candidate_subject` и `qualified_candidate_model`. Поля `release_subject` и `model` также связаны с исходным proposal. SHA-256 готового публичного отчёта считается по полным байтам файла с завершающим переводом строки.
