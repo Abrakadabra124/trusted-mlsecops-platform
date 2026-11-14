@@ -2,7 +2,7 @@ import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from mlsecops.contracts import Rejected
+from mlsecops.contracts import Rejected, canonical, digest
 
 SYFT_VERSION = "1.54.1"
 GRYPE_VERSION = "0.120.1"
@@ -14,6 +14,61 @@ GO_CONTROLS = {
     "stdlib": ("stdlib", "go1.20.9"),
 }
 GO_CONTROL_ADVISORIES = {"GO-2023-2102", "CVE-2023-39325", "GHSA-4374-p667-p6c8"}
+COREDNS_CONFIG = "sha256:97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4"
+# Sorted (type, name, version) from /coredns Go build info and the image's dpkg database.
+COREDNS_PACKAGES_SHA256 = "9b512c14911df8ec933a65f4a6010b2dc14fb7c63ef5ec6d632f9999058dc862"
+LOCAL_PATH_CONFIG = "sha256:c82008e2cd0186ef96bfd05d6b49d3286768fae5bd7a961f70bd485a3785c006"
+# Independent binary build info + dpkg rows, with registry layers/config verified.
+# Provenance and all 61 rows: image_system_inventory_fixture.py.
+LOCAL_PATH_PACKAGES_SHA256 = "552dfdc00d5981e6bc68ddae319e8d9c4df0aef7d0cf969cc40701f1d369ee91"
+
+
+def local_path_inventory_matches(observation):
+    """Recognize exact application coverage, never override vulnerability findings."""
+    try:
+        if observation.get("image_id") != LOCAL_PATH_CONFIG or observation.get("distro") != {
+            "id": "debian",
+            "versionID": "13.6",
+        }:
+            return False
+        rows = []
+        for package in observation["packages"]:
+            if package["type"] == "go-module":
+                if package["foundBy"] != "go-module-binary-cataloger" or package["paths"] != [
+                    "/usr/local/bin/local-path-provisioner"
+                ]:
+                    return False
+            elif (
+                package["type"] != "deb"
+                or package["foundBy"] != "dpkg-db-cataloger"
+                or f"/var/lib/dpkg/status.d/{package['name']}" not in package["paths"]
+            ):
+                return False
+            rows.append([package["type"], package["name"], package["version"]])
+        return digest(canonical(sorted(rows))) == LOCAL_PATH_PACKAGES_SHA256
+    except (KeyError, TypeError, AttributeError):
+        return False
+
+
+def coredns_inventory_matches(observation):
+    if (
+        observation.get("image_id") != COREDNS_CONFIG
+        or (observation["distro"] or {}).get("id") != "debian"
+    ):
+        return False
+    rows = []
+    for p in observation["packages"]:
+        if p["type"] == "go-module":
+            if p["foundBy"] != "go-module-binary-cataloger" or p["paths"] != ["/coredns"]:
+                return False
+        elif (
+            p["type"] != "deb"
+            or p["foundBy"] != "dpkg-db-cataloger"
+            or f"/var/lib/dpkg/status.d/{p['name']}" not in p["paths"]
+        ):
+            return False
+        rows.append([p["type"], p["name"], p["version"]])
+    return digest(canonical(sorted(rows))) == COREDNS_PACKAGES_SHA256
 
 
 def observe_packages(sbom, image_id):
