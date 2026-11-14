@@ -111,6 +111,7 @@ class SignedRepeat(unittest.TestCase):
             dict(candidate_probability_difference=0.0, candidate_auprc_difference=0.0),
         )
         doc = read_json(self.campaign / "candidate-replay.json")
+        self.assertEqual(doc["scores"], self.vector)
         self.assertEqual(doc["reference_runs"], [r["run_id"] for r in self.records])
         self.assertEqual(doc["protocol"]["response_digest"], self.proof["response_digest"])
 

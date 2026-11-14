@@ -12,6 +12,7 @@ from mlsecops import (
     material_bundle,
     release_bundle,
     release_policy,
+    reproducibility_gate,
 )
 from mlsecops.acceptance import GATES
 from mlsecops.contracts import (
@@ -352,6 +353,8 @@ def frozen(root, state, index, revision, fingerprint):
         frozen_demo=files["storage-demo.json"],
         split_materials=metadata["materials"],
         prediction_protocol=signed_eval["report"]["prediction_protocol"],
+        evaluation_scan=signed_eval["report"]["scan"],
+        reproducibility_host_scripts=reproducibility_gate.host_source(root),
         evaluation_auprc=signed_eval["report"]["auprc"],
         integrity_snapshot={
             **{k: splits[k + ".json"]["sha256"] for k in ("train", "validation", "holdout")},
@@ -693,39 +696,9 @@ def primary(gate, report, obj, values):
                 "isolation-subject",
             )
         elif gate == "M06":
-            replay = decode(obj(report["artifact_hashes"]["candidate_replay"]))
-            subset(
-                replay,
-                dict(
-                    split_materials=values["split_materials"],
-                    protocol=values["prediction_protocol"],
-                ),
-                "repeat-candidate-materials",
-            )
-            candidate = replay["candidate"]
-            subset(
-                candidate,
-                dict(model_digest=values["model"], auprc=values["evaluation_auprc"]),
-                "repeat-candidate",
-            )
-            subset(candidate["inputs"], dict(dataset=values["dataset"]), "repeat-dataset")
-            subset(
-                candidate["inputs"],
-                {
-                    k: report["input_digests"][k]
-                    for k in ("request", "policy", "source", "environment", "golden")
-                },
-                "repeat-inputs",
-            )
-            need(
-                len(replay["reference_runs"]) == len(set(replay["reference_runs"])) == 3
-                and candidate["run_id"] not in replay["reference_runs"],
-                "repeat-runs",
-            )
-            need(
-                "signed-candidate-three-fresh-repeats" in {c["id"] for c in report["cases"]},
-                "repeat-observation",
-            )
+            from mlsecops.reproducibility_offline import verify
+
+            verify(report, packet, obj, values)
         elif gate == "M22":
             need(
                 packet["scope"] == "M22-absolute-matrix-and-frozen-review"

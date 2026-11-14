@@ -146,11 +146,11 @@ def run_one(state, dataset, policy, image, golden, observed_environment):
     output, execution = run_worker(image, batch.request)
     if execution["image_id"] != metadata["image_id"]:
         raise Rejected("reproducibility_prediction_image_changed")
-    vector, _, _ = batch.consume(output)
+    vector, scan, protocol = batch.consume(output)
     vector = vector.tolist()
     record = record_from(metadata, golden, vector, observed_environment)
     write_json(state / "candidates" / record["run_id"] / "golden-scores.json", vector)
-    return record, vector, metadata
+    return record, vector, metadata, dict(protocol=protocol, scan=scan, execution=execution)
 
 
 def qualify(root, worker_image, *, runtime_state=None, campaign_id=None):
@@ -245,13 +245,13 @@ def qualify(root, worker_image, *, runtime_state=None, campaign_id=None):
         for role in ("admin", "publisher", "reader")
     }
     experiment = configure_access(clients["admin"], credentials, "reproducibility-" + identity)
-    receipts = []
-    for name, (record, vector, metadata) in zip(
+    receipts, readbacks = [], []
+    for name, (record, _, metadata, _) in zip(
         ("repeat-1", "repeat-2", "repeat-3", "seed", "data", "environment"), runs, strict=True
     ):
         exported = projection(record, metadata, name)
         receipt = publish(clients["publisher"], experiment, exported)
-        read_back(clients["reader"], receipt, exported)
+        readbacks.append(read_back(clients["reader"], receipt, exported))
         receipts.append(receipt)
     if len({receipt["run_id"] for receipt in receipts}) != 6:
         raise Rejected("reproducibility_tracking_run_reused")
@@ -273,8 +273,16 @@ def qualify(root, worker_image, *, runtime_state=None, campaign_id=None):
         "source_fingerprint": source_fingerprint(root),
         "source_revision": command(["git", "-C", str(root), "rev-parse", "HEAD"]),
         "source_dirty": bool(command(["git", "-C", str(root), "status", "--porcelain"])),
-        "records": [record for record, _, _ in runs],
+        "records": [record for record, _, _, _ in runs],
         "tracking_receipts": receipts,
+        "tracking_readbacks": readbacks,
+        "predictions": [observation for _, _, _, observation in runs],
+        "local_manifests": {
+            identifier: read_json(state / "approved" / identifier / "manifest.json")
+            for identifier in (dataset, seed_dataset, data_dataset)
+        },
+        "curator": read_json(state / "trusted-keys.json")["curator"],
+        "source_approval": read_json(state / "source-approval.json"),
     }
     write_json(state / "evidence/reproducibility.json", result)
     write_json(output_path, result)
