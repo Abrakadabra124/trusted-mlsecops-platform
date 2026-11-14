@@ -3,10 +3,29 @@
 import os
 from pathlib import Path
 
-from mlsecops import trust_delivery
+from mlsecops import storage_bootstrap, trust_delivery
 from mlsecops.contracts import bounded_read, canonical, decode, digest
 from mlsecops.inference_gate import NATIVE_CASES
 from scripts import shared_serving_native as shared
+
+
+def offline_pin(state):
+    marker = storage_bootstrap.validate(state)
+    container = storage_bootstrap.inspect("container", marker["container_id"])
+    observed = container["State"]
+    shared.require(
+        observed["Running"] is False and observed["Status"] == "exited", "source_offline"
+    )
+    return digest(
+        canonical(
+            dict(
+                owner=marker["container_id"],
+                started=observed["StartedAt"],
+                finished=observed["FinishedAt"],
+                restarts=container["RestartCount"],
+            )
+        )
+    )
 
 
 def receipt(state, env):
