@@ -198,6 +198,63 @@ class Delivery(unittest.TestCase):
             runpy.run_module("scripts.delivery_candidate", run_name="__main__")
         return decode(out.getvalue().encode())
 
+    def test_fixed_historical_profiles_and_frozen_m06(self):
+        from scripts.delivery_candidate import BASE7, PARENT11, frozen_reports
+
+        pins = dict(
+            demo_pin=self.env["M17_DEMO_SHA256"],
+            proposal_pin=self.env["M17_PROPOSAL_SHA256"],
+            revision=self.source["source_revision"],
+        )
+        for profile, required in (
+            ("base7", BASE7),
+            ("parent11", PARENT11),
+            ("m06-checkpoint", ("M06",)),
+        ):
+            with self.subTest(profile=profile):
+                receipt = frozen_reports(self.root, profile=profile, **pins)
+                self.assertEqual(set(receipt["reports"]), set(required))
+                self.assertIs(receipt["release_ready"], False)
+                gate = required[0]
+                write_json(self.path(gate), self.reports[gate] | {"source_revision": "b" * 40})
+                with self.assertRaises(Rejected):
+                    frozen_reports(self.root, profile=profile, **pins)
+                write_json(self.path(gate), self.reports[gate])
+
+    def test_combined_parent12_requires_early_capture_and_all_fifteen_hashes(self):
+        from scripts import controller_delivery as collector
+        from scripts.m12_pinned_native import PACKET
+
+        capture = self.root / PACKET
+        write_json(capture, {"attempt": "one"})
+        capture_pin = digest(bounded_read(capture))
+        report = self.reports["M12"] | {"artifact_hashes": {"pinned_actual": capture_pin}}
+        write_json(self.path("M12"), report)
+        scoped = {g: digest(bounded_read(self.path(g))) for g in ("M03", "M07")}
+        scoped.update({g: digest(g.encode()) for g in ("M04", "M05", "M20")})
+        with (
+            patch.object(collector, "reconcile", return_value=scoped),
+            patch.object(sys, "argv", ["controller_delivery", "--include-recovery", "parent12"]),
+            patch.dict(os.environ, M12_EARLY_SHA256=capture_pin),
+            redirect_stdout(io.StringIO()) as buffer,
+        ):
+            collector.main()
+            result = decode(buffer.getvalue().encode())
+            self.assertEqual(set(result["reports"]), set(collector.GATES))
+            self.assertEqual(len(result["reports"]), 15)
+            self.assertIs(result["release_ready"], False)
+            self.assertEqual(result["reports"]["M12"], digest(bounded_read(self.path("M12"))))
+            with patch.dict(os.environ, M19_PRIMARY_SHA256=self.env["M17_PRIMARY_SHA256"]):
+                with self.assertRaisesRegex(Rejected, "capture_reused"):
+                    collector.main()
+            write_json(self.path("M12"), report | {"artifact_hashes": {"pinned_actual": "a" * 64}})
+            with self.assertRaisesRegex(Rejected, "m12_capture_mismatch"):
+                collector.main()
+            write_json(self.path("M12"), report)
+            write_json(capture, {"attempt": "two"})
+            with self.assertRaises(Rejected):
+                collector.main()
+
     def test_cli_hashes_all_original_bytes(self):
         direct = reconcile(
             self.root,
@@ -321,6 +378,58 @@ class Delivery(unittest.TestCase):
                 with self.assertRaises(Rejected):
                     self.run_cli()
 
+    def test_joint_intake_only_combines_exact_sets_and_original_evaluation(self):
+        from scripts import controller_delivery, controller_intake
+
+        candidates = self.run_cli()["candidate"]
+        scoped = {g: digest(g.encode()) for g in ("M03", "M04", "M05", "M07", "M20")}
+        parent = self.run_cli()
+        parent["reports"].update({g: scoped[g] for g in ("M03", "M07")})
+        parent["reports"]["M11"] = digest(b"M11")
+        intake = dict(
+            original_evaluation=candidates["evaluation_reference"],
+            model=candidates["qualified_candidate_model"],
+            candidate_reference=candidates["candidate_reference"],
+            gate_sha256=digest(b"M21"),
+            capture_sha256=digest(b"capture"),
+        )
+        pins = dict(
+            demo_pin=self.env["M17_DEMO_SHA256"],
+            proposal_pin=self.env["M17_PROPOSAL_SHA256"],
+            revision=self.source["source_revision"],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                M21_START_SHA256="1" * 64,
+                M21_CAPTURE_SHA256="2" * 64,
+                M21_GATE_SHA256=intake["gate_sha256"],
+            ),
+            patch.object(controller_intake, "verify", return_value=intake) as verify,
+            patch.object(controller_delivery.delivery_candidate, "reconcile", return_value=parent),
+        ):
+            result = controller_delivery.intake_delivery(self.root, pins, scoped, "M11-M12")
+            self.assertEqual(
+                set(result["reports"]), set(controller_delivery.GATES) | {"M11", "M21"}
+            )
+            self.assertEqual(
+                set(result["reports"]), set(controller_delivery.intake_gates("M11-M12"))
+            )
+            self.assertIs(result["release_ready"], False)
+            with patch.dict(intake, original_evaluation="foreign"), self.assertRaises(Rejected):
+                controller_delivery.intake_delivery(self.root, pins, scoped, "M11-M12")
+            for gate in list(parent["reports"]):
+                with (
+                    patch.dict(
+                        parent, reports={g: v for g, v in parent["reports"].items() if g != gate}
+                    ),
+                    self.assertRaises(Rejected),
+                ):
+                    controller_delivery.intake_delivery(self.root, pins, scoped, "M11-M12")
+            verify.side_effect = Rejected("full_M21_unavailable")
+            with self.assertRaisesRegex(Rejected, "full_M21_unavailable"):
+                controller_delivery.intake_delivery(self.root, pins, scoped, "M11-M12")
+
     def test_changed_originals_or_foreign_revision_refuse(self):
         for key in (
             "M17_DEMO_SHA256",
@@ -438,6 +547,20 @@ class Workflow(unittest.TestCase):
                 }
             ),
         )
+        start, _ = step("-m scripts.controller_intake begin")
+        train, train_block = step("--gate M07 --output")
+        m05, _ = step("--gate M05 --output")
+        m21, full = step("--gate M21 --output")
+        verified, _ = step("-m scripts.controller_intake check-substitution")
+        handoff, _ = step("-m scripts.controller_serving_handoff")
+        self.assertEqual(
+            sorted({start, train, source, m05, m21, verified, handoff, materials}),
+            [start, train, source, m05, m21, verified, handoff, materials],
+        )
+        self.assertIn("M21_START_SHA256: ${{ steps.intake_start.outputs.start }}", train_block)
+        for block in (full, public):
+            self.assertIn("M21_CAPTURE_SHA256: ${{ steps.evaluated.outputs.capture }}", block)
+        self.assertIn("M21_GATE_SHA256: ${{ steps.full_intake.outputs.gate }}", public)
         for block in (prepare, inventory, public):
             for key, value in (
                 ("M19_PROPOSAL_SHA256", "steps.source.outputs.proposal"),
@@ -458,9 +581,10 @@ class Workflow(unittest.TestCase):
         self.assertIn("T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}", durable)
         self.assertIn("id: canary", traffic)
         self.assertLess(
-            public.index("--gate M19 --output"), public.index("-m scripts.delivery_candidate")
+            public.index("--gate M19 --output"),
+            public.index("-m scripts.controller_delivery --with-intake"),
         )
-        self.assertIn('for gate in campaign_gates(os.environ["DELIVERY_SERVING_GATE"]):', public)
+        self.assertIn('for gate in intake_gates(os.environ["DELIVERY_SERVING_GATE"]):', public)
         privacy, capture_privacy = step("--gate M13 --output")
         offline, _ = step("ingress_retained(Path(")
         self.assertLess(promotion, privacy)

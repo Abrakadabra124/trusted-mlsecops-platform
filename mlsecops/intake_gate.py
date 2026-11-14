@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import uuid
@@ -278,27 +279,37 @@ def qualify(root, state):
     contracts = run_contracts(root)
     campaign_id = uuid.uuid4().hex
     campaign = safe_child(state, "intake-gate/" + campaign_id)
-    initialize(root, campaign)
-    bootstrap(campaign, 15453)
-    marker = validate(campaign)
+    frozen = "M21_START_SHA256" in os.environ or "M21_CAPTURE_SHA256" in os.environ
+    backend = state if frozen else campaign
+    marker = None
+    kubernetes = None
+    if not frozen:
+        initialize(root, campaign)
+        bootstrap(campaign, 15453)
+        marker = validate(campaign)
     try:
-        demo = storage_pipeline.demo(root, campaign, image)
+        if frozen:
+            from mlsecops.controller_intake import resume
+
+            started, demo, kubernetes = resume(root, state, image)
+        else:
+            demo = storage_pipeline.demo(root, campaign, image)
         _, metadata, content = storage_pipeline.load_candidate(
-            campaign / "storage-clients/promoter",
+            backend / "storage-clients/promoter",
             demo["candidate"]["candidate_reference"],
             read_json(root / "policies/local-cpu.json"),
         )
         native = scan(image, content)
-        denials = deny(root, campaign, image)
-        result = reconcile(root, campaign, demo, native, denials, image, started)
-        kubernetes = None
-        if (state / "controllers/resources.json").is_file():
+        denials = deny(root, backend, image)
+        result = reconcile(root, backend, demo, native, denials, image, started)
+        if not frozen and (state / "controllers/resources.json").is_file():
             from mlsecops.intake_probe import CASE_IDS
             from mlsecops.kube_intake_qualification import HOST_CASES
             from mlsecops.kube_intake_qualification import qualify as kube_qualify
 
             kubernetes = kube_qualify(root, state, content, image, metadata["materials"])
             checked_cases(kubernetes, CASE_IDS | HOST_CASES)
+        if kubernetes is not None:
             result["input_digests"]["kubernetes_candidate_reference"] = kubernetes[
                 "candidate_reference"
             ]
@@ -360,18 +371,25 @@ def qualify(root, state):
             limitations=[
                 "Scoped-controller native intake replay is mandatory; missing backend leaves M21 inconclusive",
                 "Kubernetes deadline uses unschedulable owned Job, crash uses malformed request; neither is a parser exploit",
-                "Docker and Kubernetes candidate records have distinct storage identities; exact model bytes and split materials must match",
+                "Controller and destination promoter read the original evaluation and the matrix spends additional slots for this candidate"
+                if frozen
+                else "Docker and Kubernetes candidate records have distinct storage identities; exact model bytes and split materials must match",
                 "Docker faults are real replacement processes; SQL timeout is a controlled transport exception",
-                "Fresh disposable SQL state does not reset or refund any working holdout budget",
+                "SQL controls spend three additional slots on the authoritative host"
+                if frozen
+                else "Fresh disposable SQL state does not reset or refund any working holdout budget",
                 "Trusted host, local keys and synthetic data; not independent attestation or universal malware detection",
                 "Release/serving integration, M08 and image security blockers remain mandatory",
             ],
         )
         result["input_digests"].update(host_contracts=sources, data_lock=data_digest)
+        if frozen:
+            result["artifact_hashes"]["controller_capture"] = os.environ["M21_CAPTURE_SHA256"]
     finally:
-        if validate(campaign)["container_id"] != marker["container_id"]:
-            raise Rejected("M21_cleanup_identity_changed")
-        docker(["stop", marker["container_id"]], timeout=60)
+        if marker is not None:
+            if validate(campaign)["container_id"] != marker["container_id"]:
+                raise Rejected("M21_cleanup_identity_changed")
+            docker(["stop", marker["container_id"]], timeout=60)
     result["finished_at"] = now()
     write_json(output, result)
     return result

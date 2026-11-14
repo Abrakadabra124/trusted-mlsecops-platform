@@ -249,6 +249,7 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
             "integration": sum(case["id"].startswith("gate:") for case in cases),
         },
         "artifact_hashes": artifacts,
+        "evaluation_reference": controller["evaluation_reference"],
         "evaluation_references": [
             controller["evaluation_reference"],
             *(item["evaluation_reference"] for item in outputs["positive_evaluations"]),
