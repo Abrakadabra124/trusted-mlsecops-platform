@@ -41,6 +41,20 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 - Разрешённый whole-bundle rollback сохраняет subject/proposal целевого комплекта, не смешивает модели. Неверные history links и revoked target отклоняются.
 - После смены release signer старый экземпляр остаётся fenced; новый release без M22 не записывается; новый worker активируется явно.
 
+## Привязка M11 к общему delivery
+
+Для уже замороженного предложения штатный `mlsecops.acceptance --gate M11` принимает пару переменных `M11_PROPOSAL_SHA256` и `M11_DEMO_SHA256`. Это SHA-256 **полных байтов** файлов `evidence/release-native.json` и `storage-demo.json`, включая завершающий LF. Программный вход поддерживает те же значения как `trust_acceptance.qualify(root, state, image, proposal_pin=..., demo_pin=...)`. При передаче одного pin проверка завершается отказом. Без пары сохраняется прежний режим подготовки собственного proposal.
+
+В frozen режиме перед Kubernetes prepare заново проверяется существующий signed package, его model/source/image и подписанная оценка из capsule. Оценка должна совпасть с исходным storage-demo целиком. Затем retained config, signed qualification permit, probe и production refusal связываются с тем же candidate, evaluation, proposal, subject и model. Subject обоих controlled rollback releases должен отличаться от actual subject. Отчёт сохраняет `actual_release_authorization=inconclusive` и причину `release_assurance_required`.
+
+Родительский delivery сверяет `input_digests.candidate_reference`, `evaluation_reference`, `proposal_reference`, `release_subject`, `model`, `qualified_candidate_subject`, `qualified_candidate_model` и source/image. В `artifact_hashes.proposal_packet` находится исходный raw proposal pin, в `storage_demo` raw demo pin, в `signed_evaluation` reference подписанных evaluation bytes. Остальные artifact hashes относятся к обычным первичным наблюдениям M11.
+
+Перед M11 требуется чистый owned Kubernetes-сценарий. После предыдущего M12 или M13 владелец сначала проверяет и удаляет свой cluster, подтверждает отсутствие `trusted-mlsecops`, затем архивирует его локальные markers и credentials. При повторном использовании state это `cluster.json`, `kubeconfig`, `controllers`, `serving`, `kubernetes-storage`, `kubernetes-trust`, `kubernetes-trust-model`, `kubernetes-security`, `kubernetes-serving-service`. Новый cluster и kube storage создаются штатными bootstrap. Исходная host SQL, её PKI/clients, source keys, proposal, evaluation и evidence сохраняются. Адаптер отказывает при обнаружении существующих trust/security/serving campaign directories.
+
+Frozen M11 выполняет signer SQL rotation и live signer controls в отдельной owned временной SQL на порту 15446. Вложенные model/trust fixtures используют 15444 и 15445. Их cleanup проверяется до итогового отчёта. После M11 владельцу остаётся очистить scenario cluster, а исходную SQL можно использовать для следующих gates и общего snapshot. Descriptor действует в исходном signed окне 1800 секунд. Очередность общего delivery должна укладываться в это окно.
+
+Для отдельной hosted проверки выберите `kubernetes-serving.yml`, `workflow_dispatch`, `frozen_proposal=true`. Workflow замораживает предложение один раз, выполняет обычный M11, подтверждает остановку source SQL и отсутствие cluster, затем выводит hashed M11 report. В frozen режиме отдельный legacy backup/recovery step пропускается, поскольку backup общего delivery выполняется владельцем после M11. Job timeout 40 минут оставляет время для cleanup, время действия подписанных документов проверяется штатными verifier.
+
 ## Диагностика и восстановление
 
 | Симптом | Проверка и действие |
@@ -48,6 +62,8 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 | Exit 2 / inconclusive | Проверить prerequisites и тип runner. Не переносить запуск на запрещённый локальный runtime |
 | `M11_contracts_failed` / incomplete | Проверить inventory, import errors, skips и expected failures. Отсутствующий test module не считается выполненным |
 | `M11_native_binding` | Сверить source/image/candidate/model/subject и последний stage. Не заменять mismatch редактированием готового report |
+| `M11_frozen_file_pin` / `M11_frozen_pins_required` | Проверить оба raw file hashes и наличие LF. Canonical JSON digest другого gate имеет другую семантику |
+| `M11_fresh_cluster_required` | Завершить owned cleanup предыдущего Kubernetes-сценария, архивировать его markers и подготовить свежий cluster |
 | `M11_trace_invalid` | Проверить timestamps/statuses, late 200, повторную activation, границу lease и полноту trace. Не увеличивать grace period ради pass |
 | `M11_descriptor_or_time_order` | Proposal должна предшествовать checks, timestamps должны иметь timezone и правильный порядок. Новый proposal требует новой кампании |
 | `M11_inputs_changed` | Source или метод изменился во время проверки. Завершить cleanup и запустить новую кампанию из чистого checkout |

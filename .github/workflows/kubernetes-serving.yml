@@ -3,6 +3,11 @@ on:
   push:
     branches: [codex/cp3-kubernetes-serving, codex/cp3-serving-trust-lifecycle, codex/cp3-m11-trust]
   workflow_dispatch:
+    inputs:
+      frozen_proposal:
+        description: Freeze the evaluated proposal before M11 and join its signed evaluation
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -11,7 +16,7 @@ concurrency:
 jobs:
   kubernetes-serving:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -29,7 +34,7 @@ jobs:
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.data_source_lock_qualification
           uv run --locked python -W error -m unittest scripts.kube_controlled_trust_campaign_qualification scripts.kube_owned_probe_qualification scripts.kube_candidate_campaign_qualification scripts.kube_readback_retry_qualification
-          uv run --locked coverage run --branch --data-file=.coverage-M11 --source=mlsecops.trust_trace,mlsecops.trust_gate,mlsecops.trust_acceptance,scripts.trust_contracts -m unittest scripts.trust_trace_qualification scripts.trust_gate_qualification scripts.trust_acceptance_qualification scripts.inference_gate_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-M11 --source=mlsecops.trust_trace,mlsecops.trust_gate,mlsecops.trust_delivery,mlsecops.trust_acceptance,scripts.trust_contracts -m unittest scripts.trust_trace_qualification scripts.trust_gate_qualification scripts.trust_delivery_qualification scripts.trust_acceptance_qualification scripts.inference_gate_qualification
           uv run --locked coverage report --data-file=.coverage-M11 --fail-under=95
           uv run --locked coverage json --data-file=.coverage-M11 -o .coverage-M11.json
           uv run --locked python -c "import json; fs=json.load(open('.coverage-M11.json'))['files']; raise SystemExit(0 if all(f['summary']['num_branches'] and f['summary']['covered_branches']/f['summary']['num_branches'] >= 0.95 for f in fs.values()) else 1)"
@@ -96,15 +101,31 @@ jobs:
           uv run --locked python -m mlsecops build
       - name: Bootstrap owned cluster
         id: bootstrap
-        run: uv run --locked python -m mlsecops.cluster bootstrap
+        run: |
+          kind get clusters > "$RUNNER_TEMP/m11-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/m11-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -m mlsecops.cluster bootstrap
       - name: Prepare model storage and actual source candidate
         run: |
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
-          uv run --locked python -m mlsecops.storage_pipeline
+          uv run --locked python -m mlsecops.storage_pipeline > /dev/null
+      - name: Freeze evaluated proposal and exact owner file pins
+        if: inputs.frozen_proposal
+        id: frozen
+        run: |
+          echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          uv run --locked python -m scripts.release_native --state .runtime
+          echo "proposal=$(sha256sum .runtime/evidence/release-native.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Fresh M11 candidate trust, release replay and live signer acceptance
+        env:
+          M11_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
         run: uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --output .runtime/evidence/M11.json
       - name: Complete rotated policy history backup and independent recovery
+        if: ${{ !inputs.frozen_proposal }}
         run: uv run --locked python -m scripts.promotion_recovery_native --state .runtime --confirm-disposable
       - name: Sanitized rotation and recovery outcomes
         if: always()
@@ -145,12 +166,24 @@ jobs:
           PY
           fi
       - name: Remove verified owned disposable cluster
-        if: always() && steps.bootstrap.outcome == 'success'
+        if: always() && steps.bootstrap.outputs.started_empty == 'true'
+        run: |
+          kind get clusters > "$RUNNER_TEMP/m11-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/m11-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/m11-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/m11-clusters.txt"; then exit 1; fi
+      - name: Emit hashed M11 report after cleanup
         run: |
           uv run --locked python - <<'PY'
           from pathlib import Path
-          from mlsecops.cluster import validate_cluster
-          validate_cluster(Path('.runtime'))
+          from mlsecops.contracts import bounded_read, canonical, decode, digest
+          raw = bounded_read(Path(".runtime/evidence/M11.json"))
+          print(canonical({"report_sha256":digest(raw), "report":decode(raw)}).decode())
           PY
-          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
-          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"

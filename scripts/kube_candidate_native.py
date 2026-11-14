@@ -446,6 +446,7 @@ def qualify(
         "proposal_issued_at": verified["manifest"]["issued_at"],
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
+        "qualification_campaign_id": campaign,
         "native": result,
         **(
             {"trust_lifecycle_ownership_return": trust_campaign["ownership"]}
