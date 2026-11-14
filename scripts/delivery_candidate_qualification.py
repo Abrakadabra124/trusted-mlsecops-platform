@@ -582,7 +582,7 @@ class Workflow(unittest.TestCase):
         self.assertIn("id: canary", traffic)
         self.assertLess(
             public.index("--gate M19 --output"),
-            public.index("-m scripts.controller_delivery --with-intake"),
+            public.index("-m scripts.m23_delivery receipt"),
         )
         self.assertIn('for gate in intake_gates(os.environ["DELIVERY_SERVING_GATE"]):', public)
         privacy, capture_privacy = step("--gate M13 --output")
