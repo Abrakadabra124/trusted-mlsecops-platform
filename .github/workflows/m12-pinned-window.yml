@@ -1,0 +1,150 @@
+name: Disposable pinned M12 with same-proposal M16 and M17
+on:
+  push:
+    branches: [fix/m12-pinned-window]
+permissions:
+  contents: read
+jobs:
+  staged:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify staged contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked python -B -W error -m unittest scripts.m12_pinned_qualification scripts.inference_gate_qualification scripts.kube_candidate_campaign_qualification
+      - name: Prepare pinned CPU runtime
+        run: |
+          uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -B -m mlsecops build
+      - name: Start the owned disposable cluster and its private storage
+        id: cluster
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -B -m mlsecops.cluster bootstrap
+          uv run --locked python -B -m mlsecops.kube_storage
+      - name: Start owned source storage
+        id: sql
+        run: |
+          uv run --locked python -B -m mlsecops.storage_bootstrap
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.storage_bootstrap import validate
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
+              print("workspace=" + validate(Path(".runtime"))["workspace_id"], file=out)
+          PY
+      - name: Verify the actual cluster, worker, pinned tools and clean bootstrap
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M01 --output .runtime/evidence/M01.json
+      - name: Verify intake, quarantine and locked training source
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
+      - name: Verify SQL integrity and role isolation, then evaluate the same training run
+        env:
+          M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+      - name: Freeze evaluated candidate and original owner
+        id: source
+        run: |
+          uv run --locked python -B -m scripts.release_native --state .runtime
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import bounded_read, canonical, digest, read_json
+          state = Path(".runtime")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
+              for label, name in (("proposal", "evidence/release-native.json"), ("demo", "storage-demo.json")):
+                  print(label + "=" + digest(bounded_read(state / name)), file=out)
+              print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
+              print("keys_file=" + digest(bounded_read(state / "trusted-keys.json")), file=out)
+              print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
+          PY
+      - name: Qualify actual M12 and capture original permit
+        id: actual
+        env:
+          M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m scripts.m12_pinned_native capture
+      - name: Measure canary traffic on the frozen proposal before taking its storage offline
+        id: canary
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native capture
+      - name: Exercise the complete rollback before creating the daily snapshot
+        id: rollback
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native rollback
+      - name: Trigger the timer and restore its exact snapshot into fresh storage
+        id: recovery
+        env:
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.m17_recovery_native capture
+      - name: Stop and verify owned storage
+        id: stop
+        if: always() && steps.sql.outcome != 'skipped'
+        env:
+          BOOTSTRAP: ${{ steps.sql.outcome }}
+        run: |
+          if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
+          uv run --locked python -B -m scripts.m17_recovery_native stop
+      - name: Verify late M12 including full controlled rotations with source offline
+        if: always() && steps.actual.outcome == 'success' && steps.stop.outcome == 'success'
+        env:
+          M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M12_EARLY_SHA256: ${{ steps.actual.outputs.sha256 }}
+        run: |
+          rc=0
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json > "$RUNNER_TEMP/m12-acceptance.log" || rc=$?
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import read_json
+          report = read_json(Path(".runtime/evidence/M12.json"))
+          print({k:report.get(k) for k in ("status","exit_code","metrics","diagnostics","started_at","finished_at")})
+          PY
+          exit "$rc"
+      - name: Remove the owned cluster and verify its absence
+        id: cleanup
+        if: always() && steps.cluster.outputs.started_empty == 'true'
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
+      - name: Reconcile captured M16 and M17 after cleanup
+        if: always() && steps.recovery.outcome == 'success' && steps.rollback.outcome == 'success' && steps.stop.outcome == 'success' && steps.cleanup.outcome == 'success'
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
+          T19_ROLLBACK_SHA256: ${{ steps.rollback.outputs.sha256 }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M17_PRIMARY_SHA256: ${{ steps.recovery.outputs.sha256 }}
+        run: |
+          uv run --locked python -B -W error -m scripts.m17_recovery_native replay
+          for gate in M16 M17; do
+            uv run --locked python -B -W error -m mlsecops.acceptance --gate "$gate" --output ".runtime/evidence/$gate.json" > "$RUNNER_TEMP/$gate.log"
+            uv run --locked python -c 'import json,sys; r=json.load(open(".runtime/evidence/"+sys.argv[1]+".json")); print(sys.argv[1],r["status"],r["metrics"])' "$gate"
+          done
