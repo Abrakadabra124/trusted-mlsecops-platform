@@ -1,63 +1,24 @@
-"""Apply the exact runbook patch in a private copy and check native phase ordering."""
+"""Check the committed workflow phase order and frozen input boundaries."""
 
 import re
-import subprocess
-import tempfile
 import textwrap
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ".github/workflows/storage-recovery.yml"
-PATCH_BASE = "ec3f4e31df7c42a9aa4e10183f147bf22f4da2c8"
 
 
 class WorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        document = (ROOT / "docs/operations/load-profile.md").read_text(encoding="utf-8")
-        blocks = re.findall(r"```diff\n(.*?)```", document, re.S)
-        if len(blocks) != 1:
-            raise AssertionError("Expected one exact integration patch")
-        cls.patch = blocks[0]
         cls.text = (ROOT / WORKFLOW).read_text(encoding="utf-8")
-        if "      serving_trio:" not in cls.text:
-            if "id: m23_sources" not in cls.text:
-                # Independent branch before integration. Hosted checks use the
-                # integrated workflow and do not require historical Git objects.
-                cls.text = subprocess.run(
-                    ["git", "show", PATCH_BASE + ":" + WORKFLOW],
-                    cwd=ROOT,
-                    check=True,
-                    capture_output=True,
-                ).stdout.decode()
-            with tempfile.TemporaryDirectory() as temporary:
-                directory = Path(temporary)
-                target = directory / WORKFLOW
-                target.parent.mkdir(parents=True)
-                target.write_text(cls.text, encoding="utf-8", newline="\n")
-                subprocess.run(
-                    ["git", "apply", "--check", "-"],
-                    input=cls.patch.encode(),
-                    cwd=directory,
-                    capture_output=True,
-                    check=True,
-                )
-                subprocess.run(
-                    ["git", "apply", "-"],
-                    input=cls.patch.encode(),
-                    cwd=directory,
-                    capture_output=True,
-                    check=True,
-                )
-                cls.text = target.read_text(encoding="utf-8")
         cls.steps = re.split(r"^      - ", cls.text, flags=re.M)[1:]
 
-    def test_patch_only_targets_workflow_and_preserves_one_proposal_producer(self):
-        self.assertEqual(re.findall(r"^\+\+\+ (.*)$", self.patch, re.M), ["b/" + WORKFLOW])
+    def test_default_complete_composition_preserves_one_proposal_producer(self):
         self.assertEqual(self.text.count("-m scripts.release_native --state .runtime"), 1)
         self.assertIn('test "$DELIVERY_SERVING_GATE" = M11-M12', self.text)
-        self.assertIn("default: false", self.text)
+        self.assertIn("default: true", self.text)
 
     def test_trio_precedes_joint_actual_and_cluster_survives_until_controlled(self):
         ids = re.findall(r"^        id: (\S+)$", self.text, re.M)

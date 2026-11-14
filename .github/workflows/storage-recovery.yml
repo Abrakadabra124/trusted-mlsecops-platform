@@ -4,6 +4,11 @@ on:
     branches: [codex/cp4-m23-security-events-20261107, qualify/t25-delivery, qualify/r1-controller-trust-intake]
     paths:
       - '.github/workflows/storage-recovery.yml'
+      - '.github/actions/serving-campaign-transition/**'
+      - 'Dockerfile'
+      - 'scripts/serving_campaign*.py'
+      - 'scripts/serving_retention*.py'
+      - 'scripts/serving_workflow_qualification.py'
       - 'infra/systemd/mlsecops-daily-backup.*'
       - 'mlsecops/acceptance.py'
       - 'mlsecops/evaluation_gate.py'
@@ -62,6 +67,10 @@ on:
         type: choice
         default: M11-M12
         options: [M11-M12, M12, M13]
+      serving_trio:
+        description: Run frozen M13/M14/M15 before the M11-M12 recovery campaign
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -70,6 +79,7 @@ jobs:
     timeout-minutes: 90
     env:
       DELIVERY_SERVING_GATE: ${{ inputs.serving_gate || 'M11-M12' }}
+      DELIVERY_SERVING_TRIO: ${{ (github.event_name != 'workflow_dispatch' || inputs.serving_trio) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -118,6 +128,21 @@ jobs:
               print(name, summary["covered_lines"], summary["num_statements"], summary["covered_branches"], summary["num_branches"])
               if summary["covered_branches"] * 100 < 95 * summary["num_branches"]:
                   raise SystemExit("Recovery branch coverage below policy: " + name)
+          PY
+      - name: Verify frozen serving retention and transition contracts
+        run: |
+          if test "$DELIVERY_SERVING_TRIO" = true; then test "$DELIVERY_SERVING_GATE" = M11-M12; fi
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/serving-retention.coverage" --source=scripts.serving_retention -m unittest scripts.serving_campaign_qualification scripts.serving_retention_qualification scripts.serving_workflow_qualification scripts.performance_delivery_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/serving-retention.coverage" -o "$RUNNER_TEMP/serving-retention-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "serving-retention-coverage.json").read_bytes())["files"]
+          assert set(files) == {"scripts/serving_retention.py"}
+          summary = files["scripts/serving_retention.py"]["summary"]
+          for covered, total in (("covered_lines", "num_statements"), ("covered_branches", "num_branches")):
+              if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
+                  raise SystemExit("Serving retention coverage below policy")
           PY
       - name: Prepare pinned CPU runtime
         run: |
@@ -232,6 +257,17 @@ jobs:
           M18_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
           M18_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze capture
+      - name: Retain the original serving proposal before its native window expires
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: serving_retention
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          SOURCE_SQL: ${{ steps.source.outputs.sql }}
+          PROPOSAL: ${{ steps.source.outputs.proposal }}
+          DEMO: ${{ steps.source.outputs.demo }}
+          KEYS: ${{ steps.source.outputs.keys_file }}
+          TRUST: ${{ steps.source.outputs.trust }}
+        run: uv run --locked python -B -W error -m scripts.serving_retention retain
       - name: Run M05 with the original frozen proposal and verify all five gates
         env:
           M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
@@ -276,12 +312,17 @@ jobs:
         if: env.DELIVERY_SERVING_GATE == 'M11-M12'
         id: m23_sources
         env:
+          SERVING_RETENTION: ${{ steps.serving_retention.outputs.sha256 }}
           M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
           M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           M23_KEYS_FILE_SHA256: ${{ steps.source.outputs.keys_file }}
           M23_TRUST_SHA256: ${{ steps.source.outputs.trust }}
           M23_SQL_SHA256: ${{ steps.source.outputs.sql }}
-        run: uv run --locked python -B -W error -m scripts.m23_delivery capture sources
+        run: |
+          if test "$DELIVERY_SERVING_TRIO" = true; then
+            uv run --locked python -B -W error -m scripts.serving_retention check M23
+          fi
+          uv run --locked python -B -W error -m scripts.m23_delivery capture sources
       - name: Capture existing inventory audit decisions on the same candidate
         if: env.DELIVERY_SERVING_GATE == 'M11-M12'
         id: m23_inventory
@@ -349,6 +390,81 @@ jobs:
         env:
           M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
         run: uv run --locked python -B -W error -m scripts.m12_pinned_native capture
+      - name: Capture frozen M13 before the joint serving campaign
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: trio_m13
+        env:
+          SERVING_RETENTION: ${{ steps.serving_retention.outputs.sha256 }}
+          M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: |
+          uv run --locked python -B -W error -m scripts.serving_retention check M13
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M13 --state .runtime --output .runtime/evidence/M13.json
+          echo "report=$(sha256sum .runtime/evidence/M13.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          admission=$(sha256sum .runtime/evidence/privacy-gate-private.json | cut -d' ' -f1)
+          echo "::add-mask::$admission"
+          echo "admission=$admission" >> "$GITHUB_OUTPUT"
+      - name: Retire M13 cluster before load
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: privacy_to_load
+        uses: ./.github/actions/serving-campaign-transition
+        with:
+          phase: M13
+          source_sql: ${{ steps.source.outputs.sql }}
+          retention: ${{ steps.serving_retention.outputs.sha256 }}
+      - name: Capture frozen M14 before the joint serving campaign
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: trio_m14
+        env:
+          SERVING_RETENTION: ${{ steps.serving_retention.outputs.sha256 }}
+          M14_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M14_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M14_KEYS_SHA256: ${{ steps.source.outputs.keys_file }}
+          M14_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+        run: |
+          uv run --locked python -B -W error -m scripts.serving_retention check M14
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M14 --state .runtime --output .runtime/evidence/M14.json
+          echo "report=$(sha256sum .runtime/evidence/M14.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          admission=$(sha256sum .runtime/evidence/M14-frozen-private.json | cut -d' ' -f1)
+          echo "::add-mask::$admission"
+          echo "admission=$admission" >> "$GITHUB_OUTPUT"
+      - name: Retire M14 cluster before monitoring
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: load_to_monitoring
+        uses: ./.github/actions/serving-campaign-transition
+        with:
+          phase: M14
+          source_sql: ${{ steps.source.outputs.sql }}
+          retention: ${{ steps.serving_retention.outputs.sha256 }}
+      - name: Capture frozen M15 before the joint serving campaign
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: trio_m15
+        env:
+          SERVING_RETENTION: ${{ steps.serving_retention.outputs.sha256 }}
+          M15_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M15_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M15_KEYS_SHA256: ${{ steps.source.outputs.keys_file }}
+          M15_TRUST_SHA256: ${{ steps.source.outputs.trust }}
+        run: |
+          uv run --locked python -B -W error -m scripts.serving_retention check M15
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M15 --state .runtime --output .runtime/evidence/M15.json
+          echo "report=$(sha256sum .runtime/evidence/M15.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          admission=$(sha256sum .runtime/evidence/M15-frozen-private.json | cut -d' ' -f1)
+          echo "::add-mask::$admission"
+          echo "admission=$admission" >> "$GITHUB_OUTPUT"
+      - name: Retire M15 cluster before joint serving
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: monitoring_to_joint
+        uses: ./.github/actions/serving-campaign-transition
+        with:
+          phase: M15
+          source_sql: ${{ steps.source.outputs.sql }}
+          retention: ${{ steps.serving_retention.outputs.sha256 }}
+      - name: Recheck the original permit immediately before joint actual inference
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        env:
+          SERVING_RETENTION: ${{ steps.serving_retention.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.serving_retention check M11-M12
       - name: Capture joint M11 and M12 observations on the live proposal
         if: env.DELIVERY_SERVING_GATE == 'M11-M12'
         id: joint_actual
@@ -465,7 +581,7 @@ jobs:
           import hashlib, json
           from pathlib import Path
           evidence = Path(".runtime/evidence")
-          for gate in ("M01","M02","M03","M04","M05","M06","M07","M08","M09","M10","M11","M12","M20","M21"):
+          for gate in ("M01","M02","M03","M04","M05","M06","M07","M08","M09","M10","M11","M12","M13","M14","M15","M20","M21"):
               path = evidence / (gate + ".json")
               if path.is_file():
                   raw = path.read_bytes()
@@ -586,9 +702,29 @@ jobs:
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())
           PY
+      - name: Join retained serving trio after both native cleanups and parent replay
+        if: env.DELIVERY_SERVING_TRIO == 'true'
+        id: trio_delivery
+        env:
+          SERVING_RETENTION: ${{ steps.serving_retention.outputs.sha256 }}
+          PARENT_RECEIPT: ${{ steps.delivery.outputs.receipt }}
+          SOURCE_OFFLINE_SHA256: ${{ steps.stop_sql.outputs.source_state }}
+          M02_REPORT: ${{ steps.intake.outputs.sha256 }}
+          M03_REPORT: ${{ steps.evaluated.outputs.integrity }}
+          M07_REPORT: ${{ steps.evaluated.outputs.sha256 }}
+          M13_REPORT: ${{ steps.trio_m13.outputs.report }}
+          M14_REPORT: ${{ steps.trio_m14.outputs.report }}
+          M15_REPORT: ${{ steps.trio_m15.outputs.report }}
+          M13_ADMISSION: ${{ steps.trio_m13.outputs.admission }}
+          M14_ADMISSION: ${{ steps.trio_m14.outputs.admission }}
+          M15_ADMISSION: ${{ steps.trio_m15.outputs.admission }}
+          PRIVACY_TO_LOAD: ${{ steps.privacy_to_load.outputs.transition }}
+          LOAD_TO_MONITORING: ${{ steps.load_to_monitoring.outputs.transition }}
+          MONITORING_TO_JOINT: ${{ steps.monitoring_to_joint.outputs.transition }}
+        run: uv run --locked python -B -W error -m scripts.serving_retention replay
       - name: Identify missing evidence for final M18 acceptance
         env:
-          M18_DELIVERY_SHA256: ${{ steps.delivery.outputs.receipt }}
+          M18_DELIVERY_SHA256: ${{ steps.trio_delivery.outputs.receipt || steps.delivery.outputs.receipt }}
         run: |
           result=0
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M18 --output .runtime/evidence/M18-gap.json || result=$?
@@ -600,6 +736,8 @@ jobs:
           from mlsecops.final_evidence import CHILDREN
           from scripts.m23_delivery import gates as intake_gates
           gates = intake_gates(os.environ["DELIVERY_SERVING_GATE"])
+          if os.environ["DELIVERY_SERVING_TRIO"] == "true":
+              gates = tuple(sorted(set(gates) | {"M13", "M14", "M15"}))
           report = read_json(Path(".runtime/evidence/M18-gap.json"))
           observed = report["diagnostics"]
           if (report["gate"] != "M18" or report["scope"] != "delivery-receipt-gap-map"

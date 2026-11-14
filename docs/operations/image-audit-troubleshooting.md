@@ -2,6 +2,17 @@
 
 ## Ноябрьский отказ после неполного переноса исправлений
 
+Повтор после интеграции: [43622958669](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43622958669/job/132532474071)
+на `1a0f5d53cada44bb264a58b22f5cece018824d58` полностью завершился `success`.
+Worker прошёл 74 compatibility checks, отдельный storage target 435 проверок,
+включая 1 000 golden predictions; restore-to-golden составил 4,894914 с.
+Все пять exact images прошли scan с 0 Critical/High/Unknown, подтверждёнными SBOM
+и package bindings. Остаточные Medium/Low совпали с результатами описанного ниже
+первого scan. SHA-256 канонического отчёта повторно вычислен из журнала:
+`9a916352fb72a8e214b9612edc89b72e782e892cdc1e2ce4bd8f9e6bf7cb76c5`.
+Это закрывает compatibility/restore/scan данного состава на этой ревизии.
+Покрытие остальных девяти runtime images и общий B02/M18 остаются открытыми.
+
 В [43560835791](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43560835791)
 обновлённый PostgreSQL проходил audit, а worker и candidate Dockerfile сохраняли
 уязвимые пакеты. Перенос одного storage digest не обновляет остальные образы.
@@ -21,8 +32,8 @@ candidate images. Scanner, SBOM и привязка пакетов к образ
 `qualification_failed:acceptance-dispatch-M02`, signed storage restore был
 пропущен. Сам этот журнал не устанавливает более глубокую причину M02.
 Исправленные рецепты соединены с явным обновлением source lock в основной
-рабочей ветке. До свежего успешного compatibility/restore/scan на общей ревизии
-не считать перенос полностью принятым. Полный runtime inventory включает
+рабочей ветке. Успешный повтор после соединения описан выше; первый отказ
+сохраняется как история проверки. Полный runtime inventory включает
 14 образов; этот отчёт покрывает только пять и не закрывает B02/M18.
 
 Порядок проверки: сверить все три Dockerfile и tracking recipe с закреплённым
