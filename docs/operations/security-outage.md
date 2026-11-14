@@ -68,6 +68,46 @@ full M23 остаётся `inconclusive` до отдельной общей пр
 
 ## Диагностика и безопасное восстановление
 
+### Холодное чтение collector до HTTP
+
+В узком [прогоне 43549168530](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43549168530)
+на `7f85846` обычный импорт `security_event_server` в новом процессе занял
+3,384 с. Вместе с ним загружались `serving_http`, NumPy, scikit-learn,
+psycopg, FastAPI и Uvicorn. Общий трёхсекундный бюджет READ/SNAPSHOT включает
+инициализацию configured и snapshot. В тесте с задержкой HTTP-импорта все три
+чтения, public/private/observer, закончились `readback_deadline`.
+Тест использовал настоящий Linux journal, синтетические ключи и исходные
+программы чтения. Listener к этому моменту ещё не запускался.
+
+В [исправлении b4a0ae5](https://github.com/Abrakadabra124/trusted-mlsecops-platform/commit/b4a0ae544bbb7dcfa66d36f1d66e61cf786efdb1)
+импорт run_server выполняется после configured, непосредственно перед запуском
+HTTP-сервера. configured для чтения журнала загружает только нужные security
+зависимости. [Прогон 43549377702](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43549377702)
+завершился success. Шесть холодных чтений, включая задержку ненужного импорта,
+заняли 0,387-0,393 с и сохранили байты identity/state. Импорты collector,
+delivery и admission заняли 0,277/0,159/0,159 с. Прошли 2 новых теста и 33 смежных,
+включая настоящий TLS collector с перезапуском, receipt и admission.
+Локальные Windows tests дали 32 pass и 1 Linux-only skip.
+
+Для повторения только этих проверок использовать отдельный workflow
+[security-readback-bootstrap.yml](../../.github/workflows/security-readback-bootstrap.yml).
+Deadline остаётся 3 с, число retries ограничено тем же deadline.
+Проверяются отказы по identity, pin, registry, времени и полномочиям роли.
+Public output содержит только заранее определённые категории, имена модулей и
+численные длительности. Закрытый snapshot и stderr дочернего процесса остаются
+в памяти теста. Ошибки среды не преобразуются в успешный пустой journal.
+
+У исторического M23 `8d1252b /43545814738` известны место отказа в collector
+до HTTP и категория `unknown`. В M12 `d119c46 /43547553513` последняя метка
+была `actual-candidate-refusal`. Это ограничивает ретроспективную диагностику.
+Отдельный M23 `d119c46 /43547553566` прошёл. Связь этих исторических отказов
+с воспроизведённым cold-import дефектом требует новой bounded-диагностики.
+При новом отказе сверить request category и безопасные source locations,
+сохранить номер job и фазу. Raw stderr, конфигурации и токены в public log
+выводить нельзя. Для неизвестной категории причина остаётся неустановленной.
+
+### Остальные условия
+
 На Windows проверочный checkout следует размещать в коротком пути, без вложенных
 `.runtime/checkouts` внутри другого worktree. При clean-checkout проверке
 `scipy.sparse.linalg` не импортировался: путь к `_arpacklib.cp312-win_amd64.pyd`
