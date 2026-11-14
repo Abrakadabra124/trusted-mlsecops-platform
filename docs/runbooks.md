@@ -238,6 +238,8 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 4. Сверить все referenced digests и текущую trust policy. Старый backup не отменяет последующую revocation.
 5. Выполнить golden inference, проверить модель/схему/логи и измерить полный RTO/RPO.
 
+Для проверки SQL и оценённого кандидата используйте [адаптер с измерением recovery point и сверкой 1 000 предсказаний](operations/m17-restore-companion.md).
+
 **Проверка:** M17. Успешное чтение backup archive без usable verified inference недостаточно.
 
 ## 7. Retention и вывод модели из эксплуатации

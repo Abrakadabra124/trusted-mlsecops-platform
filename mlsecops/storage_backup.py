@@ -46,6 +46,11 @@ def verify_manifest(envelope, public, policy, moment=None):
             "format",
             "started_at",
             "completed_at",
+            *(
+                ("recovery_point_at",)
+                if isinstance(statement, dict) and "recovery_point_at" in statement
+                else ()
+            ),
             "source_workspace",
             "image",
             "migration",
@@ -75,6 +80,10 @@ def verify_manifest(envelope, public, policy, moment=None):
             datetime.fromisoformat(statement[field]) for field in ("started_at", "completed_at")
         )
         current = moment if moment is not None else datetime.now(UTC)
+        if "recovery_point_at" in statement:
+            point = datetime.fromisoformat(statement["recovery_point_at"])
+            if point.utcoffset() is None or not started <= point <= completed:
+                raise Rejected("backup_recovery_point_invalid")
         if (
             started.tzinfo is None
             or completed.tzinfo is None
@@ -115,7 +124,7 @@ def read_backup(directory, public, policy):
     return statement, content
 
 
-def create(root, state, *, include_promotion=False):
+def create(root, state, *, include_promotion=False, recovery_point=False):
     from mlsecops.promotion_state import require_legacy_backup_scope
 
     root, state = Path(root), Path(state)
@@ -139,7 +148,11 @@ def create(root, state, *, include_promotion=False):
     public = trusted_keys(read_json(state / "trusted-keys.json"))
     policy = read_json(root / "policies/local-cpu.json")
     started = now()
-    with snapshot(marker["name"], include_promotion=include_promotion) as observed:
+    with snapshot(
+        marker["name"],
+        include_promotion=include_promotion,
+        **({"recovery_point": True} if recovery_point else {}),
+    ) as observed:
         arguments = [
             "docker",
             "exec",
@@ -173,6 +186,7 @@ def create(root, state, *, include_promotion=False):
         "format": "postgres-custom-data-only",
         "started_at": started,
         "completed_at": now(),
+        **({"recovery_point_at": observed["recovery_point_at"]} if recovery_point else {}),
         "source_workspace": marker["workspace_id"],
         "image": IMAGE,
         "migration": expected,
@@ -210,12 +224,18 @@ def main():
     parser = argparse.ArgumentParser(description="Create a signed, consistent local SQL backup")
     parser.add_argument("--state", type=Path, default=Path(".runtime"))
     parser.add_argument("--include-promotion", action="store_true")
+    parser.add_argument(
+        "--recovery-point",
+        action="store_true",
+        help="Sign the database snapshot time for measured recovery",
+    )
     arguments = parser.parse_args()
     try:
         result = create(
             Path(__file__).resolve().parents[1],
             arguments.state,
             include_promotion=arguments.include_promotion,
+            **({"recovery_point": True} if arguments.recovery_point else {}),
         )
         write_json(arguments.state / "evidence/storage-backup.json", result)
         print(canonical(result).decode())

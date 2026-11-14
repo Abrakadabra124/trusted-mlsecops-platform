@@ -89,7 +89,7 @@ def json_session(arguments, query):
 
 
 @contextmanager
-def snapshot(name, *, include_promotion=False):
+def snapshot(name, *, include_promotion=False, recovery_point=False):
     from mlsecops import promotion_recovery, promotion_state
     from mlsecops.storage_bootstrap import admin
 
@@ -119,21 +119,31 @@ def snapshot(name, *, include_promotion=False):
         if include_promotion
         else "'promotion_absent', NOT EXISTS (SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'ml_promotion')"
     )
+    # For a measured backup, capture the database clock in the first
+    # snapshot-taking statement, before scanning either ledger.
+    if recovery_point:
+        extra += ", 'recovery_point_at', statement_timestamp()"
     query = (
         "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
         "SET LOCAL idle_in_transaction_session_timeout = '180s';\n"
         "SET LOCAL statement_timeout = '60s';\n"
-        "DO $guard$ BEGIN IF to_regnamespace('ml_trust') IS NOT NULL THEN "
-        "RAISE EXCEPTION 'trust_authority_backup_forbidden'; END IF; END $guard$;\n"
-        "SELECT jsonb_build_object('snapshot', pg_export_snapshot(), "
+        "SELECT CASE WHEN to_regnamespace('ml_trust') IS NULL THEN "
+        "jsonb_build_object('snapshot', pg_export_snapshot(), "
         f"{extra}, "
-        f"'tables', ({ledger_sql()}));\n"
+        f"'tables', ({ledger_sql()})) ELSE 'null'::jsonb END;\n"
     )
     with json_session(arguments, query) as (result, process):
+        if result is None:
+            raise Rejected("trust_authority_backup_forbidden")
         if (
             not isinstance(result, dict)
             or set(result)
-            != {"snapshot", "tables", "promotion" if include_promotion else "promotion_absent"}
+            != {
+                "snapshot",
+                "tables",
+                "promotion" if include_promotion else "promotion_absent",
+                *(("recovery_point_at",) if recovery_point else ()),
+            }
             or not isinstance(result["snapshot"], str)
             or not re.fullmatch(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{8}-[0-9]+", result["snapshot"])
         ):
