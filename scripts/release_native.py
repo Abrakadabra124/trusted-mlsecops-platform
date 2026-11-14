@@ -31,15 +31,14 @@ from scripts.candidate_lineage_native import KNOWN_OWNERS, OWNERS, metadata_snap
 from scripts.material_bundle_native import release_snapshot
 
 
-def qualify(root, state, image):
+def qualify(root, state, image, *, demo_file="storage-demo.json", sequence=1):
     marker = validate(state)
     started = now()
     clock = int(time.time())
     revision = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     dirty = command(["git", "-C", str(root), "status", "--porcelain"])
     paths = [
-        safe_child(state, name)
-        for name in ("storage-trust.json", "storage-demo.json", "trusted-keys.json")
+        safe_child(state, name) for name in ("storage-trust.json", demo_file, "trusted-keys.json")
     ]
     files = {path: digest(bounded_read(path)) for path in paths}
     trust, demo, public = (read_json(path) for path in paths)
@@ -74,7 +73,7 @@ def qualify(root, state, image):
     campaign = safe_child(state, f"release-proposals/{campaign_id}")
     attributes = {
         "release_id": campaign_id,
-        "sequence": 1,
+        "sequence": sequence,
         "owner": "platform-owner",
         "issuer": "lab-publisher",
         "issued_at": clock,
