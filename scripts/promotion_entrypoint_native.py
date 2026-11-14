@@ -81,9 +81,8 @@ def invoke(root, directory, config, request, *, denied=False):
     return result
 
 
-def controlled(root, models, authority, arguments, trust_root):
-    """All-pass documents here are existing controlled fixtures, never actual acceptance."""
-    client = models / "storage-clients/promoter"
+def stage(client, arguments):
+    """Publish the supplied immutable objects; absent authority stays absent."""
     policy = release_policy.checked(
         arguments["policy_envelope"], "promotion-policy", arguments["trusted_root"]
     )
@@ -97,11 +96,19 @@ def controlled(root, models, authority, arguments, trust_root):
     )
     request = {"schema_version": 1, "proposal_reference": reference}
     for kind in ("policy", "assurance", "approval"):
-        request[kind + "_reference"] = storage.put(
-            client, "releases", canonical(arguments[kind + "_envelope"])
+        envelope = arguments[kind + "_envelope"]
+        request[kind + "_reference"] = (
+            None if envelope is None else storage.put(client, "releases", canonical(envelope))
         )
     for content in arguments["reports"].values():
         storage.put(client, "releases", content)
+    return request
+
+
+def controlled(root, models, authority, arguments, trust_root):
+    """All-pass documents here are existing controlled fixtures, never actual acceptance."""
+    client = models / "storage-clients/promoter"
+    request = stage(client, arguments)
     campaign = safe_child(models, "evidence/promotion-cli-" + uuid.uuid4().hex)
     with security_event_audit_fixture.live() as audit:
         config = configuration(
@@ -113,7 +120,7 @@ def controlled(root, models, authority, arguments, trust_root):
         )
         first = invoke(root, campaign / "first", config, request)
         repeated = invoke(root, campaign / "repeat", config, request)
-    if first != repeated or first["proposal_reference"] != reference:
+    if first != repeated or first["proposal_reference"] != request["proposal_reference"]:
         raise Rejected("promotion_cli_repeat_mismatch")
     return first
 

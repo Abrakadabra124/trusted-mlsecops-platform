@@ -57,6 +57,8 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 ## M10
 **Комплект и promotion policy.** Все обязательные digests связаны, signature/identity/issuer policy проверяются до promotion; approval связан с environment и policy. Negative: чужой signer, отсутствующий report, mismatched subject, alias swap, self-approval trainer, неизвестная schema и повтор в другом environment отклоняются. Повтор разрешённого promotion идемпотентен. Evidence: positive/negative matrix и state transitions. T13.
 
+Для hosted-проверки конкретного предложения предусмотрены [штатный вход M10, матрица и порядок получения настоящего approval](promotion-entrypoint.md#приёмка-t13-до-выдачи-release-approval). Отчёт привязан к subject и модели. Фактическое разрешение выпуска учитывается отдельно.
+
 ## M11
 Исполняемый [runner и runbook](operations/trust-acceptance.md) объединяет свежие candidate-bound runtime observations и явно выделенные controlled release tests. [Native 56f1a19 / 43266471492](evidence/serving-profile-56f1a19-2026-11-12.md#m11-свежая-приёмка-trust-lifecycle): M11 pass, 146 критериев, source/primary hashes/traces/cleanup verified. Это synthetic mechanism acceptance, не actual production approval или общий M18/R1.
 

@@ -352,9 +352,19 @@ def report(gate, profile, root, state=None):
                 ],
             )
         result["finished_at"] = now()
-    elif gate in {"M11", "M12", "M13", "M14", "M15", "M16", "M17", "M23"}:
+    elif gate in {"M10", "M11", "M12", "M13", "M14", "M15", "M16", "M17", "M23"}:
         required = ("workspace.json", "kubeconfig", "storage.json", "storage-demo.json")
-        if gate == "M16":
+        if gate == "M10":
+            from scripts.promotion_gate_native import SCOPE
+
+            result.update(scope=SCOPE, release_ready=False)
+            required = (
+                "workspace.json",
+                "storage.json",
+                "storage-demo.json",
+                "evidence/release-native.json",
+            )
+        elif gate == "M16":
             from mlsecops.canary_gate import SCOPE
 
             result.update(scope=SCOPE, release_ready=False)
@@ -371,6 +381,10 @@ def report(gate, profile, root, state=None):
         if not all((state / name).is_file() for name in required):
             result["residual_risks"] = (
                 [
+                    "M10 requires hosted owned storage and its evaluated candidate and signed proposal"
+                ]
+                if gate == "M10"
+                else [
                     "M23 requires the three owned capture stages and retained source SQL ownership marker"
                 ]
                 if gate == "M23"
@@ -379,7 +393,9 @@ def report(gate, profile, root, state=None):
                 ]
             )
             return result
-        if gate == "M11":
+        if gate == "M10":
+            from scripts.promotion_gate_native import qualify
+        elif gate == "M11":
             from mlsecops.trust_acceptance import qualify
         elif gate == "M13":
             from mlsecops.privacy_gate import qualify
@@ -398,7 +414,7 @@ def report(gate, profile, root, state=None):
 
         try:
             evidence = qualify(root, state)
-            if gate in {"M16", "M17"} and (
+            if gate in {"M10", "M16", "M17"} and (
                 evidence["input_digests"]["source_revision"] != result["source_revision"]
                 or evidence["input_digests"]["source_fingerprint"]
                 != result["input_digests"]["source_fingerprint"]
@@ -426,6 +442,9 @@ def report(gate, profile, root, state=None):
             unavailable = (
                 isinstance(error, (OSError, subprocess.TimeoutExpired))
                 or str(error) == "trust_hosted_runner_required"
+                or gate == "M10"
+                and str(error)
+                in {"promotion_hosted_runner_required", "promotion_gate_owner_pins_required"}
                 or (
                     gate in {"M16", "M17"}
                     and str(error).startswith(
