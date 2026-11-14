@@ -20,7 +20,9 @@ on:
       - 'scripts/m12_pinned*.py'
       - 'mlsecops/data_qualification.py'
       - 'mlsecops/reproducibility*.py'
+      - 'mlsecops/datasets.py'
       - 'scripts/reproducibility*.py'
+      - 'scripts/tracking_client.py'
       - 'images/tracking/**'
       - 'mlsecops/integrity_qualification.py'
       - 'mlsecops/storage_pipeline_qualification.py'
@@ -75,9 +77,10 @@ jobs:
           uv run --locked python scripts/check_docs.py
           uv run --locked python -B -W error -m unittest scripts.m12_pinned_qualification scripts.kube_candidate_campaign_qualification scripts.inference_gate_qualification
           uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_live_freeze_and_offline_replay_share_original_signed_bytes scripts.final_evidence_qualification.FinalEvidenceContracts.test_foundation_and_intake_replay_uses_pre_run_outcomes_and_pinned_primaries scripts.final_evidence_qualification.FinalEvidenceContracts.test_inventory_delivery_requires_canonical_keys_and_the_original_file_registry
+          uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_full_gate_rejects_summary_only_m06
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
-          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate,mlsecops.inventory_fleet,mlsecops.inventory_gate,scripts.inventory_fleet_native,scripts.inventory_fleet_materials,scripts.inventory_deployment_native
-          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification scripts.reproducibility_candidate_qualification scripts.inventory_delivery_qualification scripts.inventory_fleet_qualification scripts.inventory_fleet_evidence_qualification scripts.inventory_materials_qualification scripts.inventory_gate_qualification scripts.asset_graph_qualification scripts.candidate_serving_reader_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification scripts.release_native_qualification
+          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate,mlsecops.reproducibility_offline,mlsecops.inventory_fleet,mlsecops.inventory_gate,scripts.inventory_fleet_native,scripts.inventory_fleet_materials,scripts.inventory_deployment_native
+          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification scripts.reproducibility_candidate_qualification scripts.reproducibility_offline_qualification scripts.inventory_delivery_qualification scripts.inventory_fleet_qualification scripts.inventory_fleet_evidence_qualification scripts.inventory_materials_qualification scripts.inventory_gate_qualification scripts.asset_graph_qualification scripts.candidate_serving_reader_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification scripts.release_native_qualification
           uv run --locked python -m coverage json -o "$RUNNER_TEMP/m17-coverage.json"
           uv run --locked python - "$modules" <<'PY'
           import json, os, sys
@@ -191,15 +194,19 @@ jobs:
           M10_TRUST_SHA256: ${{ steps.source.outputs.trust }}
         run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M10 --output .runtime/evidence/M10.json
       - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
+        id: repeated
         env:
           M06_DEMO_SHA256: ${{ steps.source.outputs.demo }}
         run: |
           uv run --locked python -B -m scripts.tracking_spike build
           uv run --locked python -B -m scripts.tracking_service up
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M06 --output .runtime/evidence/M06.json
+          echo "sha256=$(sha256sum .runtime/evidence/M06.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Stop and verify the owned tracking services
+        id: stop_tracking
         if: always()
         run: |
+          if test "${{ steps.repeated.outcome }}" = success; then test -f .runtime/tracking-service/resources.json; fi
           if test -f .runtime/tracking-service/resources.json; then
             uv run --locked python -B -m scripts.tracking_service stop
           fi
@@ -276,6 +283,12 @@ jobs:
           M07_REPORT_SHA256: ${{ steps.evaluated.outputs.sha256 }}
           M03_REPORT_SHA256: ${{ steps.evaluated.outputs.integrity }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay
+      - name: Reconcile six retained M06 runs and the signed candidate offline
+        if: always() && steps.m18_freeze.outcome == 'success' && steps.repeated.outcome == 'success' && steps.stop_tracking.outcome == 'success' && steps.stop_sql.outcome == 'success' && steps.stop_cluster.outcome == 'success'
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M06_REPORT_SHA256: ${{ steps.repeated.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m06
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery
         env:

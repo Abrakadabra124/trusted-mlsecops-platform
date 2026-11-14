@@ -133,16 +133,29 @@ def publish(client, experiment, record):
 
 
 def read_back(client, receipt, record):
-    observed = decode(
+    run = decode(
         client.request(
             "GET", "/api/2.0/mlflow/runs/get?" + urlencode({"run_id": receipt["run_id"]})
         )
-    )["run"]["data"]
+    )["run"]
+    data = run["data"]
     artifact = client.request("GET", receipt["artifact_path"])
+    params = {item["key"]: item["value"] for item in data["params"]}
+    metrics = {item["key"]: item["value"] for item in data["metrics"]}
+    source_run = {item["key"]: item["value"] for item in data.get("tags", [])}.get("source_run_id")
     if (
-        {item["key"]: item["value"] for item in observed["params"]} != record["params"]
-        or {item["key"]: item["value"] for item in observed["metrics"]} != record["metrics"]
+        run.get("info", {}).get("run_id") != receipt["run_id"]
+        or source_run != record["source_run_id"]
+        or params != record["params"]
+        or metrics != record["metrics"]
         or artifact != canonical(record)
         or digest(artifact) != receipt["record_digest"]
     ):
         raise Rejected("tracking_read_back_mismatch")
+    return dict(
+        run_id=run["info"]["run_id"],
+        source_run_id=source_run,
+        params=params,
+        metrics=metrics,
+        artifact=decode(artifact),
+    )

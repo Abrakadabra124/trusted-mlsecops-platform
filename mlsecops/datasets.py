@@ -85,7 +85,7 @@ def arrays(records):
     )
 
 
-def validate_approval(approval, policy):
+def validate_approval(approval, policy, *, moment=None):
     require_fields(approval, ("schema_version", "source", "purpose", "expires_at", "owner"))
     if (
         type(approval["schema_version"]) is not int
@@ -99,7 +99,7 @@ def validate_approval(approval, policy):
         expires = datetime.fromisoformat(approval["expires_at"])
     except (TypeError, ValueError) as error:
         raise Rejected("invalid_source_expiry") from error
-    if expires.tzinfo is None or expires <= datetime.now(UTC):
+    if expires.tzinfo is None or expires <= (datetime.now(UTC) if moment is None else moment):
         raise Rejected("expired_source_approval")
 
 
@@ -169,7 +169,9 @@ def publish_records(state, policy, rows):
     return identifier
 
 
-def verify_manifest(envelope, identifier, policy, approval_envelope, curator_public):
+def verify_manifest(
+    envelope, identifier, policy, approval_envelope, curator_public, *, moment=None
+):
     if (
         not isinstance(identifier, str)
         or len(identifier) != 64
@@ -204,7 +206,7 @@ def verify_manifest(envelope, identifier, policy, approval_envelope, curator_pub
     ):
         raise Rejected("invalid_dataset_manifest_schema")
     approval = verify(approval_envelope, "source", curator_public)
-    validate_approval(approval, policy)
+    validate_approval(approval, policy, moment=moment)
     if manifest["source_approval_digest"] != digest(canonical(approval)):
         raise Rejected("source_version_mismatch")
     if set(manifest["objects"]) != {"train.json", "validation.json", "holdout.json"}:

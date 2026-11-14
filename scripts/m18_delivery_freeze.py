@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from mlsecops import final_evidence, release_bundle
+from mlsecops import final_evidence, release_bundle, reproducibility_offline
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -62,7 +62,16 @@ def capture(root, state, freeze, revision):
     return pin
 
 
-def replay(root, state, pin, *, early_reports=None, evaluation_pin=None, integrity_pin=None):
+def replay(
+    root,
+    state,
+    pin,
+    *,
+    early_reports=None,
+    evaluation_pin=None,
+    integrity_pin=None,
+    reproducibility_pin=None,
+):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
     final_evidence.clean(root, revision, fingerprint)
@@ -91,7 +100,58 @@ def replay(root, state, pin, *, early_reports=None, evaluation_pin=None, integri
     if integrity_pin is not None:
         verify_integrity(root, state, values, integrity_pin)
         summary.setdefault("verified_source_reports", {})["M03"] = integrity_pin
+    if reproducibility_pin is not None:
+        summary["reproducibility_metrics"] = verify_reproducibility(
+            state, values, reproducibility_pin
+        )
+        summary.setdefault("verified_source_reports", {})["M06"] = reproducibility_pin
     return summary
+
+
+def verify_reproducibility(state, values, pin):
+    report = final_evidence.published_report(state, "M06", pin)
+    refs = final_evidence.check_gate(
+        "M06",
+        report,
+        values,
+        final_evidence.timestamp(now()),
+        digest(canonical(reproducibility_offline.CASE_IDS)),
+    )
+
+    def retain(path, ref, *, json_line=False):
+        raw = bounded_read(safe_child(state, path))
+        if json_line:
+            # Native campaign and vectors are pinned as canonical JSON before the file LF.
+            final_evidence.need(raw.endswith(b"\n"), "repeat-json-line")
+            raw = raw[:-1]
+        final_evidence.same(digest(raw), ref, "repeat-material-digest")
+        final_evidence.retain(state, raw)
+        return raw
+
+    packet = decode(
+        retain("evidence/reproducibility-qualification.json", refs["reproducibility_qualification"])
+    )
+    campaign = "reproducibility/" + hexadecimal(packet["campaign_id"], 32)
+    native = decode(
+        retain(campaign + "/evidence/reproducibility.json", refs["native_campaign"], json_line=True)
+    )
+    retain(campaign + "/candidate-replay.json", refs["candidate_replay"])
+    retained_datasets = set()
+    for name, record in zip(reproducibility_offline.NAMES, native["records"], strict=True):
+        path = campaign + "/candidates/" + hexadecimal(record["run_id"], 32)
+        retain(path + "/model.onnx", refs["model:" + name])
+        retain(path + "/golden-scores.json", refs["vector:" + name], json_line=True)
+        metadata = decode(retain(path + "/run.json", refs["metadata:" + name]))
+        dataset = hexadecimal(metadata["dataset_id"], 64)
+        if dataset not in retained_datasets:
+            for filename in ("train.json", "validation.json", "holdout.json"):
+                retain(
+                    campaign + "/approved/" + dataset + "/" + filename,
+                    metadata["materials"][filename]["sha256"],
+                )
+            retained_datasets.add(dataset)
+    final_evidence.primary("M06", report, lambda ref: final_evidence.blob(state, ref), values)
+    return report["metrics"]
 
 
 def verify_integrity(root, state, values, pin):
@@ -215,6 +275,17 @@ def main():
         pin = capture(root, state, freeze, os.environ["GITHUB_SHA"])
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
             print("sha256=" + pin, file=out)
+    elif sys.argv[1:] == ["replay-m06"]:
+        print(
+            canonical(
+                replay(
+                    root,
+                    state,
+                    os.environ["M18_FREEZE_SHA256"],
+                    reproducibility_pin=os.environ["M06_REPORT_SHA256"],
+                )
+            ).decode()
+        )
     elif sys.argv[1:] == ["replay"]:
         pins = {gate: os.environ[gate + "_REPORT_SHA256"] for gate in PRIMARY}
         print(
@@ -236,5 +307,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except (final_evidence.Invalid, final_evidence.Missing) as error:
+        sys.exit(f"M18 frozen input verification failed ({error})")
     except (Rejected, OSError, KeyError, TypeError, ValueError):
         sys.exit("M18 frozen input verification failed")

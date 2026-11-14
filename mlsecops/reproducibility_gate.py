@@ -30,9 +30,36 @@ def host_source(root):
 
 
 def reconcile(root, state, evidence, reader):
+    from scripts.tracking_client import read_back
+
+    def load(index, record, policy):
+        campaign = safe_child(state, "reproducibility/" + evidence["campaign_id"])
+        location = safe_child(campaign, "candidates/" + record["run_id"])
+        metadata, model = load_candidate(campaign, record["run_id"], policy)
+        splits, manifest = verify_dataset(campaign, metadata["dataset_id"], policy)
+        return (
+            metadata,
+            model,
+            splits,
+            manifest,
+            read_json(location / "golden-scores.json"),
+            digest(bounded_read(location / "run.json")),
+        )
+
+    return reconcile_materials(
+        evidence,
+        read_json(root / "policies/local-cpu.json"),
+        command(["git", "-C", str(root), "rev-parse", "HEAD"]),
+        source_fingerprint(root),
+        load,
+        lambda index, receipt, record: read_back(reader, receipt, record),
+    )
+
+
+def reconcile_materials(evidence, policy, revision, fingerprint, load, verify_tracking):
+    """Reconcile the same six observed runs from either native files or pinned offline bytes."""
     from scripts.reproducibility import compare, validate_record
     from scripts.reproducibility_native import projection, record_from
-    from scripts.tracking_client import read_back
 
     try:
         if (
@@ -40,8 +67,8 @@ def reconcile(root, state, evidence, reader):
             or evidence["scope"] != "native-input-mutations-and-tracking-not-full-M06"
             or evidence["release_ready"] is not False
             or type(evidence["source_dirty"]) is not bool
-            or evidence["source_fingerprint"] != source_fingerprint(root)
-            or evidence["source_revision"] != command(["git", "-C", str(root), "rev-parse", "HEAD"])
+            or evidence["source_fingerprint"] != fingerprint
+            or evidence["source_revision"] != revision
             or any(
                 type(evidence[key]) is not int or evidence[key] != value
                 for key, value in (
@@ -64,25 +91,23 @@ def reconcile(root, state, evidence, reader):
             or evidence["mutated_environment"] != {"OMP_NUM_THREADS": "2"}
         ):
             raise Rejected("M06_campaign_header_invalid")
-        campaign = safe_child(state, "reproducibility/" + evidence["campaign_id"])
-        policy = read_json(root / "policies/local-cpu.json")
         vectors, metadata_runs, cases, hashes = [], [], [], {}
         reference = None
         for index, record in enumerate(evidence["records"]):
             if not re.fullmatch(r"[0-9a-f]{32}", record["run_id"]):
                 raise Rejected("M06_run_identity_invalid")
-            location = safe_child(campaign, "candidates/" + record["run_id"])
-            vector = read_json(location / "golden-scores.json")
-            validate_record(record, vector)
             current_policy = (
                 {**policy, "training_seed": policy["training_seed"] + 1} if index == 3 else policy
             )
-            metadata, model = load_candidate(campaign, record["run_id"], current_policy)
-            splits, manifest = verify_dataset(campaign, metadata["dataset_id"], current_policy)
+            metadata, model, splits, manifest, vector, metadata_pin = load(
+                index, record, current_policy
+            )
+            validate_record(record, vector)
             if reference is None:
                 reference = splits
-            expected_splits = copy.deepcopy(reference)
+            expected_splits = reference
             if index == 4:
+                expected_splits = copy.deepcopy(reference)
                 expected_splits["train"][0]["features"][0] = (
                     1 - expected_splits["train"][0]["features"][0]
                 )
@@ -94,7 +119,7 @@ def reconcile(root, state, evidence, reader):
             }
             image = evidence["environment_image_id"] if index == 5 else evidence["image_id"]
             if (
-                splits != expected_splits
+                canonical(splits) != canonical(expected_splits)
                 or len(reference["holdout"]) != 3000
                 or len(vector) != 3000
                 or metadata["input_digest"] != digest(canonical(request))
@@ -111,7 +136,7 @@ def reconcile(root, state, evidence, reader):
                 vector,
                 {"OMP_NUM_THREADS": "2" if index == 5 else "1"},
             )
-            if record != expected:
+            if canonical(record) != canonical(expected):
                 raise Rejected("M06_record_not_bound_to_materials")
             vectors.append(vector)
             metadata_runs.append(metadata)
@@ -119,7 +144,7 @@ def reconcile(root, state, evidence, reader):
                 {
                     f"model:{NAMES[index]}": digest(model),
                     f"vector:{NAMES[index]}": record["vector_digest"],
-                    f"metadata:{NAMES[index]}": digest(bounded_read(location / "run.json")),
+                    f"metadata:{NAMES[index]}": metadata_pin,
                 }
             )
             cases.append(
@@ -132,7 +157,7 @@ def reconcile(root, state, evidence, reader):
             )
         baseline = compare(evidence["records"][:3], vectors[:3])
         if (
-            baseline != evidence["baseline"]
+            canonical(baseline) != canonical(evidence["baseline"])
             or len({record["run_id"] for record in evidence["records"]}) != 6
         ):
             raise Rejected("M06_baseline_or_fresh_runs_invalid")
@@ -173,7 +198,9 @@ def reconcile(root, state, evidence, reader):
                     for left, right in zip(vectors[0], vectors[index], strict=True)
                 ),
             }
-            if required not in changed or evidence["mutations"][index - 3] != expected:
+            if required not in changed or canonical(evidence["mutations"][index - 3]) != canonical(
+                expected
+            ):
                 raise Rejected("M06_mutation_not_bound_to_materials")
             try:
                 compare([*evidence["records"][:2], record], [*vectors[:2], vectors[index]])
@@ -193,8 +220,8 @@ def reconcile(root, state, evidence, reader):
         receipts = evidence["tracking_receipts"]
         if len({receipt["run_id"] for receipt in receipts}) != 6:
             raise Rejected("M06_tracking_run_reused")
-        for name, record, metadata, receipt in zip(
-            NAMES, evidence["records"], metadata_runs, receipts, strict=True
+        for index, (name, record, metadata, receipt) in enumerate(
+            zip(NAMES, evidence["records"], metadata_runs, receipts, strict=True)
         ):
             exported = projection(record, metadata, name)
             expected = digest(canonical(exported))
@@ -206,7 +233,7 @@ def reconcile(root, state, evidence, reader):
                 or not receipt["artifact_path"].startswith("/api/2.0/mlflow-artifacts/artifacts/")
             ):
                 raise Rejected("M06_tracking_receipt_invalid")
-            read_back(reader, receipt, exported)
+            verify_tracking(index, receipt, exported)
             cases.append(
                 {
                     "id": "tracking-read-back:" + name,
@@ -244,6 +271,8 @@ def reconcile(root, state, evidence, reader):
                 "M06 pass does not authorize release or waive image findings",
             ],
         }
+    except Rejected:
+        raise
     except (KeyError, TypeError, ValueError, IndexError) as error:
         raise Rejected("M06_evidence_shape_invalid") from error
 
