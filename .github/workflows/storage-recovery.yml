@@ -126,9 +126,12 @@ jobs:
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
           echo "sha256=$(sha256sum .runtime/evidence/M02.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Verify SQL integrity and role isolation, then evaluate the same training run
+        id: evaluated
         env:
           M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
-        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+          echo "sha256=$(sha256sum .runtime/evidence/M07.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Freeze evaluated candidate and original owner
         id: source
         run: |
@@ -268,6 +271,7 @@ jobs:
           M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
           M01_REPORT_SHA256: ${{ steps.foundation.outputs.sha256 }}
           M02_REPORT_SHA256: ${{ steps.intake.outputs.sha256 }}
+          M07_REPORT_SHA256: ${{ steps.evaluated.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery

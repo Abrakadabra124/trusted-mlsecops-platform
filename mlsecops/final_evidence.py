@@ -6,7 +6,9 @@ from datetime import datetime
 
 from mlsecops import (
     data_source,
+    evaluation_gate,
     evaluation_quality,
+    holdout_budget,
     material_bundle,
     release_bundle,
     release_policy,
@@ -27,6 +29,8 @@ from mlsecops.signing import decode64
 from mlsecops.storage import object_id
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.check_docs import SENSITIVE
+from scripts.evaluation_contracts import SCOPE as EVALUATION_CONTRACT_SCOPE
+from scripts.evaluation_contracts import case_ids as evaluation_contract_ids
 
 CHILDREN = tuple(g for g in GATES if g != "M18")
 INDEX = "evidence/M18-index.json"
@@ -346,6 +350,25 @@ def frozen(root, state, index, revision, fingerprint):
         split_materials=metadata["materials"],
         prediction_protocol=signed_eval["report"]["prediction_protocol"],
         evaluation_auprc=signed_eval["report"]["auprc"],
+        evaluation_metrics={
+            k: signed_eval["report"][k]
+            for k in (
+                "rows",
+                "positives",
+                "auprc",
+                "dummy_auprc",
+                "auprc_gain",
+                "slices",
+                "confidence_intervals",
+            )
+        },
+        evaluation_artifacts={
+            "candidate_record": context["candidate_reference"],
+            "signed_evaluation": context["evaluation_reference"],
+            "metadata": refs["provenance"],
+            "manifest": refs["split_manifest"],
+            "reservation": signed_eval["holdout_access"]["reservation"],
+        },
     )
     return values, keys, policy
 
@@ -477,6 +500,119 @@ def check_gate(gate, report, values, latest, expected_cases):
     return refs
 
 
+def evaluation_cases():
+    return {
+        "controlled": evaluation_contract_ids(),
+        "native": evaluation_gate.QUALITY_CASES,
+        "budget": evaluation_gate.BUDGET_CASES,
+    }
+
+
+def evaluation_primary(report, packet, obj, values):
+    refs = report["artifact_hashes"]
+    groups = evaluation_cases()
+    same(
+        sorted(refs),
+        sorted(
+            [*values["evaluation_artifacts"], "contracts", "native", "budget", "evaluation_gate"]
+        ),
+        "evaluation-artifacts",
+    )
+    subset(refs, values["evaluation_artifacts"], "evaluation-signed-materials")
+    subset(
+        packet,
+        {
+            "schema_version": 1,
+            "status": "pass",
+            "source_dirty": False,
+            "release_ready": False,
+            "scope": "M07-synthetic-local-cpu-independent-evaluation",
+            "checks": len(report["cases"]),
+        },
+        "evaluation-primary",
+    )
+    same(packet["metrics"], values["evaluation_metrics"], "evaluation-metrics")
+    same(
+        report["metrics"],
+        {"checks": len(report["cases"]), **values["evaluation_metrics"]},
+        "evaluation-metrics",
+    )
+    controlled, native, budget = (
+        decode(obj(refs[name])) for name in ("contracts", "native", "budget")
+    )
+    same(controlled["scope"], EVALUATION_CONTRACT_SCOPE, "evaluation-controlled-scope")
+    evaluation_gate.checked_cases(controlled, groups["controlled"])
+    evaluation_gate.checked_cases(native, groups["native"])
+    subset(
+        native,
+        {
+            "scope": "native-frozen-evaluation-component-not-full-M07",
+            **{
+                k: values[k]
+                for k in (
+                    "candidate_reference",
+                    "evaluation_reference",
+                    "dataset_reference",
+                    "source_fingerprint",
+                    "image_id",
+                )
+            },
+            "evaluation_policy_digest": values["evaluation_policy"],
+            "metrics": values["evaluation_metrics"],
+        },
+        "evaluation-native",
+    )
+    evaluation_gate.check_budget(
+        budget,
+        values["image_id"],
+        values["holdout"],
+        values["source_fingerprint"],
+        packet["started_at"],
+    )
+    claims = budget["concurrent_claims"]
+    same(
+        report["input_digests"]["budget_policy"],
+        budget["budget_policy_digest"],
+        "evaluation-budget-policy",
+    )
+    same(
+        claims,
+        dict(
+            schema_version=1,
+            diagnostic_only=True,
+            complete=True,
+            attempts=holdout_budget.LIMIT,
+            claimed_slots=list(range(2, holdout_budget.LIMIT + 1)),
+            rejection_codes={"holdout_budget_exhausted": 1},
+            invalid_receipts=0,
+        ),
+        "evaluation-budget-claims",
+    )
+    for observed in (report, packet):
+        same(
+            observed["diagnostics"],
+            {"holdout_concurrency": claims},
+            "evaluation-budget-diagnostics",
+        )
+    need(
+        timestamp(report["started_at"])
+        <= timestamp(packet["started_at"])
+        <= min(timestamp(native["observed_at"]), timestamp(budget["observed_at"]))
+        and max(timestamp(native["observed_at"]), timestamp(budget["observed_at"]))
+        <= timestamp(packet["finished_at"])
+        <= timestamp(report["finished_at"]),
+        "evaluation-time",
+    )
+    expected = {prefix + ":" + name for prefix, names in groups.items() for name in names} | {
+        "signed-materials-reconciliation"
+    }
+    same(
+        {c["id"]: [c["expected"], c["actual"]] for c in report["cases"]},
+        {name: ["pass", "pass"] for name in expected},
+        "evaluation-cases",
+    )
+
+
 def primary(gate, report, obj, values):
     for field in {"primary_materials", "review_primary"} & report["artifact_hashes"].keys():
         manifest = decode(obj(report["artifact_hashes"][field]))
@@ -533,6 +669,8 @@ def primary(gate, report, obj, values):
             same(packet["execution"]["image_id"], values["image_id"], "integrity-image")
         elif gate == "M04":
             need(packet["dataset_reference"] == values["dataset_reference"], "access-dataset")
+        elif gate == "M07":
+            evaluation_primary(report, packet, obj, values)
         elif gate == "M05":
             subset(
                 packet,

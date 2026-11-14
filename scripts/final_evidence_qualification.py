@@ -272,6 +272,7 @@ class FinalEvidenceContracts(unittest.TestCase):
             )
         )
         self.reports["M06"]["metrics"]["checks"] = 2
+        self.make_evaluation()
         self.reports["M20"]["artifact_hashes"].update(
             {k: self.placeholder for k in ("access", "controller", "isolation")}
         )
@@ -638,6 +639,100 @@ class FinalEvidenceContracts(unittest.TestCase):
 
     def repin_index(self):
         os.environ["M18_INDEX_SHA256"] = self.pinfile(final.INDEX, self.index)
+
+    def make_evaluation(self):
+        from mlsecops import evaluation_gate, holdout_budget
+
+        groups = final.evaluation_cases()
+        cases = [
+            {"id": prefix + ":" + name, "status": "pass", "expected": "pass", "actual": "pass"}
+            for prefix, names in groups.items()
+            for name in sorted(names)
+        ]
+        cases.append(
+            dict(
+                id="signed-materials-reconciliation", status="pass", expected="pass", actual="pass"
+            )
+        )
+
+        def component(group):
+            return dict(
+                status="pass",
+                checks=len(groups[group]),
+                cases=[{"id": n, "status": "pass"} for n in sorted(groups[group])],
+            )
+
+        metrics = self.values["evaluation_metrics"]
+        native = component("native") | dict(
+            scope="native-frozen-evaluation-component-not-full-M07",
+            observed_at=self.time,
+            metrics=metrics,
+            evaluation_policy_digest=self.values["evaluation_policy"],
+            **{
+                k: self.values[k]
+                for k in (
+                    "source_fingerprint",
+                    "image_id",
+                    "candidate_reference",
+                    "evaluation_reference",
+                    "dataset_reference",
+                )
+            },
+        )
+        budget = dict(
+            status="pass",
+            scope="native-persistent-holdout-budget-component-not-full-M07",
+            checks=len(groups["budget"]),
+            cases=sorted(groups["budget"]),
+            observed_at=self.time,
+            source_fingerprint=self.values["source_fingerprint"],
+            image_id=self.values["image_id"],
+            holdout_digest=self.values["holdout"],
+            budget_policy=holdout_budget.policy(),
+            budget_policy_digest=digest(canonical(holdout_budget.policy())),
+            consumed=holdout_budget.LIMIT,
+            concurrent_claims=dict(
+                schema_version=1,
+                diagnostic_only=True,
+                complete=True,
+                attempts=holdout_budget.LIMIT,
+                claimed_slots=list(range(2, holdout_budget.LIMIT + 1)),
+                rejection_codes={"holdout_budget_exhausted": 1},
+                invalid_receipts=0,
+            ),
+        )
+        refs = self.values["evaluation_artifacts"] | {
+            name: final.retain(self.state, canonical(document) + b"\n")
+            for name, document in (
+                (
+                    "contracts",
+                    component("controlled") | dict(scope=final.EVALUATION_CONTRACT_SCOPE),
+                ),
+                ("native", native),
+                ("budget", budget),
+            )
+        }
+        report = self.reports["M07"]
+        report.update(
+            cases=cases, metrics={"checks": len(cases), **metrics}, artifact_hashes=refs.copy()
+        )
+        report["input_digests"]["host_contracts"] = evaluation_gate.contract_source(ROOT)
+        report["input_digests"]["budget_policy"] = budget["budget_policy_digest"]
+        report["diagnostics"] = {"holdout_concurrency": budget["concurrent_claims"]}
+        self.primaries["M07"].update(
+            schema_version=1,
+            scope="M07-synthetic-local-cpu-independent-evaluation",
+            checks=len(cases),
+            source_dirty=False,
+            release_ready=False,
+            cases=cases,
+            metrics=metrics,
+            artifact_hashes=refs,
+            campaign_id="f" * 32,
+            diagnostics={"holdout_concurrency": budget["concurrent_claims"]},
+            started_at=self.time,
+            finished_at=self.time,
+        )
 
     def run_report(self):
         return acceptance.report("M18", "local-cpu", self.root, self.state)
@@ -1030,6 +1125,37 @@ class FinalEvidenceContracts(unittest.TestCase):
         self.pinfile("evidence/" + PRIMARY["M01"], {})
         with self.assertRaisesRegex(Rejected, "digest-mismatch"):
             verify_early(self.root, self.state, self.values, pins)
+
+    def test_offline_evaluation_rejects_rehashed_metrics_missing_case_and_changed_component(self):
+        from scripts.m18_delivery_freeze import verify_evaluation
+
+        self.build()
+        report = self.reports["M07"]
+        packet = self.primaries["M07"]
+        for name in ("contracts", "native", "budget"):
+            raw = final.blob(self.state, packet["artifact_hashes"][name])
+            path = self.state / "evaluation-gate" / packet["campaign_id"] / (name + ".json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(raw)
+            (self.state / "evidence/M18-objects" / digest(raw)).unlink()
+
+        def verify():
+            report["artifact_hashes"]["evaluation_gate"] = self.pinfile(
+                "evidence/evaluation-gate.json", packet
+            )
+            pin = self.pinfile("evidence/M07.json", report)
+            return verify_evaluation(ROOT, self.state, self.values, pin)
+
+        verify()
+        with patch.dict(report["metrics"], auprc=0):
+            with self.assertRaisesRegex(Rejected, "evaluation-metrics"):
+                verify()
+        with patch.dict(report, cases=report["cases"][:-1]):
+            with self.assertRaisesRegex(Rejected, "case-inventory"):
+                verify()
+        path.write_bytes(raw + b" ")
+        with self.assertRaisesRegex(Rejected, "digest-mismatch"):
+            verify()
 
     def test_governance_requires_independent_signature_complete_materials_and_bindings(self):
         self.build()

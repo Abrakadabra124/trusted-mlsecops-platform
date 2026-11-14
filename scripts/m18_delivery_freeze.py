@@ -62,7 +62,7 @@ def capture(root, state, freeze, revision):
     return pin
 
 
-def replay(root, state, pin, *, early_reports=None):
+def replay(root, state, pin, *, early_reports=None, evaluation_pin=None):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
     final_evidence.clean(root, revision, fingerprint)
@@ -85,7 +85,42 @@ def replay(root, state, pin, *, early_reports=None):
     }
     if early_reports is not None:
         summary["verified_source_reports"] = verify_early(root, state, values, early_reports)
+    if evaluation_pin is not None:
+        verify_evaluation(root, state, values, evaluation_pin)
+        summary.setdefault("verified_source_reports", {})["M07"] = evaluation_pin
     return summary
+
+
+def verify_evaluation(root, state, values, pin):
+    from mlsecops.evaluation_gate import contract_source
+
+    report = final_evidence.published_report(state, "M07", pin)
+    names = {
+        section + ":" + name
+        for section, cases in final_evidence.evaluation_cases().items()
+        for name in cases
+    }
+    names.add("signed-materials-reconciliation")
+    refs = final_evidence.check_gate(
+        "M07", report, values, final_evidence.timestamp(now()), digest(canonical(sorted(names)))
+    )
+    final_evidence.same(
+        report["input_digests"]["host_contracts"],
+        contract_source(root),
+        "evaluation-contract-source",
+    )
+    raw = final_evidence.pinned(
+        safe_child(state, "evidence/evaluation-gate.json"), refs["evaluation_gate"]
+    )
+    packet = decode(raw)
+    campaign = hexadecimal(packet["campaign_id"], 32)
+    final_evidence.retain(state, raw)
+    for name in ("contracts", "native", "budget"):
+        path = safe_child(state, f"evaluation-gate/{campaign}/{name}.json")
+        final_evidence.retain(state, final_evidence.pinned(path, refs[name]))
+    for ref in refs.values():
+        final_evidence.blob(state, ref)
+    final_evidence.primary("M07", report, lambda ref: final_evidence.blob(state, ref), values)
 
 
 def verify_early(root, state, values, pins):
@@ -137,7 +172,13 @@ def main():
         pins = {gate: os.environ[gate + "_REPORT_SHA256"] for gate in PRIMARY}
         print(
             canonical(
-                replay(root, state, os.environ["M18_FREEZE_SHA256"], early_reports=pins)
+                replay(
+                    root,
+                    state,
+                    os.environ["M18_FREEZE_SHA256"],
+                    early_reports=pins,
+                    evaluation_pin=os.environ["M07_REPORT_SHA256"],
+                )
             ).decode()
         )
     else:
