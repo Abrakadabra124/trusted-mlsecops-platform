@@ -126,7 +126,7 @@ class InferenceGateContracts(unittest.TestCase):
         self.native = native
 
     def test_missing_duplicate_failed_and_type_confused_native_cases_rejected(self):
-        self.assertEqual(len(gate.reconcile(self.native, self.source)), 60)
+        self.assertEqual(len(gate.reconcile(self.native, self.source)), 62)
         for fault in ("missing", "duplicate", "failed", "type", "different", "field"):
             value = copy.deepcopy(self.native)
             cases = value["actual_inference"]["native"]["cases"]
@@ -239,12 +239,12 @@ class InferenceGateContracts(unittest.TestCase):
 
                 def contracts(root):
                     preparation.assert_called_once_with(
-                        root, state.resolve(), "trusted-mlsecops:dev", proposal_pin="9" * 64
+                        root, state.resolve(), "trusted-mlsecops:dev", proposal_pin=None
                     )
                     return controlled
 
                 with (
-                    patch.dict(gate.os.environ, M12_PROPOSAL_SHA256="9" * 64),
+                    patch.dict(gate.os.environ, {}, clear=True),
                     patch.object(gate, "hosted"),
                     patch.object(
                         gate.kube_serving_native, "prepare", return_value={"prepared": True}
@@ -277,7 +277,7 @@ class InferenceGateContracts(unittest.TestCase):
                     else:
                         result = gate.qualify(root, state)
                         preparation.assert_called_once()
-                        self.assertEqual(result["checks"], 61)
+                        self.assertEqual(result["checks"], 63)
                         self.assertEqual(result["input_digests"]["model"], "e" * 64)
                         self.assertFalse(result["release_ready"])
                         self.assertEqual(

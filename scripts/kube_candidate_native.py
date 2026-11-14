@@ -58,6 +58,7 @@ def qualify(
     *,
     prepared=None,
     qualification_key=None,
+    pinned_m12=False,
     include_key_revocation=False,
     include_trust_lifecycle=False,
     privacy=False,
@@ -66,6 +67,14 @@ def qualify(
     security=False,
 ):
     hosted()
+    if pinned_m12 and (
+        prepared is None
+        or qualification_key is not None
+        or any(
+            (include_key_revocation, include_trust_lifecycle, privacy, load, monitoring, security)
+        )
+    ):
+        raise Rejected("candidate_pinned_M12_mode")
     if (
         type(security) is not bool
         or security
@@ -129,6 +138,14 @@ def qualify(
     destination = safe_child(state, "candidate-inference/" + campaign)
     key = destination / "qualification.pem"
     authority_key = campaign_authority(state)[0] if qualification_key is None else qualification_key
+    backend = kube_trust.binding
+    if pinned_m12:
+        # Ordinary release and its observer retain PRIMARY. The qualification-only
+        # lease has its own SQL owner, CA, volume and root, including during rotation.
+        kube_trust.bootstrap(state, target=Target.MODEL_REVOCATION)
+        authority_key = destination / "qualification-authority.pem"
+        signing.create_key(authority_key)
+        backend = partial(kube_trust.binding, target=Target.MODEL_REVOCATION)
     qualification_public = signing.create_key(key)
     authority_public = signing.encode64(
         signing.load_key(authority_key).public_key().public_bytes_raw()
@@ -203,10 +220,8 @@ def qualify(
         raise Rejected("candidate_inference_window")
     envelope = signing.sign(permit, KIND, key)
     permit_hash = digest(canonical(permit))
-    trust_authority.install(
-        state, permit["environment"], authority_public, backend=kube_trust.binding
-    )
-    trust_authority.update(state, permit_hash, authority_key, backend=kube_trust.binding)
+    trust_authority.install(state, permit["environment"], authority_public, backend=backend)
+    trust_authority.update(state, permit_hash, authority_key, backend=backend)
     if independent:
         alternate_backend = partial(kube_trust.binding, target=Target.MODEL_REVOCATION)
         trust_authority.install(
@@ -214,6 +229,7 @@ def qualify(
         )
         trust_authority.update(state, permit_hash, authority_key, backend=alternate_backend)
     config = {
+        **({"trust_target": Target.MODEL_REVOCATION.value} if pinned_m12 else {}),
         "context": context,
         "publisher_public": public,
         "proposal_reference": refusal["proposal"],
@@ -274,7 +290,7 @@ def qualify(
         write_json(destination / "root-rotation.json", root_rotation)
         write_json(destination / "config.json", config)
     print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
-    options = {}
+    options = {"trust_target": Target.MODEL_REVOCATION} if pinned_m12 else {}
     if monitoring or security:
         from mlsecops.release_policy import checked
         from scripts.kube_monitoring_operator import Coordinator
@@ -444,6 +460,14 @@ def qualify(
         "model_sha256": refusal["model"],
         "subject_sha256": verified["subject_sha256"],
         "proposal_issued_at": verified["manifest"]["issued_at"],
+        **(
+            {
+                "qualification_campaign_id": campaign,
+                "proposal_expires_at": verified["manifest"]["expires_at"],
+            }
+            if pinned_m12
+            else {}
+        ),
         "actual_refusal": refusal,
         "qualification_permit_sha256": permit_hash,
         "qualification_campaign_id": campaign,
