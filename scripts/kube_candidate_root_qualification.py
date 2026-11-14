@@ -118,7 +118,9 @@ class CandidateRootContracts(unittest.TestCase):
         )
         if target.value in self.receipts:
             return {**self.receipts[target.value], "reused": self.fault != "retry"}
-        if self.fault == "write-failed":
+        if self.fault == "write-failed" or (
+            self.fault == "peer-write-failed" and target is Target.MODEL_REVOCATION
+        ):
             raise Rejected("injected_write_failure")
         payload = signing.verify(package["document"], "trust-policy", next_root)
         receipt = {
@@ -219,7 +221,7 @@ class CandidateRootContracts(unittest.TestCase):
             report["lifecycle"]["observations"] = 3
         return report
 
-    def exercise(self):
+    def exercise(self, **options):
         return native.exercise(
             "state",
             "profile",
@@ -228,7 +230,30 @@ class CandidateRootContracts(unittest.TestCase):
             old_key=self.f.old_key,
             new_key=self.f.new_key,
             expires_at=self.f.clock + 600,
+            **options,
         )
+
+    def test_outer_owner_injects_raw_probe_without_nested_handoff(self):
+        with patch.object(native, "invoke", side_effect=AssertionError("nested handoff")):
+            report = self.exercise(probe=self.invoke)
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(self.observers, [self.f.new_public])
+
+    def test_failed_peer_does_not_restore_primary_or_observer(self):
+        self.fault = "peer-write-failed"
+        with self.assertRaisesRegex(Rejected, "injected_write_failure"):
+            self.exercise()
+        self.assertEqual(self.observers, [self.f.new_public])
+        self.assertEqual(self.states[Target.PRIMARY.value]["authority"]["version"], 2)
+        self.assertEqual(self.states[Target.MODEL_REVOCATION.value]["authority"]["version"], 1)
+
+    def test_failed_live_trace_does_not_update_observer_or_peer(self):
+        self.fault = "late-denial"
+        with self.assertRaisesRegex(Rejected, "candidate_root_trace"):
+            self.exercise()
+        self.assertEqual(self.observers, [])
+        self.assertEqual(self.states[Target.PRIMARY.value]["authority"]["version"], 2)
+        self.assertEqual(self.states[Target.MODEL_REVOCATION.value]["authority"]["version"], 1)
 
     def test_live_primary_then_explicit_peer_rotation_preserves_one_permit(self):
         before = copy.deepcopy(self.config)
@@ -290,6 +315,131 @@ class CandidateRootContracts(unittest.TestCase):
                     expires_at=self.f.clock + 179,
                 )
             migrate.assert_not_called()
+
+
+class SuspendedObserverContracts(unittest.TestCase):
+    """Real marker/signature/resource validators over an in-memory cluster."""
+
+    def setUp(self):
+        from mlsecops import kube_serving_handoff as handoff
+        from scripts import kube_observer_profile_qualification as profiles
+        from scripts import kube_security_events_qualification as audit
+        from scripts.kube_promotion_native import configuration
+        from scripts.kube_serving_runtime_qualification import PROFILE
+
+        self.handoff = handoff
+        self.fx = audit.AuditBootstrap()
+        self.fx.setUp()
+        self.addCleanup(self.fx.doCleanups)
+        self.rotation = profiles.ObserverProfile()
+        self.rotation.setUp()
+        self.addCleanup(self.rotation.doCleanups)
+        self.fx.world()
+        self.fx.profile = PROFILE
+        self.fx.context["initial_root"] = self.rotation.fx.old_public
+        self.audit = self.fx.bootstrap()
+        self.state = self.fx.directory
+        service = handoff.service
+        promotion = configuration(
+            "/client",
+            "/trust-client",
+            dict(
+                context={"policy": {"environment": "local-cpu"}},
+                trusted_root="root",
+                expected_policy="a" * 64,
+                expected_serving_image=PROFILE["image_id"],
+            ),
+            self.rotation.fx.old_public,
+        )
+        config = service.configuration(promotion, PROFILE)
+        documents = service.documents(self.fx.workspace, PROFILE, config)
+        for document in documents:
+            document["metadata"]["uid"] = "serving-" + document["kind"]
+            if document["kind"] == "Deployment":
+                document["spec"]["replicas"] = 0
+            self.fx.objects[service.kube_storage.reference(document)] = copy.deepcopy(document)
+        self.serving = dict(
+            schema_version=1,
+            ready=False,
+            handoff="f" * 32,
+            workspace_id=self.fx.workspace,
+            profile=PROFILE,
+            config=config,
+            config_sha256=digest(canonical(config)),
+            audit_pin=self.audit["pins"]["serving"],
+            resources={service.kube_storage.reference(d): d["metadata"]["uid"] for d in documents},
+        )
+        self.fx.subject.save(service.directory(self.state), self.serving)
+        self.ticket = dict(
+            nonce=self.serving["handoff"],
+            marker_sha256=digest(canonical(self.serving)),
+            previous="old-serving-pod",
+        )
+        self.enterContext(patch.object(service, "workspace_id", return_value=self.fx.workspace))
+        self.enterContext(
+            patch.object(kube_security_rotation.io, "history", return_value=self.rotation.history)
+        )
+        self.enterContext(
+            patch.object(
+                kube_security_rotation.io,
+                "outbox",
+                return_value={"pin": self.audit["pins"]["trust"]},
+            )
+        )
+        self.enterContext(
+            patch.object(
+                kube_security_rotation.io, "pod", return_value={"metadata": {"uid": "old-observer"}}
+            )
+        )
+
+        def replace(state, marker, before, after):
+            key = service.kube_storage.reference(before)
+            service.kube_storage.verify_resource(
+                before, self.fx.objects[key], marker["resources"][key]
+            )
+            document = copy.deepcopy(after)
+            document["metadata"]["uid"] = marker["resources"][key]
+            self.fx.objects[key] = document
+
+        self.enterContext(patch.object(kube_security_rotation, "replace", side_effect=replace))
+        self.enterContext(patch.object(kube_security_rotation, "wait_empty"))
+        self.observed = self.enterContext(
+            patch.object(
+                kube_security_rotation,
+                "wait_observed",
+                return_value={"first_source_check_confirmed": True},
+            )
+        )
+        self.assertEqual(handoff.ticket_marker(self.state, self.ticket), self.serving)
+
+    def update(self):
+        return kube_security_rotation.update(
+            self.state, self.rotation.package, next_root=self.rotation.fx.new_public
+        )
+
+    def test_observer_updates_with_suspended_serving_and_preserves_exact_return_ticket(self):
+        before = canonical(self.serving)
+        report = self.update()
+        self.assertTrue(report["first_source_check_confirmed"])
+        self.assertFalse(report["release_ready"])
+        # Real audit.validate checks collector/observer and their owned resources,
+        # not a live persistent serving Pod. The original root remains authorized.
+        after = self.handoff.ticket_marker(self.state, self.ticket)
+        self.assertEqual(canonical(after), before)
+        self.assertEqual(self.fx.state_marker()["pins"], self.audit["pins"])
+        self.assertTrue(self.fx.state_marker()["ready"])
+
+    def test_interrupted_observer_blocks_return_without_repairing_ready_or_old_root(self):
+        self.observed.side_effect = Rejected("observer_delivery_unconfirmed")
+        with self.assertRaisesRegex(Rejected, "observer_delivery_unconfirmed"):
+            self.update()
+        self.assertFalse(self.fx.state_marker()["ready"])
+        self.assertEqual(
+            self.fx.state_marker()["observer"]["history"]["root_public"],
+            self.rotation.fx.new_public,
+        )
+        with self.assertRaisesRegex(Rejected, "kube_security_profile_incomplete_or_changed"):
+            self.handoff.ticket_marker(self.state, self.ticket)
 
 
 if __name__ == "__main__":

@@ -40,6 +40,8 @@ from mlsecops.prediction_protocol import PredictionBatch
 from mlsecops.private_cli import Arguments
 from mlsecops.serving_context import QualificationTrace
 from mlsecops.trust_targets import Target
+from scripts import kube_owned_probe as ownership
+from scripts import kube_serving_native as probes
 from scripts.candidate_serving_reader import bind_proposal
 from scripts.kube_candidate_campaign import qualify as qualify_campaign
 from scripts.kube_candidate_faults import NONTERMINAL
@@ -271,25 +273,6 @@ def qualify(
     before = ledger(state)
     base_snapshot = snapshot(state)
     root_rotation = None
-    if independent:
-        next_key = destination / "rotated-authority.pem"
-        root_rotation = exercise_root(
-            state,
-            profile,
-            config,
-            expected,
-            old_key=authority_key,
-            new_key=next_key,
-            expires_at=permit["expires_at"],
-        )
-        config.update(
-            trust_root=root_rotation["next_public"],
-            minimum_trust_version=root_rotation["minimum_trust_version"],
-        )
-        authority_key = next_key
-        write_json(destination / "root-rotation.json", root_rotation)
-        write_json(destination / "config.json", config)
-    print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
     options = {"trust_target": Target.MODEL_REVOCATION} if pinned_m12 else {}
     if monitoring or security:
         from mlsecops.release_policy import checked
@@ -340,18 +323,48 @@ def qualify(
     revoked_key = digest(signing.decode64(public))
     trust_campaign = None
     if independent:
-        trust_campaign = qualify_campaign(
-            state,
-            profile,
-            config,
-            expected,
-            key=authority_key,
-            revoked_key=revoked_key,
-            expires_at=permit["expires_at"],
-            base_snapshot=base_snapshot,
-        )
+
+        def observe_trust():
+            next_key = destination / "rotated-authority.pem"
+            rotation = exercise_root(
+                state,
+                profile,
+                config,
+                expected,
+                old_key=authority_key,
+                new_key=next_key,
+                expires_at=permit["expires_at"],
+                probe=probes.invoke,
+            )
+            config.update(
+                trust_root=rotation["next_public"],
+                minimum_trust_version=rotation["minimum_trust_version"],
+            )
+            write_json(destination / "root-rotation.json", rotation)
+            write_json(destination / "config.json", config)
+            print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
+            return {
+                "root_rotation": rotation,
+                **qualify_campaign(
+                    state,
+                    profile,
+                    config,
+                    expected,
+                    key=next_key,
+                    revoked_key=revoked_key,
+                    expires_at=permit["expires_at"],
+                    base_snapshot=base_snapshot,
+                ),
+            }
+
+        # Root denial/recovery, observer update and explicit peer rotation stay
+        # inside the SAME ownership scope as all later Jobs. No intermediate
+        # resume/suspend, renewed permit or shared Job/preflight/audit state.
+        trust_campaign = ownership.run(state, profile, observe_trust)
+        root_rotation = trust_campaign["value"]["root_rotation"]
         result = trust_campaign["value"]["native"]
     else:
+        print(canonical({"stage": "actual-candidate-HTTP-matrix"}).decode(), flush=True)
         result = invoke(state, profile, config, expected, candidate_probe=True, **options)
     if monitoring:
         result["operator_retained_reverified"] = options["monitoring_operator"].reverify()

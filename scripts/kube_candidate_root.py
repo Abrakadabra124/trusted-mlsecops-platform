@@ -91,7 +91,7 @@ def checked(report, expected, recovery, permit):
         raise Rejected("candidate_root_trace")
 
 
-def exercise(state, profile, config, expected, *, old_key, new_key, expires_at):
+def exercise(state, profile, config, expected, *, old_key, new_key, expires_at, probe=None):
     old_public = config["trust_root"]
     if trust_rotation.key_id(old_public) == trust_rotation.key_id(config["permit_public"]):
         raise Rejected("candidate_root_key_separation")
@@ -127,7 +127,9 @@ def exercise(state, profile, config, expected, *, old_key, new_key, expires_at):
         phases.append(phase)
 
     print(canonical({"stage": "actual-candidate-root-rotation"}).decode(), flush=True)
-    probe = invoke(
+    # A full candidate campaign already owns serving. Each raw probe still has
+    # its own Job, audit/preflight and verified cleanup; standalone use owns it here.
+    report = (invoke if probe is None else probe)(
         state,
         profile,
         config,
@@ -141,7 +143,7 @@ def exercise(state, profile, config, expected, *, old_key, new_key, expires_at):
         "payload": config["expected_permit"],
         "envelope": digest(canonical(config["permit_envelope"])),
     }
-    checked(probe, expected, recovery, permit)
+    checked(report, expected, recovery, permit)
     primary = rotation.snapshot(state)
     rotation.transition(before[Target.PRIMARY.value], primary, receipt)
     if (
@@ -175,7 +177,7 @@ def exercise(state, profile, config, expected, *, old_key, new_key, expires_at):
         "minimum_trust_version": receipt["version"],
         "permit_sha256": config["expected_permit"],
         "permit_envelope_sha256": permit["envelope"],
-        "probe": probe,
+        "probe": report,
         "model_snapshot_sha256": digest(canonical(models)),
         "authorities": {
             Target.PRIMARY.value: {

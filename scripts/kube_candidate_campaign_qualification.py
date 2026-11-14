@@ -30,6 +30,9 @@ class CandidateCampaign(unittest.TestCase):
         self.events = []
         self.calls = []
         self.failure_at = None
+        self.root_failure = None
+        self.owner_active = False
+        self.root_owners = []
         self.mutation_at = None
         self.mutation = {}
         self.clock = 1000
@@ -178,20 +181,35 @@ class CandidateCampaign(unittest.TestCase):
 
         @contextmanager
         def transfer(state):
+            self.assertFalse(self.owner_active, "nested serving ownership transfer")
+            self.owner_active = True
             self.events.append("suspend")
             report = {"before": "original-owner"}
             try:
                 yield report
             finally:
                 self.events.append("return")
+                self.owner_active = False
                 report.update(after="returned-owner", release_ready=False)
 
         self.enterContext(patch.object(ownership.handoff, "transfer", transfer))
 
     def root_transition(self, state, profile, config, expected, **kwargs):
-        self.events.extend(["root-live", "root-return", "observer-update", "peer-rotation"])
         self.root_permit = copy.deepcopy(config["permit_envelope"])
+        self.root_probe = kwargs.get("probe")
         self.assertEqual(kwargs["expires_at"], 1600)
+        self.events.append("root-live")
+        self.root_owners.append(self.owner_active)
+        try:
+            if self.root_failure == "root":
+                raise self.original
+        finally:
+            self.events.append("cleanup:root")
+        for phase in ("observer-update", "peer-rotation"):
+            self.events.append(phase)
+            self.root_owners.append(self.owner_active)
+            if self.root_failure == phase:
+                raise self.original
         return {"next_public": self.next_public, "minimum_trust_version": 7}
 
     def coordinator(self, state, fault, policy, key, model, **kwargs):
@@ -233,6 +251,7 @@ class CandidateCampaign(unittest.TestCase):
         return Coordinator()
 
     def probe(self, state, profile, config, expected, **options):
+        self.assertTrue(self.owner_active)
         self.assertNotIn("restore_failure", options)
         self.assertTrue(options["candidate_probe"])
         rotated = "root-live" in self.events
@@ -364,7 +383,7 @@ class CandidateCampaign(unittest.TestCase):
                         "qualification-authority.pem",
                     )
 
-    def test_eight_post_root_jobs_share_one_return_and_same_permit(self):
+    def test_root_and_eight_post_root_jobs_share_one_return_and_same_permit(self):
         report = self.qualify()
         self.assertEqual(
             [c[0] for c in self.calls],
@@ -381,8 +400,10 @@ class CandidateCampaign(unittest.TestCase):
         )
         self.assertEqual(
             self.events[:5],
-            ["root-live", "root-return", "observer-update", "peer-rotation", "suspend"],
+            ["suspend", "root-live", "cleanup:root", "observer-update", "peer-rotation"],
         )
+        self.assertEqual(self.root_owners, [True, True, True])
+        self.assertIs(self.root_probe, probes.invoke)
         self.assertEqual(self.events.count("suspend"), 1)
         self.assertEqual(self.events.count("return"), 1)
         self.assertEqual(self.events[-2:], ["cleanup:cold-model", "return"])
@@ -410,6 +431,39 @@ class CandidateCampaign(unittest.TestCase):
         self.assertTrue(all("ownership_return" not in r for r in reports))
         self.assertTrue(all(r["model_sha256"] == self.model for r in reports))
         self.assertTrue(all(r["subject_sha256"] == self.subject for r in reports))
+
+    def test_root_observer_and_peer_failure_return_owner_without_later_probes(self):
+        for phase in ("root", "observer-update", "peer-rotation"):
+            with self.subTest(phase=phase):
+                case = CandidateCampaign()
+                case.setUp()
+                try:
+                    case.root_failure = phase
+                    with self.assertRaises(Rejected) as raised:
+                        case.qualify()
+                    self.assertIs(raised.exception, case.original)
+                    self.assertEqual(case.calls, [])
+                    self.assertEqual(case.events.count("suspend"), 1)
+                    self.assertEqual(case.events.count("return"), 1)
+                    self.assertEqual(case.events[-1], "return")
+                    self.assertLess(case.events.index("cleanup:root"), case.events.index("return"))
+                    self.assertTrue(all(case.root_owners))
+                    self.assertGreaterEqual(case.counter, 2)  # Independent return heartbeat.
+                    if phase != "peer-rotation":
+                        self.assertNotIn("peer-rotation", case.events)
+                    self.assertEqual(len(case.signatures), 2)
+                finally:
+                    case.doCleanups()
+
+    def test_failed_root_cannot_hide_missing_final_owner_heartbeat(self):
+        self.root_failure = "root"
+        with (
+            patch.object(ownership.audit, "collector", return_value={"heartbeats": {"serving": 1}}),
+            patch.object(ownership.time, "monotonic", side_effect=[0, 121]),
+            self.assertRaisesRegex(Rejected, "owned_probe_return_heartbeat_deadline"),
+        ):
+            self.qualify()
+        self.assertEqual(self.events[-2:], ["cleanup:root", "return"])
 
     def test_each_failed_job_stops_later_jobs_and_returns_after_cleanup_and_restore(self):
         for failed in range(1, 9):
@@ -462,6 +516,16 @@ class CandidateCampaign(unittest.TestCase):
         self.assertEqual(self.events.count("return"), 1)
         self.assertEqual(self.root_permit["payload"]["expires_at"], 1600)
         self.assertFalse(report["release_ready"])
+
+    def test_key_revocation_guard_after_model_revocation_remains_180_seconds(self):
+        self.advance_after, self.advance_to = 5, 1421
+        with self.assertRaisesRegex(Rejected, "candidate_trust_window"):
+            self.qualify()
+        self.assertEqual(self.calls[-1][0], "model-revocation")
+        self.assertEqual(len(self.calls), 5)
+        self.assertEqual(self.events[-2:], ["cleanup:model-revocation", "return"])
+        self.assertEqual(self.root_permit["payload"]["expires_at"], 1600)
+        self.assertEqual(len(self.signatures), 2)
 
     def test_changed_matrix_ledger_prevents_faults_but_returns_owner(self):
         self.change_snapshot_after = 1
