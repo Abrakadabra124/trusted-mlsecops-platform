@@ -222,7 +222,7 @@ CP3/T16 2026-11-06: [ordinary CLI privacy](evidence/kubernetes-cli-privacy-2026-
 2. Выбрать предыдущий whole bundle с действующей policy, совместимой schema и без revocation.
 3. Создать новое rollback approval, связанное с source/target digests и причиной.
 4. Переключить desired state, дождаться verified readiness и проверить несколько реальных ответов с digest.
-5. Если подходящего release нет, выключить ML-advice и оставить ручной путь, не возвращаться к сомнительной модели.
+5. Если подходящего release нет, выключить ML-advice и открыть [локальную очередь ручного рассмотрения](operations/manual-review.md) по digest заявки.
 
 **Проверка:** M16; RTO, отсутствие mixed artifacts, logs и клиентские ответы.
 

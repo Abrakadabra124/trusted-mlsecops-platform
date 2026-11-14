@@ -4,6 +4,8 @@
 
 ## Предпосылки и ответственность
 
+Для измерения трафика до отката используйте [процедуру T19](canary-traffic.md).
+
 Оператор выбирает прежний совместимый target по immutable selection hash и проверяет текущий head. Независимый approver подписывает новый schema-2 approval. Promoter публикует и записывает решение; serving отдельно проверяет всё перед ready. Trainer не получает ключ approver. Ни root key, ни database admin не требуются прикладному promoter.
 
 Target должен иметь действительные bundle/assurance/reports, соответствовать текущим policy/root/runtime pins и не быть отозван. Для другого candidate нужен заранее проверенный config с его context. Нельзя автоматически копировать context или root из полученного request. При несовместимости/expiry/отзыве использовать manual-review fallback без ML и подготовить обычный новый release через полную оценку.

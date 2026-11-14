@@ -1,0 +1,49 @@
+name: T19 canary traffic components
+on:
+  push:
+    branches: [codex/cp4-m23-security-events-20261107]
+    paths:
+      - 'mlsecops/canary_*.py'
+      - 'mlsecops/manual_review.py'
+      - 'scripts/canary_*_qualification.py'
+      - 'scripts/manual_review_qualification.py'
+      - '.github/workflows/canary-traffic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  traffic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Replay traffic decisions and exercise the local operator queue
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          export COVERAGE_FILE="$RUNNER_TEMP/t19.coverage"
+          uv run --locked python -B -W error -m coverage run --branch --source=mlsecops.canary_probe,mlsecops.canary_evaluation,mlsecops.canary_campaign,mlsecops.manual_review -m unittest scripts.canary_probe_qualification scripts.canary_evaluation_qualification scripts.canary_campaign_qualification scripts.manual_review_qualification
+          uv run --locked python -m coverage json -o "$RUNNER_TEMP/t19-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          modules = ("canary_probe", "canary_evaluation", "canary_campaign", "manual_review")
+          files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "t19-coverage.json").read_bytes())["files"]
+          if files.keys() != {"mlsecops/" + module + ".py" for module in modules}:
+              raise SystemExit("T19 module inventory changed")
+          for module, report in sorted(files.items()):
+              stats = report["summary"]
+              for covered, total in (("covered_lines", "num_statements"), ("covered_branches", "num_branches")):
+                  if stats[total] <= 0 or stats[covered] * 100 < stats[total] * 95:
+                      raise SystemExit("T19 coverage below threshold in " + module)
+              print(module, stats)
+          PY
