@@ -27,7 +27,12 @@ class Observation(unittest.TestCase):
             proposal_reference="5" * 64,
         )
         self.args = dict(
-            primary=dict(start_ns=6000, finish_ns=7000, target=dict(workspace_id="a" * 32)),
+            primary=dict(
+                start_ns=6000,
+                finish_ns=7000,
+                target=dict(workspace_id="a" * 32),
+                source_stopped_at=self.wall.isoformat(),
+            ),
             sql=subject,
             statement=dict(recovery_point_at=(self.wall - timedelta(days=1)).isoformat()),
             proposal={
@@ -67,6 +72,9 @@ class Observation(unittest.TestCase):
         for path, value in [
             (("serving_verified_ns",), 6999),
             (("primary", "start_ns"), 4999),
+            (("primary", "source_stopped_at"), (self.wall + timedelta(seconds=901)).isoformat()),
+            (("primary", "source_stopped_at"), self.wall.replace(tzinfo=None).isoformat()),
+            (("primary", "source_stopped_at"), (self.wall + timedelta(microseconds=1)).isoformat()),
             (("proposal", "target_workspace"), "b" * 32),
             (("proposal", "release_ready"), True),
             (("proposal", "status"), "restored"),

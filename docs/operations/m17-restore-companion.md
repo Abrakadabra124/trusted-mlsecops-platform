@@ -10,8 +10,16 @@ worker image этой модели. Подготовьте отдельный с
 ```python
 from scripts.m17_restore_native import capture, replay
 
-packet = capture(root, state, target, image, demo_pin=demo_pin, keys_pin=keys_pin,
-                 port=15440, backup_pin=daily_receipt["backup_id"])
+packet = capture(
+    root,
+    state,
+    target,
+    image,
+    demo_pin=demo_pin,
+    keys_pin=keys_pin,
+    port=15440,
+    backup_pin=daily_receipt["backup_id"],
+)
 ```
 
 Передайте `backup_id` из проверенной инвентарной записи
@@ -40,7 +48,7 @@ SHA-256 **записанных байтов** пакета (включая пе�
 Для публичного отчёта используйте результат replay.
 
 RPO для данного отказа измеряется от времени SQL-команды, получившей
-repeatable-read snapshot, до начала остановки source. Время SQL записано в
+repeatable-read snapshot, до подтверждённой остановки исходного SQL. Время SQL записано в
 подписанный manifest. Предварительная проверка закреплённой копии завершается
 при работающем source. Таймер RTO стартует непосредственно перед вызовом остановки.
 Он включает повторную проверку backup при restore, создание target, импорт, проверку подписей

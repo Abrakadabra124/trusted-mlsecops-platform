@@ -27,8 +27,16 @@ def measure(clock, *, primary, sql, statement, proposal, report, serving_verifie
         raise Rejected("recovery_snapshot_clock")
     utc_epoch = datetime(1970, 1, 1, tzinfo=UTC)
     point_ns = ((point - utc_epoch) // timedelta(microseconds=1)) * 1000
-    # Use the later end of the initial wall-clock bracket for the RPO ceiling.
-    age = clock["start"]["after_ns"] - point_ns
+    # The initial anchor includes healthy baseline probes. RPO must extend
+    # through the actual loss of the source. A timestamp immediately after
+    # its confirmed stop bounds that loss conservatively.
+    outage = datetime.fromisoformat(primary["source_stopped_at"])
+    if outage.utcoffset() is None:
+        raise Rejected("recovery_snapshot_clock")
+    outage_ns = ((outage - utc_epoch) // timedelta(microseconds=1)) * 1000
+    if not clock["start"]["before_ns"] <= outage_ns <= clock["end"]["after_ns"]:
+        raise Rejected("recovery_outage_clock")
+    age = outage_ns - point_ns
     if point_ns > clock["start"]["before_ns"] or age > 86400 * load_clock.NS:
         raise Rejected("recovery_snapshot_age")
     if (

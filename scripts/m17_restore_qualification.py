@@ -144,7 +144,7 @@ class Restore(unittest.TestCase):
         self.mock(
             adapter,
             "now",
-            side_effect=[self.start.isoformat(), (self.start + timedelta(seconds=17)).isoformat()],
+            side_effect=[(self.start + timedelta(seconds=i)).isoformat() for i in (0, 2, 17)],
         )
         self.mock(adapter, "monotonic_ns", side_effect=[10**9, 18 * 10**9])
 
@@ -252,7 +252,7 @@ class Restore(unittest.TestCase):
                 result["golden_rows"],
                 result["max_error"],
             ),
-            (17, 40, 1000, 0),
+            (17, 42, 1000, 0),
         )
         self.assertEqual(result["model_sha256"], digest(self.model))
         self.assertFalse(result["release_ready"])

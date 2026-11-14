@@ -117,7 +117,9 @@ def replay(packet, *, backup_pin, demo_pin, public, policy):
     require(digest(canonical(statement)) == object_id(backup_pin), "backup_pin")
     require("recovery_point_at" in statement, "unmeasured_snapshot")
     point = datetime.fromisoformat(statement["recovery_point_at"])
-    rpo = start - point
+    stopped = datetime.fromisoformat(packet["source_stopped_at"])
+    require(stopped.utcoffset() is not None and start <= stopped <= finish, "outage_time")
+    rpo = stopped - point
     require(timedelta(0) <= rpo <= timedelta(days=1), "rpo")
     first, last = (packet[k] for k in ("start_ns", "finish_ns"))
     require(
@@ -149,7 +151,7 @@ def replay(packet, *, backup_pin, demo_pin, public, policy):
         and receipt["release_ready"] is False
         and receipt["status"] == "storage-restored-not-release-ready"
         and imported.utcoffset() is not None
-        and start <= imported <= finish,
+        and stopped <= imported <= finish,
         "receipt",
     )
     raw = packet["storage_demo"].encode("utf-8")
@@ -281,6 +283,7 @@ def capture(
 
     started_at, start_ns = now(), monotonic_ns()
     stop_owned(state)
+    source_stopped_at = now()
     receipt = storage_restore.restore(root, directory, target, public, port, expected_backup_id=pin)
     dest = storage_bootstrap.validate(target)
     require(not receipt["reused"] and all(dest[k] != source[k] for k in IDENTITY), "independence")
@@ -320,6 +323,7 @@ def capture(
         original=original,
         restored=restored,
         started_at=started_at,
+        source_stopped_at=source_stopped_at,
         finished_at=finished_at,
         start_ns=start_ns,
         finish_ns=finish_ns,
