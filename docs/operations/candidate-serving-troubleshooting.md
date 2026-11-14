@@ -117,3 +117,20 @@ Readback опирается на отдельные запросы списка 
 3. Для `scripts.m17_recovery_native capture` передать `M17_PROPOSAL_SHA256`, `M17_DEMO_SHA256` исходных байтов и `M17_KEYS_SHA256` канонических public keys. В этой фазе таймер делает snapshot, source останавливается, восстановленная proposal проверяется по текущим часам в собственном target. Этот bind тоже должен завершиться до expiry. Выход `sha256` сохранить как `M17_PRIMARY_SHA256`.
 4. До удаления Kind, в том же job выполнить `mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json` с исходным `M12_PROPOSAL_SHA256` и `M12_EARLY_SHA256` из шага 1. Нужны работающий кластер и прежние локальные evidence bytes. Source SQL может быть остановлен. Adapter сверяет runner, workspace, cluster UID, revision, image, proposal, permit, retained artifacts и состояние обеих authority. Затем выполняет все controlled approval, expiry, rollback, rotation и outage на PRIMARY. Повторно сверяет peer и исходные байты перед итоговой агрегацией. Один ранний пакет не закрывает M12.
 5. После подтверждённой остановки обоих SQL и удаления Kind повторить `scripts.m17_recovery_native replay` и acceptance M16/M17 с сохранёнными pin. Raw packet, registry, ключи, TLS clients и журналы остаются приватными. При отказе сохранить bounded location и исходные хеши. Новый измерительный запуск требует нового disposable runner и отдельной записи о результате.
+
+#### Измерение на отдельном runner, 2026-11-14
+
+На [`77542d3`, job 132323540492](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43554297246/job/132323540492) один и тот же закреплённый proposal прошёл M12, M16 и M17. Job занял 22 мин 07 с при лимите 60 минут.
+
+| Событие | UTC | Наблюдение |
+|---|---|---|
+| Freeze исходных байтов | 04:01:25 | Исходный expiry 04:31:24 |
+| Bind и HTTP-матрица actual M12 | 04:03:18 и 04:03:34 | Все 62 native cases прошли. Actual завершилась в 04:04:34.712, запас 26 мин 49 с |
+| M16 capture и rollback | 04:04:36 - 04:05:52 | 48 с и 28 с соответственно |
+| M17 capture | 04:05:52 - 04:06:20 | Таймер создал snapshot, проверка proposal в восстановленной БД прошла с остановленной исходной БД |
+| Поздняя M12 | 04:06:22 - 04:20:31 | Обе host SQL остановлены. 201 проверка, 62 native, максимальная ошибка golden 0.0 |
+| Удаление Kind и replay | 04:20:32 - 04:20:36 | Отсутствие кластера проверено. M16 pass, 8 проверок. M17 pass, 10 проверок |
+
+В M17 таймер сработал по controlled trigger. Суточный интервал между двумя реальными запусками здесь не измерялся. Восстановлены 1000 golden rows с максимальной ошибкой 0.0. Отдельный job измерял три gate и cleanup. M19 и остальные этапы общей delivery-последовательности требуют её собственного прогона.
+
+В [предыдущем job 132321748546](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43553729988/job/132321748546) bind начался в 03:55:43, отказ до HTTP имел bounded location `mlsecops/storage_snapshot.py:164`. Обе операции cleanup прошли. Эта строка объединяет ненулевой код процесса и непустой stderr. Текст SQL-ошибки из неё установить нельзя. При проверке кода обнаружена зависимость actual snapshot от ранее установленной схемы promotion journal. Исправление выполняет существующую идемпотентную миграцию перед отказом и чтением ledger. Установка схемы не записывает approval.
