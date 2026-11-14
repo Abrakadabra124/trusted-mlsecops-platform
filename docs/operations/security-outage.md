@@ -106,6 +106,26 @@ Public output содержит только заранее определённ�
 сохранить номер job и фазу. Raw stderr, конфигурации и токены в public log
 выводить нельзя. Для неизвестной категории причина остаётся неустановленной.
 
+Полный [изолированный M23 на b4a0ae5, job 132308467213](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43549512608/job/132308467213)
+завершился success 14 ноября 2026 года. Gate вернул pass по 161 проверке в
+03:20:23 UTC. Реальный кандидат `8d1f11fb9245d14e34fcbab57299510cb385691a2fa1cba9fa5945d72f9c402c`,
+evaluation `8e8e1cba95053cda10820544ef1c36d87044a135095a377c8d6d6d6deb9831f4`.
+Проверены inference и monitoring во время outage, остановка owned SQL,
+удаление owned cluster и последующий replay. Hash stage-outage равен
+`1dc556055cce3cad1abc6d8a7f031ce632c869dc5bcad97ccd290679ddc2875c`.
+Это отдельный candidate-bound M23. Общая приёмка M12 на интегрированном
+same-candidate runner отслеживается владельцем отдельно.
+
+У [9fc84a9 /43548647878, job 132307265641](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43548647878/job/132307265641)
+завершены фазы ready/outage/attempt. Первый опубликованный operator diagnostic
+содержит `security_outage_operator_rejected` и
+`mlsecops/cluster.py:156`; category исходного запроса в этой записи отсутствует.
+Позднейшая верхняя ошибка указывает на `kube_serving_service.py:323`,
+`wait_empty` внутри возврата ownership, где сработал cleanup deadline.
+Обе записи нужны для диагностики. Из cleanup timeout нельзя установить
+первичную причину operator failure или состав оставшихся Pods/Jobs.
+В проверенном прогоне b4a0ae5 этот отказ не повторился.
+
 ### Остальные условия
 
 На Windows проверочный checkout следует размещать в коротком пути, без вложенных
