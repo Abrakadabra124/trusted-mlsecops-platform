@@ -43,7 +43,7 @@ BINDINGS = {
     "M01": "worker_image",
     "M02": "source data_lock",
     "M03": "source data_lock dataset_reference candidate_reference evaluation_reference worker_image",
-    "M04": "worker_image",
+    "M04": "worker_image dataset_reference candidate_reference evaluation_reference model_digest",
     "M05": "worker_image",
     "M06": "request policy source environment golden worker_image candidate_reference evaluation_reference dataset_reference model_digest candidate_training_input frozen_demo",
     "M07": "candidate_reference evaluation_reference dataset_reference dataset_source model holdout training_request evaluation_policy worker_image data_lock",
@@ -626,6 +626,57 @@ def evaluation_primary(report, packet, obj, values):
     )
 
 
+def access_primary(report, packet, obj, values):
+    from mlsecops.isolation_gates import reconcile_access
+
+    refs = report["artifact_hashes"]
+    names = ("isolation", "access", "controller", "storage")
+    same(sorted(refs), sorted((*names, "authority", PRIMARY["M04"])), "access-artifacts")
+    same(packet["artifact_hashes"], {k: refs[k] for k in (*names, "authority")}, "access-producer")
+    components = {k: decode(obj(refs[k])) for k in names}
+    binding = {k: values[k] for k in ("source_fingerprint", "image_id")}
+    candidate = {
+        k: values[k]
+        for k in (
+            "dataset_reference",
+            "candidate_reference",
+            "evaluation_reference",
+            "model_digest",
+        )
+    }
+    subset(
+        packet,
+        dict(
+            schema_version=1,
+            scope="M04-current-owned-lab-identity-and-access",
+            **binding,
+            **candidate,
+        ),
+        "access-subject",
+    )
+    subset(components["controller"], candidate, "access-controller")
+    same(
+        components["access"]["dataset_reference"], candidate["dataset_reference"], "access-dataset"
+    )
+    same(
+        components["isolation"]["cluster"]["namespace_uid"],
+        packet["cluster_namespace_uid"],
+        "access-namespace",
+    )
+    same(components["storage"]["volume_uid"], packet["storage_volume_uid"], "access-volume")
+    authority = decode(obj(refs["authority"]))
+    subset(authority, dict(status="pass", **binding, **candidate), "access-authority-subject")
+    subset(
+        authority["artifact_hashes"],
+        {k: refs[k] for k in ("access", "isolation", "controller")},
+        "access-authority-components",
+    )
+    cases = reconcile_access(components, binding)
+    same(report["cases"], cases, "access-observations")
+    same(report["metrics"], dict(checks=len(cases)), "access-metrics")
+    same(packet["checks"], len(cases), "access-count")
+
+
 def primary(gate, report, obj, values):
     for field in {"primary_materials", "review_primary"} & report["artifact_hashes"].keys():
         manifest = decode(obj(report["artifact_hashes"][field]))
@@ -681,7 +732,7 @@ def primary(gate, report, obj, values):
             )
             same(packet["execution"]["image_id"], values["image_id"], "integrity-image")
         elif gate == "M04":
-            need(packet["dataset_reference"] == values["dataset_reference"], "access-dataset")
+            access_primary(report, packet, obj, values)
         elif gate == "M07":
             evaluation_primary(report, packet, obj, values)
         elif gate == "M05":

@@ -21,6 +21,14 @@ from scripts.serving_output_native import source
 
 RECEIPT = "evidence/M18-frozen-inputs.json"
 PRIMARY = {"M01": "foundation-qualification.json", "M02": "data-qualification.json"}
+ACCESS_FILES = {
+    "access": "M20-access.json",
+    "controller": "M20-controller.json",
+    "isolation": "M20-isolation.json",
+    "storage": "kubernetes-storage-qualification.json",
+    "authority": "authority-qualification.json",
+    "isolation_qualification": "access-qualification.json",
+}
 
 
 def capture(root, state, freeze, revision):
@@ -72,6 +80,7 @@ def replay(
     integrity_pin=None,
     promotion_pin=None,
     reproducibility_pin=None,
+    access_pin=None,
 ):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
@@ -111,7 +120,25 @@ def replay(
             state, values, reproducibility_pin
         )
         summary.setdefault("verified_source_reports", {})["M06"] = reproducibility_pin
+    if access_pin is not None:
+        verify_access(state, values, access_pin)
+        summary.setdefault("verified_source_reports", {})["M04"] = access_pin
     return summary
+
+
+def verify_access(state, values, pin):
+    report = final_evidence.published_report(state, "M04", pin)
+    refs = report["artifact_hashes"]
+    materials = {
+        refs[k]: final_evidence.pinned(safe_child(state, "evidence/" + path), refs[k])
+        for k, path in ACCESS_FILES.items()
+    }
+    qualified = decode(materials[refs["isolation_qualification"]])
+    inventory = digest(canonical(sorted(c["id"] for c in qualified["cases"])))
+    final_evidence.check_gate("M04", report, values, final_evidence.timestamp(now()), inventory)
+    final_evidence.primary("M04", report, materials.__getitem__, values)
+    for raw in materials.values():
+        final_evidence.retain(state, raw)
 
 
 def verify_reproducibility(state, values, pin):
@@ -281,6 +308,11 @@ def main():
         pin = capture(root, state, freeze, os.environ["GITHUB_SHA"])
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
             print("sha256=" + pin, file=out)
+    elif sys.argv[1:] == ["replay-m04"]:
+        result = replay(
+            root, state, os.environ["M18_FREEZE_SHA256"], access_pin=os.environ["M04_REPORT_SHA256"]
+        )
+        print(canonical(result).decode())
     elif sys.argv[1:] == ["replay-m06"]:
         print(
             canonical(

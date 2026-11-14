@@ -170,6 +170,16 @@ M13/M15 требуют private admissions, исходные private observations
 `retained_packets`. Отсутствующий preimage диагностируется как отсутствующее
 evidence, даже если сам hash выглядит корректно.
 
+После удаления учебного и обслуживающего кластеров шаг `replay-m04`
+использует хеш отчёта M04, сохранённый сразу после оценки, и исходную
+квитанцию заморозки. Проверяющий заново строит матрицу доступа из четырёх
+первичных файлов. Запись контроллера должна указывать на тот же датасет,
+кандидата, оценку и модель. Записи изоляции и хранилища должны содержать
+исходные идентификаторы пространства имён Kubernetes и тома базы.
+При расхождении возьмите первичные файлы из того же запуска, сверьте
+их SHA-256 с `artifact_hashes` M04 и хешами общих компонентов M20.
+Команда повтора приведена в [рабочем процессе восстановления](../../.github/workflows/storage-recovery.yml).
+
 ## Native schemas и привязки
 
 | Gates | Проверяемая связь |
@@ -177,7 +187,7 @@ evidence, даже если сам hash выглядит корректно.
 | M01 | Source, worker image, primary inventory/materials, runtime inventory |
 | M02 | Source digest и data.lock, совпадающие с подписанной lineage candidate |
 | M03 | Source/data.lock, dataset/candidate/evaluation, worker, storage configuration |
-| M04, M20 | Dataset/authority primary, общие component hashes и cluster identity |
+| M04, M20 | M04 сверяет кандидата, оценку и модель с исходным контроллером, перечитывает матрицу доступа и проверяет общие с M20 материалы, namespace и том |
 | M05 | Candidate/model и serving-under-fault bundle subject, ссылки на M04/M20 |
 | M06 | Frozen candidate replay, signed evaluator protocol, одинаковые split bytes и request, три отдельных training runs, численные tolerances |
 | M07 | Candidate/evaluation, dataset, source, model, holdout, training request и evaluation policy |

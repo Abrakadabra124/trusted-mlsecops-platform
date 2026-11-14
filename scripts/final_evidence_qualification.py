@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from mlsecops import acceptance, data_source
+from mlsecops import acceptance, data_source, isolation_gates
 from mlsecops import final_evidence as final
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, now, write_json
 from mlsecops.signing import create_key, sign
@@ -234,9 +234,6 @@ class FinalEvidenceContracts(unittest.TestCase):
             execution=dict(image_id=self.values["image_id"]),
             storage_inputs=dict(config_digest=self.placeholder),
         )
-        self.primaries["M04"].update(
-            dataset_reference=self.values["dataset_reference"], cluster_namespace_uid="cluster"
-        )
         self.primaries["M05"].update(
             candidate_reference=self.values["candidate_reference"],
             model_sha256=self.values["model"],
@@ -274,9 +271,7 @@ class FinalEvidenceContracts(unittest.TestCase):
         )
         self.reports["M06"]["metrics"]["checks"] = 2
         self.make_evaluation()
-        self.reports["M20"]["artifact_hashes"].update(
-            {k: self.placeholder for k in ("access", "controller", "isolation")}
-        )
+        self.make_access()
         self.primaries["M22"].update(scope="M22-absolute-matrix-and-frozen-review")
         self.make_challenges()
         for gate, key in final.PRIMARY.items():
@@ -312,13 +307,9 @@ class FinalEvidenceContracts(unittest.TestCase):
             primary=self.put(dict(schema_version=2, fleet=fleet)), fleet=self.put(fleet)
         )
         self.reports["M17"]["artifact_hashes"]["backup_id"] = self.placeholder
-        authority = self.reports["M20"]["artifact_hashes"]
-        self.reports["M04"]["artifact_hashes"].update(
-            authority=authority[final.PRIMARY["M20"]],
-            **{k: authority[k] for k in ("access", "controller", "isolation")},
-        )
         self.reports["M05"]["artifact_hashes"].update(
-            access=self.put(self.primaries["M04"]), isolation=self.placeholder
+            access=self.put(self.primaries["M04"]),
+            isolation=self.reports["M20"]["artifact_hashes"]["isolation"],
         )
         self.make_governance()
         self.index["retained"] = {}
@@ -363,6 +354,54 @@ class FinalEvidenceContracts(unittest.TestCase):
     def git(self, arguments):
         self.assertEqual(arguments[0], "git")
         return "" if "status" in arguments else self.source["source_revision"]
+
+    def make_access(self):
+        binding = {k: self.values[k] for k in ("source_fingerprint", "image_id")}
+        candidate = {
+            k: self.values[k]
+            for k in (
+                "candidate_reference",
+                "evaluation_reference",
+                "dataset_reference",
+                "model_digest",
+            )
+        }
+        components = {
+            name: dict(
+                status="pass",
+                **binding,
+                cases=[{"id": case, "status": "pass"} for case in sorted(ids)],
+            )
+            for name, ids in isolation_gates.required_access_cases().items()
+        }
+        components["controller"].update(candidate)
+        components["access"]["dataset_reference"] = candidate["dataset_reference"]
+        components["isolation"]["cluster"] = {"namespace_uid": "cluster"}
+        storage = components["storage"]
+        storage.update(
+            worker_image=binding["image_id"], volume_uid="volume", count=len(storage["cases"])
+        )
+        refs = {k: self.put(v) for k, v in components.items()}
+        authority = self.primaries["M20"]
+        common_refs = {k: refs[k] for k in ("access", "controller", "isolation")}
+        authority.update(**binding, **candidate, artifact_hashes=common_refs)
+        self.reports["M20"]["artifact_hashes"].update(common_refs)
+        refs["authority"] = self.put(authority)
+        cases = isolation_gates.reconcile_access(components, binding)
+        self.primaries["M04"].update(
+            schema_version=1,
+            scope="M04-current-owned-lab-identity-and-access",
+            **binding,
+            **candidate,
+            cluster_namespace_uid="cluster",
+            storage_volume_uid="volume",
+            artifact_hashes=refs,
+            cases=cases,
+            checks=len(cases),
+        )
+        self.reports["M04"].update(
+            cases=cases, metrics=dict(checks=len(cases)), artifact_hashes=dict(refs)
+        )
 
     def make_challenges(self):
         inputs = {
@@ -711,6 +750,45 @@ class FinalEvidenceContracts(unittest.TestCase):
 
     def run_report(self):
         return acceptance.report("M18", "local-cpu", self.root, self.state)
+
+    def test_m04_cannot_pass_on_a_resealed_controller_report_from_another_candidate(self):
+        self.build()
+        report = self.reports["M04"]
+        packet = copy.deepcopy(self.primaries["M04"])
+        refs = report["artifact_hashes"]
+        controller = decode(final.blob(self.state, refs["controller"]))
+        controller["candidate_reference"] = "0" * 64
+        refs["controller"] = self.put(controller)
+        packet.setdefault("artifact_hashes", {})["controller"] = refs["controller"]
+        refs[final.PRIMARY["M04"]] = self.put(packet)
+        self.seal()
+        result = self.run_report()
+        self.assertNotIn("M04", result["artifact_hashes"])
+        self.assertIn("M04/access-controller", result["residual_risks"])
+
+    def test_teardown_replay_retains_access_components_and_requires_original_matrix(self):
+        from scripts import m18_delivery_freeze as driver
+
+        self.build()
+        report = self.reports["M04"]
+        refs = report["artifact_hashes"]
+        for name, filename in driver.ACCESS_FILES.items():
+            path = self.state / "evidence" / filename
+            path.write_bytes(final.blob(self.state, refs[name]))
+        pin = self.index["reports"]["M04"]
+        driver.verify_access(self.state, self.values, pin)
+        for ref in refs.values():
+            self.assertEqual(digest(final.blob(self.state, ref)), ref)
+        path = self.state / "evidence" / driver.ACCESS_FILES["storage"]
+        raw = path.read_bytes()
+        path.write_bytes(raw + b"\n")
+        with self.assertRaisesRegex(Rejected, "digest-mismatch"):
+            driver.verify_access(self.state, self.values, pin)
+        path.write_bytes(raw)
+        driver.verify_access(self.state, self.values, pin)
+        path.unlink()
+        with self.assertRaisesRegex(final.Missing, "material-missing"):
+            driver.verify_access(self.state, self.values, pin)
 
     def test_full_gate_rejects_summary_only_m06(self):
         self.build()
