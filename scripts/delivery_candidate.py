@@ -11,13 +11,24 @@ GATES = ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "
 
 
 def campaign_gates(serving_gate):
+    if serving_gate == "M11-M12":
+        return tuple(sorted((*GATES, "M11")))
     if serving_gate not in {"M12", "M13"}:
         raise Rejected("delivery_unknown_serving_gate")
     return tuple(serving_gate if gate == "M12" else gate for gate in GATES)
 
 
 def reconcile(
-    state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, revision, serving_gate="M12"
+    state,
+    *,
+    demo_pin,
+    proposal_pin,
+    keys_pin,
+    trust_pin,
+    captures,
+    revision,
+    serving_gate="M12",
+    joint_pin=None,
 ):
     evidence = state / "evidence"
     demo = decode(read_pinned(state / "storage-demo.json", demo_pin))
@@ -115,7 +126,7 @@ def reconcile(
                     proposal_reference=proposal["proposal_reference"],
                 )
             )
-        elif gate in ("M10", "M12"):
+        elif gate in ("M10", "M11", "M12"):
             if gate == "M10" and (
                 report["release_ready"] is not False
                 or report["artifact_hashes"]["actual_proposal_report"] != proposal_pin
@@ -182,6 +193,18 @@ def reconcile(
         reports[gate] = digest(raw)
     if not observations["M16"].isdisjoint(observations["M19"]):
         raise Rejected("delivery_canary_observation_reused")
+    if serving_gate == "M11-M12":
+        joint = decode(
+            read_pinned(evidence / "shared-serving-receipt.json", hexadecimal(joint_pin))
+        )
+        if (
+            joint["release_ready"] is not False
+            or joint["proposal_packet"] != proposal_pin
+            or joint["proposal_reference"] != proposal["proposal_reference"]
+            or set(joint["reports"]) != {"M11", "M12"}
+            or any(joint["reports"][g]["report_sha256"] != reports[g] for g in ("M11", "M12"))
+        ):
+            raise Rejected("delivery_joint_serving_mismatch")
     return dict(
         candidate=common | runtime,
         reports=reports,
@@ -209,6 +232,7 @@ if __name__ == "__main__":
                 ),
                 revision=os.environ["GITHUB_SHA"],
                 serving_gate=os.environ.get("DELIVERY_SERVING_GATE", "M12"),
+                joint_pin=os.environ.get("M11_M12_RECEIPT_SHA256"),
             )
         ).decode()
     )

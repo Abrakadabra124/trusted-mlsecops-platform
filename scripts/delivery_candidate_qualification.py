@@ -284,6 +284,43 @@ class Delivery(unittest.TestCase):
         with patch.dict(os.environ, DELIVERY_SERVING_GATE="M18"), self.assertRaises(Rejected):
             self.run_cli()
 
+    def test_joint_trust_and_inference_require_both_original_files_and_owner_receipt(self):
+        env = {"DELIVERY_SERVING_GATE": "M11-M12", "M11_M12_RECEIPT_SHA256": "f" * 64}
+        with patch.dict(os.environ, env):
+            write_json(self.path("M11"), self.reports["M12"] | {"gate": "M11"})
+            rows = {
+                g: {"report_sha256": digest(bounded_read(self.path(g)))} for g in ("M11", "M12")
+            }
+            joint = {
+                "release_ready": False,
+                "reports": rows,
+                "proposal_packet": self.env["M17_PROPOSAL_SHA256"],
+                "proposal_reference": self.proposal["proposal_reference"],
+            }
+            path = self.dir / "shared-serving-receipt.json"
+            write_json(path, joint)
+            with self.assertRaises(Rejected):
+                self.run_cli()
+            os.environ["M11_M12_RECEIPT_SHA256"] = digest(bounded_read(path))
+            receipt = self.run_cli()
+            self.assertEqual(set(receipt["reports"]), set(self.reports) | {"M11"})
+            for g in ("M11", "M12"):
+                original = bounded_read(self.path(g))
+                self.path(g).write_bytes(original + b" ")
+                with self.assertRaises(Rejected):
+                    self.run_cli()
+                self.path(g).write_bytes(original)
+            for change in (
+                {"release_ready": True},
+                {"proposal_packet": "0" * 64},
+                {"proposal_reference": "0" * 64},
+                {"reports": {"M12": rows["M12"]}},
+            ):
+                write_json(path, joint | change)
+                os.environ["M11_M12_RECEIPT_SHA256"] = digest(bounded_read(path))
+                with self.assertRaises(Rejected):
+                    self.run_cli()
+
     def test_changed_originals_or_foreign_revision_refuse(self):
         for key in (
             "M17_DEMO_SHA256",
@@ -440,6 +477,28 @@ class Workflow(unittest.TestCase):
         self.assertIn("M12_EARLY_SHA256: ${{ steps.actual_m12.outputs.sha256 }}", late_block)
         self.assertIn("M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}", capture_privacy)
         self.assertIn("M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}", capture_privacy)
+        joint, begin = step("-m scripts.shared_serving_native actual")
+        controlled, finish = step("-m scripts.shared_serving_native controlled")
+        gates, gates_block = step("for gate in M11 M12; do")
+        receipt, receipt_block = step("-m scripts.shared_serving_receipt >")
+        self.assertLess(capture, joint)
+        self.assertLess(joint, promotion)
+        self.assertLess(stop, controlled)
+        self.assertLess(controlled, gates)
+        self.assertLess(gates, cluster)
+        self.assertLess(cluster, receipt)
+        self.assertLess(receipt, replay)
+        for block in (begin, finish, gates_block, receipt_block):
+            for name in ("M11_PROPOSAL_SHA256", "M12_PROPOSAL_SHA256"):
+                self.assertIn(name + ": ${{ steps.source.outputs.proposal }}", block)
+            self.assertIn("M11_DEMO_SHA256: ${{ steps.source.outputs.demo }}", block)
+        for block in (finish, gates_block, receipt_block):
+            self.assertIn("M11_M12_ACTUAL_SHA256: ${{ steps.joint_actual.outputs.sha256 }}", block)
+        for block in (gates_block, receipt_block):
+            self.assertIn(
+                "M11_M12_NATIVE_SHA256: ${{ steps.joint_controlled.outputs.sha256 }}", block
+            )
+        self.assertIn("M11_M12_RECEIPT_SHA256: ${{ steps.joint_receipt.outputs.sha256 }}", public)
 
     def test_normal_entrypoints_write_distinct_private_packets(self):
         from scripts import canary_rollout_native as canary
