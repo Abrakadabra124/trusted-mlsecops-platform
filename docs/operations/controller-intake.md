@@ -1,5 +1,15 @@
 # M21 on the controller candidate
 
+## Hosted original-subject readback
+
+The dedicated workflow ran at `2c968b8485ba358a84a04de9245bb94137984c0b` with adapter `be2dbfe` and the controller history transfer from `aeeb6f3`. Its synthetic controller generated one evaluation over 3,000 holdout rows. The evaluator signature bound the 544-byte ONNX to its original candidate. A second worker inspected the same bytes with a distinct inspection ID and approved exactly one digest, with zero skipped, unsupported or erroneous objects. [Hosted job](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43557891578/job/132334783503).
+
+After transfer, the promoter read the original evaluation and the reservation for slot 1. The ledger digest before and after readback was identical. The job observed four candidate rows, two evaluation-table rows (reservation and signed evaluation) and zero releases. Substituting the expected model digest was rejected before the worker ran. Substituting the capture pin also failed. The result file SHA-256 is `15e9a449c348ace1c0fc2c421a9a72f9066a65505bdd21cd96e161348faa0978`, verified against the hash printed by the runner. [Public result and exact pins](../evidence/m21-controller-original-43557891578.md).
+
+To reproduce this scoped result on a fresh hosted runner, dispatch `kubernetes.yml` from the qualification branch at the tested source or create a fresh attempt from the recorded run. Use the producer outputs from that attempt. The job checks the original controller subject, clean intake and read-only reconciliation. The ordinary M21 acceptance matrix and joint delivery remain separate evidence requirements.
+
+## Ordinary M21 integration
+
 The controller producer and the ordinary M21 verifier run in separate steps of the same hosted synthetic job. The workspace, source revision, SQL container, public keys, run and attempt are bound before training. The scorer produces a signed evaluation during M04. A separate promoter Job reads this exact evaluation and both matrix denials. The matrix also spends a fresh slot on a second evaluation of the same candidate. Its reference must differ from the delivery evaluation.
 
 In the controller training function, immediately before `restore_history` and after M04 has produced its signed subject, use the opt-in hook below.
