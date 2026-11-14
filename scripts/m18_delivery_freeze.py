@@ -62,11 +62,20 @@ def capture(root, state, freeze, revision):
     return pin
 
 
-def replay(root, state, pin, *, early_reports=None, evaluation_pin=None, integrity_pin=None):
+def replay(
+    root,
+    state,
+    pin,
+    *,
+    early_reports=None,
+    evaluation_pin=None,
+    integrity_pin=None,
+    promotion_pin=None,
+):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
     final_evidence.clean(root, revision, fingerprint)
-    values, _, _ = final_evidence.frozen(root, state, receipt, revision, fingerprint)
+    values, keys, _ = final_evidence.frozen(root, state, receipt, revision, fingerprint)
     summary = {
         "scope": "offline-original-proposal-materials",
         "release_ready": False,
@@ -91,6 +100,11 @@ def replay(root, state, pin, *, early_reports=None, evaluation_pin=None, integri
     if integrity_pin is not None:
         verify_integrity(root, state, values, integrity_pin)
         summary.setdefault("verified_source_reports", {})["M03"] = integrity_pin
+    if promotion_pin is not None:
+        from scripts.m18_promotion_replay import verify
+
+        verify(state, values, receipt["freeze"], keys, promotion_pin)
+        summary.setdefault("verified_source_reports", {})["M10"] = promotion_pin
     return summary
 
 
@@ -226,6 +240,9 @@ def main():
                     early_reports=pins,
                     evaluation_pin=os.environ["M07_REPORT_SHA256"],
                     integrity_pin=os.environ["M03_REPORT_SHA256"],
+                    promotion_pin=os.environ["M10_REPORT_SHA256"]
+                    if os.environ.get("M10_OUTCOME") == "success"
+                    else None,
                 )
             ).decode()
         )

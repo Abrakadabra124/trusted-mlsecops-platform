@@ -116,7 +116,7 @@ class MatrixContracts(unittest.TestCase):
                         fx.submit(request=request)
                     self.assertIsNone(fx.fixture.head)
 
-    def test_whole_matrix_and_durable_readback_with_controlled_transports(self):
+    def controlled_matrix(self):
         fx = self.setup_submission()
         models = Path(fx.config["storage_client"]).parents[1]
         # The SQL identity is an established transport boundary in SubmissionContracts.
@@ -146,7 +146,10 @@ class MatrixContracts(unittest.TestCase):
                 side_effect=lambda: nullcontext(SimpleNamespace(audit_config=Path("fixture"))),
             ),
         ):
-            record = gate.matrix(Path.cwd(), models, models, fx.fixture)
+            return gate.matrix(Path.cwd(), models, models, fx.fixture)
+
+    def test_whole_matrix_and_durable_readback_with_controlled_transports(self):
+        record = self.controlled_matrix()
         self.assertEqual(set(record["negatives"]), set(gate.NEGATIVES))
         self.assertEqual(len(record["committed"]["events"]), 1)
         for key, fields, bad in (
@@ -179,6 +182,132 @@ class MatrixContracts(unittest.TestCase):
                         )
                     )
                 )
+
+    def test_offline_promotion_replays_original_reports_signed_audit_and_idempotent_control(self):
+        from mlsecops import final_evidence
+        from mlsecops.contracts import now
+        from scripts import m18_promotion_replay
+
+        state = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        control = self.controlled_matrix()
+        audit = ActualContracts()
+        audit.setUp()
+        self.addCleanup(audit.doCleanups)
+        proposal, policy = {"test": "original proposal"}, {"test": "original policy"}
+
+        def hash_json(doc):
+            return digest(canonical(doc))
+
+        keys = {"trust": audit.fx.publics["root"]}
+        values = {
+            k: hash_json(k) for k in ("source_fingerprint", *final_evidence.BINDINGS["M10"].split())
+        }
+        values.update(
+            source_revision="a" * 40,
+            image_id="sha256:" + hash_json("image"),
+            policy=hash_json("local policy"),
+            proposal_reference=hash_json(proposal),
+            policy_reference=hash_json(policy),
+        )
+        source = {k: values[k] for k in ("source_fingerprint", "source_revision", "image_id")}
+        frozen_path = state / "evidence/release-native.json"
+        write_json(
+            frozen_path, {"source": source, "proposal_reference": values["proposal_reference"]}
+        )
+        freeze = {"evidence/release-native.json": digest(bounded_read(frozen_path))}
+        before = journal()
+        request = {k: values[k] for k in ("proposal_reference", "policy_reference")} | {
+            "approval_reference": None,
+            "assurance_reference": None,
+        }
+        actual = dict(
+            before=before,
+            after=before,
+            after_parent=before,
+            request=request,
+            reason="release_assurance_required",
+            cli={"status": "rejected", "release_ready": False},
+            windows=audit.windows,
+            registry_pin=audit.fx.registry.sha256,
+            registry_root=audit.fx.publics["root"],
+            audit=audit.primary
+            | {
+                "incidents": [
+                    audit.incident(i, proposal=request["proposal_reference"]) for i in (1, 2)
+                ]
+            },
+        )
+        packet = dict(
+            schema_version=1,
+            scope=gate.SCOPE,
+            source=source,
+            input_files=freeze,
+            actual_policy_root=keys["trust"],
+            actual_subject=values["release_subject"],
+            actual_model=values["model"],
+            actual_policy=policy,
+            actual_proposal=proposal,
+            actual=actual,
+            controlled=control,
+        )
+        outcomes = {
+            "actual-signed-proposal": values["release_subject"],
+            "actual-candidate-denied": actual["reason"],
+            "actual-signed-denials-delivered": 2,
+            "actual-durable-sequence": 0,
+            "controlled-recorded-sequence": 1,
+            "controlled-repeat-same-request": control["first"]["request_sha256"],
+            **{"controlled-" + k: v for k, v in gate.NEGATIVES.items()},
+        }
+        report = dict(
+            schema_version=1,
+            gate="M10",
+            source_dirty=False,
+            profile="local-cpu",
+            source_revision=source["source_revision"],
+            policy_digest=values["policy"],
+            redaction_version=1,
+            status="pass",
+            exit_code=0,
+            release_ready=False,
+            started_at=now(),
+            finished_at=now(),
+            residual_risks=["Controlled fixture"],
+            input_digests={
+                k: values[k]
+                for k in ("source_fingerprint", *final_evidence.BINDINGS["M10"].split())
+            },
+            cases=[dict(id=k, expected=v, actual=v, status="pass") for k, v in outcomes.items()],
+            metrics=dict(
+                checks=len(outcomes),
+                actual_release_authorization="inconclusive",
+                actual_sequence=0,
+                controlled_sequence=1,
+                controlled_negative_cases=len(gate.NEGATIVES),
+            ),
+        )
+
+        def verify():
+            path = state / "evidence/M10-promotion-primary.json"
+            write_json(path, packet)
+            report["artifact_hashes"] = {
+                "actual_proposal_report": freeze["evidence/release-native.json"],
+                "promotion_primary": digest(bounded_read(path)),
+            }
+            path = state / "evidence/M10.json"
+            write_json(path, report)
+            m18_promotion_replay.verify(state, values, freeze, keys, digest(bounded_read(path)))
+
+        verify()
+        for ref in report["artifact_hashes"].values():
+            final_evidence.blob(state, ref)
+        for target, change in (
+            (control["negatives"]["missing-approval"], {"reason": "untrusted_key"}),
+            (control, {"retry": {"state": "recorded"}}),
+            (packet, {"actual_policy_root": "foreign"}),
+        ):
+            with patch.dict(target, change), self.assertRaises(Rejected):
+                verify()
 
     def test_separately_authorized_path_refuses_foreign_pin_or_nonempty_head_before_cli(self):
         fx = self.setup_submission()
@@ -273,6 +402,39 @@ class ActualContracts(unittest.TestCase):
                 self.verify()
         with patch.dict(self.primary, incidents=[]), self.assertRaises(Rejected):
             self.verify()
+
+    def test_offline_refusal_requires_two_signed_incidents_and_unchanged_parent_and_cli_history(
+        self,
+    ):
+        from scripts.m18_promotion_replay import verify_refusal
+
+        history = journal()
+        packet = dict(
+            before=history,
+            after_parent=history,
+            after=history,
+            cli={"status": "rejected", "release_ready": False},
+            reason="release_assurance_required",
+            audit=self.primary,
+            registry_root=self.fx.publics["root"],
+            registry_pin=self.fx.registry.sha256,
+            windows=self.windows,
+            request={"proposal_reference": self.proposal},
+        )
+        verify_refusal(packet, self.proposal)
+        for change in (
+            {"after_parent": journal("a" * 64)},
+            {"cli": {"status": "pass", "release_ready": True}},
+            {"reason": "unrelated_denial"},
+            {"windows": [self.windows[0], self.windows[0]]},
+            {"registry_pin": "f" * 64},
+        ):
+            with (
+                self.subTest(keys=list(change)),
+                patch.dict(packet, change),
+                self.assertRaises(Rejected),
+            ):
+                verify_refusal(packet, self.proposal)
 
     def test_native_actual_refusal_retains_verified_signed_pair(self):
         fx = self.fx

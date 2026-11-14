@@ -11,6 +11,8 @@ on:
       - 'mlsecops/inference_gate.py'
       - 'mlsecops/final_evidence.py'
       - 'scripts/m18_delivery_freeze.py'
+      - 'scripts/m18_promotion_replay.py'
+      - 'scripts/promotion_gate_qualification.py'
       - 'policies/m18-foundation-intake.json'
       - 'policies/m18-integrity.json'
       - 'scripts/final_evidence_qualification.py'
@@ -76,6 +78,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.promotion_gate_qualification
           uv run --locked python -B -W error -m unittest scripts.m12_pinned_qualification scripts.kube_candidate_campaign_qualification scripts.inference_gate_qualification
           uv run --locked python -B -W error -m unittest scripts.final_evidence_qualification.FinalEvidenceContracts.test_live_freeze_and_offline_replay_share_original_signed_bytes scripts.final_evidence_qualification.FinalEvidenceContracts.test_foundation_and_intake_replay_uses_pre_run_outcomes_and_pinned_primaries scripts.final_evidence_qualification.FinalEvidenceContracts.test_inventory_delivery_requires_canonical_keys_and_the_original_file_registry
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
@@ -195,12 +198,15 @@ jobs:
           M11_DEMO_SHA256: ${{ steps.source.outputs.demo }}
         run: uv run --locked python -B -W error -m scripts.shared_serving_native actual
       - name: Verify signed promotion refusal and authorized control before serving
+        id: promotion
         env:
           M10_STORAGE_DEMO_SHA256: ${{ steps.source.outputs.demo }}
           M10_RELEASE_REPORT_SHA256: ${{ steps.source.outputs.proposal }}
           M10_KEYS_SHA256: ${{ steps.source.outputs.keys_file }}
           M10_TRUST_SHA256: ${{ steps.source.outputs.trust }}
-        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M10 --output .runtime/evidence/M10.json
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M10 --output .runtime/evidence/M10.json
+          echo "sha256=$(sha256sum .runtime/evidence/M10.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
         env:
           M06_DEMO_SHA256: ${{ steps.source.outputs.demo }}
@@ -310,6 +316,8 @@ jobs:
           M02_REPORT_SHA256: ${{ steps.intake.outputs.sha256 }}
           M07_REPORT_SHA256: ${{ steps.evaluated.outputs.sha256 }}
           M03_REPORT_SHA256: ${{ steps.evaluated.outputs.integrity }}
+          M10_OUTCOME: ${{ steps.promotion.outcome }}
+          M10_REPORT_SHA256: ${{ steps.promotion.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay
       - name: Verify the original M11 and M12 reports after both cleanups
         if: ${{ !cancelled() && steps.joint_gates.outcome == 'success' && steps.stop_cluster.outcome == 'success' }}
