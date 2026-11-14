@@ -51,6 +51,7 @@ from scripts.promotion_qualification import PromotionAdmissionContracts
 from scripts.release_reader_native import disposable
 
 SCOPE = "controlled-signed-approvals-disposable-host-recovery"
+DATASET_SCOPE = "controlled-signed-dataset-rollback-under-shared-trust"
 ENV = "local-cpu"
 NS = 1_000_000_000
 STEPS = (
@@ -116,8 +117,45 @@ def completed(models, sequence):
     return result
 
 
-def releases(fixture, image, features):
+def dataset_release(fixture, image, features, seed):
+    """Bind these exact synthetic training rows into the controlled signed ancestry."""
+    candidate = fixture.fixture.bundle.materials.fixture
+    count = candidate.policy["split_counts"][0]
+    rows = generate(seed=seed, rows=max(100, count))[:count]
+    raw = canonical(rows)
+    candidate.manifest["objects"]["train.json"] = dict(
+        sha256=digest(raw), bytes=len(raw), rows=count
+    )
+    dataset = sha(candidate.manifest)
+    candidate.lineage.update(dataset_id=dataset, source_sha256=digest(raw))
+    lineage = sha(candidate.lineage)
+    candidate.statement.update(
+        dataset_id=dataset,
+        lineage_id=lineage,
+        quarantine_object=digest(raw),
+        manifest_object=candidate.signed("manifests", candidate.manifest, "dataset", "curator"),
+        lineage_object=candidate.signed("lineage", candidate.lineage, "data-lineage", "curator"),
+    )
+    reference = candidate.signed("manifests", candidate.statement, "stored-dataset", "curator")
+    candidate.record["dataset_reference"] = reference
+    candidate.metadata.update(
+        dataset_id=dataset, lineage_id=lineage, materials=candidate.manifest["objects"]
+    )
+    candidate.bound.update(dataset_reference=reference, lineage_id=lineage)
+    candidate.bound["report"]["dataset_id"] = dataset
+    trained = train(dict(action="train", train=rows, seed=17, features=features))
+    serving_native.bind_model(fixture, image, signing.decode64(trained["model"]), trained)
+    return trained["python_scores"][0]
+
+
+def releases(fixture, image, features, *, revoke_datasets=False):
     """Independent Python reference scores from each export. No serving output used as a golden."""
+    if revoke_datasets:
+        score_a = dataset_release(fixture, image, features, 24017)
+        a = copy.deepcopy(fixture.arguments)
+        renew(fixture, image)
+        score_b = dataset_release(fixture, image, features, 73039)
+        return a, fixture.arguments, dict(a=score_a, b=score_b)
     first = train(
         {"action": "train", "train": generate(rows=1000), "seed": 17, "features": features}
     )
@@ -318,7 +356,9 @@ def manual(root, state, target, case, body):
     }
 
 
-def drill(root, state, image, campaign, features):
+def drill(
+    root, state, image, campaign, features, *, revoke_datasets=False, check_inventory_head=None
+):
     promoter.hosted()
     hexadecimal(campaign, 32)
     validate_features(features, max_rows=1)
@@ -342,7 +382,7 @@ def drill(root, state, image, campaign, features):
         fixture = PromotionAdmissionContracts()
         cleanup.callback(lambda: require(fixture.doCleanups()))
         fixture.setUp()
-        a, b, scores = releases(fixture, image, features)
+        a, b, scores = releases(fixture, image, features, revoke_datasets=revoke_datasets)
         public, policy = fixture.trust_fixture.public, a["expected_policy"]
         promotion_state.install(models)
         promotion_state.configure(models, ENV, policy)
@@ -365,15 +405,25 @@ def drill(root, state, image, campaign, features):
             for label, m in manifests.items()
         }
         body = goldens["a"].body
+        material = "split_manifest" if revoke_datasets else "model"
         prior = record("select_a", select, root, models, authority, a, public)["receipt"]
         with endpoint(models, authority, a, public, 1) as target:
             healthy = record("healthy_a", predict, target, body, prior["request_sha256"])
             check_http(healthy, goldens["a"], prior["request_sha256"], set(), unavailable=False)
+        if check_inventory_head is not None:
+            check_inventory_head(models, authority, fixture, a, public)
         current = record("select_b", select, root, models, authority, b, public)["receipt"]
         with endpoint(models, authority, b, public, 2) as target:
             healthy = record("healthy_b", predict, target, body, current["request_sha256"])
             check_http(healthy, goldens["b"], current["request_sha256"], set(), unavailable=False)
-            record("revoke_b", publish_trust, authority, fixture, policy, [goldens["b"].model])
+            record(
+                "revoke_b",
+                publish_trust,
+                authority,
+                fixture,
+                policy,
+                [manifests["b"]["materials"][material]],
+            )
             record("denied_b", wait_denied, target, goldens["b"], current["request_sha256"])
         rollback = rollback_args(a, prior, current, fixture.fixture.authorities.keys["approver"])
         restored = record("rollback_a", select, root, models, authority, rollback, public)[
@@ -387,7 +437,14 @@ def drill(root, state, image, campaign, features):
                 b, current, restored, fixture.fixture.authorities.keys["approver"]
             )
             record("reject_rollback_b", reject_rollback, root, models, authority, public, negative)
-            record("revoke_a", publish_trust, authority, fixture, policy, [goldens["a"].model])
+            record(
+                "revoke_a",
+                publish_trust,
+                authority,
+                fixture,
+                policy,
+                [manifests["a"]["materials"][material]],
+            )
             record("denied_a", wait_denied, target, goldens["a"], restored["request_sha256"])
             record(
                 "manual",
@@ -401,7 +458,7 @@ def drill(root, state, image, campaign, features):
         record("final_head", promotion_state.state, models / "storage-clients/serving", ENV)
         packet = dict(
             schema_version=1,
-            scope=SCOPE,
+            scope=DATASET_SCOPE if revoke_datasets else SCOPE,
             campaign=campaign,
             image=image,
             policy_root=a["trusted_root"],
@@ -412,7 +469,7 @@ def drill(root, state, image, campaign, features):
             events=events,
             completed_http=[completed(models, i) for i in (1, 2, 3)],
         )
-        replay(packet)
+        replay(packet, revoke_datasets=revoke_datasets)
     require(not models.exists() and not authority.exists())
     return packet
 
@@ -569,10 +626,10 @@ def check_selection(event, manifest_envelope, root, image, seq, rollback):
     return manifest, reference
 
 
-def replay(record):
+def replay(record, *, revoke_datasets=False):
     """Replay an owner-pinned private record; embedded fixture public keys are not independent pins."""
     try:
-        return _replay(record)
+        return _replay(record, revoke_datasets)
     except (KeyError, TypeError, IndexError, ValueError, OverflowError) as exc:
         raise Rejected("canary_rollback_evidence") from exc
 
@@ -583,7 +640,7 @@ def recovery_ns(events):
     return elapsed
 
 
-def _replay(record):
+def _replay(record, revoke_datasets):
     require_fields(
         record,
         (
@@ -604,7 +661,7 @@ def _replay(record):
         len(canonical(record)) <= 1024 * 1024
         and type(record["schema_version"]) is int
         and record["schema_version"] == 1
-        and record["scope"] == SCOPE
+        and record["scope"] == (DATASET_SCOPE if revoke_datasets else SCOPE)
     )
     campaign = hexadecimal(record["campaign"], 32)
     require(re.fullmatch(r"sha256:[0-9a-f]{64}", record["image"]) is not None)
@@ -614,7 +671,7 @@ def _replay(record):
     require_fields(record["scores"], ("a", "b"))
     validate_features(record["features"], max_rows=1)
     signed_trust = previous = None
-    goldens, references = {}, []
+    goldens, references, artifacts_by_role = {}, [], {}
     completed_http = []
     seen = set()
     for seq, (label, selection, trust_phase, healthy) in enumerate(
@@ -650,8 +707,19 @@ def _replay(record):
             )
         )
         goldens[label] = golden
+        artifacts_by_role[label] = (
+            manifest["materials"]["split_manifest"] if revoke_datasets else golden.model
+        )
         if seq == 2:
-            require(golden.model != goldens["a"].model and golden.bundle != goldens["a"].bundle)
+            require(
+                golden.model != goldens["a"].model
+                and golden.bundle != goldens["a"].bundle
+                and artifacts_by_role["b"] != artifacts_by_role["a"]
+            )
+            if revoke_datasets:
+                require(
+                    set(artifacts_by_role.values()).isdisjoint(g.model for g in goldens.values())
+                )
         references.append(ref)
         grant = events[trust_phase]["value"]["envelope"]
         receipt = step["value"]["receipt"]
@@ -695,7 +763,7 @@ def _replay(record):
             and step["start"]["wall_ns"] // NS <= clock <= step["end"]["wall_ns"] // NS
         )
         signed_trust = trust.validate(value["envelope"], record["trust_root"], ENV, clock)
-        artifacts = [goldens["b"].model, goldens["a"].model][: version - 1]
+        artifacts = [artifacts_by_role["b"], artifacts_by_role["a"]][: version - 1]
         require(
             signed_trust["version"] == version
             and signed_trust["promotion_policy_sha256"] == policy
@@ -707,6 +775,12 @@ def _replay(record):
             trust.successor(previous, signed_trust)
         previous = signed_trust
     for label, phase, index in (("b", "denied_b", 1), ("a", "denied_a", 2)):
+        if revoke_datasets:
+            if (
+                events[phase]["end"]["mono_ns"] - events["revoke_" + label]["start"]["mono_ns"]
+                > 60 * NS
+            ):
+                raise Rejected("M19_dataset_lease_exceeded")
         attempts = events[phase]["value"]
         for i, attempt in enumerate(attempts):
             check_http(
@@ -742,7 +816,7 @@ def _replay(record):
         canonical(events["final_head"]["value"]) == canonical(events["rollback_a"]["value"]["head"])
     )
     return dict(
-        scope=SCOPE,
+        scope=record["scope"],
         release_ready=False,
         campaign=campaign,
         recovery_ns=elapsed,
@@ -823,6 +897,10 @@ def check_denial(value, events, refs, root):
             assurance_reference=sha(proof["assurance_envelope"]),
         )
     )
+    return check_incident(value, proposal, "trust")
+
+
+def check_incident(value, proposal, reason):
     registry = value["registry"]
     require_fields(registry, ("envelope", "root", "pin"))
     start, end = (value[k]["wall_ns"] // 1_000_000 for k in ("start", "end"))
@@ -839,7 +917,7 @@ def check_denial(value, events, refs, root):
     doc = event.document()
     require(
         doc["kind"] == "promotion.denied"
-        and doc["reason"] == "trust"
+        and doc["reason"] == reason
         and doc["asset_sha256"] == doc["bundle_sha256"] == proposal
         and start
         <= doc["occurred_at_ms"]

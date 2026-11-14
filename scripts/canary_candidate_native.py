@@ -68,7 +68,7 @@ def _trust_update(authority, key, policy, root, environment, read, version, revo
 
 
 @contextmanager
-def actual_candidate(root, state, image, campaign, proposal_pin, features):
+def actual_candidate(root, state, image, campaign, proposal_pin, features, *, revoke_dataset=False):
     """Yield an inactive engine, independent one-row golden, public binding and one-shot revocation."""
     hosted()
     if not isinstance(campaign, str) or not re.fullmatch("[0-9a-f]{32}", campaign):
@@ -196,6 +196,15 @@ def actual_candidate(root, state, image, campaign, proposal_pin, features):
             sidecar = safe_child(state, f"evidence/canary-native-{campaign}/candidate-source.json")
             write_json(sidecar, private)
             pins[sidecar] = digest(canonical(private) + b"\n")
+            revoked_artifact = model
+            if revoke_dataset:
+                projection = decode(package["documents"]["asset_projection"])
+                (dataset,) = (a for a in projection["graph"]["assets"] if a["kind"] == "dataset")
+                revoked_artifact = dataset["sha256"]
+                evidence = dict(projection=projection, proposal=package["envelope"])
+                path = safe_child(sidecar.parent, "inventory-source.json")
+                write_json(path, evidence)
+                pins[path] = digest(canonical(evidence) + b"\n")
             binding = {
                 **expected,
                 "candidate_reference": context["candidate_reference"],
@@ -216,7 +225,7 @@ def actual_candidate(root, state, image, campaign, proposal_pin, features):
                     if not available:
                         raise Rejected("canary_candidate_revocation_closed")
                     available = False
-                    after, revoked = update(2, [model])
+                    after, revoked = update(2, [revoked_artifact])
                     trust.successor(initial, revoked)
                     return {"root": public_root, "before": before, "after": after}
 

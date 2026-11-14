@@ -89,7 +89,15 @@ def candidate_source(state, directory, campaign, owner, clock):
 
 
 def check_recovery(
-    record, *, stable, candidate, owner, last_stage_end, candidate_attempts, permit_issued
+    record,
+    *,
+    stable,
+    candidate,
+    owner,
+    last_stage_end,
+    candidate_attempts,
+    permit_issued,
+    revoked_dataset=None,
 ):
     """The clock starts before the trust mutation and ends after the golden reply."""
     require_fields(
@@ -120,7 +128,8 @@ def check_recovery(
     require(
         before["version"] == 1
         and before["revoked_artifacts"] == []
-        and after["revoked_artifacts"] == [candidate.model]
+        and after["revoked_artifacts"]
+        == [candidate.model if revoked_dataset is None else revoked_dataset]
         and before["revoked_keys"] == after["revoked_keys"] == []
         and permit_issued <= before["issued_at"]
     )
@@ -156,7 +165,7 @@ def check_recovery(
     return (cursor - start) / SECOND, delta == 0, before["issued_at"], after["issued_at"]
 
 
-def replay(state, packet, *, proposal_pin, source, methods, runner):
+def replay(state, packet, *, proposal_pin, source, methods, runner, revoked_dataset=None):
     require_fields(
         packet,
         (
@@ -252,6 +261,7 @@ def replay(state, packet, *, proposal_pin, source, methods, runner):
         last_stage_end=stages[-1]["rows"][-1]["end_ns"],
         candidate_attempts=sum(s["candidate_attempts"] for s in result["stages"]),
         permit_issued=permit_issued,
+        revoked_dataset=revoked_dataset,
     )
     counts = {}
     for role, extra, binding, authority in (

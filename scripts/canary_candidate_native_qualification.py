@@ -310,6 +310,66 @@ class ActualCandidate(unittest.TestCase):
             worker.start.assert_called_once()
             worker.close.assert_called_once()
 
+    def test_dataset_ancestor_from_signed_projection_refuses_the_loaded_candidate(self):
+        from mlsecops import inventory_gate
+
+        with self.open(revoke_dataset=True) as (engine, golden, binding, revoke):
+            loaded = engine.reader.load()
+            engine.reader.check(loaded)
+            projection = decode(self.package["documents"]["asset_projection"])
+            dataset = next(
+                a["sha256"] for a in projection["graph"]["assets"] if a["kind"] == "dataset"
+            )
+            self.assertNotEqual(dataset, golden.model)
+            proof = revoke()
+            self.assertEqual(
+                signing.verify(proof["after"], "trust-policy", proof["root"])["revoked_artifacts"],
+                [dataset],
+            )
+            with self.assertRaisesRegex(Rejected, "trust_artifact_revoked"):
+                engine.reader.check(loaded)
+            source = decode(
+                (
+                    self.state
+                    / "evidence"
+                    / ("canary-native-" + self.campaign)
+                    / "inventory-source.json"
+                ).read_bytes()
+            )
+            observation = dict(
+                permit_sha256=loaded.permit_sha256,
+                subject_sha256=loaded.subject_sha256,
+                model_sha256=golden.model,
+                image_id=self.source["image_id"],
+                evaluation_policy_sha256=digest(canonical(self.context["policy"])),
+            )
+            args = (source, binding, self.report, self.context["policy"])
+            graph, snapshot, root = inventory_gate.deployment(
+                *args,
+                observation=observation,
+                publisher=self.fixture.policy["identities"]["publisher"]["public_key"],
+            )
+            result = inventory_gate.impacts(graph, snapshot, root)
+            self.assertEqual(
+                result["impacted_assets"],
+                sorted(
+                    a["asset_id"]
+                    for a in graph["assets"]
+                    if a["kind"] in ("dataset", "run", "model", "release", "deployment")
+                ),
+            )
+            self.assertEqual(len(result["blocked_deployments"]), 1)
+            self.assertEqual(
+                set(inventory_gate.refusals(graph, snapshot, root)),
+                {"owner", "dangling", "cycle", "digest"},
+            )
+            with self.assertRaisesRegex(Rejected, "observed_digest"):
+                inventory_gate.deployment(
+                    *args,
+                    observation={**observation, "model_sha256": "0" * 64},
+                    publisher=self.fixture.policy["identities"]["publisher"]["public_key"],
+                )
+
     def test_cannot_attribute_measurement_after_permit_expiry_to_revocation(self):
         with (
             self.assertRaisesRegex(Rejected, "release_expired_or_future_document"),

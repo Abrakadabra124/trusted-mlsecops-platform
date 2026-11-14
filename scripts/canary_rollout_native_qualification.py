@@ -7,6 +7,7 @@ import unittest
 from contextlib import ExitStack, nullcontext, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from threading import Lock
 from unittest.mock import AsyncMock, Mock, patch
 
 from mlsecops import canary_journal
@@ -193,6 +194,53 @@ class Rollout(unittest.TestCase):
             with self.assertRaises(Rejected):
                 native.traffic(self.state, self.state)
             self.assertEqual(run.await_count, 2)
+
+    def test_inventory_observes_activated_worker_and_requires_specific_cold_reader_denial(self):
+        from scripts import canary_candidate_native, canary_stable_native
+
+        observed = Mock(startup_failure=None, lock=Lock())
+        observed.loaded.permit_sha256 = "2" * 64
+        observed.loaded.subject_sha256 = self.golden.bundle
+        observed.worker.binding = {"model_sha256": self.golden.model}
+        observed.worker.image = "sha256:" + "a" * 64
+        observed.reader.context = {"policy": {"environment": "local-cpu"}}
+        self.source.update(source={}, methods="a" * 64, runner={})
+        self.stub(
+            canary_stable_native,
+            "stable_release",
+            return_value=nullcontext((observed, self.golden, {})),
+        )
+
+        def candidate(_root, state, _image, campaign, _pin, _features, *, revoke_dataset):
+            self.assertTrue(revoke_dataset)
+            (
+                state / "evidence" / ("canary-native-" + campaign) / "inventory-source.json"
+            ).write_bytes(b"{}\n")
+            return nullcontext((observed, self.golden, {}, Mock()))
+
+        self.stub(canary_candidate_native, "actual_candidate", side_effect=candidate)
+        self.stub(native, "listen", return_value=nullcontext(12345))
+        self.stub(
+            native.canary_campaign,
+            "run",
+            new_callable=AsyncMock,
+            return_value={"decision": "complete", "stages": []},
+        )
+        self.stub(native, "recover", new_callable=AsyncMock, return_value={})
+        with redirect_stdout(StringIO()):
+            for reason in ("trust_artifact_revoked", "qualification_expired", None):
+                observed.reader.load.side_effect = Rejected(reason) if reason else None
+                if reason == "trust_artifact_revoked":
+                    result = native.traffic(self.state, self.state, inventory=True)
+                    self.assertEqual(result["reader_refusal"], reason)
+                    self.assertEqual(
+                        result["observation"]["model_sha256"],
+                        observed.worker.binding["model_sha256"],
+                    )
+                    self.assertEqual(result["inventory_source_sha256"], digest(b"{}\n"))
+                else:
+                    with self.assertRaises(Rejected):
+                        native.traffic(self.state, self.state, inventory=True)
 
     def test_recovery_needs_an_actual_denial_and_a_correct_restored_reply(self):
         golden = Mock()

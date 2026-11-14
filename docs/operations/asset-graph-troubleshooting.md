@@ -53,3 +53,25 @@ uv run --locked coverage report --data-file=.coverage-asset-graph --fail-under=1
 Повторный запуск допустим после исправления producer; одинаковый fixture даёт одинаковый результат. Для настоящего serving восстановление требует T14/T15 integration, authenticated актуального trust state и действующего approval. Предыдущий release, зависящий от отозванного ancestor, не является безопасным rollback. Самовольное снятие revocation запрещено.
 
 Эскалировать security reviewer при unexpected model/runtime digest, неизвестном owner, изменившихся edges или расхождении actual/expected impacted set. Если collector недоступен, не подставлять пустой список deployments и не объявлять M19 pass. Существующие security failures остаются blockers; этот плейбук не даёт waiver.
+
+## Hosted replay T25
+
+Владелец квалификации выбирает фиксированный commit. Для первого запуска в GitHub Actions предусмотрена ветка `qualify/t25-inventory`. Push владельца в эту ветку запускает [inventory-deployment.yml](../../.github/workflows/inventory-deployment.yml). Когда workflow зарегистрирован в основной ветке, доступен ручной запуск на подготовленном ref:
+
+```bash
+gh workflow run inventory-deployment.yml --ref qualify/t25-inventory
+```
+
+Runner Ubuntu создаёт disposable lab, обучает и оценивает локальную synthetic-модель, получает подписанный proposal и сохраняет отдельно три SHA-256 по полным байтам файлов. `scripts.inventory_deployment_native` запускает HTTP-трафик, считывает identity загруженного worker, отзывает точный digest dataset и сохраняет приватный пакет. Хеш пакета фиксируется отдельным шагом workflow. В графе семь узлов, включая release и одно наблюдение deployment. Четыре изменения этого графа проходят через существующий `asset_graph.assess`. Контролируемый assessor связывает каждый отказ с подписанным assurance. Штатный promoter должен отвергнуть все четыре запроса, записать подписанные события и сохранить прежний SQL head.
+
+В отдельном disposable drill две подписанные fixture-версии обучаются на разных synthetic train splits. Они используют одну trust authority. После отзыва dataset второй версии проверяются HTTP 503 в пределах 60 секунд, успешный ответ первой версии и отказ promoter вернуть вторую версию. Время отсчитывается до изменения trust. В отчёте отдельно приведён точный impact для исходного fixture из 17 узлов.
+
+После закрытия временных endpoints и хранилищ workflow останавливает принадлежащий ему source SQL и проверяет состояние контейнера. В том же job он выполняет:
+
+```bash
+uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json
+```
+
+Для повторного чтения в этом job нужны исходная `.runtime`, тот же checkout и значения `M19_PROPOSAL_SHA256`, `M19_KEYS_SHA256`, `M19_DEMO_SHA256`, `M19_PRIMARY_SHA256` из шагов владельца. Файловый digest включает завершающий перевод строки. Поля `graph_sha256` и `snapshot_sha256` считаются по canonical JSON. Приватный packet, ключи и журналы остаются на runner. В лог поступает публичный отчёт с digest, версионированным графом, наблюдаемым snapshot и точными expected/actual sets. После удаления runner для нового прогона нужен новый захват.
+
+Успешный replay данного среза выдаёт 9 пройденных компонентных случаев, `inconclusive`, exit 2 и `release_ready=false`. Workflow проверяет inventory случаев, источник и внешний pin. Пустой отчёт, несовпадение digest, действующий source SQL или попытка подставить другой run требуют нового захвата после выяснения причины. Полный M19 остаётся открытым до наблюдения всех четырёх deployments и проверки общей цепочки от реальных materials до работающих descendants, включая предыдущую версию. Исторические SQL и inventory-event прогоны описаны в [evidence](../evidence/inventory-security-events-2026-11-11.md).

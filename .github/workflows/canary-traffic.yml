@@ -34,7 +34,7 @@ jobs:
           uv run --locked python scripts/check_docs.py
           export COVERAGE_FILE="$RUNNER_TEMP/t19.coverage"
           export MODULES=mlsecops.canary_probe,mlsecops.canary_evaluation,mlsecops.canary_campaign,mlsecops.manual_review,mlsecops.canary_journal,mlsecops.canary_gate,mlsecops.canary_native_evidence,scripts.canary_candidate_native,scripts.canary_stable_native,scripts.canary_rollback_native,scripts.canary_rollout_native
-          uv run --locked python -B -W error -m coverage run --branch --source="$MODULES" -m unittest scripts.canary_probe_qualification scripts.canary_evaluation_qualification scripts.canary_campaign_qualification scripts.manual_review_qualification scripts.canary_candidate_native_qualification scripts.canary_stable_native_qualification scripts.canary_rollback_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollout_native_qualification scripts.canary_gate_qualification
+          uv run --locked python -B -W error -m coverage run --branch --source="$MODULES" -m unittest scripts.canary_probe_qualification scripts.canary_evaluation_qualification scripts.canary_campaign_qualification scripts.manual_review_qualification scripts.canary_candidate_native_qualification scripts.canary_stable_native_qualification scripts.canary_rollback_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollout_native_qualification scripts.canary_gate_qualification scripts.inventory_gate_qualification.DatasetRollback
           uv run --locked python -m coverage json -o "$RUNNER_TEMP/t19-coverage.json"
           uv run --locked python - <<'PY'
           import json, os
