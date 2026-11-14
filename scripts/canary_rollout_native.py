@@ -132,13 +132,13 @@ async def recover(targets, goldens, revoke, candidate_access):
     )
 
 
-def traffic(root, state, *, inventory=False):
+def traffic(root, state, *, inventory=False, campaign=None):
     from scripts.canary_candidate_native import actual_candidate
     from scripts.canary_stable_native import stable_release
 
     proposal_variable = "M19_PROPOSAL_SHA256" if inventory else "T19_PROPOSAL_SHA256"
     inputs = capture_inputs(root, proposal_variable)
-    campaign, started = uuid.uuid4().hex, now()
+    campaign, started = uuid.uuid4().hex if campaign is None else hexadecimal(campaign, 32), now()
     directory = safe_child(state, "evidence/canary-native-" + campaign)
     directory.mkdir(parents=True, mode=0o700, exist_ok=False)
     features = [[0.1] * len(FEATURES)]

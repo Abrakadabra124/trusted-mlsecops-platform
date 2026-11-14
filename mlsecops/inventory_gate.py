@@ -1,4 +1,4 @@
-"""M19 vertical slice: signed SQL lineage, observed qualification endpoint and dataset denial."""
+"""M19 acceptance for the observed qualification inventory and dataset revocation."""
 
 import copy
 import os
@@ -41,7 +41,7 @@ def reference(asset):
     return {key: asset[key] for key in ("asset_id", "sha256")}
 
 
-def deployment(source, binding, report, policy, *, observation, publisher):
+def deployment(source, binding, report, policy, *, observation, publisher, worker_id=None):
     """Extend the authenticated candidate graph with its proposal and one observed activation."""
     envelope = source["proposal"]
     require_fields(
@@ -79,6 +79,8 @@ def deployment(source, binding, report, policy, *, observation, publisher):
         and nodes["dataset"]["sha256"] == materials["split_manifest"] != materials["model"]
     )
     permit = hexadecimal(binding["permit_sha256"])
+    require(observation["permit_sha256"] == permit)
+    identifier = permit if worker_id is None else hexadecimal(worker_id)
     release = dict(
         asset_id="release-" + binding["subject_sha256"],
         kind="release",
@@ -88,9 +90,9 @@ def deployment(source, binding, report, policy, *, observation, publisher):
         dependencies=[reference(nodes[k]) for k in ("model", "runtime", "policy")],
     )
     endpoint = dict(
-        asset_id="deployment-" + permit,
+        asset_id="deployment-" + identifier,
         kind="deployment",
-        sha256=permit,
+        sha256=identifier,
         owner="platform-owner",
         environment=manifest["environment"],
         dependencies=[reference(release)],
@@ -98,7 +100,7 @@ def deployment(source, binding, report, policy, *, observation, publisher):
     graph["assets"].extend((release, endpoint))
     row = dict(
         asset_id=endpoint["asset_id"],
-        sha256=observation["permit_sha256"],
+        sha256=identifier,
         release_sha256=observation["subject_sha256"],
         model_sha256=observation["model_sha256"],
         runtime_sha256=observation["image_id"].removeprefix("sha256:"),
@@ -120,15 +122,17 @@ def impacts(graph, snapshot, ancestor):
 
 
 def fault_inputs(graph, snapshot, ancestor):
+    affected = impacts(graph, snapshot, ancestor)["blocked_deployments"][0]
     for reason in ("owner", "dangling", "cycle", "digest"):
         changed, observed = copy.deepcopy((graph, snapshot))
         root = next(a for a in changed["assets"] if a["asset_id"] == ancestor["asset_id"])
+        endpoint = next(a for a in changed["assets"] if a["asset_id"] == affected)
         if reason == "owner":
             root["owner"] = "unknown-owner"
         elif reason == "dangling":
-            changed["assets"][-1]["dependencies"][0]["asset_id"] = "missing-release"
+            endpoint["dependencies"][0]["asset_id"] = "missing-release"
         elif reason == "cycle":
-            root["dependencies"] = [reference(changed["assets"][-1])]
+            root["dependencies"] = [reference(endpoint)]
         else:
             model = observed["deployments"][0]["model_sha256"]
             observed["deployments"][0]["model_sha256"] = digest(model.encode())
@@ -228,6 +232,25 @@ def materialize(root, state, record, files):
     return graph, snapshot, ancestor
 
 
+def full_graph(root, state, record, owner, files, ancestor):
+    from mlsecops import inventory_fleet
+    from scripts.inventory_fleet_native import pinned
+
+    traffic = record["traffic"]
+    result = inventory_fleet.replay(
+        state,
+        record["fleet"],
+        inputs=pinned(state),
+        files=files,
+        owner=owner,
+        campaign=traffic["campaign"],
+        policy=read_json(root / "policies/local-cpu.json"),
+        features=canary_rollout_native.probe_features(traffic),
+    )
+    require(result[2] == ancestor)
+    return result
+
+
 def qualify(root, state):
     if not os.environ.get("M19_PRIMARY_SHA256") or not safe_child(state, PACKET).is_file():
         raise FileNotFoundError("M19 capture unavailable")
@@ -237,6 +260,8 @@ def qualify(root, state):
     )
     pin = hexadecimal(os.environ["M19_PRIMARY_SHA256"])
     record = decode(canary_native_evidence.read_pinned(safe_child(state, PACKET), pin))
+    require(isinstance(record, dict))
+    full = record.get("schema_version") == 2
     require_fields(
         record,
         (
@@ -250,17 +275,17 @@ def qualify(root, state):
             "snapshot",
             "durable",
             "denials",
+            *(("fleet",) if full else ()),
         ),
     )
     require(
         type(record["schema_version"]) is int
-        and record["schema_version"] == 1
+        and record["schema_version"] in (1, 2)
         and record["storage_sha256"] == digest(canonical(marker))
         and record["reader_refusal"] == "trust_artifact_revoked"
     )
     traffic = record["traffic"]
     graph, snapshot, ancestor = materialize(root, state, record, files)
-    require(canonical((graph, snapshot)) == canonical((record["graph"], record["snapshot"])))
     replay = canary_native_evidence.replay(
         state, traffic, **owner, revoked_dataset=ancestor["sha256"]
     )
@@ -275,6 +300,12 @@ def qualify(root, state):
         and impact["impacted_assets"] == expected
         and impact["blocked_deployments"] == [snapshot["deployments"][0]["asset_id"]]
     )
+    if full:
+        graph, snapshot, ancestor, expected, denial_times = full_graph(
+            root, state, record, owner, files, ancestor
+        )
+        impact = impacts(graph, snapshot, ancestor)
+    require(canonical((graph, snapshot)) == canonical((record["graph"], record["snapshot"])))
     fault = traffic["recovery"]
     denied_ns = fault["candidate"][-1]["end_ns"] - fault["start_ns"]
     require(
@@ -293,6 +324,12 @@ def qualify(root, state):
     epoch = datetime(1970, 1, 1, tzinfo=UTC)
     start_us = (datetime.fromisoformat(traffic["finished_at"]) - epoch) // timedelta(microseconds=1)
     require(durable["events"]["initial_trust"]["start"]["wall_ns"] >= start_us * 1000)
+    if full:
+        fleet = record["fleet"]
+        slice_start = (datetime.fromisoformat(traffic["started_at"]) - epoch) // timedelta(
+            microseconds=1
+        )
+        require(fleet["finished"]["wall_ns"] // 1000 <= slice_start)
     denials = inventory_promotion_native.replay(record["denials"], negative, durable)
     fixture = fixture_impact()
     names = [
@@ -303,12 +340,29 @@ def qualify(root, state):
         "controlled-independent-branch-serves",
         *("promotion-rejected-" + r for r in negative),
     ]
+    if full:
+        names.extend(
+            (
+                "four-live-workers-shared-runtime-and-policy",
+                "previous-version-served-before-current",
+                "exact-observed-ancestor-closure",
+                "three-descendants-denied-within-lease",
+                "independent-worker-serves-after-all-denials",
+            )
+        )
     cases = [dict(id="M19-" + name, status="pass", expected=True, actual=True) for name in names]
     return dict(
-        status="inconclusive",
+        status="pass" if full else "inconclusive",
         cases=cases,
         source_dirty=False,
-        started_at=traffic["started_at"],
+        started_at=(
+            epoch
+            + timedelta(
+                microseconds=fleet["deployments"]["previous"]["history"]["wall_start_ns"] // 1000
+            )
+        ).isoformat()
+        if full
+        else traffic["started_at"],
         checks=len(cases),
         metrics=dict(
             expected=expected,
@@ -322,6 +376,17 @@ def qualify(root, state):
             controlled_promotion_denials=denials,
             dataset_denial_ns=denied_ns,
             traffic_requests=replay["requests"],
+            **(
+                dict(
+                    unaffected=impact["unaffected_deployments"],
+                    fleet_denial_ns=denial_times,
+                    deployment_roles={
+                        r: "deployment-" + o["container"] for r, o in fleet["deployments"].items()
+                    },
+                )
+                if full
+                else {}
+            ),
         ),
         artifact_hashes=dict(
             primary=pin,
@@ -339,6 +404,15 @@ def qualify(root, state):
             promotion_denials=digest(canonical(record["denials"])),
             demo=hexadecimal(os.environ["M19_DEMO_SHA256"]),
             public_keys=hexadecimal(os.environ["M19_KEYS_SHA256"]),
+            **(
+                dict(
+                    fleet_inputs=hexadecimal(os.environ["M19_FLEET_INPUTS_SHA256"]),
+                    fleet=digest(canonical(fleet)),
+                    **{r + "_fleet_journal": o["journal"] for r, o in fleet["deployments"].items()},
+                )
+                if full
+                else {}
+            ),
         ),
         input_digests=dict(
             **owner["source"],
@@ -346,8 +420,18 @@ def qualify(root, state):
             qualified_model=replay["model"],
             dataset=ancestor["sha256"],
             qualified_subject=replay["release_subject"],
+            **(
+                dict(release_subject=replay["release_subject"], model=replay["model"])
+                if full
+                else {}
+            ),
         ),
         limitations=[
+            "Four observed loopback qualification deployments in one disposable synthetic lab. All three evaluated proposals remain unapproved.",
+            "Durable promotion and rollback rejection use separately approved controlled releases.",
+        ]
+        if full
+        else [
             "One evaluated qualification deployment observed. The four-deployment inventory is a structural fixture.",
             "Rollback, independent service and durable promotion refusals use separately approved controlled releases. The evaluated candidate has no approved selection or deployed rollback history.",
         ],
