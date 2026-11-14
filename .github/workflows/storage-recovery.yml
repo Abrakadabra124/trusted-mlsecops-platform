@@ -15,6 +15,8 @@ on:
       - 'scripts/m17_*.py'
       - 'scripts/recovery_*qualification.py'
       - 'scripts/restore_negative*.py'
+      - 'scripts/canary_rollout_native.py'
+      - 'mlsecops/canary_gate.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -74,6 +76,17 @@ jobs:
                   print(label + "=" + digest(bounded_read(state / name)), file=out)
               print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
           PY
+      - name: Measure canary traffic on the frozen proposal before taking its storage offline
+        id: canary
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native capture
+      - name: Exercise the complete rollback before creating the daily snapshot
+        id: rollback
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native rollback
       - name: Trigger the timer and restore its exact snapshot into fresh storage
         id: recovery
         env:
@@ -88,18 +101,51 @@ jobs:
         run: |
           if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
           uv run --locked python -B -m scripts.m17_recovery_native stop
-      - name: Verify M17 from retained evidence after cleanup
+      - name: Verify M16 and M17 against the original candidate after cleanup
         env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
+          T19_ROLLBACK_SHA256: ${{ steps.rollback.outputs.sha256 }}
           M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
           M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
           M17_PRIMARY_SHA256: ${{ steps.recovery.outputs.sha256 }}
         run: |
           uv run --locked python -B -W error -m scripts.m17_recovery_native replay
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
           uv run --locked python - <<'PY'
+          import os
           from pathlib import Path
-          from mlsecops.contracts import bounded_read, canonical, decode, digest
-          raw = bounded_read(Path(".runtime/evidence/M17.json"))
-          print(canonical(decode(raw) | {"report_sha256": digest(raw)}).decode())
+          from mlsecops.canary_native_evidence import read_pinned
+          from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest
+          state = Path(".runtime")
+          evidence = state / "evidence"
+          demo = decode(read_pinned(state / "storage-demo.json", os.environ["M17_DEMO_SHA256"]))
+          pin = os.environ["M17_PROPOSAL_SHA256"]
+          proposal = decode(read_pinned(evidence / "release-native.json", pin))
+          expected = {
+              **proposal["source"],
+              "qualified_candidate_subject": proposal["subject_sha256"],
+              "qualified_candidate_model": proposal["model_sha256"],
+              "proposal_reference": proposal["proposal_reference"],
+              "candidate_reference": demo["candidate"]["candidate_reference"],
+              "evaluation_reference": demo["evaluation_reference"],
+          }
+          summaries = {}
+          for gate in ("M16", "M17"):
+              raw = bounded_read(evidence / (gate + ".json"))
+              result = decode(raw)
+              if not (
+                  result["gate"] == gate and result["status"] == "pass" and result["exit_code"] == 0
+                  and result["release_ready"] is False and result["source_dirty"] is False
+                  and result["source_revision"] == expected["source_revision"] == os.environ["GITHUB_SHA"]
+                  and result["artifact_hashes"]["proposal_packet"] == pin
+                  and all(result["input_digests"][key] == value for key, value in expected.items())
+              ):
+                  raise Rejected("recovery_delivery_candidate_changed")
+              summaries[gate] = digest(raw)
+              print(canonical(result | {"report_sha256": summaries[gate]}).decode())
+          print(canonical({"reports": summaries, "candidate": expected, "proposal_packet": pin,
+                           "release_ready": False}).decode())
           PY
