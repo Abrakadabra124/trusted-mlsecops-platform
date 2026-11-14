@@ -118,13 +118,14 @@ jobs:
               for label, name in (("proposal", "evidence/release-native.json"), ("demo", "storage-demo.json")):
                   print(label + "=" + digest(bounded_read(state / name)), file=out)
               print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
+              print("keys_file=" + digest(bounded_read(state / "trusted-keys.json")), file=out)
               print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
           PY
       - name: Verify signed promotion refusal and authorized control before serving
         env:
           M10_STORAGE_DEMO_SHA256: ${{ steps.source.outputs.demo }}
           M10_RELEASE_REPORT_SHA256: ${{ steps.source.outputs.proposal }}
-          M10_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M10_KEYS_SHA256: ${{ steps.source.outputs.keys_file }}
           M10_TRUST_SHA256: ${{ steps.source.outputs.trust }}
         run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M10 --output .runtime/evidence/M10.json
       - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
