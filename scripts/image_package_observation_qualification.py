@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import image_audit_contract as contract
-from scripts import image_scope
+from scripts import image_kubernetes_inventory, image_scope
 from scripts.image_audit_contract import observe_packages
 from scripts.image_audit_qualification import fixtures
 from scripts.image_system_inventory_fixture import LOCAL_PATH_INVENTORY
@@ -35,6 +35,80 @@ def local_path_observation():
 
 
 class PackageObservationTests(unittest.TestCase):
+    def test_kubernetes_independent_inventory_never_infers_release_versions(self):
+        config, original = next(iter(image_kubernetes_inventory.INVENTORIES.items()))
+        binary = original["binary_paths"][-1]
+        packages = [
+            {
+                "type": "go-module",
+                "name": "k8s.io/api",
+                "version": "UNKNOWN",
+                "foundBy": "go-module-binary-cataloger",
+                "paths": [binary],
+            },
+            {
+                "type": "deb",
+                "name": "base-files",
+                "version": "12.4+deb12u14",
+                "foundBy": "dpkg-db-cataloger",
+                "paths": ["/var/lib/dpkg/status.d/base-files"],
+            },
+        ]
+        rows = sorted([p["type"], p["name"], p["version"], p["paths"][0]] for p in packages)
+        spec = {**original, "scanner_rows_sha256": digest(canonical(rows)), "package_count": 2}
+        observation = {"image_id": config, "distro": original["distro"], "packages": packages}
+        with patch.dict(image_kubernetes_inventory.INVENTORIES, {config: spec}, clear=True):
+            result = image_kubernetes_inventory.diagnose(observation)
+            self.assertTrue(result["independent_inventory_verified"])
+            self.assertEqual(result["status"], "inconclusive")
+            self.assertEqual(result["reason"], "image_audit_kubernetes_module_versions_unresolved")
+            self.assertGreater(result["unversioned_module_instances"], 0)
+            before = copy.deepcopy(observation)
+            for change in (
+                lambda o: o["packages"][0].update(version="v0.36.4"),
+                lambda o: o["packages"][0].update(version="v0.0.0"),
+                lambda o: o["packages"].pop(),
+                lambda o: o["packages"].append(o["packages"][0]),
+                lambda o: o["packages"][0].update(paths=["/other"]),
+                lambda o: o["packages"][0].update(foundBy="file-cataloger"),
+                lambda o: o["packages"][0].update(paths=[]),
+                lambda o: o["packages"][0].pop("name"),
+                lambda o: o["packages"][1].update(paths=[]),
+                lambda o: o["packages"][1].update(type="rpm"),
+                lambda o: o["packages"][1].update(foundBy="file-cataloger"),
+                lambda o: o.update(distro={"id": "debian", "versionID": "13"}),
+                lambda o: o.update(packages=None),
+            ):
+                changed = copy.deepcopy(observation)
+                change(changed)
+                with self.subTest(change=change):
+                    rejected = image_kubernetes_inventory.diagnose(changed)
+                    self.assertFalse(rejected["independent_inventory_verified"])
+                    self.assertEqual(
+                        rejected["reason"], "image_audit_kubernetes_inventory_mismatch"
+                    )
+                    self.assertEqual(rejected["status"], "inconclusive")
+            self.assertEqual(observation, before)
+            for malformed in (None, {}, {"image_id": []}):
+                self.assertIsNone(image_kubernetes_inventory.diagnose(malformed))
+            self.assertIsNone(
+                image_kubernetes_inventory.diagnose(
+                    {**observation, "image_id": "sha256:" + "0" * 64}
+                )
+            )
+            component = {
+                "name": "runtime-000",
+                "image_config_id": config,
+                "scan_executed": True,
+                "sbom_validated": False,
+                "status": "fail",
+                "coverage_profile": "unapproved-system",
+                "catalogued_packages": 2,
+                "application_inventory": result,
+            }
+            snapshot = {"targets": [{"name": "runtime-000", "config_id": config}]}
+            self.assertEqual(image_scope.coverage(snapshot, [component])["covered_images"], 0)
+
     def test_local_path_matches_independent_binary_and_dpkg_inventory(self):
         observation = local_path_observation()
         self.assertEqual(len(observation["packages"]), 61)
