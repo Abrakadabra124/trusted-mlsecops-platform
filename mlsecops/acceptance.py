@@ -419,17 +419,24 @@ def report(gate, profile, root, state=None):
             unavailable = (
                 isinstance(error, (OSError, subprocess.TimeoutExpired))
                 or str(error) == "trust_hosted_runner_required"
+                or (
+                    gate == "M16"
+                    and str(error).startswith(
+                        ("storage_docker_unavailable", "storage_resource_missing:")
+                    )
+                )
             )
+            reason = f"{gate} runtime verification rejected"
+            if unavailable:
+                reason = (
+                    "M16 requires a hosted runner, workflow pins, retained packets and stopped owned storage"
+                    if gate == "M16"
+                    else f"{gate} prerequisites unavailable"
+                )
             result.update(
                 status="inconclusive" if unavailable else "fail",
                 exit_code=2 if unavailable else 1,
-                residual_risks=[
-                    "M16 needs both retained packets, their workflow pins and the stopped owned store"
-                    if unavailable and gate == "M16"
-                    else f"{gate} prerequisites unavailable"
-                    if unavailable
-                    else f"{gate} runtime verification rejected"
-                ],
+                residual_risks=[reason],
             )
             if gate == "M11":
                 from mlsecops.cluster import request_failure

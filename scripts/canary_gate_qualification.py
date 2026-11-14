@@ -197,6 +197,11 @@ class Acceptance(unittest.TestCase):
         self.run_gate(1, "fail")
         self.durable_replay.assert_not_called()
 
+    def test_missing_owned_store_cannot_establish_cleanup(self):
+        self.inspect.side_effect = Rejected("storage_resource_missing:container")
+        self.run_gate(2, "inconclusive")
+        self.traffic_replay.assert_not_called()
+
     def test_rehashed_durable_capture_from_another_attempt_is_rejected(self):
         self.record["owner"] = {
             **self.owner,

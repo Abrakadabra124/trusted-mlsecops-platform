@@ -128,6 +128,8 @@ def qualify(root, state):
     ]
     cases = [dict(id="M16-" + name, status="pass", expected=True, actual=True) for name in names]
     return dict(
+        scope=SCOPE,
+        release_ready=False,
         status="pass",
         started_at=packet["started_at"],
         source_dirty=False,
