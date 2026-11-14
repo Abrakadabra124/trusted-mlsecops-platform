@@ -70,6 +70,25 @@ lock. Полная проверка M02 и последующих gates посл
 
 Границы доказательства задаёт конкретный source и конкретная попытка. `release_ready` остаётся false. Общая кампания M18 и два внешних challenge для M22 требуют своих доказательств.
 
+## Дополнительные отказы общего расписания 14 ноября
+
+На `20a7b96`, [run 43623516855](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43623516855),
+`candidate_trust_window` остановил actual после blackhole, перед policy change.
+В журнале нет точного остатка permit; нельзя приписывать ему измеренное значение.
+Cleanup SQL, tracking и cluster, а также офлайн M04/M06 прошли.
+
+На `ed33efa`, [run 43623884406](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43623884406),
+проверка `serving_retention.window` отказала ещё перед M13. Последовательные M23,
+смена кластера и M19 использовали слишком большую часть исходного proposal window:
+для следующей стадии требуется минимум 600 секунд. Cleanup и M04/M06 replay
+успешны, но новый full delivery не принят.
+
+Единый ownership scope сокращает накладные расходы actual M11. Сам по себе он не
+устраняет проблему общего последовательного расписания. Следующая интеграция
+должна параллельно проверять тот же исходный candidate с точными source/image/pins,
+сохраняя конфиденциальность передачи и отдельное владение ресурсами. Продлевать
+proposal, перевыпускать permit или переносить отчёты другого кандидата нельзя.
+
 ## Измерения 14 ноября 2026 UTC
 
 В [job 132338202094, run 43558988807](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43558988807/job/132338202094) на `b03535d518a286578784b0722d4d1850ce5c7676`, attempt 1, штатные M11 и M12 прошли на одном proposal. Job длился 26 мин 58 с. Исходный Docker SQL был остановлен перед late. Это отдельная hosted qualification порядка стадий. Интеграционная попытка родительского storage-recovery имеет собственный source и evidence.

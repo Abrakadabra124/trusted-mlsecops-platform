@@ -96,7 +96,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -B -W error -m unittest scripts.m18_security_retention_qualification scripts.m18_serving_retention_qualification
+          uv run --locked python -B -W error -m unittest scripts.m18_security_retention_qualification scripts.m18_security_driver_qualification scripts.m18_serving_retention_qualification
           uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/m18-adversarial.coverage" --source=scripts.m18_adversarial_retention -m unittest scripts.m18_adversarial_retention_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/m18-adversarial.coverage" -o "$RUNNER_TEMP/m18-adversarial-coverage.json"
           uv run --locked python - <<'PY'
@@ -157,6 +157,9 @@ jobs:
               if summary[total] <= 0 or summary[covered] * 100 < 95 * summary[total]:
                   raise SystemExit("Serving retention coverage below policy")
           PY
+      - name: Freeze source defined M23 criteria before any native measurement
+        id: security_plan
+        run: uv run --locked python -B -W error -m scripts.m18_security_driver case-inventory
       - name: Prepare pinned CPU runtime
         run: |
           uv run --locked python -B -m mlsecops bootstrap
@@ -181,8 +184,10 @@ jobs:
           import os
           from pathlib import Path
           from mlsecops.storage_bootstrap import validate
+          from mlsecops.contracts import bounded_read, digest
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
               print("workspace=" + validate(Path(".runtime"))["workspace_id"], file=out)
+              print("workspace_file=" + digest(bounded_read(Path(".runtime/workspace.json"))), file=out)
           PY
       - name: Verify the actual cluster, worker, pinned tools and clean bootstrap
         id: foundation
@@ -672,7 +677,7 @@ jobs:
           M06_REPORT_SHA256: ${{ steps.repeated.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.m18_delivery_freeze replay-m06
       - name: Replay the original M23 defensive evidence after SQL and cluster cleanup
-        if: env.DELIVERY_SERVING_GATE == 'M11-M12'
+        if: always() && env.DELIVERY_SERVING_GATE == 'M11-M12' && steps.m23_sources.outcome == 'success' && steps.m23_inventory.outcome == 'success' && steps.m23_outage.outcome == 'success' && steps.m23_transition.outcome == 'success' && steps.m23_offline.outcome == 'success' && steps.stop_sql.outcome == 'success' && steps.stop_cluster.outcome == 'success'
         id: m23_gate
         env:
           SOURCE_OFFLINE_SHA256: ${{ steps.m23_offline.outputs.sha256 }}
@@ -689,6 +694,38 @@ jobs:
           M23_OUTAGE_DELIVERY_SHA256: ${{ steps.m23_outage.outputs.delivery }}
           M23_TRANSITION_SHA256: ${{ steps.m23_transition.outputs.sha256 }}
         run: uv run --locked python -B -W error -m scripts.m23_delivery gate
+      - name: Retain original security primaries after the ordinary M23 verifier
+        if: always() && steps.m23_gate.outcome == 'success' && steps.m18_freeze.outcome == 'success' && steps.security_plan.outcome == 'success'
+        id: security_primary
+        env:
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M18_SECURITY_CASES_SHA256: ${{ steps.security_plan.outputs.expected_cases_sha256 }}
+          M23_RUN_ID: ${{ github.run_id }}
+          M23_RUN_ATTEMPT: ${{ github.run_attempt }}
+          M23_REPORT_SHA256: ${{ steps.m23_gate.outputs.sha256 }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_INVENTORY_SHA256: ${{ steps.m23_inventory.outputs.sha256 }}
+          M23_OUTAGE_SHA256: ${{ steps.m23_outage.outputs.sha256 }}
+          M23_TRANSITION_SHA256: ${{ steps.m23_transition.outputs.sha256 }}
+          M23_WORKSPACE_SHA256: ${{ steps.sql.outputs.workspace_file }}
+        run: uv run --locked python -B -W error -m scripts.m18_security_driver capture
+      - name: Replay retained security primaries without their original stage files
+        if: always() && steps.security_primary.outcome == 'success'
+        env:
+          M18_SECURITY_INDEX_SHA256: ${{ steps.security_primary.outputs.index_sha256 }}
+          M18_FREEZE_SHA256: ${{ steps.m18_freeze.outputs.sha256 }}
+          M18_SECURITY_CASES_SHA256: ${{ steps.security_plan.outputs.expected_cases_sha256 }}
+          M23_RUN_ID: ${{ github.run_id }}
+          M23_RUN_ATTEMPT: ${{ github.run_attempt }}
+          M23_REPORT_SHA256: ${{ steps.m23_gate.outputs.sha256 }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_SOURCES_SHA256: ${{ steps.m23_sources.outputs.sha256 }}
+          M23_INVENTORY_SHA256: ${{ steps.m23_inventory.outputs.sha256 }}
+          M23_OUTAGE_SHA256: ${{ steps.m23_outage.outputs.sha256 }}
+          M23_TRANSITION_SHA256: ${{ steps.m23_transition.outputs.sha256 }}
+          M23_WORKSPACE_SHA256: ${{ steps.sql.outputs.workspace_file }}
+        run: uv run --locked python -B -W error -m scripts.m18_security_driver replay
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery
         env:

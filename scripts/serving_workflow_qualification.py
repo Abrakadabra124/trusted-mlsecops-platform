@@ -47,6 +47,7 @@ class WorkflowTests(unittest.TestCase):
             "stop_cluster",
             "joint_receipt",
             "m23_gate",
+            "security_primary",
             "delivery",
             "trio_delivery",
             "serving_primary",
@@ -124,6 +125,34 @@ class WorkflowTests(unittest.TestCase):
                         + " }}",
                         step,
                     )
+
+    def test_security_criteria_precede_measurements_and_retention_requires_verified_cleanup(self):
+        plan = next(s for s in self.steps if "id: security_plan\n" in s)
+        gate = next(s for s in self.steps if "id: m23_gate\n" in s)
+        capture = next(s for s in self.steps if "id: security_primary\n" in s)
+        replay = next(s for s in self.steps if "scripts.m18_security_driver replay" in s)
+        self.assertLess(self.text.index(plan), self.text.index("id: cluster"))
+        for name in (
+            "m23_sources",
+            "m23_inventory",
+            "m23_outage",
+            "m23_transition",
+            "m23_offline",
+            "stop_sql",
+            "stop_cluster",
+        ):
+            self.assertIn("steps." + name + ".outcome == 'success'", gate)
+        self.assertIn("steps.m23_gate.outcome == 'success'", capture)
+        self.assertIn("steps.security_primary.outcome == 'success'", replay)
+        for step in (capture, replay):
+            self.assertIn(
+                "M18_SECURITY_CASES_SHA256: ${{ steps.security_plan.outputs.expected_cases_sha256 }}",
+                step,
+            )
+            self.assertIn("M23_WORKSPACE_SHA256: ${{ steps.sql.outputs.workspace_file }}", step)
+            self.assertIn("M23_RUN_ID: ${{ github.run_id }}", step)
+            self.assertIn("M23_RUN_ATTEMPT: ${{ github.run_attempt }}", step)
+        self.assertNotIn("continue-on-error:", self.text)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,9 @@
 Финальное сведение одного frozen candidate описано в
 [процедуре M18](operations/final-evidence.md).
 
+Исходные M23 stage/owner packets, заранее закреплённый перечень критериев и
+повторная проверка после teardown: [security primary](operations/m18-security-primary.md).
+
 Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
 [serving primary](operations/m18-serving-primary.md). Отказ по времени
 qualification permit и порядок возврата serving identity:
