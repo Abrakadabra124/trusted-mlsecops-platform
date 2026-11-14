@@ -89,6 +89,9 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 **Мониторинг качества и обратной связи.** Synthetic shift fixture даёт alert <= 120 s после попадания достаточного окна в scheduled evaluator. Initial profile: >=1 000 observations/window, фиксированные bins/reference, PSI >=0.2 как lab warning, минимум два окна; реальные пороги калибруются отдельно. Delayed-label fixture ухудшения recall на >0.05 после >=200 positives даёт другой alert. Clean control не создаёт alarm в 10 контрольных окнах; это не оценка production false-positive rate. Alert не запускает auto-promotion. T18.
 
 ## M16
+
+На `2cecbb1` приняты восемь критериев лабораторного профиля. Проверены фактический трафик, отказы, восстановление через SQL и ручной разбор. [Результаты и границы](evidence/m16-canary-2cecbb1.md).
+
 **Canary и rollback целого bundle.** В lab провести staged traffic 10% -> 50% -> 100% с минимум 100 валидными наблюдениями на стадии, без увеличения ошибок >1 процентного пункта и нарушения latency gate. При fixture отказа возврат к разрешённому compatible bundle <= 120 s; model/preprocessing/config не смешиваются. Отозванная previous model не используется; manual-review fallback остаётся доступен без ML. T19.
 
 ## M17

@@ -230,7 +230,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 - Проверка: injected shift, degraded labels, clean windows, telemetry outage; ни один alert не повышает candidate автоматически.
 
 ## T19
-- [ ] Canary и rollback. Зависимость: T18. Gate: M16.
+- [x] Canary и rollback в лабораторном профиле. T18 завершён, M16 прошёл на `2cecbb1`. [Измерения и подтверждение отката](../docs/evidence/m16-canary-2cecbb1.md).
 - Результат: staged rollout, совместимость целого bundle и manual-review fallback.
 - Проверка: failure injection с измерением времени, запрет отозванного previous release, отсутствие смешанных preprocessing/model.
 

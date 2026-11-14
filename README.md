@@ -7,7 +7,7 @@
 Primary, Security components, M13 privacy (514 критериев) и M14 load (153 критерия).
 [Milestone prerelease и очищенный verification asset](https://github.com/Abrakadabra124/trusted-mlsecops-platform/releases/tag/m11-trust-lifecycle-2026-11-12).
 
-Текущий этап - неделя 11 / T29, security events и наблюдение за потерей telemetry.
+Текущий этап - T20/M17, восстановление из резервной копии. Для T19/M16 проверены 800 HTTP-запросов, отзыв кандидата и восстановление контрольного подписанного выпуска за 8,092 с. [Результаты](docs/evidence/m16-canary-2cecbb1.md) и [ранбук](docs/operations/canary-rollout.md).
 M11 milestone подтверждает работу механизма доверия. Полный R1 ещё не принят:
 actual production promotion сохраняет отказ без обязательного assurance,
 независимый M22 и остальные открытые gates остаются обязательными.
@@ -17,7 +17,7 @@ actual production promotion сохраняет отказ без обязате�
 
 На runtime commit `6fa4d96` свежие M15 (188 критериев) и M13 (512 критериев) прошли с проверенной очисткой инфраструктуры. Из чистого checkout воспроизведены 37 связанных тестов без пропусков; интерфейс отдельно проверен в браузере. [Доказательства и точные ограничения](docs/evidence/monitoring-dashboard-2026-11-07.md).
 
-Полный R1 ещё не принят. Следующий этап по плану - неделя 11/T29/M23: доставка security events и блокировка promotion при недоступном audit sink. Исторические результаты ниже относятся к своим revisions.
+Доставка security events и блокировка promotion при недоступном аудите проверены в T29/M23. Исторические результаты ниже относятся к своим revisions. [Отчёт M23](docs/evidence/m23-acceptance-d0313d6.md).
 
 CP4/T17 2026-11-07 МСК: **[M14 fresh load acceptance](docs/evidence/m14-load-acceptance-bbff69e.md) pass**, `bbff69e` / 42297023903 success. 143 cases (137 contracts + 6 aggregate), 15672/15672 correct, 130.6 RPS, p95=103.052346 ms, p99=117.668110 ms, 0 normal errors/429; overload/recovery и cleanup подтверждены. Source/policy/methods/primary bindings сверены. T17 lab profile принят; далее T18/M15. Исторический shutdown failure остаётся reliability debt R1-B08, не объявлен исправленным. M10/M19, independent M22 0/2, image findings, оставшиеся CP4/CP5 и общий M18/R1 открыты. Записи ниже - история конкретных commits.
 
