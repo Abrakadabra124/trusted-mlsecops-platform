@@ -1,18 +1,48 @@
 import contextlib
 import copy
 import io
+import re
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops import qualification
-from mlsecops.contracts import Rejected, canonical, read_json, write_json
+from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from scripts import image_candidates
 
 
 def qualify():
     cases = []
+    # Historical APK inventories from the strict machine audit, not a fresh scan:
+    # https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43559420357
+    # Source: 26e84ae571a9010504f25558ecab00518171211f; canonical report SHA-256:
+    # b85b99bf9d852fde4f932ccb459d1480a908cbb79f3435de24195e089fada4f5
+    # Catch partial adoption: updating the deployed storage digest alone left
+    # worker and both candidate recipes vulnerable in run 43560835791.
+    python_inventory = "e376b3427a09b38181b8563265ef63f19f69727c21253b916ab2d2cbaf8d50be"
+    storage_inventory = "e0fc5e474da30afc05da3c0979b395031f60e7b07481a48888f20d1dbecd37a6"
+    repository = Path(__file__).resolve().parents[1]
+    for recipe, expected in (
+        ("Dockerfile", python_inventory),
+        ("images/candidates/worker/Dockerfile", python_inventory),
+        ("images/tracking/Dockerfile", python_inventory),
+        ("images/candidates/storage/Dockerfile", storage_inventory),
+    ):
+        packages = sorted(
+            (
+                {"name": name, "version": version}
+                for name, version in re.findall(
+                    r"^\s+'([a-zA-Z0-9+_.-]+)=([^']+)' \\\s*$",
+                    (repository / recipe).read_text(encoding="utf-8"),
+                    re.MULTILINE,
+                )
+            ),
+            key=lambda package: package["name"],
+        )
+        if digest(canonical(packages)) != expected:
+            raise Rejected("candidate_recipe_differs_from_qualified_apk_inventory")
+        cases.append({"id": f"qualified-apk-inventory:{recipe}", "status": "pass"})
     with tempfile.TemporaryDirectory(prefix="candidate-contract-") as temporary:
         root = Path(temporary).resolve()
         output = root / ".runtime/evidence/image-candidate-worker.json"
