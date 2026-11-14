@@ -1,5 +1,10 @@
 # R1: границы и конечный маршрут поставки
 
+14 ноября [T29/M23 принят на d0313d6](evidence/m23-acceptance-d0313d6.md).
+M16, M17, общий M18 и остальные открытые обязательства R1 требуют отдельных
+доказательств. Ранее полученные результаты на других кандидатах учитываются
+по их фактическим версиям.
+
 CP4/T18 2026-11-07: **операторская панель и fresh M13/M15 приняты в synthetic CPU lab профиле**, runtime `6fa4d96`. M15 /42343109962:188criteria,12000actualobservations,3receipts(max0.374568635s). M13 /42343123664:512criteria,9staticdashboard privacyrequests,69metricseries. Contracts /42343109982:350Linuxexecutions с повторами/0skips; clean Windows checkout37/0, dashboard+probe55statements/26branches100%, real-browser controlled UI проверен. Source/policy/methods, SQL/cluster cleanup и post-cleanup replay сверены. T18 завершён; далее неделя11/T29/M23. Общий M18/R1, actual M10/M19, independent M22 0/2, image findings, M16/M17 и R1-B08 остаются открытыми. [Evidence](evidence/monitoring-dashboard-2026-11-07.md).
 
 CP4/T18 2026-11-07: **[M15 общая acceptance](evidence/m15-monitoring-acceptance-2026-11-07.md) pass**, `bd90286` /42339902029 success. 167 criteria (160 contracts + 7 aggregate), 12000 observations, 10 clean + 2 shift windows, 200 delayed positive labels, 3 signed receipts, max delivery0.437768848s. Feedback10claims/1row,15SQLdenials, retry/protectedtables/promotion unchanged. Source/policy/exact method IDs, SQL/cluster cleanup и offline primary replay сверены; новая gate logic183/24 100%, clean Windows checkout8tests/0skips. T18 ещё требует визуальную dashboard; M23 security-event delivery и остальные CP4/CP5 gates остаются обязательными. Полный M18/R1 не принят, independent M22 0/2.

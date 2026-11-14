@@ -113,6 +113,11 @@ Synthetic executable contract: [M07 runbook](evaluation-gate.md). Fresh campaign
 **Дополнительная assurance campaign.** Выполнены 36 absolute-budget poisoned runs + 6 clean controls по [расширенному протоколу](threat-model.md) и минимум 2 независимых challenge cases. Для сопоставимых probes сохраняются M08-пороги, нельзя выбрать только выгодные seeds. Отчёт отделяет deterministic enforcement от statistical robustness, фиксирует независимую единицу CI и запрещает объявлять per-scenario CI общей гарантией. Любой подтверждённый обход hard boundary блокирует release; недостаточные данные/неразобранный challenge = inconclusive. Для challenge с новым воздействием метрика и severity утверждаются до запуска, не подгоняются под результат. T28.
 
 ## M23
+
+[Приёмка на d0313d6](evidence/m23-acceptance-d0313d6.md) прошла в synthetic CPU
+профиле. Все семь маршрутов, отказ, восстановление и остановка стенда
+проверены в одной попытке на закреплённом предложении выпуска.
+
 **Security events и доставка реакции.** Минимум по одному fixture для каждого из 7 event types архитектуры; authentic denied/revoked/mismatch events доходят до ожидаемого alert route <=60 s в lab после ingest, без raw payload. Подделанный producer отклонён, duplicate event id не создаёт повторный incident, out-of-order доставлен с признаком задержки, missing sequence/heartbeat обнаружен <=120 s. При audit sink outage новые promotions блокируются, даже если drift dashboard зелёный. Если выбран Sigma backend, дополнительно проверяются field mapping и replay результата после конвертации; без backend не заявляется Sigma deployment. T29.
 
 ## Измерение качества: определения

@@ -213,6 +213,9 @@ Historical source checkpoint до ADR 0038: `QualifiedCandidate` ещё не с�
 
 ## Неделя 11: Security events и потеря telemetry
 
+T29 завершён для synthetic CPU профиля 14 ноября на `d0313d6`.
+[Отчёт приёмки](../docs/evidence/m23-acceptance-d0313d6.md).
+
 Checkpoint 2026-11-12: [56f1a19](../docs/evidence/serving-profile-56f1a19-2026-11-12.md),
 M11 43266471492 pass (146 критериев), Primary/Security success; обновлённые
 M13/M14 pass с проверенной очисткой. Обязательный serving profile проверен;

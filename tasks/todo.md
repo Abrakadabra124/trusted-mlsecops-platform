@@ -1,5 +1,9 @@
 # Backlog реализации
 
+14 ноября T29/M23 принят на одном кандидате в synthetic CPU профиле.
+Следующие задачи недели 12 охватывают staged rollout, измеряемый откат и
+независимое восстановление. [Результаты и границы M23](../docs/evidence/m23-acceptance-d0313d6.md).
+
 CP4/T29 2026-11-12: [Kubernetes audit increment](../docs/evidence/kubernetes-audit-2026-11-12.md)
 4aeece4 /43102906649 success: durable audit и refusal/recovery соединены с promoter.
 Full T29 остаётся открытым, включая observer deadline regression, остальные actual
