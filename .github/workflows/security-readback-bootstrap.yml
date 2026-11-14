@@ -1,7 +1,7 @@
 name: Cold security journal bootstrap
 on:
   push:
-    branches: [fix/m12-m23-bootstrap-9fc84a9]
+    branches: [main, codex/cp4-m23-security-events-20261107, fix/m12-m23-bootstrap-9fc84a9]
     paths:
       - mlsecops/security_event_server.py
       - scripts/security_readback_bootstrap_qualification.py
