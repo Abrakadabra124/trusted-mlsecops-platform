@@ -990,6 +990,47 @@ class FinalEvidenceContracts(unittest.TestCase):
         ):
             check()
 
+    def test_foundation_and_intake_replay_uses_pre_run_outcomes_and_pinned_primaries(self):
+        from scripts.m18_delivery_freeze import PRIMARY, verify_early
+
+        self.build()
+        schedule = "policies/m18-foundation-intake.json"
+        shutil.copyfile(ROOT / schedule, self.root / schedule)
+        expected = decode(bounded_read(self.root / schedule))
+        self.assertEqual([len(expected[g]) for g in PRIMARY], [10, 44])
+        pins = {}
+        for gate, filename in PRIMARY.items():
+            report = self.reports[gate]
+            report["cases"] = [
+                dict(
+                    id=name,
+                    status="pass",
+                    actual=value,
+                    expected=True if value is True else "reject",
+                )
+                for name, value in expected[gate].items()
+            ]
+            report["metrics"]["checks"] = len(report["cases"])
+            packet = self.primaries[gate] | dict(cases=report["cases"])
+            report["artifact_hashes"] = {
+                final.PRIMARY[gate]: self.pinfile("evidence/" + filename, packet)
+            }
+            pins[gate] = self.pinfile("evidence/" + gate + ".json", report)
+        self.assertEqual(verify_early(self.root, self.state, self.values, pins), pins)
+        with self.assertRaises(Rejected):
+            verify_early(self.root, self.state, self.values, {"M01": pins["M01"]})
+        intake = self.reports["M02"]
+        targets = [c for c in intake["cases"] if c["expected"] == "reject"]
+        self.assertTrue(targets)
+        with patch.dict(targets[0], actual="other_rejection"):
+            changed = self.pinfile("evidence/M02.json", intake)
+            with self.assertRaisesRegex(Rejected, "early-observation"):
+                verify_early(self.root, self.state, self.values, pins | {"M02": changed})
+        self.pinfile("evidence/M02.json", intake)
+        self.pinfile("evidence/" + PRIMARY["M01"], {})
+        with self.assertRaisesRegex(Rejected, "digest-mismatch"):
+            verify_early(self.root, self.state, self.values, pins)
+
     def test_governance_requires_independent_signature_complete_materials_and_bindings(self):
         self.build()
         args = (

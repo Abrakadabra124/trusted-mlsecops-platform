@@ -11,6 +11,7 @@ from mlsecops.contracts import (
     canonical,
     decode,
     digest,
+    now,
     safe_child,
     write_json,
 )
@@ -19,6 +20,7 @@ from scripts.kube_trust_native import hosted
 from scripts.serving_output_native import source
 
 RECEIPT = "evidence/M18-frozen-inputs.json"
+PRIMARY = {"M01": "foundation-qualification.json", "M02": "data-qualification.json"}
 
 
 def capture(root, state, freeze, revision):
@@ -60,12 +62,12 @@ def capture(root, state, freeze, revision):
     return pin
 
 
-def replay(root, state, pin):
+def replay(root, state, pin, *, early_reports=None):
     receipt = decode(final_evidence.pinned(safe_child(state, RECEIPT), pin))
     revision, fingerprint = receipt["source_revision"], receipt["source_fingerprint"]
     final_evidence.clean(root, revision, fingerprint)
     values, _, _ = final_evidence.frozen(root, state, receipt, revision, fingerprint)
-    return {
+    summary = {
         "scope": "offline-original-proposal-materials",
         "release_ready": False,
         "frozen_inputs_sha256": pin,
@@ -81,6 +83,37 @@ def replay(root, state, pin):
             )
         },
     }
+    if early_reports is not None:
+        summary["verified_source_reports"] = verify_early(root, state, values, early_reports)
+    return summary
+
+
+def verify_early(root, state, values, pins):
+    # The expected outcomes belong to the checked-out policy and precede the run.
+    expected = decode(bounded_read(root / "policies/m18-foundation-intake.json"))
+    final_evidence.same(sorted(pins), sorted(PRIMARY), "early-gates")
+    for gate, filename in PRIMARY.items():
+        report = final_evidence.published_report(state, gate, pins[gate])
+        inventory = expected[gate]
+        artifacts = final_evidence.check_gate(
+            gate,
+            report,
+            values,
+            final_evidence.timestamp(now()),
+            digest(canonical(sorted(inventory))),
+        )
+        final_evidence.need(artifacts.keys() == {final_evidence.PRIMARY[gate]}, "early-artifacts")
+        for case in report["cases"]:
+            outcome = inventory[case["id"]]
+            final_evidence.same(
+                case["expected"], True if outcome is True else "reject", "early-expected"
+            )
+            final_evidence.same(case["actual"], outcome, "early-observation")
+        packet_pin = artifacts[final_evidence.PRIMARY[gate]]
+        packet = final_evidence.pinned(safe_child(state, "evidence/" + filename), packet_pin)
+        final_evidence.retain(state, packet)
+        final_evidence.primary(gate, report, lambda ref: final_evidence.blob(state, ref), values)
+    return pins
 
 
 def main():
@@ -101,7 +134,12 @@ def main():
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
             print("sha256=" + pin, file=out)
     elif sys.argv[1:] == ["replay"]:
-        print(canonical(replay(root, state, os.environ["M18_FREEZE_SHA256"])).decode())
+        pins = {gate: os.environ[gate + "_REPORT_SHA256"] for gate in PRIMARY}
+        print(
+            canonical(
+                replay(root, state, os.environ["M18_FREEZE_SHA256"], early_reports=pins)
+            ).decode()
+        )
     else:
         raise Rejected("M18_freeze_arguments")
 

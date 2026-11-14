@@ -207,6 +207,7 @@ def main():
             not in {
                 DECISION_FILE,
                 "policies/local-cpu.json",
+                "policies/m18-foundation-intake.json",
                 "images/tracking/Dockerfile.dockerignore",
                 "images/tracking/requirements.in",
                 "infra/systemd/mlsecops-daily-backup.service",
