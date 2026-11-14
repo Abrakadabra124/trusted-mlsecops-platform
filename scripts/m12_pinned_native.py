@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from mlsecops import cluster, signing
+from mlsecops import cluster, kube_storage, promotion_state, signing
 from mlsecops.canary_native_evidence import read_pinned
 from mlsecops.candidate_serving_reader import KIND
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, now, safe_child
@@ -14,7 +14,7 @@ from mlsecops.trust_targets import Target
 from scripts import kube_authority_pair, kube_candidate_native, kube_serving_native
 from scripts.canary_rollout_native import publish_pin
 from scripts.kube_load_native import failure_site
-from scripts.kube_security_outage_native import ownership_return
+from scripts.kube_security_outage_native import failure_report, ownership_return
 from scripts.kube_trust_native import hosted
 from scripts.serving_output_native import source
 
@@ -124,6 +124,8 @@ def capture(root, state, image, pin):
     hosted()
     binding = owner(root, state, image, pin)
     started = now()
+    # Candidate snapshots include the promotion journal even before its first policy.
+    promotion_state.install(state, backend=kube_storage.binding)
     prepared = kube_serving_native.prepare(root, state, image, proposal_pin=pin)
     primary = kube_authority_pair.read(state, Target.PRIMARY)
     actual = kube_candidate_native.qualify(
@@ -191,7 +193,12 @@ def main():
     except Exception as error:
         print(
             canonical(
-                dict(stage="M12-actual", status="fail", location=failure_site(error))
+                dict(
+                    stage="M12-actual",
+                    status="fail",
+                    location=failure_site(error),
+                    callers=failure_report(error)["callers"],
+                )
             ).decode()
         )
         return 1
