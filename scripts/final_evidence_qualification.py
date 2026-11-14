@@ -642,6 +642,60 @@ class FinalEvidenceContracts(unittest.TestCase):
     def run_report(self):
         return acceptance.report("M18", "local-cpu", self.root, self.state)
 
+    def test_live_freeze_and_offline_replay_share_original_signed_bytes(self):
+        from scripts import m18_delivery_freeze as driver
+
+        self.build()
+        revision = self.source["source_revision"]
+        campaign = self.verified["manifest"]["release_id"]
+        self.proposal["campaign_id"] = campaign
+        self.freeze["evidence/release-native.json"] = self.pinfile(
+            "evidence/release-native.json", self.proposal
+        )
+        self.pinfile(
+            "release-proposals/" + campaign + "/policy-envelope.json", self.release.policy_envelope
+        )
+        # build() preloads the signed fixture. Require capture to provide every object itself.
+        self.state.joinpath("evidence/M18-objects").rename(self.state / "previous-fixture-objects")
+        with (
+            patch.object(driver, "source", return_value=self.source),
+            patch.object(driver.release_bundle, "load", return_value=self.package) as load,
+        ):
+            with self.assertRaises(Rejected):
+                driver.capture(self.root, self.state, self.freeze, "wrong-revision")
+            load.assert_not_called()
+            pin = driver.capture(self.root, self.state, self.freeze, revision)
+            load.assert_called_once_with(
+                self.state.resolve() / "storage-clients/serving",
+                self.proposal["proposal_reference"],
+                publisher_public=self.keys["approver"],
+            )
+
+        with (
+            patch.object(final, "clean") as clean,
+            patch.object(
+                driver.release_bundle,
+                "load",
+                side_effect=AssertionError("offline reader touched storage"),
+            ),
+        ):
+            result = driver.replay(self.root, self.state, pin)
+            clean.assert_called_once_with(self.root, revision, self.source["source_fingerprint"])
+            self.assertIs(result["release_ready"], False)
+            for key in (
+                "candidate_reference",
+                "evaluation_reference",
+                "model",
+                "release_subject",
+                "proposal_reference",
+            ):
+                self.assertEqual(result[key], self.values[key])
+            with self.assertRaises(Rejected):
+                driver.replay(self.root, self.state, "a" * 64)
+            write_json(self.state / "evidence/M18-objects" / result["evaluation_reference"], {})
+            with self.assertRaisesRegex(Rejected, "digest-mismatch"):
+                driver.replay(self.root, self.state, pin)
+
     def test_missing_owner_pin_reports_inconclusive_without_running_child_gates(self):
         report = acceptance.report("M18", "local-cpu", ROOT, self.state)
         self.assertEqual((report["status"], report["exit_code"]), ("inconclusive", 2))

@@ -55,6 +55,7 @@ class Delivery(unittest.TestCase):
         write_json(self.root / "storage-trust.json", self.keys)
         pin = digest(bounded_read(self.original))
         self.env = dict(
+            DELIVERY_SERVING_GATE="M12",
             GITHUB_SHA=self.source["source_revision"],
             M17_PROPOSAL_SHA256=pin,
             M17_DEMO_SHA256=digest(bounded_read(self.demo)),
