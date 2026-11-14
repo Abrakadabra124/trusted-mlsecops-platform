@@ -42,6 +42,10 @@ def report(gate, profile, root, state=None):
         "residual_risks": ["Full gate implementation and runtime evidence not yet available"],
     }
     state = Path(state) if state else root / ".runtime"
+    if gate == "M18":
+        from mlsecops.final_evidence import qualify
+
+        return qualify(root, state, result)
     if gate == "M01":
         if not all(
             (state / name).is_file() for name in ("workspace.json", "cluster.json", "kubeconfig")

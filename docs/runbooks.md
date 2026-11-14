@@ -1,5 +1,8 @@
 # Эксплуатационные процедуры
 
+Финальное сведение одного frozen candidate описано в
+[процедуре M18](operations/final-evidence.md).
+
 - [T29: первичные signed evidence и replay](operations/security-primary-evidence.md):
   registry pins, полные outbox/collector/incidents, source bindings и восстановление
   после неполного retention. Общий M23 остаётся обязательным отдельным gate.
