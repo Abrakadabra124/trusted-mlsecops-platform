@@ -33,7 +33,7 @@ def check_pair(controller, candidate, evaluation, dataset, metadata, signed):
         raise Rejected("delivery_scoped_signed_pair_mismatch")
 
 
-def restore_history(state, owner, migration, baseline, public):
+def restore_history(state, owner, migration, baseline, public, subject):
     """Move all reservations together with the signed evaluations, in one transaction."""
     if any(baseline[name]["rows"] for name in HISTORY):
         raise Rejected("delivery_history_requires_empty_destination")
@@ -68,6 +68,7 @@ def restore_history(state, owner, migration, baseline, public):
             limit=MAX_ARCHIVE,
         )
         context = {
+            "subject": subject,
             "workspace": owner["workspace_id"],
             "host_container": owner["container_id"],
             "volume_uid": target["volume_uid"],
@@ -165,7 +166,15 @@ def train(root, state, dataset, image):
         or bound["status"] != "pass"
     ):
         raise Rejected("delivery_scoped_controller_binding")
-    restore_history(state, owner, migration, backup["tables"], public)
+    subject = {
+        "candidate_reference": candidate,
+        "evaluation_reference": evaluation,
+        "dataset_reference": dataset["dataset_reference"],
+        "metadata_sha256": digest(canonical(controller["publisher"]["result"]["metadata"])),
+        "evaluation_sha256": digest(canonical(controller["scorer"]["result"]["evaluation"])),
+        "authority_report": gate["artifact_hashes"]["authority"],
+    }
+    restore_history(state, owner, migration, backup["tables"], public, subject)
     # Real role reads of the transferred objects. Outer M03 instruments these accesses.
     publisher, scorer = (state / "storage-clients" / role for role in ("publisher", "scorer"))
     for client, selected in ((publisher, ("train", "validation")), (scorer, ("holdout",))):
