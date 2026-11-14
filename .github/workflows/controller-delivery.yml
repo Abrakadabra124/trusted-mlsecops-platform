@@ -30,7 +30,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
           uv run --locked python -m mlsecops build
       - name: Bootstrap private cluster and owned SQL
+        id: cluster
         run: |
+          kind get clusters > "$RUNNER_TEMP/controller-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/controller-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
           uv run --locked python -m mlsecops.cluster bootstrap
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.controller_bootstrap
@@ -59,6 +64,12 @@ jobs:
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M05 --output .runtime/evidence/M05.json
           uv run --locked python -B -W error -m scripts.controller_delivery
+      - name: Replace fenced training cluster with a fresh private serving SQL
+        env:
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.controller_serving_handoff
       - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
@@ -97,7 +108,7 @@ jobs:
           uv run --locked python -B -W error -m scripts.m17_recovery_native replay
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
-          uv run --locked python -B -W error -m scripts.controller_delivery --include-recovery
+          uv run --locked python -B -W error -m scripts.controller_delivery --include-recovery base7
       - name: Sanitized diagnostics
         if: always()
         run: |
@@ -131,11 +142,17 @@ jobs:
                   for action, item in result["serving_under_fault"]["faults"].items():
                       print(action, item["probe"]["reason"], item["probe"].get("termination"), len(item["during"]))
           PY
-      - name: Remove and verify owned resources
-        if: always()
+      - name: Remove the owned cluster and verify its absence
+        if: always() && steps.cluster.outputs.started_empty == 'true'
         run: |
-          if test -f .runtime/cluster.json; then
-            uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
             kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
-            test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
           fi
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi

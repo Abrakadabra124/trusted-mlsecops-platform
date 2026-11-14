@@ -98,9 +98,32 @@ def reconcile(state, *, demo_pin, proposal_pin, revision, keys_pin):
     return hashes
 
 
+BASE7 = {"M02", "M03", "M07", "M08", "M09", "M16", "M17"}
+PARENT11 = BASE7 | {"M01", "M06", "M10", "M12"}
+
+
+def combine(summary, reports, profile):
+    expected = {"base7": BASE7, "parent11": PARENT11}[profile]
+    if (
+        summary["release_ready"] is not False
+        or set(summary["reports"]) != expected
+        or set(reports) != {"M03", "M04", "M05", "M07", "M20"}
+        or any(reports[g] != summary["reports"][g] for g in ("M03", "M07"))
+    ):
+        raise Rejected("delivery_scoped_report_set_or_overlap")
+    return summary | {
+        "recovery_profile": profile,
+        "recovery_reports": summary["reports"],
+        "scoped_reports": reports,
+        "reports": summary["reports"] | reports,
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--include-recovery", action="store_true")
+    parser.add_argument(
+        "--include-recovery", nargs="?", const="base7", choices=("base7", "parent11")
+    )
     args = parser.parse_args()
     state = Path(".runtime")
     pins = dict(
@@ -113,9 +136,6 @@ if __name__ == "__main__":
         from scripts.delivery_candidate import reconcile as recovery
 
         summary = recovery(state, **pins)
-        if any(reports[gate] != summary["reports"][gate] for gate in ("M03", "M07")):
-            raise Rejected("delivery_overlapping_reports_changed")
-        summary["reports"].update(reports)
-        print(canonical(summary).decode())
+        print(canonical(combine(summary, reports, args.include_recovery)).decode())
     else:
         print(canonical({"reports": reports, "release_ready": False}).decode())
