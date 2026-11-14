@@ -7,6 +7,10 @@ inputs:
   source_sql:
     description: Owner hash of the source SQL marker
     required: true
+  retention:
+    description: Original storage-recovery retention hash, mandatory for the M15 to M11-M12 handoff
+    required: false
+    default: ''
 outputs:
   transition:
     description: Observed public identity hashes on either side of the transition
@@ -19,6 +23,7 @@ runs:
       env:
         PHASE: ${{ inputs.phase }}
         SOURCE_SQL: ${{ inputs.source_sql }}
+        SERVING_RETENTION: ${{ inputs.retention }}
       run: |
         uv run --locked python - <<'PY'
         import os
@@ -26,11 +31,22 @@ runs:
         from mlsecops.contracts import canonical
         from scripts.kube_trust_native import hosted
         from scripts.serving_campaign import transition
+        from scripts.serving_retention import load, preflight
         hosted()
         phase = os.environ["PHASE"]
-        if phase not in {"M13","M14"}:
+        successors = {"M13": "M14", "M14": "M15", "M15": "M11-M12"}
+        retention = os.environ["SERVING_RETENTION"]
+        if phase not in successors or (phase == "M15" and not retention):
             raise SystemExit("unknown serving phase")
-        packet = transition(Path(".runtime").resolve(), Path(os.environ["RUNNER_TEMP"]) / (phase+"-retired"), os.environ["SOURCE_SQL"])
+        root, state = Path.cwd(), Path(".runtime").resolve()
+        if retention:
+            receipt, _ = load(root, state, retention, os.environ["GITHUB_SHA"])
+            if receipt["source_sql"] != os.environ["SOURCE_SQL"]:
+                raise SystemExit("serving source owner mismatch")
+            preflight(root, state, retention, os.environ["GITHUB_SHA"], successors[phase])
+        packet = transition(state, Path(os.environ["RUNNER_TEMP"]) / (phase+"-retired"), os.environ["SOURCE_SQL"])
+        if retention:
+            preflight(root, state, retention, os.environ["GITHUB_SHA"], successors[phase])
         with open(os.environ["GITHUB_OUTPUT"], "a") as out:
             print("transition="+canonical(packet).decode(), file=out)
         PY

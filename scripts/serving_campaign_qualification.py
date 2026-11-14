@@ -18,6 +18,8 @@ class SharedCampaignTests(unittest.TestCase):
         self.sql = {"workspace_id": "owner", "container_id": "original"}
         write_json(self.state / "storage.json", self.sql)
         self.pin = digest(canonical(self.sql) + b"\n")
+        (self.state / "kubeconfig").write_bytes(b"owned-config")
+        self.node = {"container": "old-node", "namespace": "a", "volumes": ["old-volume"]}
 
     def test_transition_requires_owned_source_and_actual_absence(self):
         with (
@@ -28,6 +30,7 @@ class SharedCampaignTests(unittest.TestCase):
                 return_value={"workspace_id": "owner", "namespace_uid": "a"},
             ),
             patch.object(campaign.kube_storage, "validate", return_value={"volume_uid": "v"}),
+            patch.object(campaign, "owned_node", return_value=self.node),
             patch.object(campaign, "command", return_value=campaign.cluster.NAME),
             patch.object(campaign.cluster, "bootstrap") as create,
         ):
@@ -35,6 +38,70 @@ class SharedCampaignTests(unittest.TestCase):
                 with self.subTest(pin=pin), self.assertRaises(Rejected):
                     campaign.transition(self.state, self.state / "retired", pin)
             create.assert_not_called()
+
+    def transition_mocks(self, commands):
+        self.enterContext(
+            patch.object(campaign.storage_bootstrap, "validate", return_value=self.sql)
+        )
+        self.enterContext(patch.object(campaign, "owned_node", return_value=self.node))
+        self.enterContext(
+            patch.object(
+                campaign,
+                "identity",
+                side_effect=[dict(namespace="a", volume="v"), dict(namespace="b", volume="w")],
+            )
+        )
+        command = self.enterContext(patch.object(campaign, "command", side_effect=commands))
+        create = self.enterContext(patch.object(campaign.cluster, "bootstrap"))
+        storage = self.enterContext(patch.object(campaign.kube_storage, "bootstrap"))
+        return command, create, storage
+
+    def test_transition_refuses_existing_archive_before_destructive_command(self):
+        retired = self.state / "retired"
+        retired.mkdir()
+        command, create, _ = self.transition_mocks([])
+        with self.assertRaises(Rejected):
+            campaign.transition(self.state, retired, self.pin)
+        command.assert_not_called()
+        create.assert_not_called()
+        with self.assertRaises(Rejected):
+            campaign.transition(self.state, self.state / "serving", self.pin)
+
+    def test_transition_preserves_private_evidence_and_config_until_absence_confirmed(self):
+        evidence = self.state / "evidence"
+        evidence.mkdir()
+        (evidence / "retained.json").write_bytes(b"retained")
+        (self.state / "serving").mkdir()
+        (self.state / "serving" / "owner.json").write_bytes(b"old")
+        command, create, storage = self.transition_mocks(["", "", "", ""])
+        retired = self.state / "retired"
+        result = campaign.transition(self.state, retired, self.pin)
+        self.assertEqual(result["source_sql"], self.pin)
+        self.assertEqual((retired / "kubeconfig").read_bytes(), b"owned-config")
+        self.assertEqual((retired / "serving/owner.json").read_bytes(), b"old")
+        self.assertEqual((evidence / "retained.json").read_bytes(), b"retained")
+        self.assertEqual(
+            Path(command.call_args_list[0].args[0][-1]), (retired / "teardown-kubeconfig").resolve()
+        )
+        create.assert_called_once_with(self.state)
+        storage.assert_called_once_with(self.state)
+
+    def test_surviving_node_or_volume_blocks_archive_and_bootstrap(self):
+        for commands in (["", "", "old-node"], ["", "", "", "old-volume"]):
+            with (
+                self.subTest(commands=commands),
+                unittest.mock.patch.object(
+                    campaign, "identity", return_value=dict(namespace="a", volume="v")
+                ),
+                patch.object(campaign, "owned_node", return_value=self.node),
+                patch.object(campaign, "command", side_effect=commands),
+                patch.object(campaign.cluster, "bootstrap") as create,
+            ):
+                retired = self.state / ("retired" + str(len(commands)))
+                with self.assertRaises(Rejected):
+                    campaign.transition(self.state, retired, self.pin)
+                create.assert_not_called()
+                self.assertTrue((self.state / "kubeconfig").is_file())
 
     def test_two_boundaries_cannot_reuse_cluster_or_volume_or_break_chain(self):
         nodes = [

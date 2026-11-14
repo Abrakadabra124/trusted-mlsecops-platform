@@ -13,9 +13,10 @@ from mlsecops import (
 from mlsecops import (
     performance_delivery as delivery,
 )
-from mlsecops.contracts import canonical, decode, digest, safe_child
+from mlsecops.contracts import atomic_write, bounded_read, canonical, decode, digest, safe_child
 from mlsecops.inventory import command
 from mlsecops.storage import object_id
+from scripts.controller_serving_handoff import owned_node
 
 GATES = ("M02", "M03", "M07", "M13", "M14", "M15")
 MARKERS = (
@@ -44,7 +45,18 @@ def identity(state, source_pin):
 
 
 def transition(state, retired, source_pin):
+    # Validate all archive paths before deleting anything. kind may rewrite its
+    # kubeconfig, so use a separate teardown copy and preserve the original.
+    retired = safe_child(retired.parent, retired.name)
+    markers = [safe_child(state, name) for name in MARKERS]
+    delivery.require(not retired.exists())
+    delivery.require(not any(retired.is_relative_to(path) for path in markers))
     before = identity(state, source_pin)
+    old = owned_node(state)
+    retired.mkdir(mode=0o700)
+    cleanup_config = retired / "teardown-kubeconfig"
+    atomic_write(cleanup_config, bounded_read(state / "kubeconfig"))
+    delivery.require(owned_node(state) == old)
     command(
         [
             "kind",
@@ -53,16 +65,21 @@ def transition(state, retired, source_pin):
             "--name",
             cluster.NAME,
             "--kubeconfig",
-            str(state / "kubeconfig"),
+            str(cleanup_config),
         ],
         timeout=180,
     )
     delivery.require(cluster.NAME not in command(["kind", "get", "clusters"]).splitlines())
-    retired.mkdir(mode=0o700)
-    for name in MARKERS:
-        marker = safe_child(state, name)
+    delivery.require(
+        old["container"] not in command(["docker", "ps", "-aq", "--no-trunc"]).splitlines()
+    )
+    delivery.require(
+        not set(old["volumes"])
+        & set(command(["docker", "volume", "ls", "--format", "{{.Name}}"]).splitlines())
+    )
+    for marker in markers:
         if marker.exists():
-            marker.rename(retired / name)
+            marker.rename(retired / marker.name)
     cluster.bootstrap(state)
     kube_storage.bootstrap(state)
     after = identity(state, source_pin)
