@@ -1,4 +1,4 @@
-"""Reconcile four gate files from one proposal and refuse mixed attempts or candidates."""
+"""Reconcile the gate files from one proposal and refuse mixed attempts or candidates."""
 
 import io
 import os
@@ -45,6 +45,7 @@ class Delivery(unittest.TestCase):
             ),
             evaluation_reference=h("evaluation"),
         )
+        demo["dataset"] = dict(dataset_reference=h("dataset"))
         self.original = self.dir / "release-native.json"
         self.demo = self.root / "storage-demo.json"
         write_json(self.original, self.proposal)
@@ -57,7 +58,7 @@ class Delivery(unittest.TestCase):
         )
         self.enterContext(patch.dict(os.environ, self.env))
         self.reports = {}
-        for gate in ("M08", "M09", "M16", "M17"):
+        for gate in ("M07", "M08", "M09", "M16", "M17"):
             common = dict(
                 candidate_reference=h("candidate"),
                 evaluation_reference=h("evaluation"),
@@ -79,6 +80,13 @@ class Delivery(unittest.TestCase):
                     qualified_candidate_model=h("model"),
                     qualified_candidate_subject=h("subject"),
                     proposal_reference=h("proposal"),
+                )
+            elif gate == "M07":
+                inputs = dict(
+                    model=h("model"),
+                    training_request=h("training"),
+                    worker_image=self.source["image_id"],
+                    dataset_reference=h("dataset"),
                 )
             else:
                 inputs = {

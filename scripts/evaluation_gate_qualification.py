@@ -1,4 +1,5 @@
 import copy
+import os
 import subprocess
 import tempfile
 import unittest
@@ -242,7 +243,14 @@ class EvaluationGateContracts(unittest.TestCase):
                     evaluation_gate.run_contracts(ROOT)
 
     def run_campaign(
-        self, state, *, budget_mutation=None, fingerprints=None, cleanup_changed=False
+        self,
+        state,
+        *,
+        budget_mutation=None,
+        fingerprints=None,
+        cleanup_changed=False,
+        source_owner=None,
+        source_rows=0,
     ):
         result = self.reconcile()
         budget = {
@@ -282,7 +290,16 @@ class EvaluationGateContracts(unittest.TestCase):
                 patch.object(evaluation_gate, "run_contracts", return_value=contracts)
             )
             stack.enter_context(patch.object(evaluation_gate, "initialize"))
-            stack.enter_context(patch.object(evaluation_gate, "bootstrap"))
+            create_sql = stack.enter_context(patch.object(evaluation_gate, "bootstrap"))
+            if source_owner is not None:
+                stack.enter_context(patch.dict(os.environ, M07_FRESH_WORKSPACE_ID=source_owner))
+                stack.enter_context(
+                    patch.object(
+                        evaluation_gate,
+                        "ledger",
+                        return_value={"candidates": {"rows": source_rows}},
+                    )
+                )
             native = stack.enter_context(
                 patch.object(evaluation_gate, "evaluate", return_value=self.evidence)
             )
@@ -302,7 +319,7 @@ class EvaluationGateContracts(unittest.TestCase):
                     evaluation_gate,
                     "validate",
                     side_effect=[
-                        {"container_id": "owned"},
+                        {"container_id": "owned", "workspace_id": "a" * 32, "name": "owned"},
                         {"container_id": "other" if cleanup_changed else "owned"},
                     ],
                 )
@@ -315,15 +332,28 @@ class EvaluationGateContracts(unittest.TestCase):
             try:
                 report = evaluation_gate.qualify(ROOT, state)
             except Rejected:
-                if cleanup_changed:
+                if cleanup_changed or source_owner is not None:
                     stopped.assert_not_called()
+                    if source_owner is not None:
+                        create_sql.assert_not_called()
+                        if (
+                            source_rows
+                            or source_owner != "a" * 32
+                            or (state / "storage-demo.json").exists()
+                        ):
+                            native.assert_not_called()
                 else:
                     stopped.assert_called_once_with(["stop", "owned"], timeout=60)
                 raise
             native.assert_called_once()
             run_budget.assert_called_once()
             self.assertNotEqual(native.call_args.args[1], run_budget.call_args.args[1])
-            stopped.assert_called_once_with(["stop", "owned"], timeout=60)
+            if source_owner is None:
+                stopped.assert_called_once_with(["stop", "owned"], timeout=60)
+            else:
+                self.assertEqual(native.call_args.args[1], state.resolve())
+                create_sql.assert_not_called()
+                stopped.assert_not_called()
             self.assertEqual(read_json(state / "evidence/evaluation-gate.json"), report)
             return report
 
@@ -335,6 +365,20 @@ class EvaluationGateContracts(unittest.TestCase):
             self.assertNotEqual(first["campaign_id"], second["campaign_id"])
             self.assertEqual(first["status"], "pass")
             self.assertFalse(first["release_ready"])
+
+    def test_shared_fresh_source_is_owned_by_workflow_after_evaluation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            self.assertEqual(self.run_campaign(state, source_owner="a" * 32)["status"], "pass")
+            for owner, rows in (("b" * 32, 0), ("a" * 32, 1)):
+                with (
+                    self.subTest(owner=owner, rows=rows),
+                    self.assertRaisesRegex(Rejected, "fresh_owned_storage"),
+                ):
+                    self.run_campaign(state, source_owner=owner, source_rows=rows)
+            write_json(state / "storage-demo.json", {})
+            with self.assertRaisesRegex(Rejected, "fresh_owned_storage"):
+                self.run_campaign(state, source_owner="a" * 32)
 
     def test_campaign_rejects_budget_subject_and_source_mutations(self):
         for field, value in (

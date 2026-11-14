@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import uuid
@@ -22,6 +23,7 @@ from mlsecops.holdout_budget_qualification import qualify as budget_campaign
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.sandbox import resolve_image
 from mlsecops.storage_bootstrap import bootstrap, docker, validate
+from mlsecops.storage_restore import ledger
 
 QUALITY_CASES = {
     "native-signed-quality-report",
@@ -255,10 +257,20 @@ def qualify(root, state):
     campaign_id = uuid.uuid4().hex
     campaign = safe_child(state, "evaluation-gate/" + campaign_id)
     campaign.mkdir(parents=True, exist_ok=False)
-    quality_state = campaign / "quality"
-    initialize(root, quality_state)
-    bootstrap(quality_state, 15451)
+    # A delivery workflow can lend its explicitly owned, empty SQL to M07.
+    # This lets all subsequent gates read the exact candidate evaluated here.
+    shared_owner = os.environ.get("M07_FRESH_WORKSPACE_ID")
+    quality_state = state if shared_owner is not None else campaign / "quality"
+    if shared_owner is None:
+        initialize(root, quality_state)
+        bootstrap(quality_state, 15451)
     marker = validate(quality_state)
+    if shared_owner is not None and (
+        marker["workspace_id"] != shared_owner
+        or (state / "storage-demo.json").exists()
+        or any(entry["rows"] for entry in ledger(marker["name"]).values())
+    ):
+        raise Rejected("M07_requires_fresh_owned_storage")
     try:
         native = evaluate(root, quality_state, image)
         result = reconcile(root, quality_state, native, image, started)
@@ -326,7 +338,8 @@ def qualify(root, state):
         current = validate(quality_state)
         if current["container_id"] != marker["container_id"]:
             raise Rejected("M07_cleanup_identity_changed")
-        docker(["stop", marker["container_id"]], timeout=60)
+        if shared_owner is None:
+            docker(["stop", marker["container_id"]], timeout=60)
     result["finished_at"] = now()
     write_json(output, result)
     return result
