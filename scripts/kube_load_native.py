@@ -64,7 +64,7 @@ def failure_site(failure):
     return site
 
 
-def run(root, state):
+def run(root, state, *, proposal_pin=None):
     hosted()
     write_json(
         state / "evidence/kubernetes-load-public.json",
@@ -75,7 +75,12 @@ def run(root, state):
     promotion_state.install(state, backend=kube_storage.binding)
     # The existing controller bootstrap resolves and verifies this locally built
     # tag against the current source/image descriptor before issuing the permit.
-    prepared = prepare(root, state, "trusted-mlsecops:dev")
+    prepared = prepare(
+        root,
+        state,
+        "trusted-mlsecops:dev",
+        **({} if proposal_pin is None else {"proposal_pin": proposal_pin}),
+    )
     result = qualify(
         root,
         state,

@@ -1,5 +1,48 @@
 # Диагностика нагрузочного профиля M14
 
+## Замороженный proposal для M14 и M15
+
+Совместный hosted job прошёл оба gate на `e59a06c`.
+[Измерения, cleanup и хеши отчётов](../evidence/m14-m15-frozen-proposal-2026-11-14.md)
+
+Самостоятельные workflows `kubernetes-load.yml` и `kubernetes-monitoring.yml` сохраняют обычные входы.
+В [load workflow](../../.github/workflows/kubernetes-load.yml) параметр `mode` принимает
+`frozen-m14`, `frozen-m15` или `frozen-pair`. В последнем режиме один runner готовит
+один proposal, выполняет M14, удаляет свой Kubernetes-кластер и проверяет его отсутствие.
+Он переносит старые cluster markers в закрытый каталог runner и создаёт новый кластер для M15.
+Исходная host SQL остаётся доступна до завершения обоих gate. Каждый сценарий получает свой
+подписанный qualification permit. У proposal исходный срок 1800 секунд, у permit до 600 секунд.
+Capture проверяет срок по текущим часам. При expiry требуется свежая кампания.
+
+Для общего delivery шаг владельца фиксирует SHA-256 полных байтов четырёх файлов, включая LF.
+Для каждого gate он передаёт переменные с префиксом `M14_` или `M15_` в обычный
+`python -m mlsecops.acceptance --gate M14 --state .runtime --output .runtime/evidence/M14.json`
+или аналогичную команду M15.
+
+| Окончание имени переменной | Файл в state |
+| --- | --- |
+| `PROPOSAL_SHA256` | `evidence/release-native.json` |
+| `DEMO_SHA256` | `storage-demo.json` |
+| `KEYS_SHA256` | `trusted-keys.json` |
+| `TRUST_SHA256` | `storage-trust.json` |
+
+Сразу после успешного выхода владелец фиксирует raw SHA-256 отчёта `evidence/M14.json`
+и закрытой записи `evidence/M14-frozen-private.json` (для M15 соответственно).
+После подтверждённых остановки своей SQL и отсутствия кластера он вызывает
+`performance_delivery.replay(root, state, gate, pins=pins, report_pin=report_pin, admission_pin=admission_pin)`.
+В `pins` ключи совпадают с путями из таблицы. Replay использует сохранённые объекты
+в `evidence/M18-objects`, исходные четыре файла, нативные private observations и каталоги
+кандидата, load и monitoring. Блокирует подмену отчёта, материала подписи или первичных пакетов.
+Он проверяет историческую подпись и срок на момент наблюдения. Повторная проверка возвращает
+конечный acceptance report с его SHA-256. До её успеха владелец сохраняет private state
+на runner. В публичный вывод попадает штатный отчёт gate. M15 сохраняет хеши
+monitoring/feedback packets в private admission.
+
+Для пары сверяются source, image, candidate, evaluation, proposal, subject и model.
+Оба permit должны различаться. Production promotion у исходного кандидата отказан по
+`release_assurance_required`. Thresholds, HTTP-окна, роль serving и изоляция feedback
+проверяются штатными [M14](../../mlsecops/load_gate.py) и [M15](../../mlsecops/monitoring_gate.py).
+
 Статус 2026-11-07: [M14 с monitoring на cab2cad](../evidence/m14-monitored-load-cab2cad.md)
 прошёл 153 criteria/cases,12958 correct,p95=128.355589ms,p99=139.386008ms.
 Collector/evaluator/signed sink,shutdown,cleanup и post-cleanup verification проверены.

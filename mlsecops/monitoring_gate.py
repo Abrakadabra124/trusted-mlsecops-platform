@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from mlsecops import audit_lineage, load_monitoring, release_policy
+from mlsecops import audit_lineage, load_monitoring, performance_delivery, release_policy
 from mlsecops.candidate_serving_reader import KIND
 from mlsecops.contracts import (
     Rejected,
@@ -260,7 +260,8 @@ def retained(state, value, files):
     return summary, hashes, trace["lineage"]
 
 
-def qualify(root, state):
+@performance_delivery.diagnostic
+def qualify(root, state, *, pins=None):
     hosted()
     root, state = Path(root).resolve(), Path(state).resolve()
     started = now()
@@ -269,8 +270,11 @@ def qualify(root, state):
     for path in (output, private):
         write_json(path, {"status": "inconclusive", "release_ready": False})
     before, expected = materials(root), source(root, "trusted-mlsecops:dev")
+    index = performance_delivery.start(
+        root, state, expected, performance_delivery.owner("M15", pins)
+    )
     controlled = contracts(root)
-    observed = kube_monitoring_native.run(root, state)
+    observed = kube_monitoring_native.run(root, state, **performance_delivery.prepare_args(index))
     content = bounded_read(private, 4 * 1024**2)
     value = decode(content, 4 * 1024**2)
     require(
@@ -339,6 +343,7 @@ def qualify(root, state):
         {"private_observation": digest(content), "retained_packets": packets},
     )
     write_json(state / "evidence/monitoring-contracts.json", controlled)
+    performance_delivery.seal(root, state, "M15", index, value, digest(content), packets, result)
     write_json(output, result)
     return result
 

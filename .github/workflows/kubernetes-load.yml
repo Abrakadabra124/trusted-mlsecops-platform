@@ -3,6 +3,12 @@ on:
   push:
     branches: [codex/cp4-m14-load-20261106, codex/cp4-m14-acceptance-20261106]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Select the standalone load gate or frozen proposal gates
+        type: choice
+        options: [standalone, frozen-m14, frozen-m15, frozen-pair]
+        default: standalone
 permissions:
   contents: read
 concurrency:
@@ -11,7 +17,7 @@ concurrency:
 jobs:
   load-baseline:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -59,6 +65,13 @@ jobs:
           from mlsecops.load_gate import contracts
           print('Fresh M14 pure preflight passed:', contracts(Path.cwd())['checks'])
           PY
+      - name: Frozen evidence joins and offline replay regressions
+        if: startsWith(inputs.mode, 'frozen-')
+        run: |
+          uv run --locked coverage run --branch --source=mlsecops.performance_delivery --data-file="$RUNNER_TEMP/performance.coverage" -m unittest scripts.performance_delivery_qualification
+          uv run --locked coverage report --data-file="$RUNNER_TEMP/performance.coverage" --fail-under=100
+          uv run --locked coverage run --branch --source=mlsecops.monitoring_gate,scripts.monitoring_contracts --data-file="$RUNNER_TEMP/monitoring-gate.coverage" -m unittest scripts.monitoring_gate_qualification
+          uv run --locked coverage report --data-file="$RUNNER_TEMP/monitoring-gate.coverage" --fail-under=100
       - name: Prepare pinned tools and image
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -67,16 +80,73 @@ jobs:
           uv run --locked python -m mlsecops build
       - name: Bootstrap owned cluster
         id: bootstrap
-        run: uv run --locked python -m mlsecops.cluster bootstrap
+        run: |
+          kind get clusters > "$RUNNER_TEMP/performance-clusters"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/performance-clusters"; then exit 1; fi
+          test ! -e .runtime/cluster.json && test ! -e .runtime/kubeconfig
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -m mlsecops.cluster bootstrap
       - name: Prepare model storage and source candidate
         run: |
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
-          uv run --locked python -m mlsecops.storage_pipeline
+          uv run --locked python -m mlsecops.storage_pipeline > /dev/null
+      - name: Freeze original proposal and exact owner inputs once
+        if: startsWith(inputs.mode, 'frozen-')
+        id: freeze
+        run: |
+          uv run --locked python -m scripts.release_native --state .runtime
+          for item in 'proposal evidence/release-native.json' 'demo storage-demo.json' 'keys trusted-keys.json' 'trust storage-trust.json'; do
+            read -r key file <<< "$item"
+            echo "$key=$(sha256sum ".runtime/$file" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          done
       - name: Fresh M14 acceptance and independent resource observation
+        if: ${{ !startsWith(inputs.mode, 'frozen-') }}
         run: uv run --locked python -m mlsecops.acceptance --gate M14 --profile local-cpu --state .runtime --output .runtime/evidence/M14.json
+      - name: Capture M14 on the frozen proposal
+        if: inputs.mode == 'frozen-m14' || inputs.mode == 'frozen-pair'
+        id: m14
+        env:
+          M14_PROPOSAL_SHA256: ${{ steps.freeze.outputs.proposal }}
+          M14_DEMO_SHA256: ${{ steps.freeze.outputs.demo }}
+          M14_KEYS_SHA256: ${{ steps.freeze.outputs.keys }}
+          M14_TRUST_SHA256: ${{ steps.freeze.outputs.trust }}
+        run: |
+          uv run --locked python -m mlsecops.acceptance --gate M14 --state .runtime --output .runtime/evidence/M14.json
+          echo "report=$(sha256sum .runtime/evidence/M14.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          admission=$(sha256sum .runtime/evidence/M14-frozen-private.json | cut -d' ' -f1)
+          echo "::add-mask::$admission"
+          echo "admission=$admission" >> "$GITHUB_OUTPUT"
+      - name: Retire owned load cluster and bootstrap isolated monitoring cluster
+        if: inputs.mode == 'frozen-pair'
+        run: |
+          uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          kind get clusters > "$RUNNER_TEMP/performance-clusters"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/performance-clusters"; then exit 1; fi
+          retired="$RUNNER_TEMP/m14-owned-cluster"
+          mkdir -m 700 "$retired"
+          for name in cluster.json kubeconfig controllers serving kubernetes-storage kubernetes-trust kubernetes-trust-model kubernetes-security kubernetes-serving-service; do
+            if test -e ".runtime/$name"; then mv -- ".runtime/$name" "$retired/"; fi
+          done
+          uv run --locked python -m mlsecops.cluster bootstrap
+          uv run --locked python -m mlsecops.kube_storage
+      - name: Capture M15 on the frozen proposal
+        if: inputs.mode == 'frozen-m15' || inputs.mode == 'frozen-pair'
+        id: m15
+        env:
+          M15_PROPOSAL_SHA256: ${{ steps.freeze.outputs.proposal }}
+          M15_DEMO_SHA256: ${{ steps.freeze.outputs.demo }}
+          M15_KEYS_SHA256: ${{ steps.freeze.outputs.keys }}
+          M15_TRUST_SHA256: ${{ steps.freeze.outputs.trust }}
+        run: |
+          uv run --locked python -m mlsecops.acceptance --gate M15 --state .runtime --output .runtime/evidence/M15.json
+          echo "report=$(sha256sum .runtime/evidence/M15.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          admission=$(sha256sum .runtime/evidence/M15-frozen-private.json | cut -d' ' -f1)
+          echo "::add-mask::$admission"
+          echo "admission=$admission" >> "$GITHUB_OUTPUT"
       - name: Finite baseline projection only
-        if: always()
+        if: always() && !startsWith(inputs.mode, 'frozen-')
         run: |
           uv run --locked python - <<'PY'
           from pathlib import Path
@@ -105,16 +175,21 @@ jobs:
           PY
           fi
       - name: Remove verified owned disposable cluster
-        if: always() && steps.bootstrap.outcome == 'success'
+        if: always() && steps.bootstrap.outputs.started_empty == 'true'
         run: |
-          uv run --locked python - <<'PY'
-          from pathlib import Path
-          from mlsecops.cluster import validate_cluster
-          validate_cluster(Path('.runtime'))
-          PY
-          kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
-          test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
+          kind get clusters > "$RUNNER_TEMP/performance-clusters"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/performance-clusters"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/performance-clusters"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/performance-clusters"; then exit 1; fi
       - name: Reverify primary evidence after SQL and cluster cleanup
+        if: ${{ !startsWith(inputs.mode, 'frozen-') }}
         run: |
           uv run --locked python - <<'PY'
           from pathlib import Path
@@ -126,4 +201,37 @@ jobs:
           content = bounded_read(state / 'evidence/kubernetes-load-private.json', 4 * 1024**2)
           hashes = retained(state, decode(content, 4 * 1024**2))
           print(canonical({'scope': 'M14-post-cleanup-primary-reverification', 'status': 'pass', 'release_ready': False, 'private_sha256': digest(content), 'artifacts': hashes}).decode())
+          PY
+
+      - name: Replay original signed material and primary observations after verified cleanup
+        if: startsWith(inputs.mode, 'frozen-')
+        env:
+          MODE: ${{ inputs.mode }}
+          M14_REPORT: ${{ steps.m14.outputs.report }}
+          M14_ADMISSION: ${{ steps.m14.outputs.admission }}
+          M15_REPORT: ${{ steps.m15.outputs.report }}
+          M15_ADMISSION: ${{ steps.m15.outputs.admission }}
+          PROPOSAL: ${{ steps.freeze.outputs.proposal }}
+          DEMO: ${{ steps.freeze.outputs.demo }}
+          KEYS: ${{ steps.freeze.outputs.keys }}
+          TRUST: ${{ steps.freeze.outputs.trust }}
+        run: |
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops import performance_delivery as delivery
+          from mlsecops.contracts import canonical
+          from mlsecops.security_gate import confirm_cleanup
+          state = Path('.runtime')
+          confirm_cleanup(state)
+          pins = {p:os.environ[key] for p,key in delivery.FILES.items()}
+          gates = {'frozen-m14':['M14'], 'frozen-m15':['M15'], 'frozen-pair':['M14','M15']}[os.environ['MODE']]
+          proofs = [delivery.replay(Path.cwd(),state,gate,pins=pins,report_pin=os.environ[gate+'_REPORT'],
+                    admission_pin=os.environ[gate+'_ADMISSION']) for gate in gates]
+          if len(proofs) == 2:
+              first,second = [p['report']['input_digests'] for p in proofs]
+              delivery.require(all(first[k] == second[k] for k in (*delivery.SOURCE,*delivery.IDENTITY))
+                               and first['qualification_permit_sha256'] != second['qualification_permit_sha256'])
+          for proof in proofs:
+              print(canonical(proof).decode())
           PY
