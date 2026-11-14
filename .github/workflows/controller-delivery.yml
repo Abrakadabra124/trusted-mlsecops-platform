@@ -1,0 +1,158 @@
+name: R1 scoped controller delivery
+on:
+  push:
+    branches: [qualify/r1-controller-delivery]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  delivery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify contracts and prepare locked runtime
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.controller_delivery_qualification scripts.isolation_gates_qualification scripts.evaluation_gate_qualification scripts.delivery_candidate_qualification
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap private cluster and owned SQL
+        id: cluster
+        run: |
+          kind get clusters > "$RUNNER_TEMP/controller-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/controller-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -m mlsecops.cluster bootstrap
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.controller_bootstrap
+          uv run --locked python -m mlsecops.storage_bootstrap
+      - name: Verify approved training source
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
+      - name: Run joint M03 M07 with private scoped publisher and scorer in M04 M20
+        env:
+          R1_SCOPED_TRAINING: "1"
+        run: |
+          export M07_FRESH_WORKSPACE_ID="$(uv run --locked python -c 'from pathlib import Path; from mlsecops.storage_bootstrap import validate; print(validate(Path(".runtime"))["workspace_id"])')"
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+      - name: Freeze proposal and demo
+        id: source
+        run: |
+          uv run --locked python -m scripts.release_native --state .runtime
+          echo "proposal=$(sha256sum .runtime/evidence/release-native.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "keys=$(uv run --locked python -c 'from pathlib import Path; from mlsecops.contracts import canonical, digest, read_json; print(digest(canonical(read_json(Path(".runtime/trusted-keys.json")))))')" >> "$GITHUB_OUTPUT"
+          echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Run M05 with the original frozen proposal and verify all five gates
+        env:
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          R1_ISOLATION_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M05 --output .runtime/evidence/M05.json
+          uv run --locked python -B -W error -m scripts.controller_delivery
+      - name: Replace fenced training cluster with a fresh private serving SQL
+        env:
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.controller_serving_handoff
+      - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
+      - name: Measure canary traffic on the frozen proposal before taking its storage offline
+        id: canary
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native capture
+      - name: Exercise the complete rollback before creating the daily snapshot
+        id: rollback
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m scripts.canary_rollout_native rollback
+      - name: Trigger the timer and restore its exact snapshot into fresh storage
+        id: recovery
+        env:
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: uv run --locked python -B -W error -m scripts.m17_recovery_native capture
+      - name: Stop and verify source and restore
+        if: always()
+        run: uv run --locked python -m scripts.m17_recovery_native stop
+      - name: Verify M16 and M17 against the original candidate after cleanup
+        env:
+          T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
+          T19_ROLLBACK_SHA256: ${{ steps.rollback.outputs.sha256 }}
+          M17_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M17_KEYS_SHA256: ${{ steps.source.outputs.keys }}
+          M17_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M17_PRIMARY_SHA256: ${{ steps.recovery.outputs.sha256 }}
+        run: |
+          uv run --locked python -B -W error -m scripts.m17_recovery_native replay
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
+          uv run --locked python -B -W error -m scripts.controller_delivery --include-recovery base7
+      - name: Sanitized diagnostics
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          state = Path(".runtime")
+          for name in ("M02","M03","M04","M05","M07","M08","M09","M16","M17","M20","M20-controller","M20-outputs","M20-access","M20-isolation","M20-protocol","controller-failure","controller-history-transfer"):
+              path = state / "evidence" / (name + ".json")
+              if path.exists():
+                  result = json.loads(path.read_bytes())
+                  keys = ("status","checks","exit_code","residual_risks","input_digests","metrics","role","diagnostic_sha256","bytes")
+                  print(name, {k:result[k] for k in keys if k in result and k!="metrics"})
+                  metrics = result.get("metrics",{})
+                  print("counts", {k:metrics[k] for k in ("rows","checks","negative_native_batches") if k in metrics})
+                  if name in ("M03","M04","M05","M07","M08","M09","M16","M17","M20"):
+                      print("cases",len(result.get("cases",[])))
+                  print("failed cases", [c["id"] for c in result.get("cases",[]) if c.get("status")!="pass"])
+          for name in ("controller-demo","training-isolation"):
+              path = state / "evidence" / (name+".json")
+              if not path.exists():
+                  continue
+              result = json.loads(path.read_bytes())
+              if name == "controller-demo":
+                  for role, field in (("publisher","execution"),("scorer","prediction_execution")):
+                      item = result[role]
+                      record = item["result"]["metadata"] if role=="publisher" else item["result"]["evaluation"]["report"]
+                      work = record[field]
+                      print(role, item["controller"]["pod_uid"], work["pod_uid"], work["namespace"], work["backend"])
+              elif "serving_under_fault" in result:
+                  for action, item in result["serving_under_fault"]["faults"].items():
+                      print(action, item["probe"]["reason"], item["probe"].get("termination"), len(item["during"]))
+          PY
+      - name: Remove the owned cluster and verify its absence
+        if: always() && steps.cluster.outputs.started_empty == 'true'
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi

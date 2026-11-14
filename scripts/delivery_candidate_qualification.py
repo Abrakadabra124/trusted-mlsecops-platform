@@ -197,6 +197,29 @@ class Delivery(unittest.TestCase):
             runpy.run_module("scripts.delivery_candidate", run_name="__main__")
         return decode(out.getvalue().encode())
 
+    def test_fixed_historical_profiles_and_frozen_m06(self):
+        from scripts.delivery_candidate import BASE7, PARENT11, frozen_reports
+
+        pins = dict(
+            demo_pin=self.env["M17_DEMO_SHA256"],
+            proposal_pin=self.env["M17_PROPOSAL_SHA256"],
+            revision=self.source["source_revision"],
+        )
+        for profile, required in (
+            ("base7", BASE7),
+            ("parent11", PARENT11),
+            ("m06-checkpoint", ("M06",)),
+        ):
+            with self.subTest(profile=profile):
+                receipt = frozen_reports(self.root, profile=profile, **pins)
+                self.assertEqual(set(receipt["reports"]), set(required))
+                self.assertIs(receipt["release_ready"], False)
+                gate = required[0]
+                write_json(self.path(gate), self.reports[gate] | {"source_revision": "b" * 40})
+                with self.assertRaises(Rejected):
+                    frozen_reports(self.root, profile=profile, **pins)
+                write_json(self.path(gate), self.reports[gate])
+
     def test_cli_hashes_all_original_bytes(self):
         direct = reconcile(
             self.root,
@@ -393,9 +416,10 @@ class Workflow(unittest.TestCase):
         self.assertIn("T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}", durable)
         self.assertIn("id: canary", traffic)
         self.assertLess(
-            public.index("--gate M19 --output"), public.index("-m scripts.delivery_candidate")
+            public.index("--gate M19 --output"),
+            public.index("-m scripts.controller_delivery --include-recovery parent12"),
         )
-        self.assertIn("from scripts.delivery_candidate import GATES", public)
+        self.assertIn("from scripts.controller_delivery import GATES", public)
         self.assertIn("for gate in GATES:", public)
 
     def test_normal_entrypoints_write_distinct_private_packets(self):

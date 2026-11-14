@@ -1,3 +1,4 @@
+import os
 import time
 
 from mlsecops import kube_storage
@@ -131,9 +132,15 @@ def qualify(root, state, image):
     ):
         raise Rejected("training_isolation_resources_or_evidence_changed")
     proposal_path = safe_child(state, "evidence/release-native.json")
-    write_json(proposal_path, {"status": "inconclusive", "release_ready": False})
-    proposal = release_native.qualify(root, state, image_id)
-    write_json(proposal_path, proposal)
+    pin = os.environ.get("R1_ISOLATION_PROPOSAL_SHA256")
+    if pin is None:
+        write_json(proposal_path, {"status": "inconclusive", "release_ready": False})
+        proposal = release_native.qualify(root, state, image_id)
+        write_json(proposal_path, proposal)
+    else:
+        from mlsecops.canary_native_evidence import read_pinned
+
+        read_pinned(proposal_path, pin)
     observations = {}
 
     def during_serving(engine, request, body):
@@ -152,6 +159,15 @@ def qualify(root, state, image):
         or observations["bundle_sha256"] != serving["subject_sha256"]
     ):
         raise Rejected("training_isolation_actual_candidate_binding")
+    if pin is not None:
+        # The serving reader verifies the signed capsule and loads the proposal by reference.
+        read_pinned(proposal_path, pin)
+        if (
+            serving["candidate_reference"] != access["candidate_reference"]
+            or serving["evaluation_reference"] != access["evaluation_reference"]
+            or serving["model_sha256"] != access["model_digest"]
+        ):
+            raise Rejected("training_isolation_scoped_candidate_mismatch")
     cases = [
         {"id": name, "expected": True, "actual": True, "status": "pass"}
         for name in (
@@ -174,6 +190,16 @@ def qualify(root, state, image):
         "image_id": image_id,
         "candidate_reference": serving["candidate_reference"],
         "model_sha256": serving["model_sha256"],
+        **(
+            {
+                "evaluation_reference": serving["evaluation_reference"],
+                "proposal_reference": serving["proposal_reference"],
+                "subject_sha256": serving["subject_sha256"],
+                "proposal_packet": pin,
+            }
+            if pin is not None
+            else {}
+        ),
         "cases": cases,
         "checks": len(cases),
         "serving_under_fault": observations,

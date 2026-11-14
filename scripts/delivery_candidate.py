@@ -32,6 +32,26 @@ def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, r
             source_trust=trust_pin,
         ),
     }
+    summary = _collect(state, demo, proposal, demo_pin, proposal_pin, revision, GATES, artifacts)
+    return summary | {
+        "source_files": dict(demo=demo_pin, public_keys=keys_pin, source_trust=trust_pin)
+    }
+
+
+BASE7 = ("M02", "M03", "M07", "M08", "M09", "M16", "M17")
+PARENT11 = ("M01", "M06", "M10", "M12", *BASE7)
+
+
+def frozen_reports(state, *, demo_pin, proposal_pin, revision, profile):
+    # Each historical caller has a fixed receipt set, selected before reading any reports.
+    gates = {"base7": BASE7, "parent11": PARENT11, "m06-checkpoint": ("M06",)}[profile]
+    demo = decode(read_pinned(state / "storage-demo.json", demo_pin))
+    proposal = decode(read_pinned(state / "evidence/release-native.json", proposal_pin))
+    return _collect(state, demo, proposal, demo_pin, proposal_pin, revision, gates, None)
+
+
+def _collect(state, demo, proposal, demo_pin, proposal_pin, revision, gates, artifacts):
+    evidence = state / "evidence"
     observations = {}
     source = proposal["source"]
     if (
@@ -64,7 +84,7 @@ def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, r
     raw_lock = bounded_read(state.parent / "data.lock")
     data_lock = digest(raw_lock)
     dataset_source = decode(raw_lock)["output"]["sha256"]
-    for gate in GATES:
+    for gate in gates:
         raw = bounded_read(evidence / (gate + ".json"))
         report = decode(raw)
         if gate in ("M16", "M17", "M19"):
@@ -74,11 +94,11 @@ def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, r
             ):
                 raise Rejected("delivery_recovery_proposal_mismatch")
             expected = common | runtime
-            if any(
+            if artifacts is not None and any(
                 report["artifact_hashes"].get(k) != value for k, value in artifacts[gate].items()
             ):
                 raise Rejected("delivery_source_or_capture_mismatch_" + gate)
-            if gate in ("M16", "M19"):
+            if artifacts is not None and gate in ("M16", "M19"):
                 observations[gate] = {
                     hexadecimal(report["artifact_hashes"].get(k))
                     for k in (
@@ -157,14 +177,27 @@ def reconcile(state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, r
         ):
             raise Rejected("delivery_candidate_mismatch_" + gate)
         reports[gate] = digest(raw)
-    if not observations["M16"].isdisjoint(observations["M19"]):
+    if observations and not observations["M16"].isdisjoint(observations["M19"]):
         raise Rejected("delivery_canary_observation_reused")
     return dict(
         candidate=common | runtime,
         reports=reports,
         proposal_packet=proposal_pin,
-        source_files=dict(demo=demo_pin, public_keys=keys_pin, source_trust=trust_pin),
         release_ready=False,
+    )
+
+
+def owner_inputs():
+    return dict(
+        keys_pin=os.environ["M17_KEYS_SHA256"],
+        trust_pin=os.environ["M19_TRUST_SHA256"],
+        captures=dict(
+            canary=os.environ["T19_PRIMARY_SHA256"],
+            rollback=os.environ["T19_ROLLBACK_SHA256"],
+            recovery=os.environ["M17_PRIMARY_SHA256"],
+            inventory=os.environ["M19_PRIMARY_SHA256"],
+            fleet=os.environ["M19_FLEET_INPUTS_SHA256"],
+        ),
     )
 
 
@@ -175,16 +208,8 @@ if __name__ == "__main__":
                 Path(".runtime"),
                 demo_pin=os.environ["M17_DEMO_SHA256"],
                 proposal_pin=os.environ["M17_PROPOSAL_SHA256"],
-                keys_pin=os.environ["M17_KEYS_SHA256"],
-                trust_pin=os.environ["M19_TRUST_SHA256"],
-                captures=dict(
-                    canary=os.environ["T19_PRIMARY_SHA256"],
-                    rollback=os.environ["T19_ROLLBACK_SHA256"],
-                    recovery=os.environ["M17_PRIMARY_SHA256"],
-                    inventory=os.environ["M19_PRIMARY_SHA256"],
-                    fleet=os.environ["M19_FLEET_INPUTS_SHA256"],
-                ),
                 revision=os.environ["GITHUB_SHA"],
+                **owner_inputs(),
             )
         ).decode()
     )

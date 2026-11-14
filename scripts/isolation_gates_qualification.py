@@ -57,6 +57,9 @@ class AccessGateContracts(unittest.TestCase):
         self.components["storage"]["volume_uid"] = "volume"
         for name in ("access", "controller"):
             self.components[name]["dataset_reference"] = "c" * 64
+        self.components["controller"].update(
+            candidate_reference="cand", evaluation_reference="eval", model_digest="model"
+        )
         hashes = {}
         for name, report in self.components.items():
             filename = "kubernetes-storage-qualification" if name == "storage" else f"M20-{name}"

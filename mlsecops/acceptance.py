@@ -180,7 +180,22 @@ def report(gate, profile, root, state=None):
                     "isolation_qualification": digest(bounded_read(state / "evidence" / filename)),
                 },
             )
+            result["source_dirty"] = bool(
+                command(["git", "-C", str(root), "status", "--porcelain"])
+            )
             result["input_digests"].update(worker_image=evidence["image_id"])
+            for field in (
+                "candidate_reference",
+                "evaluation_reference",
+                "dataset_reference",
+                "model_digest",
+                "model_sha256",
+                "proposal_reference",
+                "subject_sha256",
+                "proposal_packet",
+            ):
+                if field in evidence:
+                    result["input_digests"][field] = evidence[field]
         except (Rejected, OSError, subprocess.TimeoutExpired) as error:
             unavailable = isinstance(error, (OSError, subprocess.TimeoutExpired)) or (
                 isinstance(error, Rejected) and str(error).startswith("required_tool_")
@@ -562,6 +577,9 @@ def report(gate, profile, root, state=None):
 
         try:
             evidence = qualify(root, state)
+            result["source_dirty"] = bool(
+                command(["git", "-C", str(root), "status", "--porcelain"])
+            )
             result.update(
                 status=evidence["status"],
                 cases=evidence["cases"],
@@ -584,6 +602,7 @@ def report(gate, profile, root, state=None):
                     name: evidence[name]
                     for name in (
                         "image_id",
+                        "evaluation_reference",
                         "dataset_reference",
                         "candidate_reference",
                         "model_digest",
