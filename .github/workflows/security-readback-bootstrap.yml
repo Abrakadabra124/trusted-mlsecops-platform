@@ -1,0 +1,38 @@
+name: Cold security journal bootstrap
+on:
+  push:
+    branches: [fix/m12-m23-bootstrap-9fc84a9]
+    paths:
+      - mlsecops/security_event_server.py
+      - scripts/security_readback_bootstrap_qualification.py
+      - .github/workflows/security-readback-bootstrap.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: security-readback-bootstrap-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  cold-readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked Python dependencies
+        run: uv sync --locked --no-build --python 3.12.15
+      - name: Cold configured readers before HTTP
+        run: uv run --locked python -B -W error -m unittest -v scripts.security_readback_bootstrap_qualification
+      - name: Adjacent real TLS and bounded readback regressions
+        if: always()
+        run: |
+          uv run --locked python -B -W error -m unittest scripts.kube_readback_retry_qualification scripts.security_event_tls_qualification scripts.security_event_tls_live_qualification scripts.security_event_provision_qualification
+          uv run --locked ruff check mlsecops/security_event_server.py scripts/security_readback_bootstrap_qualification.py scripts/security_event_tls_qualification.py
+          uv run --locked ruff format --check mlsecops/security_event_server.py scripts/security_readback_bootstrap_qualification.py scripts/security_event_tls_qualification.py
+          uv run --locked python scripts/check_docs.py
