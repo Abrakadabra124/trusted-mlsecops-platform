@@ -38,13 +38,15 @@ on:
       - 'mlsecops/inventory_fleet.py'
       - 'mlsecops/inventory_gate.py'
       - 'scripts/inventory_*.py'
+      - 'mlsecops/security_gate*.py'
+      - 'scripts/security_gate*_qualification.py'
   workflow_dispatch:
     inputs:
       serving_gate:
         description: Kubernetes campaign to exercise on this attempt's frozen proposal
         type: choice
         default: M12
-        options: [M12, M13]
+        options: [M12, M13, M23]
 permissions:
   contents: read
 jobs:
@@ -68,6 +70,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.security_gate_qualification scripts.security_gate_dispatch_qualification
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
           modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate,mlsecops.inventory_fleet,mlsecops.inventory_gate,scripts.inventory_fleet_native,scripts.inventory_fleet_materials,scripts.inventory_deployment_native
           uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification scripts.reproducibility_candidate_qualification scripts.inventory_delivery_qualification scripts.inventory_fleet_qualification scripts.inventory_fleet_evidence_qualification scripts.inventory_materials_qualification scripts.inventory_gate_qualification scripts.asset_graph_qualification scripts.candidate_serving_reader_qualification scripts.canary_candidate_native_qualification scripts.canary_native_evidence_qualification scripts.canary_rollback_native_qualification scripts.canary_rollout_native_qualification scripts.release_native_qualification
@@ -117,10 +120,17 @@ jobs:
         env:
           M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
         run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+      - name: Verify poisoning resistance and ONNX robustness on the evaluated candidate before proposal issuance
+        if: env.DELIVERY_SERVING_GATE == 'M23'
+        run: |
+          sha256sum .runtime/storage-demo.json .runtime/trusted-keys.json .runtime/storage-trust.json > "$RUNNER_TEMP/evaluated-files.sha256"
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
       - name: Freeze evaluated candidate and original owner
         id: source
         run: |
           uv run --locked python -B -m scripts.release_native --state .runtime
+          if test "$DELIVERY_SERVING_GATE" = M23; then sha256sum --check --status "$RUNNER_TEMP/evaluated-files.sha256"; fi
           uv run --locked python - <<'PY'
           import os
           from pathlib import Path
@@ -133,6 +143,27 @@ jobs:
               print("keys_file=" + digest(bounded_read(state / "trusted-keys.json")), file=out)
               print("trust=" + digest(bounded_read(state / "storage-trust.json")), file=out)
           PY
+      - name: Capture signed security source receipts after proposal issuance
+        id: security_sources
+        if: env.DELIVERY_SERVING_GATE == 'M23'
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m mlsecops.security_gate sources
+      - name: Capture inventory decisions on the original evaluated model
+        id: security_inventory
+        if: env.DELIVERY_SERVING_GATE == 'M23'
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m mlsecops.security_gate inventory
+      - name: Observe audit outage and recovery on the frozen proposal
+        id: security_outage
+        if: env.DELIVERY_SERVING_GATE == 'M23'
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+        run: uv run --locked python -B -W error -m mlsecops.security_gate outage
       - name: Prepare inventory branches around the fresh original proposal
         id: inventory_inputs
         env:
@@ -173,6 +204,7 @@ jobs:
             uv run --locked python -B -m scripts.tracking_service stop
           fi
       - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
+        if: env.DELIVERY_SERVING_GATE != 'M23'
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M09 --output .runtime/evidence/M09.json
@@ -233,6 +265,15 @@ jobs:
       - name: Reverify retained private monitoring and feedback observations after teardown
         if: success() && env.DELIVERY_SERVING_GATE == 'M13'
         run: uv run --locked python -B -W error -c 'from pathlib import Path; from mlsecops.privacy_gate import ingress_retained; from mlsecops.contracts import canonical; print(canonical(ingress_retained(Path(".runtime"))).decode())'
+      - name: Replay the three signed M23 stages after verified cleanup
+        if: success() && env.DELIVERY_SERVING_GATE == 'M23'
+        env:
+          M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+          M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M23_SOURCES_SHA256: ${{ steps.security_sources.outputs.sha256 }}
+          M23_INVENTORY_SHA256: ${{ steps.security_inventory.outputs.sha256 }}
+          M23_OUTAGE_SHA256: ${{ steps.security_outage.outputs.sha256 }}
+        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M23 --output .runtime/evidence/M23.json
       - name: Replay M16 M17 M19 and reconcile the reports of this campaign after verified cleanup
         id: delivery
         env:
@@ -250,6 +291,9 @@ jobs:
           M19_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
           M19_FLEET_INPUTS_SHA256: ${{ steps.inventory_inputs.outputs.sha256 }}
           M19_PRIMARY_SHA256: ${{ steps.inventory_capture.outputs.sha256 }}
+          M23_SOURCES_SHA256: ${{ steps.security_sources.outputs.sha256 }}
+          M23_INVENTORY_SHA256: ${{ steps.security_inventory.outputs.sha256 }}
+          M23_OUTAGE_SHA256: ${{ steps.security_outage.outputs.sha256 }}
         run: |
           uv run --locked python -B -W error -m scripts.m17_recovery_native replay
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json

@@ -390,6 +390,7 @@ def report(gate, profile, root, state=None):
         elif gate == "M23":
             from mlsecops.security_gate import STAGES
 
+            result["release_ready"] = False
             required = ("storage.json", *(f"evidence/M23-{name}.json" for name in STAGES))
         if not all((state / name).is_file() for name in required):
             result["residual_risks"] = (
@@ -429,7 +430,7 @@ def report(gate, profile, root, state=None):
 
         try:
             evidence = qualify(root, state)
-            if gate in {"M10", "M16", "M17", "M19"} and (
+            if gate in {"M10", "M16", "M17", "M19", "M23"} and (
                 evidence["input_digests"]["source_revision"] != result["source_revision"]
                 or evidence["input_digests"]["source_fingerprint"]
                 != result["input_digests"]["source_fingerprint"]

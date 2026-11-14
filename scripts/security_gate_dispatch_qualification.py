@@ -39,11 +39,18 @@ class Dispatch(unittest.TestCase):
                     metrics={},
                     limitations=["synthetic"],
                     artifact_hashes={"primary": "a" * 64},
-                    input_digests={"candidate_reference": "b" * 64},
+                    input_digests={
+                        "candidate_reference": "b" * 64,
+                        "source_revision": failed["source_revision"],
+                        "source_fingerprint": failed["input_digests"]["source_fingerprint"],
+                    },
                 )
                 with patch.object(security_gate, "qualify", return_value=evidence):
+                    with patch.dict(evidence["input_digests"], source_fingerprint="f" * 64):
+                        self.assertEqual(acceptance.main(), 1)
                     self.assertEqual(acceptance.main(), 0)
                 passed = read_json(output)
                 self.assertEqual(passed["status"], "pass")
+                self.assertIs(passed["release_ready"], False)
                 self.assertEqual(passed["input_digests"]["candidate_reference"], "b" * 64)
                 self.assertEqual(passed["artifact_hashes"], {"primary": "a" * 64})

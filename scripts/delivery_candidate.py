@@ -11,13 +11,22 @@ GATES = ("M01", "M02", "M03", "M06", "M07", "M08", "M09", "M10", "M12", "M16", "
 
 
 def campaign_gates(serving_gate):
-    if serving_gate not in {"M12", "M13"}:
+    if serving_gate not in {"M12", "M13", "M23"}:
         raise Rejected("delivery_unknown_serving_gate")
     return tuple(serving_gate if gate == "M12" else gate for gate in GATES)
 
 
 def reconcile(
-    state, *, demo_pin, proposal_pin, keys_pin, trust_pin, captures, revision, serving_gate="M12"
+    state,
+    *,
+    demo_pin,
+    proposal_pin,
+    keys_pin,
+    trust_pin,
+    captures,
+    revision,
+    serving_gate="M12",
+    security_stages=None,
 ):
     evidence = state / "evidence"
     demo = decode(read_pinned(state / "storage-demo.json", demo_pin))
@@ -100,6 +109,24 @@ def reconcile(
                 expected |= dict(
                     release_subject=proposal["subject_sha256"], model=proposal["model_sha256"]
                 )
+        elif gate == "M23":
+            require_fields(security_stages, ("sources", "inventory", "outage"))
+            pins = {"stage-" + k: hexadecimal(v) for k, v in security_stages.items()}
+            pins.update({"candidate-outage-proposal_sha256": proposal_pin, "frozen_demo": demo_pin})
+            if report["release_ready"] is not False or any(
+                report["artifact_hashes"].get(k) != v for k, v in pins.items()
+            ):
+                raise Rejected("delivery_security_capture_mismatch")
+            expected = (
+                common
+                | source
+                | dict(
+                    proposal_reference=proposal["proposal_reference"],
+                    model_sha256=proposal["model_sha256"],
+                    model=proposal["model_sha256"],
+                    release_subject=proposal["subject_sha256"],
+                )
+            )
         elif gate == "M13":
             if (
                 report["artifact_hashes"].get("proposal_packet") != proposal_pin
@@ -209,6 +236,10 @@ if __name__ == "__main__":
                 ),
                 revision=os.environ["GITHUB_SHA"],
                 serving_gate=os.environ.get("DELIVERY_SERVING_GATE", "M12"),
+                security_stages={
+                    stage: os.environ.get("M23_" + stage.upper() + "_SHA256")
+                    for stage in ("sources", "inventory", "outage")
+                },
             )
         ).decode()
     )

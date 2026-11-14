@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from mlsecops import cluster, security_events
+from mlsecops.canary_native_evidence import read_pinned
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -126,13 +127,38 @@ def runner():
     }
 
 
+def delivery_inputs(state):
+    if "M23_DEMO_SHA256" not in os.environ:
+        return None
+    demo_pin = security_events.hexadecimal(os.environ["M23_DEMO_SHA256"])
+    proposal_pin = security_events.hexadecimal(os.environ.get("M23_PROPOSAL_SHA256"))
+    demo = decode(read_pinned(safe_child(state, "storage-demo.json"), demo_pin))
+    proposal = decode(read_pinned(safe_child(state, "evidence/release-native.json"), proposal_pin))
+    security_events.shape(proposal["source"], ("image_id", "source_revision", "source_fingerprint"))
+    require(demo["candidate"]["metadata"]["model_digest"] == proposal["model_sha256"])
+    return dict(
+        frozen_demo=demo_pin,
+        proposal_packet=proposal_pin,
+        proposal_reference=proposal["proposal_reference"],
+        candidate_reference=demo["candidate"]["candidate_reference"],
+        evaluation_reference=demo["evaluation_reference"],
+        model_sha256=proposal["model_sha256"],
+        release_subject=proposal["subject_sha256"],
+        **proposal["source"],
+    )
+
+
 def capture(root, state, name, operation):
     hosted()
     path = stage_path(state, name)
     source, method = source_state(root), digest(canonical(materials(root)))
+    delivery = delivery_inputs(state)
+    if delivery is not None:
+        require(all(delivery[k] == v for k, v in source.items()))
     started = now()
     binding = operation(root, state)
     require(source_state(root) == source and digest(canonical(materials(root))) == method)
+    require(delivery_inputs(state) == delivery)
     record = dict(
         schema_version=1,
         stage=name,
@@ -142,6 +168,7 @@ def capture(root, state, name, operation):
         source=source,
         methods=method,
         binding=binding,
+        **({"delivery": delivery} if delivery is not None else {}),
     )
     write_json(path, record)
     content = bounded_read(path)
@@ -149,7 +176,7 @@ def capture(root, state, name, operation):
     return digest(content)
 
 
-def read_stage(state, name, pin, source, method, owner):
+def read_stage(state, name, pin, source, method, owner, delivery=None):
     raw = bounded_read(stage_path(state, name))
     require(digest(raw) == security_events.hexadecimal(pin))
     record = decode(raw)
@@ -164,6 +191,7 @@ def read_stage(state, name, pin, source, method, owner):
             "source",
             "methods",
             "binding",
+            *(("delivery",) if delivery is not None else ()),
         ),
     )
     security_events.version(record["schema_version"])
@@ -172,6 +200,7 @@ def read_stage(state, name, pin, source, method, owner):
         and record["owner"] == owner
         and record["source"] == source
         and record["methods"] == method
+        and record.get("delivery") == delivery
     )
     return record
 
@@ -183,7 +212,11 @@ def qualify(root, state):
     root, state = Path(root).resolve(), Path(state).resolve()
     source, method, owner = source_state(root), digest(canonical(materials(root))), runner()
     pins = {name: os.environ["M23_" + name.upper() + "_SHA256"] for name in STAGES}
-    packets = {name: read_stage(state, name, pins[name], source, method, owner) for name in STAGES}
+    delivery = delivery_inputs(state)
+    packets = {
+        name: read_stage(state, name, pins[name], source, method, owner, delivery)
+        for name in STAGES
+    }
     times = [
         datetime.fromisoformat(packets[name][field])
         for name in STAGES
@@ -205,6 +238,15 @@ def qualify(root, state):
     sealed = datetime.fromisoformat(candidate["proposal_finished_at"])
     require(sealed.utcoffset() is not None and sealed <= times[0])
     evidence = reconcile(sources, candidate, source)
+    if delivery is not None:
+        inputs = evidence["input_digests"]
+        require(
+            evidence["artifact_hashes"]["candidate-outage-proposal_sha256"]
+            == delivery["proposal_packet"]
+            and all(inputs[k] == delivery[k] for k in (*candidate["candidate"], "release_subject"))
+        )
+        inputs["proposal_reference"] = delivery["proposal_reference"]
+        evidence["artifact_hashes"]["frozen_demo"] = delivery["frozen_demo"]
     evidence["artifact_hashes"].update(
         {"method_materials": method, **{"stage-" + k: v for k, v in pins.items()}}
     )

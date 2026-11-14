@@ -311,6 +311,52 @@ class StageWorkflow(GateResults):
         self.rejected_before_replay()
         self.validate.assert_not_called()
 
+    def test_shared_delivery_rechecks_frozen_bytes_stage_owner_and_signed_subject(self):
+        demo = dict(
+            candidate=dict(
+                candidate_reference=self.subject["candidate_reference"],
+                metadata=dict(model_digest=self.subject["model_sha256"]),
+            ),
+            evaluation_reference=self.subject["evaluation_reference"],
+        )
+        proposal = dict(
+            source={**self.source, "image_id": self.subject["image_id"]},
+            proposal_reference="3" * 64,
+            model_sha256=self.subject["model_sha256"],
+            subject_sha256=self.candidate["release_subject"],
+        )
+        demo_path = self.state / "storage-demo.json"
+        proposal_path = self.state / "evidence/release-native.json"
+        write_json(demo_path, demo)
+        write_json(proposal_path, proposal)
+        env = dict(
+            M23_DEMO_SHA256=digest(demo_path.read_bytes()),
+            M23_PROPOSAL_SHA256=digest(proposal_path.read_bytes()),
+        )
+        self.enterContext(patch.dict(os.environ, env))
+        hashes = self.candidate["artifact_hashes"]
+        hashes["outage-proposal_sha256"] = env["M23_PROPOSAL_SHA256"]
+        self.stages()
+        result = gate.qualify(self.root, self.state)
+        self.assertEqual(result["artifact_hashes"]["frozen_demo"], env["M23_DEMO_SHA256"])
+        self.assertEqual(
+            result["input_digests"]["proposal_reference"], proposal["proposal_reference"]
+        )
+        for obj, changes in (
+            (hashes, {"outage-proposal_sha256": "0" * 64}),
+            (self.subject, {"evaluation_reference": "0" * 64}),
+        ):
+            with patch.dict(obj, changes), self.assertRaises(Rejected):
+                gate.qualify(self.root, self.state)
+        write_json(demo_path, {**demo, "evaluation_reference": "0" * 64})
+        with self.assertRaises(Rejected):
+            gate.qualify(self.root, self.state)
+        with (
+            patch.dict(os.environ, M23_DEMO_SHA256=digest(demo_path.read_bytes())),
+            self.assertRaises(Rejected),
+        ):
+            gate.qualify(self.root, self.state)
+
     def test_proposal_must_be_frozen_before_the_first_measurement(self):
         self.stages()
         for stamp in (self.at(2), self.at(0).removesuffix("+00:00")):

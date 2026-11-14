@@ -55,6 +55,7 @@ class Delivery(unittest.TestCase):
         write_json(self.root / "storage-trust.json", self.keys)
         pin = digest(bounded_read(self.original))
         self.env = dict(
+            DELIVERY_SERVING_GATE="M12",
             GITHUB_SHA=self.source["source_revision"],
             M17_PROPOSAL_SHA256=pin,
             M17_DEMO_SHA256=digest(bounded_read(self.demo)),
@@ -283,6 +284,36 @@ class Delivery(unittest.TestCase):
         with patch.dict(os.environ, DELIVERY_SERVING_GATE="M18"), self.assertRaises(Rejected):
             self.run_cli()
 
+    def test_security_campaign_requires_its_three_stage_pins_and_frozen_candidate(self):
+        report = self.reports["M12"].copy()
+        inputs = dict(report["input_digests"])
+        inputs["model_sha256"] = inputs["model"]
+        stages = {name: digest(name.encode()) for name in ("sources", "inventory", "outage")}
+        artifacts = {
+            "frozen_demo": self.env["M17_DEMO_SHA256"],
+            "candidate-outage-proposal_sha256": self.env["M17_PROPOSAL_SHA256"],
+            **{"stage-" + name: pin for name, pin in stages.items()},
+        }
+        report.update(
+            gate="M23", release_ready=False, artifact_hashes=artifacts, input_digests=inputs
+        )
+        pins = {"M23_" + name.upper() + "_SHA256": pin for name, pin in stages.items()}
+        write_json(self.path("M13"), self.reports["M12"])
+        with patch.dict(os.environ, DELIVERY_SERVING_GATE="M23", **pins):
+            write_json(self.path("M23"), report)
+            receipt = self.run_cli()
+            self.assertEqual(set(receipt["reports"]), (set(self.reports) - {"M12"}) | {"M23"})
+            self.assertEqual(receipt["reports"]["M23"], digest(bounded_read(self.path("M23"))))
+            for fields in (inputs, artifacts):
+                for key in fields:
+                    with self.subTest(key=key), patch.dict(fields, {key: "8" * 64}):
+                        write_json(self.path("M23"), report)
+                        with self.assertRaises(Rejected):
+                            self.run_cli()
+            self.path("M23").unlink()
+            with self.assertRaises(Rejected):
+                self.run_cli()
+
     def test_changed_originals_or_foreign_revision_refuse(self):
         for key in (
             "M17_DEMO_SHA256",
@@ -431,6 +462,27 @@ class Workflow(unittest.TestCase):
         self.assertLess(offline, replay)
         self.assertIn("M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}", capture_privacy)
         self.assertIn("M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}", capture_privacy)
+        positions = [source]
+        for stage in ("sources", "inventory", "outage"):
+            position, block = step("-m mlsecops.security_gate " + stage)
+            positions.append(position)
+            self.assertIn("env.DELIVERY_SERVING_GATE == 'M23'", block)
+            self.assertIn("M23_DEMO_SHA256: ${{ steps.source.outputs.demo }}", block)
+            self.assertIn("M23_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}", block)
+        positions.extend((materials, recovery, stop, cluster))
+        security_replay, owner = step("--gate M23 --output")
+        positions.extend((security_replay, replay))
+        self.assertEqual(positions, sorted(set(positions)))
+        for stage in ("sources", "inventory", "outage"):
+            pin = (
+                "M23_"
+                + stage.upper()
+                + "_SHA256: ${{ steps.security_"
+                + stage
+                + ".outputs.sha256 }}"
+            )
+            self.assertIn(pin, owner)
+            self.assertIn(pin, public)
 
     def test_normal_entrypoints_write_distinct_private_packets(self):
         from scripts import canary_rollout_native as canary
