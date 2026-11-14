@@ -1,6 +1,10 @@
 # M11: сквозная проверка trust lifecycle
 
-Текущий принятый source: [56f1a19 / 43266471492](../evidence/serving-profile-56f1a19-2026-11-12.md#m11-свежая-приёмка-trust-lifecycle),
+Режим с замороженным proposal прошёл 149 проверок на `de5713d73f3e67df41eb2bfcbb3d147a639d9191`.
+Сохранены [очищенный отчёт M11 и его привязки](../evidence/m11-frozen-proposal-2026-11-14.md) и
+[шаги hosted job 132309357172](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43549796164/job/132309357172).
+
+Для прежнего режима с подготовкой собственного proposal принят [56f1a19 / 43266471492](../evidence/serving-profile-56f1a19-2026-11-12.md#m11-свежая-приёмка-trust-lifecycle),
 146 критериев, 746 preflight executions / 0 skips, проверенные primary hashes/traces и
 terminal SQL/cluster cleanup. Общий job 29 min 6 s уложился в 30 min; резерв 54 s относится
 только к этому запуску. M11 mechanism pass не разрешает production release или R1.
@@ -43,6 +47,10 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 
 ## Привязка M11 к общему delivery
 
+В общем delivery владелец передаёт pins из шага, который заморозил proposal и demo.
+В новом owned кластере вызовите один раз команду приёмки из раздела запуска выше.
+Отдельный dispatch и повторный вызов `scripts.release_native` для этой интеграции не нужны.
+
 Для уже замороженного предложения штатный `mlsecops.acceptance --gate M11` принимает пару переменных `M11_PROPOSAL_SHA256` и `M11_DEMO_SHA256`. Это SHA-256 **полных байтов** файлов `evidence/release-native.json` и `storage-demo.json`, включая завершающий LF. Программный вход поддерживает те же значения как `trust_acceptance.qualify(root, state, image, proposal_pin=..., demo_pin=...)`. При передаче одного pin проверка завершается отказом. Без пары сохраняется прежний режим подготовки собственного proposal.
 
 В frozen режиме перед Kubernetes prepare заново проверяется существующий signed package, его model/source/image и подписанная оценка из capsule. Оценка должна совпасть с исходным storage-demo целиком. Затем retained config, signed qualification permit, probe и production refusal связываются с тем же candidate, evaluation, proposal, subject и model. Subject обоих controlled rollback releases должен отличаться от actual subject. Отчёт сохраняет `actual_release_authorization=inconclusive` и причину `release_assurance_required`.
@@ -54,6 +62,31 @@ uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --outp
 Frozen M11 выполняет signer SQL rotation и live signer controls в отдельной owned временной SQL на порту 15446. Вложенные model/trust fixtures используют 15444 и 15445. Их cleanup проверяется до итогового отчёта. После M11 владельцу остаётся очистить scenario cluster, а исходную SQL можно использовать для следующих gates и общего snapshot. Descriptor действует в исходном signed окне 1800 секунд. Очередность общего delivery должна укладываться в это окно.
 
 Для отдельной hosted проверки выберите `kubernetes-serving.yml`, `workflow_dispatch`, `frozen_proposal=true`. Workflow замораживает предложение один раз, выполняет обычный M11, подтверждает остановку source SQL и отсутствие cluster, затем выводит hashed M11 report. В frozen режиме отдельный legacy backup/recovery step пропускается, поскольку backup общего delivery выполняется владельцем после M11. Job timeout 40 минут оставляет время для cleanup, время действия подписанных документов проверяется штатными verifier.
+
+### Сверка результата от 14 ноября 2026
+
+В run `43549796164` шаг M11 занял 25 мин 16 с. Отчёт содержит 149 уникальных
+успешных критериев. Для actual subject штатный promotion Job вернул `rejected`
+по причине `release_assurance_required`. В общем отчёте это поля
+`metrics.actual_job_outcome` и `metrics.actual_production_refusal`.
+Значения `metrics.actual_release_authorization=inconclusive` и
+`metrics.release_ready=false` сохраняют статус production-допуска.
+Оба значения `metrics.controlled_subjects` отличаются друг от друга и от
+`input_digests.release_subject`. Изолированные signer fixtures прошли очистку.
+После M11 отдельные шаги подтвердили остановку исходной SQL и отсутствие
+кластера. Затем runner вывел отчёт и его SHA-256.
+
+SHA-256 сохранённых 28 365 байтов, включая LF в конце файла,
+`76edf6d1f65cf6d98f573d343a0ddc81b8c2ec1f71f7c39820dfc258d1741424`.
+Из корня checkout с этим документом извлеките строку JSON с завершающим LF и сверьте digest.
+
+```bash
+sed -n '/^{/p' docs/evidence/m11-frozen-proposal-2026-11-14.md | sha256sum
+```
+
+Для prerelease `m11-frozen-proposal-2026-11-14` проверенный source указан в
+`source_revision` этого отчёта. При интеграции на другой ревизии владелец
+сверяет pins и исходы из нового запуска общего delivery.
 
 ## Диагностика и восстановление
 
