@@ -382,4 +382,13 @@ serving report. После исправления проверены сохра�
 отказ при изменении формата/содержимого, подмене candidate/evaluation/proposal,
 чтение после удаления исходного файла и отказ при повреждении сохранённого
 объекта. Общий локальный набор M18/M06/isolation/workflow прошёл 56 тестов.
-Это проверка сборщика; новый hosted replay M05 ещё требуется.
+Первый hosted replay подтверждён на `8f01750` в
+[run 43625496116](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43625496116).
+Оригинальный M05, retention и повторная проверка после успешной остановки SQL и
+удаления кластера завершились success. Native verifier связал исходный отчёт
+`e7533c98b9d17d70620d95bec44c5c6da2f8d88a31ac5ef72bf5a1be9c616f89`
+с candidate `6e08bee837129e8888c7bb86844babb0dd231ba41695a6303b9d69127f215f9e`
+и freeze `5bd5c4739a5ad0bae08c74f28baeee9fcf65494c0ec5631d14b8221640ed5992`.
+Это pins из вывода native verifier; отдельного скачивания и внешнего пересчёта
+байтов M05.json здесь не было. Общая попытка завершилась failure перед M13 из-за
+исходного временного окна proposal. Она не является общим M18/R1 pass.

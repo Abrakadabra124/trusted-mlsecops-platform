@@ -70,6 +70,38 @@ lock. Полная проверка M02 и последующих gates посл
 
 Границы доказательства задаёт конкретный source и конкретная попытка. `release_ready` остаётся false. Общая кампания M18 и два внешних challenge для M22 требуют своих доказательств.
 
+## Повтор с единым ownership scope на 983db0c
+
+[Run 43627872163, job 132547716217](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43627872163/job/132547716217)
+завершился success на `983db0c7f7e016b34a0192ed4b4da7de8ddd5792`, attempt 1,
+за 30 мин 15 с. M11 проверил 149 критериев, M12 - 201, включая 62 native.
+Actual выполнялся с 18:44:45.019195 до 18:53:09.395526 UTC. После него
+исходный SQL остановлен; late прошёл обычный serving и controlled rotations.
+Обе приёмки завершены в 19:10:13 UTC. Повторный readback подтвердил тот же
+остановленный SQL без restart; затем кластер удалён, два отчёта сверены снова.
+
+Qualification permit не продлевался. Receipt verifier проверил его первоначальную
+подпись, исходное окно максимум 600 секунд, finish до expiry, общий baseline,
+11 исходных files и одинаковые bindings двух gate. Оригинальный proposal сохранил
+окно 1800 секунд. Production refusal `release_assurance_required` остаётся
+обязательным; `release_ready` равен false.
+
+| Pin из native receipt | SHA-256 |
+| --- | --- |
+| Исходный proposal file | `550c8aa0444e62e7f57bb6af57be16a758dab2ef3052a430e3c9bbe237f472ea` |
+| Proposal reference | `5c193ed0c858ddf70bc68818bbc96c304419d287273dfee3f54ac3251acd9eca` |
+| Qualification permit | `825251cd4122fae8e5f8e0e0ac1aabd8b9581d13e65c32a86b08c65c9f379a79` |
+| Ранний пакет | `f7ac0e1681e36299c626cdf3423ac66eb4055e9d5044fdbebe1953d11abadd96` |
+| Поздний пакет | `7337ae9795ee8bb245474765370adf9ac2bae21bdefb51812dbbfaa1ae68d447` |
+| Отчёт M11 | `d3499aa8b778a19be0a7d8197cd309348ad7a2e59c0ccd326458225d0ad2e487` |
+| Отчёт M12 | `ce38070a2079c041f3cd4fdf65cf51745e4dfec866ae04fdf89bd3b00dfbfb71` |
+| Остановленный источник до и после late | `f85c63d768f6cd686cfec83dc54cfa6f84535c0c41515601103568e379cda384` |
+
+Числа и pins получены из завершённого workflow и его штатного повторного reader.
+Сырые файлы M11/M12 в этой процедуре отдельно с runner не скачивались; внешний
+пересчёт их байтов не заявляется. Эта попытка подтверждает совместную кампанию
+после исправления ownership, но не всё расписание M01-M23 на одном candidate.
+
 ## Дополнительные отказы общего расписания 14 ноября
 
 На `20a7b96`, [run 43623516855](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43623516855),

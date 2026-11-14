@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+[Совместный M11/M12 на 983db0c](docs/operations/shared-serving.md#повтор-с-единым-ownership-scope-на-983db0c)
+прошёл в run 43627872163: M11 149 критериев, M12 201 / 62 native, SQL остался
+остановленным, cluster teardown и повторная сверка отчётов успешны. Исходные
+proposal/permit windows не изменены. Общая последовательная кампания по-прежнему
+требует исправления расписания, а не продления разрешений. M18/R1 не завершены.
+
 На `983db0c` [отдельный M23 run 43627872607](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43627872607)
 завершился success после очистки. Исходный отчёт содержит 161 pass case,
 29 000 observations и семь event routes; максимальная доставка 14 ms,
