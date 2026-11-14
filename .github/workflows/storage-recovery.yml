@@ -9,6 +9,7 @@ on:
       - 'mlsecops/evaluation_gate.py'
       - 'mlsecops/foundation.py'
       - 'mlsecops/inference_gate.py'
+      - 'mlsecops/final_evidence.py'
       - 'scripts/promotion_gate_native.py'
       - 'scripts/promotion_entrypoint_native.py'
       - 'scripts/kube_candidate_native.py'
@@ -215,6 +216,7 @@ jobs:
           kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
           if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
       - name: Replay M16 M17 M19 and reconcile twelve reports after verified cleanup
+        id: delivery
         env:
           T19_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           T19_PRIMARY_SHA256: ${{ steps.canary.outputs.sha256 }}
@@ -235,7 +237,9 @@ jobs:
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M16 --output .runtime/evidence/M16.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M17 --output .runtime/evidence/M17.json
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M19 --output .runtime/evidence/M19.json
-          uv run --locked python -B -W error -m scripts.delivery_candidate
+          set -o pipefail
+          uv run --locked python -B -W error -m scripts.delivery_candidate | tee .runtime/evidence/delivery-candidate.json
+          echo "receipt=$(sha256sum .runtime/evidence/delivery-candidate.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           uv run --locked python - <<'PY'
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
@@ -245,4 +249,30 @@ jobs:
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())
+          PY
+      - name: Identify missing evidence for final M18 acceptance
+        env:
+          M18_DELIVERY_SHA256: ${{ steps.delivery.outputs.receipt }}
+        run: |
+          result=0
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M18 --output .runtime/evidence/M18-gap.json || result=$?
+          test "$result" -eq 2
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          from mlsecops.final_evidence import CHILDREN
+          from scripts.delivery_candidate import GATES
+          report = read_json(Path(".runtime/evidence/M18-gap.json"))
+          observed = report["diagnostics"]
+          if (report["gate"] != "M18" or report["scope"] != "delivery-receipt-gap-map"
+                  or report["status"] != "inconclusive" or report["exit_code"] != 2
+                  or report["release_ready"] is not False or report["production_authorized"] is not False
+                  or report["source_revision"] != os.environ["GITHUB_SHA"]
+                  or observed["delivery_source_revision"] != os.environ["GITHUB_SHA"]
+                  or report["artifact_hashes"]["delivery_receipt"] != os.environ["M18_DELIVERY_SHA256"]
+                  or observed["unavailable"] or sorted(observed["receipt_matched"]) != sorted(GATES)
+                  or sorted(observed["missing_receipts"]) != sorted(set(CHILDREN) - set(GATES))):
+              raise SystemExit("M18 delivery evidence mismatch")
+          print(canonical({"M18": report["status"], **observed}).decode())
           PY
