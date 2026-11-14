@@ -33,6 +33,8 @@ class SharedServingTests(unittest.TestCase):
                     self.assertNotEqual(original, receipts.offline_pin(Path(".runtime")))
             with patch.dict(marker, {"container_id": "other"}):
                 self.assertNotEqual(original, receipts.offline_pin(Path(".runtime")))
+            with patch.dict(observed, {"RestartCount": 1}):
+                self.assertNotEqual(original, receipts.offline_pin(Path(".runtime")))
             with patch.dict(observed["State"], {"Running": True}), self.assertRaises(Rejected):
                 receipts.offline_pin(Path(".runtime"))
 

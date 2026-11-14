@@ -504,6 +504,28 @@ class EvaluationGateContracts(unittest.TestCase):
         self.assertEqual(result["status"], "inconclusive")
         self.assertEqual(result["exit_code"], 2)
 
+    def test_concurrency_failure_preserves_bounded_diagnostics_and_denies_gate(self):
+        from mlsecops.holdout_diagnostics import ClaimFailure, check_claims
+        from scripts.holdout_budget_qualification import BudgetDiagnosticContracts
+
+        receipts = BudgetDiagnosticContracts.receipts()
+        receipts[-1] = {"rejected": "storage_claim_rejected:55P03"}
+        with self.assertRaises(ClaimFailure) as failure:
+            check_claims(receipts, "a" * 64)
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            write_json(state / "workspace.json", {})
+            with patch.object(evaluation_gate, "qualify", side_effect=failure.exception):
+                result = acceptance.report("M07", "local-cpu", ROOT, state)
+        self.assertEqual((result["status"], result["exit_code"]), ("fail", 1))
+        self.assertEqual(
+            result["diagnostics"]["holdout_concurrency"]["rejection_codes"],
+            {"storage_claim_rejected:55P03": 1},
+        )
+        self.assertEqual(
+            result["diagnostics"]["holdout_concurrency"]["claimed_slots"], list(range(2, 33))
+        )
+
     def test_partial_skipped_duplicate_and_boolean_cases_rejected(self):
         evidence = {
             "status": "pass",

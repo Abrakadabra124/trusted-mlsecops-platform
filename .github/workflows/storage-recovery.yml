@@ -81,6 +81,7 @@ jobs:
       - name: Verify recovery contracts and documentation
         run: |
           uv sync --locked --no-build --python 3.12.15
+          uv run --locked python -B -W error -m unittest scripts.data_source_lock_qualification
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
@@ -150,7 +151,17 @@ jobs:
           R1_SCOPED_TRAINING: "1"
           M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
         run: |
-          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+          result=0
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json || result=$?
+          if test "$result" -ne 0; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          report = read_json(Path(".runtime/evidence/M07.json"))
+          print(canonical({"gate": "M07", "status": report["status"], "diagnostics": report.get("diagnostics", {})}).decode())
+          PY
+            exit "$result"
+          fi
           echo "sha256=$(sha256sum .runtime/evidence/M07.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "integrity=$(sha256sum .runtime/evidence/M03.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -319,6 +330,9 @@ jobs:
         run: |
           if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
           uv run --locked python -B -m scripts.m17_recovery_native stop
+          if test "$BOOTSTRAP" = success; then
+            uv run --locked python -c 'from pathlib import Path; from scripts.shared_serving_receipt import offline_pin; print("source_state=" + offline_pin(Path(".runtime")))' >> "$GITHUB_OUTPUT"
+          fi
       - name: Complete M12 controlled rotations and verify the early packet with source SQL offline
         if: always() && env.DELIVERY_SERVING_GATE == 'M12' && steps.actual_m12.outcome == 'success' && steps.stop_sql.outcome == 'success'
         env:
@@ -409,12 +423,14 @@ jobs:
         if: ${{ !cancelled() && steps.joint_gates.outcome == 'success' && steps.stop_cluster.outcome == 'success' }}
         id: joint_receipt
         env:
+          SOURCE_OFFLINE_SHA256: ${{ steps.stop_sql.outputs.source_state }}
           M11_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
           M11_DEMO_SHA256: ${{ steps.source.outputs.demo }}
           M11_M12_ACTUAL_SHA256: ${{ steps.joint_actual.outputs.sha256 }}
           M11_M12_NATIVE_SHA256: ${{ steps.joint_controlled.outputs.sha256 }}
         run: |
+          uv run --locked python -c 'import os; from pathlib import Path; from scripts.shared_serving_receipt import offline_pin; from scripts.shared_serving_native import require; pin=offline_pin(Path(".runtime")); require(pin == os.environ["SOURCE_OFFLINE_SHA256"], "source_restart"); print("source_sql_stayed_stopped", pin)'
           uv run --locked python -B -W error -m scripts.shared_serving_receipt > .runtime/evidence/shared-serving-receipt.json
           echo "sha256=$(sha256sum .runtime/evidence/shared-serving-receipt.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           cat .runtime/evidence/shared-serving-receipt.json

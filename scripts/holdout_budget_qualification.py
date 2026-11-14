@@ -1,6 +1,7 @@
 import copy
 import io
-import runpy
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -155,13 +156,17 @@ class InspectionCLI(unittest.TestCase):
             self.assertIn("storage_connection_rejected", output.getvalue())
 
     def test_module_entrypoint_help_is_read_only(self):
-        with (
-            patch("sys.argv", ["budget", "--help"]),
-            redirect_stdout(io.StringIO()),
-            self.assertRaises(SystemExit) as result,
-        ):
-            runpy.run_module("mlsecops.holdout_budget", run_name="__main__")
-        self.assertEqual(result.exception.code, 0)
+        result = subprocess.run(
+            [sys.executable, "-B", "-W", "error", "-m", "mlsecops.holdout_budget", "--help"],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Read-only holdout access ledger inspection", result.stdout)
+        self.assertEqual(result.stderr, "")
 
 
 class BudgetDiagnosticContracts(unittest.TestCase):
