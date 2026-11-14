@@ -43,6 +43,8 @@ NATIVE_CASES = {
     "one-persistent-worker",
     "actual-candidate-not-release",
     "qualification-audit-context",
+    "qualification-permit-payload",
+    "qualification-permit-envelope",
     "stopped-worker-503",
     "stopped-worker-not-ready",
     "final-worker-absence",
@@ -188,6 +190,10 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
     preparation_started = now()
     output = safe_child(state, "evidence/inference-gate.json")
     write_json(output, {"status": "inconclusive", "release_ready": False})
+    proposal_pin = os.environ.get("M12_PROPOSAL_SHA256")
+    early_pin = os.environ.get("M12_EARLY_SHA256")
+    if early_pin is not None and proposal_pin is None:
+        raise Rejected("M12_early_proposal_required")
     paths = [module.replace(".", "/") + ".py" for module in inference_contracts.MODULES]
     paths += [
         "scripts/inference_contracts.py",
@@ -199,14 +205,19 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "data.lock",
     ]
     materials = {path: digest(bounded_read(root / path)) for path in paths}
-    prepared = kube_serving_native.prepare(
-        root, state, image, proposal_pin=os.environ.get("M12_PROPOSAL_SHA256")
-    )
-    started = now()
-    controlled = contracts(root)
-    native = kube_serving_native.qualify(
-        root, state, image, include_candidate=True, prepared=prepared
-    )
+    if proposal_pin is not None:
+        from scripts import m12_pinned_native
+
+        started, native = m12_pinned_native.finish(root, state, image, proposal_pin, early_pin)
+        preparation_started = native["started_at"]
+        controlled = contracts(root)
+    else:
+        prepared = kube_serving_native.prepare(root, state, image, proposal_pin=None)
+        started = now()
+        controlled = contracts(root)
+        native = kube_serving_native.qualify(
+            root, state, image, include_candidate=True, prepared=prepared
+        )
     source = {
         "source_revision": command(["git", "-C", str(root), "rev-parse", "HEAD"]),
         "source_fingerprint": source_fingerprint(root),
@@ -248,6 +259,7 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
             "proposal_reference": actual["proposal_reference"],
         },
         "artifact_hashes": {
+            **({"pinned_actual": early_pin} if early_pin is not None else {}),
             "native": digest(bounded_read(state / "evidence/inference-native.json")),
             "contracts": digest(bounded_read(state / "evidence/inference-contracts.json")),
             "contract_materials": digest(canonical(materials)),
