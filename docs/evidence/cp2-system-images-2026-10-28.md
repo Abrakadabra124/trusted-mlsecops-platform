@@ -91,3 +91,44 @@ Commit `ced7ea067487f21523adac72c632e04a5fbdba37` закрепляет **1.20.4*
 Интеграция Cilium 1.20.4, диагностического audit и node candidate tools опубликована в main `4fc4f67d7468a7762bbc94ccaf719bbdfe4f1463`. Все 10 workflow terminal: **7 success / 3 failure**. [Kubernetes 40778430565](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430565) success, M01/M04/M05/M21 pass. [Developer 40778430646](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430646), [storage 40778430505](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430505), [tracking 40778430509](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430509), [component image audit 40778430619](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430619), [intake 40778430576](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430576) и [docs 40778430671](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430671) success.
 
 [M08 40778430556](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430556) fail: 68 checks, 25 nonviolating/10 violating/0 inconclusive, 251 primary files, actual-candidate replay error 0.0. [Standalone evasion 40778430672](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430672) fail с recall drop 0.07183673469387755; [paired robust training 40778430561](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40778430561) также fail. Это checkpoint до новой M09 integration, не M18-приёмка. Функциональный успех Cilium не снимает системные CVE или неполное application coverage.
+
+## Повтор 14 ноября: подтверждённый состав local-path-provisioner
+
+[Запуск 43623592528](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43623592528/job/132534442633)
+на `b8ab15459021f8ae85be02e49636fb45a98c90e9` завершился `failure` на audit.
+Все три шага очистки tracking, host SQL и временного кластера прошли.
+Обе опубликованные копии первичного отчёта совпали; SHA-256 канонического JSON
+повторно вычислен:
+`18d20ad43319201766bf5ccab1eff1884ca7ea846e1a44d6ff2eb630d1c94a3b`.
+
+Проверены 14 observed runtime targets и отдельно три эталонных прикладных образа.
+Выполнение scanner подтверждено для всех 17 записей. Полный состав приложения
+подтверждён для 6/14 runtime targets; восемь profiles остаются неподтверждёнными.
+Это показатель покрытия, а не доля безопасных образов.
+
+local-path-provisioner проверяется по точному image config
+`sha256:c82008e2cd0186ef96bfd05d6b49d3286768fae5bd7a961f70bd485a3785c006`.
+Независимое чтение registry layers, Go build info и dpkg дало 56 Go-записей
+и 5 Debian-пакетов. Хеш полного отсортированного состава
+`552dfdc00d5981e6bc68ddae319e8d9c4df0aef7d0cf969cc40701f1d369ee91`.
+При несовпадении config, пакета, пути или cataloger покрытие не принимается.
+
+| Target | Покрытие состава | Critical / High / Unknown |
+| --- | --- | --- |
+| kube-apiserver | Не подтверждено | 5 / 44 / 3 |
+| kube-proxy | Не подтверждено | 9 / 71 / 9 |
+| kube-controller-manager | Не подтверждено | 7 / 59 / 4 |
+| kube-scheduler | Не подтверждено | 7 / 59 / 4 |
+| Cilium agent | Не подтверждено | 0 / 12 / 15 |
+| Cilium operator | Не подтверждено | 0 / 3 / 3 |
+| CoreDNS | Подтверждено | 3 / 24 / 2 |
+| etcd | Не подтверждено | 0 / 4 / 5 |
+| kind node | Не подтверждено | 72 / 464 / 60 |
+| local-path-provisioner | Подтверждено | 3 / 22 / 1 |
+
+Числа означают scanner matches, не число независимо доказанных эксплуатаций.
+Даже у подтверждённых CoreDNS и local-path-provisioner результат остаётся fail.
+Порог High/Critical, отказ при Unknown и запрет исключений сохранены.
+Принятые inventory profiles не являются разрешением эксплуатации этих образов.
+Для перенесённого кода нужен новый полный runtime audit на общей source revision;
+этот отчёт не закрывает B02, M18 или R1.
