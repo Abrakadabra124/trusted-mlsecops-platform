@@ -42,7 +42,7 @@ def reconcile(state, *, demo_pin, proposal_pin, revision):
     raw_lock = bounded_read(state.parent / "data.lock")
     data_lock = digest(raw_lock)
     dataset_source = decode(raw_lock)["output"]["sha256"]
-    for gate in ("M02", "M03", "M07", "M08", "M09", "M16", "M17"):
+    for gate in ("M02", "M03", "M06", "M07", "M08", "M09", "M16", "M17"):
         raw = bounded_read(evidence / (gate + ".json"))
         report = decode(raw)
         if gate in ("M16", "M17"):
@@ -64,6 +64,16 @@ def reconcile(state, *, demo_pin, proposal_pin, revision):
                 data_lock=data_lock,
                 worker_image=source["image_id"],
                 dataset_reference=demo["dataset"]["dataset_reference"],
+            )
+        elif gate == "M06":
+            expected = (
+                common
+                | statistical
+                | dict(
+                    frozen_demo=demo_pin,
+                    worker_image=source["image_id"],
+                    dataset_reference=demo["dataset"]["dataset_reference"],
+                )
             )
         elif gate == "M07":
             expected = common | dict(

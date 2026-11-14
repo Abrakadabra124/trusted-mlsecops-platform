@@ -8,6 +8,9 @@ on:
       - 'mlsecops/acceptance.py'
       - 'mlsecops/evaluation_gate.py'
       - 'mlsecops/data_qualification.py'
+      - 'mlsecops/reproducibility*.py'
+      - 'scripts/reproducibility*.py'
+      - 'images/tracking/**'
       - 'mlsecops/integrity_qualification.py'
       - 'mlsecops/storage_pipeline_qualification.py'
       - 'mlsecops/evaluation_qualification.py'
@@ -32,7 +35,7 @@ permissions:
 jobs:
   recovery:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -49,8 +52,8 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
           export COVERAGE_FILE="$RUNNER_TEMP/m17.coverage"
-          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate
-          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification
+          modules=mlsecops.daily_backup,mlsecops.recovery_observation,mlsecops.recovery_gate,scripts.daily_backup_systemd_native,scripts.m17_recovery_native,scripts.m17_restore_native,scripts.m17_restored_proposal,scripts.restore_negative_native,scripts.delivery_candidate,mlsecops.evaluation_gate,mlsecops.reproducibility_candidate
+          uv run --locked python -B -W error -m coverage run --branch --source="$modules" -m unittest scripts.daily_backup_qualification scripts.daily_backup_systemd_native_qualification scripts.m17_restore_qualification scripts.m17_restored_proposal_qualification scripts.recovery_observation_qualification scripts.restore_negative_qualification scripts.m17_recovery_native_qualification scripts.recovery_gate_qualification scripts.delivery_candidate_qualification scripts.evaluation_gate_qualification scripts.reproducibility_candidate_qualification
           uv run --locked python -m coverage json -o "$RUNNER_TEMP/m17-coverage.json"
           uv run --locked python - "$modules" <<'PY'
           import json, os, sys
@@ -98,6 +101,19 @@ jobs:
                   print(label + "=" + digest(bounded_read(state / name)), file=out)
               print("keys=" + digest(canonical(read_json(state / "trusted-keys.json"))), file=out)
           PY
+      - name: Compare the evaluated ONNX with three fresh trainings and three input mutations
+        env:
+          M06_DEMO_SHA256: ${{ steps.source.outputs.demo }}
+        run: |
+          uv run --locked python -B -m scripts.tracking_spike build
+          uv run --locked python -B -m scripts.tracking_service up
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M06 --output .runtime/evidence/M06.json
+      - name: Stop and verify the owned tracking services
+        if: always()
+        run: |
+          if test -f .runtime/tracking-service/resources.json; then
+            uv run --locked python -B -m scripts.tracking_service stop
+          fi
       - name: Verify poisoning resistance and ONNX robustness of the frozen candidate
         run: |
           uv run --locked python -B -W error -m mlsecops.acceptance --gate M08 --output .runtime/evidence/M08.json
@@ -145,7 +161,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
           evidence = Path(".runtime/evidence")
-          for gate in ("M02", "M03", "M07", "M08", "M09", "M16", "M17"):
+          for gate in ("M02", "M03", "M06", "M07", "M08", "M09", "M16", "M17"):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())

@@ -1,5 +1,6 @@
 import copy
 import io
+import os
 import subprocess
 import tempfile
 from contextlib import redirect_stdout
@@ -277,6 +278,14 @@ def qualify():
             )
             if result["status"] != "pass":
                 raise Rejected("m06_fresh_dispatch_failed")
+            with (
+                patch.dict(os.environ, M06_DEMO_SHA256="f" * 64),
+                patch("mlsecops.reproducibility_candidate.bind") as bind,
+            ):
+                bound_result = reproducibility_gate.qualify(root, state)
+                bind.assert_called_once_with(
+                    root.resolve(), state.resolve(), evidence, bound_result, "f" * 64
+                )
         cases.append("qualifier-executes-campaign-in-explicit-state")
         with (
             patch("scripts.reproducibility_native.qualify", return_value=evidence),

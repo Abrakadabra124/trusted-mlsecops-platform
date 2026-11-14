@@ -1,4 +1,5 @@
 import copy
+import os
 import re
 import uuid
 from pathlib import Path
@@ -281,6 +282,10 @@ def qualify(root, state):
         credentials["reader"],
     )
     result = reconcile(root, state, evidence, reader)
+    if "M06_DEMO_SHA256" in os.environ:
+        from mlsecops.reproducibility_candidate import bind
+
+        bind(root, state, evidence, result, os.environ["M06_DEMO_SHA256"])
     result["input_digests"]["host_scripts"] = host_fingerprint
     result["finished_at"] = now()
     write_json(output, result)
