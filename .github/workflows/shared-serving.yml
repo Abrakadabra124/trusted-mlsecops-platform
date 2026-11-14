@@ -1,0 +1,127 @@
+name: Joint frozen M11 and M12 native qualification
+on:
+  push:
+    branches: [fix/m11-m12-common-native]
+permissions:
+  contents: read
+jobs:
+  shared-serving:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Check shared evidence lookup
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked python -B -W error -m unittest scripts.shared_serving_qualification
+      - name: Prepare pinned tools and image
+        run: |
+          uv run --locked python -m mlsecops bootstrap
+          uv run --locked python scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -m mlsecops build
+      - name: Bootstrap owned cluster
+        id: bootstrap
+        run: |
+          kind get clusters > "$RUNNER_TEMP/m11-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/m11-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Prepare model storage and actual source candidate
+        run: |
+          uv run --locked python -m mlsecops.kube_storage
+          uv run --locked python -m mlsecops.storage_bootstrap
+          uv run --locked python -m mlsecops.storage_pipeline > /dev/null
+      - name: Freeze evaluated proposal and exact owner file pins
+        id: frozen
+        run: |
+          echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          uv run --locked python -m scripts.release_native --state .runtime
+          echo "proposal=$(sha256sum .runtime/evidence/release-native.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Observe actual refusal, HTTP matrix and trust lifecycle
+        id: actual
+        env:
+          M11_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M12_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
+        run: uv run --locked python -m scripts.shared_serving_native actual
+      - name: Complete ordinary serving and controlled rotation
+        id: native
+        env:
+          M11_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M12_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
+          M11_M12_ACTUAL_SHA256: ${{ steps.actual.outputs.sha256 }}
+        run: uv run --locked python -m scripts.shared_serving_native controlled
+      - name: Independent M11 acceptance
+        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
+        env:
+          M11_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M12_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
+          M11_M12_ACTUAL_SHA256: ${{ steps.actual.outputs.sha256 }}
+          M11_M12_NATIVE_SHA256: ${{ steps.native.outputs.sha256 }}
+        run: |
+          status=0
+          uv run --locked python -m mlsecops.acceptance --gate M11 --state .runtime --output .runtime/evidence/M11.json > "$RUNNER_TEMP/M11.log" || status=$?
+          uv run --locked python -c 'import json; r=json.load(open(".runtime/evidence/M11.json")); print(r["gate"],r["status"],r["metrics"].get("checks"),r.get("diagnostics",{}))'
+          exit "$status"
+      - name: Independent M12 acceptance
+        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
+        env:
+          M11_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M12_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
+          M11_M12_ACTUAL_SHA256: ${{ steps.actual.outputs.sha256 }}
+          M11_M12_NATIVE_SHA256: ${{ steps.native.outputs.sha256 }}
+        run: |
+          status=0
+          uv run --locked python -m mlsecops.acceptance --gate M12 --state .runtime --output .runtime/evidence/M12.json > "$RUNNER_TEMP/M12.log" || status=$?
+          uv run --locked python -c 'import json; r=json.load(open(".runtime/evidence/M12.json")); print(r["gate"],r["status"],r["metrics"].get("checks"),r.get("diagnostics",{}))'
+          exit "$status"
+      - name: Stop verified owned source SQL
+        if: always()
+        run: |
+          if test -f .runtime/storage.json; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import Rejected
+          from mlsecops.storage_bootstrap import docker, inspect, validate
+          state = Path('.runtime')
+          marker = validate(state)
+          docker(['stop', '--time', '20', marker['container_id']])
+          marker = validate(state)
+          if inspect('container', marker['container_id'])['State']['Running']:
+              raise Rejected('promotion_source_cleanup_incomplete')
+          PY
+          fi
+      - name: Remove verified owned disposable cluster
+        if: always() && steps.bootstrap.outputs.started_empty == 'true'
+        run: |
+          kind get clusters > "$RUNNER_TEMP/m11-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/m11-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/m11-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/m11-clusters.txt"; then exit 1; fi
+      - name: Verify both reports after cleanup
+        env:
+          M11_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M12_PROPOSAL_SHA256: ${{ steps.frozen.outputs.proposal }}
+          M11_DEMO_SHA256: ${{ steps.frozen.outputs.demo }}
+          M11_M12_ACTUAL_SHA256: ${{ steps.actual.outputs.sha256 }}
+          M11_M12_NATIVE_SHA256: ${{ steps.native.outputs.sha256 }}
+        run: uv run --locked python -m scripts.shared_serving_receipt
