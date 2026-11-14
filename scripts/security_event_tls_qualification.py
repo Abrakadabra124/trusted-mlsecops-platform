@@ -392,7 +392,7 @@ class TLSContracts(unittest.TestCase):
             ),
             patch.object(server, "enforce_privacy"),
             patch.object(server.sys, "argv", ["collector", "--config", path]),
-            patch.object(server, "run_server") as run,
+            patch("mlsecops.serving_http.run_server") as run,
         ):
             self.assertEqual(server.main(), 0)
             self.assertEqual(run.call_args.kwargs["host"], "0.0.0.0")

@@ -16,7 +16,6 @@ from mlsecops import (
 from mlsecops.contracts import Rejected, bounded_read, decode
 from mlsecops.private_cli import Arguments
 from mlsecops.process_privacy import enforce as enforce_privacy
-from mlsecops.serving_http import run_server
 
 FIELDS = (
     "schema_version",
@@ -78,6 +77,10 @@ def main():
         options = parser.parse_args()
         app, port = configured(options.config)
         tls = app.tls_context
+        # Journal readers call configured() in a fresh process with a three-second
+        # budget. Import the serving/ML dependency graph only for the actual server.
+        from mlsecops.serving_http import run_server
+
         run_server(
             app,
             host="127.0.0.1" if tls is None else "0.0.0.0",
