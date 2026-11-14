@@ -147,7 +147,11 @@ jobs:
       - name: Serve the frozen proposal through the Kubernetes HTTP worker and verify admission refusals
         env:
           M12_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
-        run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json
+        run: |
+          if ! uv run --locked python -B -W error -m mlsecops.acceptance --gate M12 --output .runtime/evidence/M12.json; then
+            uv run --locked python -c 'from pathlib import Path; from mlsecops.contracts import canonical, read_json; print(canonical(read_json(Path(".runtime/evidence/M12.json")).get("diagnostics", {})).decode())'
+            exit 1
+          fi
       - name: Measure canary traffic on the frozen proposal before taking its storage offline
         id: canary
         env:

@@ -477,7 +477,7 @@ def report(gate, profile, root, state=None):
                 exit_code=2 if unavailable else 1,
                 residual_risks=[reason],
             )
-            if gate == "M11":
+            if gate in {"M11", "M12"}:
                 from mlsecops.cluster import request_failure
                 from scripts.kube_privacy_diagnostic import location, validated
 

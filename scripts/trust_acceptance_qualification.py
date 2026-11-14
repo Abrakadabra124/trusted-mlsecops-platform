@@ -81,8 +81,8 @@ class TrustAcceptanceContracts(unittest.TestCase):
             )
             self.assertNotIn("private-canary", canonical(result).decode())
 
-    def test_M11_keeps_finite_kubernetes_reason_without_command_or_stderr(self):
-        from mlsecops import acceptance
+    def test_trust_and_inference_keep_only_finite_kubernetes_diagnostics(self):
+        from mlsecops import acceptance, inference_gate
 
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
@@ -96,11 +96,15 @@ class TrustAcceptanceContracts(unittest.TestCase):
                 ),
                 ("kubernetes_request_failed:exec:unknown:private-canary", None),
             ):
-                with patch.object(trust_acceptance, "qualify", side_effect=Rejected(message)):
-                    result = acceptance.report("M11", "local-cpu", root, state)
-                self.assertEqual(result["status"], "fail")
-                self.assertEqual(result["diagnostics"].get("kubernetes_request"), expected)
-                self.assertNotIn("private-canary", canonical(result).decode())
+                for gate, module in (("M11", trust_acceptance), ("M12", inference_gate)):
+                    with (
+                        self.subTest(gate=gate),
+                        patch.object(module, "qualify", side_effect=Rejected(message)),
+                    ):
+                        result = acceptance.report(gate, "local-cpu", root, state)
+                    self.assertEqual(result["status"], "fail")
+                    self.assertEqual(result["diagnostics"].get("kubernetes_request"), expected)
+                    self.assertNotIn("private-canary", canonical(result).decode())
 
     def test_acceptance_dispatches_M11_and_reports_missing_runtime_without_success(self):
         from mlsecops import acceptance
