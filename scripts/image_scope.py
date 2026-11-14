@@ -14,6 +14,7 @@ from mlsecops.kube_worker import image_config
 from mlsecops.storage_bootstrap import WORKSPACE_LABEL
 from mlsecops.storage_pki import workspace_id
 from scripts import tracking_service
+from scripts.image_audit_contract import COREDNS_CONFIG, coredns_inventory_matches
 
 
 def image_digest(value):
@@ -252,7 +253,14 @@ def coverage(snapshot, components):
             item.get("scan_executed") is True
             and item.get("sbom_validated") is True
             and item.get("status") in {"pass", "fail"}
-            and item.get("coverage_profile") in {"worker", "storage", "tracking"}
+            and (
+                item.get("coverage_profile") in {"worker", "storage", "tracking"}
+                or (
+                    item.get("coverage_profile") == "coredns"
+                    and target["config_id"] == COREDNS_CONFIG
+                    and coredns_inventory_matches(item.get("package_observation") or {})
+                )
+            )
             and type(item.get("catalogued_packages")) is int
             and item["catalogued_packages"] > 0
             and (

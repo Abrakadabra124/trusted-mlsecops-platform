@@ -2,7 +2,7 @@ import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from mlsecops.contracts import Rejected
+from mlsecops.contracts import Rejected, canonical, digest
 
 SYFT_VERSION = "1.54.1"
 GRYPE_VERSION = "0.120.1"
@@ -14,6 +14,30 @@ GO_CONTROLS = {
     "stdlib": ("stdlib", "go1.20.9"),
 }
 GO_CONTROL_ADVISORIES = {"GO-2023-2102", "CVE-2023-39325", "GHSA-4374-p667-p6c8"}
+COREDNS_CONFIG = "sha256:97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4"
+# Sorted (type, name, version) from /coredns Go build info and the image's dpkg database.
+COREDNS_PACKAGES_SHA256 = "9b512c14911df8ec933a65f4a6010b2dc14fb7c63ef5ec6d632f9999058dc862"
+
+
+def coredns_inventory_matches(observation):
+    if (
+        observation.get("image_id") != COREDNS_CONFIG
+        or (observation["distro"] or {}).get("id") != "debian"
+    ):
+        return False
+    rows = []
+    for p in observation["packages"]:
+        if p["type"] == "go-module":
+            if p["foundBy"] != "go-module-binary-cataloger" or p["paths"] != ["/coredns"]:
+                return False
+        elif (
+            p["type"] != "deb"
+            or p["foundBy"] != "dpkg-db-cataloger"
+            or f"/var/lib/dpkg/status.d/{p['name']}" not in p["paths"]
+        ):
+            return False
+        rows.append([p["type"], p["name"], p["version"]])
+    return digest(canonical(sorted(rows))) == COREDNS_PACKAGES_SHA256
 
 
 def observe_packages(sbom, image_id):

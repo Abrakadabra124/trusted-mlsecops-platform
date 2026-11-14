@@ -10,6 +10,17 @@
 
 ## Закреплённые материалы и границы
 
+### Проверка etcd и CoreDNS в ветке R1-B02
+
+Для нового disposable кластера [конфигурация kind](../../infra/kind.yaml) передаёт kubeadm два linux/amd64 manifest digest из `registry.k8s.io`. На 14 ноября в серии Kubernetes 1.36 официальный kind публикует образы node 1.36.1 и 1.36.4. В kind v0.33.0 закреплён 1.36.4. Даже kubeadm 1.36.6 по умолчанию выбирает etcd 3.6.8-0. Для двух компонентов проверяются отдельные patch releases в действующих minor-сериях. [Релиз kind](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0), [таблица версий kubeadm](https://github.com/kubernetes/kubernetes/blob/v1.36.6/cmd/kubeadm/app/constants/constants.go).
+
+| Компонент | Manifest linux/amd64 | Ожидаемый config SHA-256 |
+| --- | --- | --- |
+| etcd 3.6.16-0 | `00edecc7baeaf69c61708ed713d55a8c928d539f200298d8d67cbfed59db9c7e` | `a17708350060c02414f0ecd9a0afd44404df2e4ed8cc9726a3a9c5776b40645e` |
+| CoreDNS v1.14.7 | `2329f5f0e7e79fbe56dcdf11ecc4337ee2476bb251095bc275fe9461cb88a55b` | `97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4` |
+
+В шаге reconcile [runtime-image-audit](../../.github/workflows/runtime-image-audit.yml) найти оба config ID среди фактических Pod images. Для CoreDNS эталон получен независимо от Syft чтением слоёв указанного manifest с проверкой SHA-256. Из `/coredns` взяты строки mod/dep встроенного Go build info и версия stdlib. Всего 194 записи Go, в том числе stdlib go1.26.6. Четыре Debian-пакета получены из полей Package/Version в `/var/lib/dpkg/status.d`. SHA-256 канонического JSON отсортированных троек type/name/version равен `9b512c14911df8ec933a65f4a6010b2dc14fb7c63ef5ec6d632f9999058dc862`. Для совпадения требуются этот config ID, полный состав, ожидаемые пути бинарника и базы dpkg, соответствующие catalogers, согласованная distro и успешные Go controls. Любое несовпадение состава сохраняет диагностический скан с его findings. Coverage проверяется отдельно от результата допуска образа.
+
 [Builder](../../scripts/image_node_candidate.py) использует:
 
 - server archive `v1.36.6`, SHA-256 `702d6529b5eb7bfb919dab3542cd420ccf316fca6aa7c506b69169bd12b26a7c`, сверенный с [официальным checksum](https://dl.k8s.io/release/v1.36.6/kubernetes-server-linux-amd64.tar.gz.sha256);

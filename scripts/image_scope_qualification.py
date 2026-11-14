@@ -384,6 +384,7 @@ class RuntimeImageScopeContracts(unittest.TestCase):
             lambda rows: rows[0].update(sbom_validated=False),
             lambda rows: rows[0].update(status="inconclusive"),
             lambda rows: rows[0].update(coverage_profile="unapproved-system"),
+            lambda rows: rows[0].update(coverage_profile="coredns"),
             lambda rows: rows[plain].update(runtime_image_id=sha("f")),
             lambda rows: rows[0].update(catalogued_packages=0),
             lambda rows: rows[bound].update(image_config_id=sha("f")),
