@@ -10,6 +10,13 @@ nodes:
     image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
     kubeadmConfigPatches:
       - |
+        kind: ClusterConfiguration
+        etcd:
+          local:
+            imageTag: "3.6.16-0@sha256:00edecc7baeaf69c61708ed713d55a8c928d539f200298d8d67cbfed59db9c7e"
+        dns:
+          imageTag: "v1.14.7@sha256:2329f5f0e7e79fbe56dcdf11ecc4337ee2476bb251095bc275fe9461cb88a55b"
+      - |
         kind: KubeletConfiguration
         podPidsLimit: 64
         containerLogMaxSize: "20Mi"
