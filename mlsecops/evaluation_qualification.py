@@ -13,7 +13,7 @@ from mlsecops.signing import sign
 from mlsecops.storage_bootstrap import validate
 
 
-def qualify(root, state, image):
+def qualify(root, state, image, *, prepared=None):
     root, state = Path(root).resolve(), Path(state).resolve()
     marker = validate(state)
     fingerprint = source_fingerprint(root)
@@ -32,7 +32,7 @@ def qualify(root, state, image):
         else:
             raise Rejected(f"evaluation_qualification_bypass:{name}")
 
-    result = storage_pipeline.demo(root, state, image)
+    result = storage_pipeline.demo(root, state, image) if prepared is None else prepared
     candidate = result["candidate"]["candidate_reference"]
     reference = result["evaluation_reference"]
     policy = read_json(root / "policies/local-cpu.json")

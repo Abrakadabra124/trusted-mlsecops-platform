@@ -123,6 +123,7 @@ def report(gate, profile, root, state=None):
                 cases=evidence["cases"],
                 exit_code=0,
                 metrics={"checks": evidence["checks"], **evidence["component_checks"]},
+                source_dirty=bool(command(["git", "-C", str(root), "status", "--porcelain"])),
                 residual_risks=evidence["limitations"],
                 artifact_hashes={
                     **evidence["artifact_hashes"],
@@ -136,6 +137,7 @@ def report(gate, profile, root, state=None):
                 data_lock=evidence["source_lock_digest"],
                 dataset_reference=evidence["dataset_reference"],
                 candidate_reference=evidence["candidate_reference"],
+                evaluation_reference=evidence["evaluation_reference"],
                 worker_image=evidence["execution"]["image_id"],
                 storage_config=evidence["storage_inputs"]["config_digest"],
             )

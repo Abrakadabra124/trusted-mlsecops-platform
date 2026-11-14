@@ -318,6 +318,7 @@ class EvaluationGateContracts(unittest.TestCase):
             native = stack.enter_context(
                 patch.object(evaluation_gate, "evaluate", return_value=self.evidence)
             )
+            prepare = stack.enter_context(patch.object(evaluation_gate, "integrity_candidate"))
             stack.enter_context(patch.object(evaluation_gate, "reconcile", return_value=result))
             run_budget = stack.enter_context(
                 patch.object(
@@ -361,6 +362,12 @@ class EvaluationGateContracts(unittest.TestCase):
                     stopped.assert_called_once_with(["stop", "owned"], timeout=60)
                 raise
             native.assert_called_once()
+            if source_owner is None:
+                prepare.assert_not_called()
+                self.assertIsNone(native.call_args.kwargs["prepared"])
+            else:
+                prepare.assert_called_once_with(ROOT, state.resolve(), self.image)
+                self.assertIs(native.call_args.kwargs["prepared"], prepare.return_value)
             run_budget.assert_called_once()
             self.assertNotEqual(native.call_args.args[1], run_budget.call_args.args[1])
             if source_owner is None:
@@ -371,6 +378,42 @@ class EvaluationGateContracts(unittest.TestCase):
                 stopped.assert_not_called()
             self.assertEqual(read_json(state / "evidence/evaluation-gate.json"), report)
             return report
+
+    def test_intake_integrity_subject_and_evaluation_are_bound_before_reuse(self):
+        inputs = dict(
+            worker_image=self.image,
+            dataset_reference="dataset",
+            candidate_reference="candidate",
+            evaluation_reference="evaluation",
+        )
+        demo = dict(
+            dataset=dict(dataset_reference="dataset"),
+            candidate=dict(candidate_reference="candidate"),
+            evaluation_reference="evaluation",
+        )
+        gate = dict(status="pass", exit_code=0, source_dirty=False, input_digests=inputs)
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(acceptance, "report", return_value=gate),
+        ):
+            state = Path(temporary)
+            write_json(state / "storage-demo.json", demo)
+            self.assertEqual(evaluation_gate.integrity_candidate(ROOT, state, self.image), demo)
+            self.assertEqual(read_json(state / "evidence/M03.json"), gate)
+            for key in inputs:
+                with (
+                    self.subTest(key=key),
+                    patch.dict(inputs, {key: "foreign"}),
+                    self.assertRaisesRegex(Rejected, "candidate_mismatch"),
+                ):
+                    evaluation_gate.integrity_candidate(ROOT, state, self.image)
+            for change in (dict(source_dirty=True), dict(status="inconclusive"), dict(exit_code=1)):
+                with (
+                    self.subTest(change=change),
+                    patch.dict(gate, change),
+                    self.assertRaisesRegex(Rejected, "not_accepted"),
+                ):
+                    evaluation_gate.integrity_candidate(ROOT, state, self.image)
 
     def test_campaign_executes_fresh_components_and_preserves_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

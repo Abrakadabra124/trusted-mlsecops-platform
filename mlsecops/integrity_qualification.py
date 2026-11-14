@@ -163,6 +163,7 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         "source_lock_digest": lock_digest,
         "dataset_reference": pipeline["dataset_reference"],
         "candidate_reference": pipeline["candidate_reference"],
+        "evaluation_reference": pipeline["evaluation_reference"],
         "execution": execution,
         "storage_inputs": storage["inputs"],
         "approved_sql_hashes_before": before,

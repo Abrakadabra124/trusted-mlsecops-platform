@@ -8,6 +8,9 @@ on:
       - 'mlsecops/acceptance.py'
       - 'mlsecops/evaluation_gate.py'
       - 'mlsecops/data_qualification.py'
+      - 'mlsecops/integrity_qualification.py'
+      - 'mlsecops/storage_pipeline_qualification.py'
+      - 'mlsecops/evaluation_qualification.py'
       - 'data.lock'
       - 'mlsecops/daily_backup.py'
       - 'mlsecops/recovery_*.py'
@@ -77,7 +80,7 @@ jobs:
           PY
       - name: Verify intake, quarantine and locked training source
         run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
-      - name: Train once and verify the independent evaluation and holdout budget
+      - name: Verify SQL integrity and role isolation, then evaluate the same training run
         env:
           M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
         run: uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
@@ -142,7 +145,7 @@ jobs:
           from pathlib import Path
           from mlsecops.contracts import bounded_read, canonical, decode, digest
           evidence = Path(".runtime/evidence")
-          for gate in ("M02", "M07", "M08", "M09", "M16", "M17"):
+          for gate in ("M02", "M03", "M07", "M08", "M09", "M16", "M17"):
               raw = bounded_read(evidence / (gate + ".json"))
               result = decode(raw)
               print(canonical(result | {"report_sha256": digest(raw)}).decode())

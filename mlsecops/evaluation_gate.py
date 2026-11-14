@@ -248,6 +248,25 @@ def reconcile(root, state, evidence, image, started):
         raise Rejected("M07_material_shape_invalid") from error
 
 
+def integrity_candidate(root, state, image):
+    from mlsecops.acceptance import report
+
+    result = report("M03", "local-cpu", root, state)
+    write_json(state / "evidence/M03.json", result)
+    if result["status"] != "pass" or result["exit_code"] != 0 or result["source_dirty"]:
+        raise Rejected("M07_integrity_gate_not_accepted")
+    demo = read_json(state / "storage-demo.json")
+    inputs = result["input_digests"]
+    if (
+        inputs["worker_image"] != image
+        or inputs["dataset_reference"] != demo["dataset"]["dataset_reference"]
+        or inputs["candidate_reference"] != demo["candidate"]["candidate_reference"]
+        or inputs["evaluation_reference"] != demo["evaluation_reference"]
+    ):
+        raise Rejected("M07_integrity_candidate_mismatch")
+    return demo
+
+
 def qualify(root, state):
     root, state = Path(root).resolve(), Path(state).resolve()
     output = state / "evidence/evaluation-gate.json"
@@ -277,7 +296,8 @@ def qualify(root, state):
     ):
         raise Rejected("M07_requires_fresh_owned_storage")
     try:
-        native = evaluate(root, quality_state, image)
+        prepared = None if shared_owner is None else integrity_candidate(root, quality_state, image)
+        native = evaluate(root, quality_state, image, prepared=prepared)
         result = reconcile(root, quality_state, native, image, started)
         budget = budget_campaign(root, campaign / "budget", image, 15452)
         budget_cases = check_budget(
