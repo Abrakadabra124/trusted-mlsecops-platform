@@ -34,6 +34,15 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUEST_OPERATIONS = frozenset(
     {"get", "create", "apply", "replace", "delete", "logs", "wait", "exec", "config", "other"}
 )
+# A remote Python traceback may contain paths and configuration. Only exact
+# exception lines from the journal are eligible for a public classification.
+JOURNAL_ERRORS = {
+    b"mlsecops.contracts.rejected: security_readback_deadline": "readback_deadline",
+    b"mlsecops.contracts.rejected: security_store_busy": "journal_busy",
+    b"mlsecops.contracts.rejected: security_store_unavailable": "journal_unavailable",
+    b"mlsecops.contracts.rejected: artifact_unavailable": "artifact_unavailable",
+    b"mlsecops.contracts.rejected: security_config_expired_or_future": "registry_time",
+}
 REQUEST_CATEGORIES = frozenset(
     {
         "container_pending",
@@ -46,6 +55,7 @@ REQUEST_CATEGORIES = frozenset(
         "admission",
         "rbac",
         "pod_security",
+        *JOURNAL_ERRORS.values(),
     }
 )
 
@@ -132,6 +142,11 @@ def kubectl(state, arguments, value=None, timeout=60, check=True, config=None):
             "unknown",
         )
         counts = quota_counts(diagnostic) if category == "quota" else None
+        if operation == "exec" and category == "unknown":
+            for line in reversed(diagnostic.splitlines()):
+                if line in JOURNAL_ERRORS:
+                    category = JOURNAL_ERRORS[line]
+                    break
         if counts is not None:
             print(
                 canonical({"event": "kubernetes-quota-refused", **counts}).decode(),

@@ -1,5 +1,7 @@
 # T29: sequence gap и отказ audit при здоровом ML
 
+В [попытке на 8d1252b](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43545814738/job/132297518888) команда чтения журнала collector завершилась ошибкой до запуска проверяемого HTTP-процесса. В публичном отчёте этой попытки указано `exec:unknown`. Причина внутри процесса по этой записи не установлена. В следующих запусках оператор может различить превышение срока чтения (`readback_deadline`), занятую блокировку (`journal_busy`), недоступный журнал или файл (`journal_unavailable`, `artifact_unavailable`) и время действия реестра (`registry_time`). Для разбора используйте категорию вместе с фазой и местом вызова. Отказ до наблюдения не подтверждает работу модели во время аварии.
+
 Статус: [sequence и actual outage на c57d3f6](../evidence/m23-outage-c57d3f6-2026-11-12.md)
 прошли компонентную hosted-проверку, включая recovery и post-cleanup replay.
 Это компонентные проверки [плана M23](../m23-acceptance-plan.md),

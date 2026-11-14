@@ -2,7 +2,7 @@ name: M23 security event acceptance
 on:
   push:
     branches: [codex/cp4-m23-security-events-20261107]
-    paths: ['mlsecops/acceptance.py', 'mlsecops/security_gate*.py', 'scripts/security_gate*.py', 'scripts/security_event_sequence_native.py', 'scripts/security_identity_events_native.py', 'scripts/security_source_campaign.py', 'scripts/security_trust_service_native.py', 'mlsecops/security_outage*.py', 'mlsecops/security_*evidence.py', 'mlsecops/security_inventory_events.py', 'scripts/security_inventory*.py', 'scripts/security_source_capture.py', 'scripts/kube_security*.py', 'scripts/security_audit_boundary*.py', 'scripts/kube_candidate_native.py', 'scripts/kube_serving_native.py', 'scripts/kube_privacy_bundle.py', '.github/workflows/kubernetes-security-outage.yml', 'Dockerfile', 'pyproject.toml', 'uv.lock']
+    paths: ['mlsecops/acceptance.py', 'mlsecops/cluster.py', 'scripts/cluster_command_qualification.py', 'mlsecops/security_gate*.py', 'scripts/security_gate*.py', 'scripts/security_event_sequence_native.py', 'scripts/security_identity_events_native.py', 'scripts/security_source_campaign.py', 'scripts/security_trust_service_native.py', 'mlsecops/security_outage*.py', 'mlsecops/security_*evidence.py', 'mlsecops/security_inventory_events.py', 'scripts/security_inventory*.py', 'scripts/security_source_capture.py', 'scripts/kube_security*.py', 'scripts/security_audit_boundary*.py', 'scripts/kube_candidate_native.py', 'scripts/kube_serving_native.py', 'scripts/kube_privacy_bundle.py', '.github/workflows/kubernetes-security-outage.yml', 'Dockerfile', 'pyproject.toml', 'uv.lock']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
           uv run --locked ruff check .
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -B -W error -m unittest scripts.security_outage_exchange_qualification scripts.security_outage_packet_qualification scripts.security_outage_probe_qualification scripts.kube_security_boundary_qualification scripts.kube_security_outage_operator_qualification scripts.kube_security_outage_native_qualification scripts.security_audit_boundary_probe_qualification scripts.kube_candidate_qualification scripts.kube_monitoring_native_qualification scripts.kube_serving_native_qualification scripts.kube_privacy_bundle_qualification
+          uv run --locked python -B -W error -m unittest scripts.cluster_command_qualification scripts.security_outage_exchange_qualification scripts.security_outage_packet_qualification scripts.security_outage_probe_qualification scripts.kube_security_boundary_qualification scripts.kube_security_outage_operator_qualification scripts.kube_security_outage_native_qualification scripts.security_audit_boundary_probe_qualification scripts.kube_candidate_qualification scripts.kube_monitoring_native_qualification scripts.kube_serving_native_qualification scripts.kube_privacy_bundle_qualification
           uv run --locked python -B -W error -m unittest scripts.security_inventory_evidence_qualification scripts.security_source_evidence_qualification scripts.security_source_capture_qualification
       - name: Require per-module coverage for the M23 acceptance path
         run: |

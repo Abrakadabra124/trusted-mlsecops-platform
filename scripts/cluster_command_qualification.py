@@ -72,6 +72,22 @@ class ClusterCommandContracts(unittest.TestCase):
                 "create:pod_security",
             ),
             (["get", "pods"], b"connection refused", "get:connection_refused"),
+            (
+                ["exec", "pod"],
+                b"private\nmlsecops.contracts.Rejected: security_readback_deadline\ncommand terminated with exit code 1",
+                "exec:readback_deadline",
+            ),
+            (
+                ["exec", "pod"],
+                b"mlsecops.contracts.Rejected: security_store_busy",
+                "exec:journal_busy",
+            ),
+            (
+                ["exec", "pod"],
+                b"mlsecops.contracts.Rejected: security_store_busy:secret",
+                "exec:unknown",
+            ),
+            (["get", "pods"], b"mlsecops.contracts.Rejected: security_store_busy", "get:unknown"),
             (["get", "pods"], b"TLS handshake timeout", "get:timeout"),
             (["private-operation"], b"private diagnostic", "other:unknown"),
             ([], b"", "other:unknown"),
@@ -88,7 +104,7 @@ class ClusterCommandContracts(unittest.TestCase):
                         cluster.subprocess,
                         "run",
                         return_value=subprocess.CompletedProcess(
-                            [], 1, b"PRIVATE_STDOUT_CANARY", message + b" PRIVATE_STDERR_CANARY"
+                            [], 1, b"PRIVATE_STDOUT_CANARY", message + b"\nPRIVATE_STDERR_CANARY"
                         ),
                     ),
                 ):
