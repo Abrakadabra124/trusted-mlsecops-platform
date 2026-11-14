@@ -254,7 +254,9 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
                         native, "materials", side_effect=[{}, {"changed": "yes"} if changed else {}]
                     ),
                     patch.object(native, "command", return_value=""),
-                    patch.object(native.kube_serving_native, "prepare", return_value=prepared),
+                    patch.object(
+                        native.kube_serving_native, "prepare", return_value=prepared
+                    ) as prepare,
                     patch.object(
                         native.kube_candidate_native, "qualify", return_value=copy.deepcopy(value)
                     ),
@@ -263,7 +265,8 @@ class NativePrivacyProjectionContracts(unittest.TestCase):
                         with self.assertRaises(Rejected):
                             native.qualify(root, root, "image")
                     else:
-                        result = native.qualify(root, root, "image")
+                        result = native.qualify(root, root, "image", proposal_pin="f" * 64)
+                        prepare.assert_called_once_with(root, root, "image", proposal_pin="f" * 64)
                         self.assertEqual(result["status"], "pass")
                         self.assertTrue(
                             (root / "evidence/kubernetes-privacy-private.json").is_file()

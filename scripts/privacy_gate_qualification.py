@@ -280,11 +280,52 @@ class PrivacyGateContracts(unittest.TestCase):
                         feedback_check.assert_called_once_with(state, value)
 
     def test_fresh_runner_clears_old_success_and_rejects_mutation_without_publishing(self):
-        for fault in (None, "native", "projection", "source", "methods", "private", "stale"):
+        for fault in (
+            None,
+            "pinned",
+            "native",
+            "projection",
+            "source",
+            "methods",
+            "private",
+            "stale",
+            "foreign-evaluation",
+            "changed-proposal",
+            "partial-pins",
+        ):
             with tempfile.TemporaryDirectory() as directory:
                 state = Path(directory)
                 value, source = fixture()
                 before = {"file": "hash"}
+                pins = {}
+                binding = {
+                    k: value[k]
+                    for k in (
+                        "candidate_reference",
+                        "evaluation_reference",
+                        "proposal_reference",
+                        "model_sha256",
+                        "subject_sha256",
+                    )
+                }
+                if fault in ("pinned", "foreign-evaluation", "changed-proposal", "partial-pins"):
+                    inputs = {
+                        "evidence/release-native.json": b"owner proposal\n",
+                        "storage-demo.json": b"owner demo\n",
+                    }
+                    for name, content in inputs.items():
+                        (state / name).parent.mkdir(parents=True, exist_ok=True)
+                        (state / name).write_bytes(content)
+                    binding["input_files"] = {
+                        name: digest(content) for name, content in inputs.items()
+                    }
+                    pins["M13_PROPOSAL_SHA256"] = binding["input_files"][
+                        "evidence/release-native.json"
+                    ]
+                    if fault != "partial-pins":
+                        pins["M13_DEMO_SHA256"] = binding["input_files"]["storage-demo.json"]
+                if fault == "foreign-evaluation":
+                    binding["evaluation_reference"] = "0" * 64
                 value["method_materials"] = digest(canonical(before))
                 write_json(state / "evidence/privacy-gate.json", {"status": "pass", "stale": True})
                 write_json(
@@ -292,7 +333,10 @@ class PrivacyGateContracts(unittest.TestCase):
                     {"status": "pass", "stale": True},
                 )
 
-                def native(*args):
+                def native(*args, proposal_pin):
+                    self.assertEqual(proposal_pin, pins.get("M13_PROPOSAL_SHA256"))
+                    if fault == "changed-proposal":
+                        (state / "evidence/release-native.json").write_bytes(b"other")
                     for name in ("privacy-gate", "kubernetes-privacy-private"):
                         self.assertEqual(
                             read_json(state / f"evidence/{name}.json"),
@@ -315,6 +359,8 @@ class PrivacyGateContracts(unittest.TestCase):
                     return {"retained": "9" * 64}
 
                 with (
+                    patch.dict(gate.os.environ, pins),
+                    patch.object(gate.trust_delivery, "freeze", return_value=binding) as freeze,
                     patch.object(gate, "hosted"),
                     patch.object(
                         gate,
@@ -350,7 +396,7 @@ class PrivacyGateContracts(unittest.TestCase):
                     patch.object(gate.kube_privacy_native, "qualify", side_effect=native),
                     patch.object(gate, "retained", side_effect=retained),
                 ):
-                    if fault:
+                    if fault not in (None, "pinned"):
                         with self.subTest(fault=fault), self.assertRaises(Rejected):
                             gate.qualify(state, state)
                         self.assertEqual(
@@ -359,6 +405,23 @@ class PrivacyGateContracts(unittest.TestCase):
                         )
                     else:
                         result = gate.qualify(state, state)
+                        if fault == "pinned":
+                            freeze.assert_called_once_with(
+                                state.resolve(),
+                                state.resolve(),
+                                source,
+                                pins["M13_PROPOSAL_SHA256"],
+                                pins["M13_DEMO_SHA256"],
+                            )
+                            self.assertEqual(
+                                result["artifact_hashes"]["proposal_packet"],
+                                pins["M13_PROPOSAL_SHA256"],
+                            )
+                            self.assertEqual(
+                                result["artifact_hashes"]["frozen_demo"], pins["M13_DEMO_SHA256"]
+                            )
+                        else:
+                            freeze.assert_not_called()
                         self.assertEqual(result["checks"], 9)
                         self.assertFalse(result["release_ready"])
                         self.assertEqual(

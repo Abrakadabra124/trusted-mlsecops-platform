@@ -1,12 +1,13 @@
 """Fresh synthetic M13 composition. Privacy acceptance cannot authorize a release."""
 
+import os
 import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from mlsecops import audit_snapshot
+from mlsecops import audit_snapshot, trust_delivery
 from mlsecops.contracts import (
     Rejected,
     bounded_read,
@@ -306,8 +307,16 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         write_json(path, {"status": "inconclusive", "release_ready": False})
     before = materials(root)
     expected_source = source(root, image)
+    proposal_pin = os.environ.get("M13_PROPOSAL_SHA256")
+    demo_pin = os.environ.get("M13_DEMO_SHA256")
+    trust_delivery.check_pins(proposal_pin, demo_pin)
+    binding = (
+        trust_delivery.freeze(root, state, expected_source, proposal_pin, demo_pin)
+        if proposal_pin is not None
+        else None
+    )
     controlled = contracts(root)
-    observed = kube_privacy_native.qualify(root, state, image)
+    observed = kube_privacy_native.qualify(root, state, image, proposal_pin=proposal_pin)
     content = bounded_read(private, 4 * 1024**2)
     value = decode(content, 4 * 1024**2)
     require(canonical(observed) == canonical(kube_privacy_native.projection(value)))
@@ -315,6 +324,17 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         value, expected_source, started=started, finished=now(), methods=digest(canonical(before))
     )
     packets = retained(root, state, value)
+    if binding is not None:
+        for key in (
+            "candidate_reference",
+            "evaluation_reference",
+            "proposal_reference",
+            "subject_sha256",
+            "model_sha256",
+        ):
+            require(value[key] == binding[key])
+        for name, pin in binding["input_files"].items():
+            require(digest(bounded_read(safe_child(state, name))) == pin)
     require(source(root, image) == expected_source and materials(root) == before)
     require(bounded_read(private, 4 * 1024**2) == content)
     names = (
@@ -373,6 +393,8 @@ def qualify(root, state, image="trusted-mlsecops:dev"):
         {"private_observation": digest(content), "retained_packets": packets},
     )
     write_json(safe_child(state, "evidence/privacy-contracts.json"), controlled)
+    if binding is not None:
+        result["artifact_hashes"].update(proposal_packet=proposal_pin, frozen_demo=demo_pin)
     write_json(safe_child(state, "evidence/kubernetes-privacy-public.json"), observed)
     write_json(output, result)
     return result

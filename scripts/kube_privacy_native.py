@@ -217,10 +217,10 @@ def projection(report):
     return result
 
 
-def qualify(root, state, image):
+def qualify(root, state, image, *, proposal_pin=None):
     hosted()
     before = materials(root)
-    prepared = kube_serving_native.prepare(root, state, image)
+    prepared = kube_serving_native.prepare(root, state, image, proposal_pin=proposal_pin)
     # The focused runner does not perform a controlled release first. Create
     # only the empty versioned journal before candidate snapshot comparisons;
     # this operator migration grants no authority, approval or release.

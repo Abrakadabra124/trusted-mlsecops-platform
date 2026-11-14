@@ -87,12 +87,21 @@ jobs:
       - name: Bootstrap owned cluster
         id: bootstrap
         run: uv run --locked python -m mlsecops.cluster bootstrap
-      - name: Prepare model storage and actual source candidate
+      - name: Prepare model storage and qualify intake, integrity and evaluation
+        id: source
         run: |
           uv run --locked python -m mlsecops.kube_storage
           uv run --locked python -m mlsecops.storage_bootstrap
-          uv run --locked python -m mlsecops.storage_pipeline
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
+          export M07_FRESH_WORKSPACE_ID="$(uv run --locked python -c 'from pathlib import Path; from mlsecops.storage_bootstrap import validate; print(validate(Path(".runtime"))["workspace_id"])')"
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json
+          uv run --locked python -B -m scripts.release_native --state .runtime
+          echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "proposal=$(sha256sum .runtime/evidence/release-native.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Fresh M13 privacy acceptance and private operator observation
+        env:
+          M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}
         run: uv run --locked python -m mlsecops.acceptance --gate M13 --profile local-cpu --state .runtime --output .runtime/evidence/M13.json
       - name: Public finite projection only
         if: always()
@@ -132,10 +141,34 @@ jobs:
           test -z "$(kind get clusters | sed -n '/^trusted-mlsecops$/p')"
       - name: Reverify monitoring and feedback packets after infrastructure cleanup
         if: success()
+        env:
+          M13_PROPOSAL_SHA256: ${{ steps.source.outputs.proposal }}
+          M13_DEMO_SHA256: ${{ steps.source.outputs.demo }}
         run: |
           uv run --locked python - <<'PY'
+          import os
           from pathlib import Path
-          from mlsecops.contracts import canonical
+          from mlsecops.contracts import bounded_read, canonical, decode, digest
           from mlsecops.privacy_gate import ingress_retained
-          print(canonical(ingress_retained(Path('.runtime'))).decode())
+          state = Path(".runtime")
+          print(canonical(ingress_retained(state)).decode())
+          reports = {}
+          for gate in ("M02", "M03", "M07", "M13"):
+              raw = bounded_read(state / "evidence" / (gate + ".json"))
+              report = decode(raw)
+              if (report["gate"] != gate or report["status"] != "pass" or report["exit_code"] != 0
+                      or report["source_revision"] != os.environ["GITHUB_SHA"] or report["source_dirty"] is not False):
+                  raise SystemExit("privacy delivery report invalid: " + gate)
+              reports[gate] = report
+              print(canonical({**report, "report_sha256": digest(raw)}).decode())
+          inputs = {g: r["input_digests"] for g, r in reports.items()}
+          for key in ("candidate_reference", "evaluation_reference"):
+              if len({inputs[g][key] for g in ("M03", "M07", "M13")}) != 1:
+                  raise SystemExit("privacy delivery candidate mismatch")
+          if (inputs["M02"]["source"] != inputs["M03"]["source"] or inputs["M02"]["source"] != inputs["M07"]["dataset_source"]
+                  or len({inputs[g]["data_lock"] for g in ("M02", "M03", "M07")}) != 1
+                  or inputs["M13"]["model_sha256"] != inputs["M07"]["model"]
+                  or reports["M13"]["artifact_hashes"]["proposal_packet"] != os.environ["M13_PROPOSAL_SHA256"]
+                  or reports["M13"]["artifact_hashes"]["frozen_demo"] != os.environ["M13_DEMO_SHA256"]):
+              raise SystemExit("privacy delivery source mismatch")
           PY
