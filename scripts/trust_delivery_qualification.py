@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -199,11 +200,121 @@ class FrozenContracts(unittest.TestCase):
             damaged["actual_inference"][field] = "1" * 64
             with self.subTest(field=field), self.assertRaises(Rejected):
                 trust_gate.delivery(damaged, binding, config)
+
         for field in ("subject_sha256", "proposal_reference"):
             damaged = copy.deepcopy(native)
             damaged["authorized_rollback"]["target_receipt"][field] = binding[field]
             with self.subTest(controlled=field), self.assertRaises(Rejected):
                 trust_gate.delivery(damaged, binding, config)
+
+    def test_joint_retention_checks_original_bytes_window_and_separate_authority_histories(self):
+        from scripts import kube_authority_pair_qualification as pair
+        from scripts import shared_serving_native as shared
+
+        binding, native, config = self.runtime()
+        actual = native["actual_inference"]
+        directory = shared.directory(self.state, actual)
+        base = pair.states()
+        model, key = binding["model_sha256"], digest(signing.decode64(binding["publisher_public"]))
+        with patch.multiple(pair, MODEL=model, KEY=key):
+            after_model = pair.revoked(base, pair.Target.MODEL_REVOCATION)
+            after_key = pair.revoked(after_model, pair.Target.PRIMARY)
+        actual["independent_authorities"]["states"] = dict(
+            before=base, after_model=after_model, after_key=after_key
+        )
+        actual["native"].update(pair.isolation(pair.Target.PRIMARY, base))
+        actual["model_revocation"].update(pair.isolation(pair.Target.MODEL_REVOCATION, base))
+        snapshot = {"objects": [], "promotion": []}
+        sha = digest(canonical(snapshot))
+        for r in actual["trust_lifecycle"].values():
+            r["snapshot_sha256"] = sha
+        actual.update(
+            key_revocation_snapshot_sha256=sha,
+            model_revocation_snapshot_sha256=sha,
+            base_snapshot_sha256=sha,
+            revoked_key_sha256=key,
+        )
+        actual["root_rotation"].update(next_public=pair.PUBLIC, model_snapshot_sha256=sha)
+        config.update(
+            trust_root=pair.PUBLIC,
+            expected_campaign=actual["qualification_campaign_id"],
+            kubernetes_worker={},
+        )
+        # Sign against the genuine fixture proposal's original clock.
+        issued = binding["proposal_issued_at"]
+        permit = signing.verify(config["permit_envelope"], KIND, config["permit_public"])
+        config["permit_envelope"] = signing.sign(
+            {**permit, "issued_at": issued + 10, "expires_at": issued + 610},
+            KIND,
+            self.state / "qualification.pem",
+        )
+        config["expected_permit"] = actual["qualification_permit_sha256"] = digest(
+            canonical(signing.verify(config["permit_envelope"], KIND, config["permit_public"]))
+        )
+        actual.update(
+            proposal_issued_at=issued,
+            started_at=datetime.fromtimestamp(issued + 1, UTC).isoformat(),
+            finished_at=datetime.fromtimestamp(issued + 300, UTC).isoformat(),
+            trust_lifecycle_ownership_return=dict(
+                transfer=dict(before="one", after="two", release_ready=False),
+                observation=None,
+                heartbeat_before=1,
+                heartbeat_after=2,
+                identity_events_delivered=0,
+                return_seconds=0.1,
+                outbox_retained=True,
+                release_ready=False,
+            ),
+        )
+        files = {
+            "config.json": config,
+            "request.json": dict(
+                model=model,
+                bundle=binding["subject_sha256"],
+                clock_cache=True,
+                independent_authorities=True,
+            ),
+            "reference.json": {"receipt": {"model_digest": model}},
+            "probe.json": actual["native"],
+            "root-rotation.json": actual["root_rotation"],
+            "independent-authorities.json": actual["independent_authorities"],
+            "key-revocation.json": actual["key_revocation"],
+            "model-revocation.json": actual["model_revocation"],
+            **{k + ".json": v["probe"] for k, v in actual["trust_lifecycle"].items()},
+        }
+        for name, value in files.items():
+            write_json(directory / name, value)
+        actual["artifact_hashes"] = {
+            name: digest((directory / name).read_bytes()) for name in files
+        }
+        packet = dict(
+            binding=binding,
+            actual=actual,
+            prepared=dict(actual=native["actual"], profile={}),
+            owner=dict(source=binding["source"]),
+            sql_snapshot=snapshot,
+        )
+        self.assertEqual(shared.retained(self.state, packet), config)
+        for filename in files:
+            raw = (directory / filename).read_bytes()
+            (directory / filename).write_bytes(raw + b" ")
+            with self.subTest(filename=filename), self.assertRaises(Rejected):
+                shared.retained(self.state, packet)
+            (directory / filename).write_bytes(raw)
+        for change in (
+            dict(finished_at=datetime.fromtimestamp(issued + 610, UTC).isoformat()),
+            dict(model_sha256="0" * 64),
+            dict(base_snapshot_sha256="0" * 64),
+        ):
+            with self.subTest(change=change), self.assertRaises(Rejected):
+                shared.retained(self.state, {**packet, "actual": {**actual, **change}})
+        after_model["primary"]["version"] += 1
+        write_json(directory / "independent-authorities.json", actual["independent_authorities"])
+        actual["artifact_hashes"]["independent-authorities.json"] = digest(
+            (directory / "independent-authorities.json").read_bytes()
+        )
+        with self.assertRaisesRegex(Rejected, "candidate_authority_revoke_transition"):
+            shared.retained(self.state, packet)
 
     def test_retention_and_current_owner_inputs_reject_substitution_after_native_run(self):
         binding, native, config = self.runtime()
@@ -354,6 +465,34 @@ class FrozenContracts(unittest.TestCase):
             self.assertEqual(result["input_digests"]["evaluation_reference"], "4" * 64)
             self.assertEqual(result["input_digests"]["qualified_candidate_subject"], "1" * 64)
             self.assertEqual(result["metrics"]["actual_release_authorization"], "inconclusive")
+            from scripts import shared_serving_native as shared
+
+            joint_binding = {
+                **binding,
+                "source": source,
+                "input_files": {
+                    "evidence/release-native.json": self.proposal_pin,
+                    "storage-demo.json": self.demo_pin,
+                },
+            }
+            native["started_at"] = native["actual_inference"]["started_at"]
+            with patch.dict(os.environ, {"M11_M12_ACTUAL_SHA256": "7" * 64}):
+                with self.assertRaisesRegex(Rejected, "M11_joint_native_required"):
+                    trust_acceptance.qualify(self.state, self.state)
+                with (
+                    patch.dict(os.environ, {shared.PIN: "8" * 64}),
+                    patch.object(
+                        shared, "lookup", return_value=(joint_binding, native, {})
+                    ) as lookup,
+                ):
+                    joint = trust_acceptance.qualify(self.state, self.state)
+                    lookup.assert_called_once()
+                    prepare.assert_called_once()
+                    self.assertEqual(joint["artifact_hashes"]["shared_native"], "8" * 64)
+                    self.assertEqual(joint["artifact_hashes"]["pinned_actual"], "7" * 64)
+                    self.assertEqual(joint["checks"], result["checks"])
+                    with self.assertRaises(Rejected):
+                        trust_acceptance.qualify(self.state, self.state, proposal_pin="0" * 64)
             fail_cleanup = True
             with self.assertRaises(Rejected):
                 trust_acceptance.qualify(
