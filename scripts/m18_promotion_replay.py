@@ -2,6 +2,7 @@
 
 from mlsecops import final_evidence as evidence
 from mlsecops.contracts import canonical, decode, digest, now, safe_child
+from mlsecops.storage import object_id
 from scripts import promotion_gate_native as promotion
 
 
@@ -32,8 +33,7 @@ def verify_refusal(record, proposal):
     )
 
 
-def verify(state, values, freeze, keys, pin):
-    report = evidence.published_report(state, "M10", pin)
+def verify_primary(report, obj, values, freeze, keys, latest):
     refs = report["artifact_hashes"]
     evidence.same(
         sorted(refs), ["actual_proposal_report", "promotion_primary"], "promotion-artifacts"
@@ -41,11 +41,34 @@ def verify(state, values, freeze, keys, pin):
     evidence.same(
         refs["actual_proposal_report"], freeze["evidence/release-native.json"], "promotion-source"
     )
-    raw = evidence.pinned(
-        safe_child(state, "evidence/M10-promotion-primary.json"), refs["promotion_primary"]
+    packet = decode(obj(refs["promotion_primary"]))
+    evidence.same(
+        packet["actual"]["request"],
+        dict(
+            schema_version=1,
+            proposal_reference=values["proposal_reference"],
+            policy_reference=values["policy_reference"],
+            assurance_reference=None,
+            approval_reference=None,
+        ),
+        "actual-denial-request",
     )
-    packet = decode(raw)
+    evidence.subset(
+        packet,
+        dict(actual_subject=values["release_subject"], actual_model=values["model"]),
+        "promotion-subject",
+    )
+    for field, reference in (
+        ("actual_policy", "policy_reference"),
+        ("actual_proposal", "proposal_reference"),
+    ):
+        evidence.same(digest(canonical(packet[field])), values[reference], field)
     control = packet["controlled"]
+    evidence.need(
+        object_id(control["subject"]) != values["release_subject"]
+        and object_id(control["request"]["proposal_reference"]) != values["proposal_reference"],
+        "controlled-subject",
+    )
     outcomes = {
         "actual-signed-proposal": values["release_subject"],
         "actual-candidate-denied": "release_assurance_required",
@@ -55,9 +78,7 @@ def verify(state, values, freeze, keys, pin):
         "controlled-recorded-sequence": 1,
         "controlled-repeat-same-request": control["first"]["request_sha256"],
     }
-    evidence.check_gate(
-        "M10", report, values, evidence.timestamp(now()), digest(canonical(sorted(outcomes)))
-    )
+    evidence.check_gate("M10", report, values, latest, digest(canonical(sorted(outcomes))))
     evidence.same({c["id"]: c["actual"] for c in report["cases"]}, outcomes, "promotion-cases")
     evidence.subset(
         packet,
@@ -103,11 +124,18 @@ def verify(state, values, freeze, keys, pin):
         ),
         "promotion-metrics",
     )
-    for content in (
-        raw,
-        evidence.pinned(
-            safe_child(state, "evidence/release-native.json"), refs["actual_proposal_report"]
-        ),
-    ):
-        evidence.retain(state, content)
-    evidence.primary("M10", report, lambda ref: evidence.blob(state, ref), values)
+
+
+def verify(state, values, freeze, keys, pin):
+    report = evidence.published_report(state, "M10", pin)
+    refs = report["artifact_hashes"]
+    paths = {
+        "promotion_primary": "evidence/M10-promotion-primary.json",
+        "actual_proposal_report": "evidence/release-native.json",
+    }
+    materials = {
+        refs[k]: evidence.pinned(safe_child(state, path), refs[k]) for k, path in paths.items()
+    }
+    verify_primary(report, materials.__getitem__, values, freeze, keys, evidence.timestamp(now()))
+    for raw in materials.values():
+        evidence.retain(state, raw)

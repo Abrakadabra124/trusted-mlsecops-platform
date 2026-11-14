@@ -733,70 +733,6 @@ def primary(gate, report, obj, values):
                 and report["metrics"]["independent_challenges"] >= 2,
                 "independent-challenges",
             )
-    if gate == "M10":
-        subset(
-            report["metrics"],
-            dict(
-                actual_release_authorization="inconclusive",
-                actual_sequence=0,
-                controlled_sequence=1,
-            ),
-            "promotion-mode",
-        )
-        packet = decode(obj(report["artifact_hashes"]["promotion_primary"]))
-        actual = packet["actual"]["request"]
-        subset(
-            actual,
-            dict(
-                proposal_reference=values["proposal_reference"],
-                policy_reference=values["policy_reference"],
-                assurance_reference=None,
-                approval_reference=None,
-            ),
-            "actual-denial-request",
-        )
-        need(
-            digest(canonical(packet["actual_policy"])) == values["policy_reference"],
-            "actual-policy",
-        )
-        control = packet["controlled"]
-        need(
-            object_id(control["subject"]) != values["release_subject"]
-            and object_id(control["request"]["proposal_reference"]) != values["proposal_reference"],
-            "controlled-subject",
-        )
-        same(control["first"], control["retry"], "controlled-retry")
-        subset(
-            control["first"],
-            dict(
-                subject_sha256=control["subject"],
-                proposal_reference=control["request"]["proposal_reference"],
-                sequence=1,
-                release_ready=False,
-                state="recorded-not-activated",
-            ),
-            "controlled-transition",
-        )
-        subset(
-            packet,
-            dict(
-                scope="T13-pre-promotion-mechanism-actual-refusal-separate-controlled-authorization"
-            ),
-            "promotion-scope",
-        )
-        same(packet["actual"]["before"], packet["actual"]["after"], "promotion-state")
-        same(packet["actual"]["after"]["head"]["sequence"], 0, "actual-sequence")
-        same(packet["controlled"]["committed"]["head"]["sequence"], 1, "controlled-sequence")
-        subset(
-            packet,
-            dict(actual_subject=values["release_subject"], actual_model=values["model"]),
-            "promotion-subject",
-        )
-        need(
-            packet["actual"]["reason"] == "release_assurance_required"
-            and digest(canonical(packet["actual_proposal"])) == values["proposal_reference"],
-            "promotion-refusal",
-        )
 
 
 def evidence_text(raw):
@@ -1464,7 +1400,12 @@ def qualify(root, state, result):
                 if ref not in verified:
                     obj(ref)
                     verified.add(ref)
-            primary(g, r, obj, values)
+            if g == "M10":
+                from scripts.m18_promotion_replay import verify_primary
+
+                verify_primary(r, obj, values, index["freeze"], keys, latest)
+            else:
+                primary(g, r, obj, values)
             return r
 
         failed = False

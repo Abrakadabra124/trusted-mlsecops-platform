@@ -183,40 +183,15 @@ class MatrixContracts(unittest.TestCase):
                     )
                 )
 
-    def test_offline_promotion_replays_original_reports_signed_audit_and_idempotent_control(self):
-        from mlsecops import final_evidence
-        from mlsecops.contracts import now
-        from scripts import m18_promotion_replay
-
-        state = Path(self.enterContext(tempfile.TemporaryDirectory()))
+    def promotion_evidence(self, values, keys, freeze, proposal, policy):
         control = self.controlled_matrix()
         audit = ActualContracts()
         audit.setUp()
         self.addCleanup(audit.doCleanups)
-        proposal, policy = {"test": "original proposal"}, {"test": "original policy"}
-
-        def hash_json(doc):
-            return digest(canonical(doc))
-
-        keys = {"trust": audit.fx.publics["root"]}
-        values = {
-            k: hash_json(k) for k in ("source_fingerprint", *final_evidence.BINDINGS["M10"].split())
-        }
-        values.update(
-            source_revision="a" * 40,
-            image_id="sha256:" + hash_json("image"),
-            policy=hash_json("local policy"),
-            proposal_reference=hash_json(proposal),
-            policy_reference=hash_json(policy),
-        )
         source = {k: values[k] for k in ("source_fingerprint", "source_revision", "image_id")}
-        frozen_path = state / "evidence/release-native.json"
-        write_json(
-            frozen_path, {"source": source, "proposal_reference": values["proposal_reference"]}
-        )
-        freeze = {"evidence/release-native.json": digest(bounded_read(frozen_path))}
         before = journal()
         request = {k: values[k] for k in ("proposal_reference", "policy_reference")} | {
+            "schema_version": 1,
             "approval_reference": None,
             "assurance_reference": None,
         }
@@ -259,6 +234,47 @@ class MatrixContracts(unittest.TestCase):
             "controlled-repeat-same-request": control["first"]["request_sha256"],
             **{"controlled-" + k: v for k, v in gate.NEGATIVES.items()},
         }
+        return packet, dict(
+            cases=[dict(id=k, expected=v, actual=v, status="pass") for k, v in outcomes.items()],
+            metrics=dict(
+                checks=len(outcomes),
+                actual_release_authorization="inconclusive",
+                actual_sequence=0,
+                controlled_sequence=1,
+                controlled_negative_cases=len(gate.NEGATIVES),
+            ),
+        )
+
+    def test_offline_promotion_replays_original_reports_signed_audit_and_idempotent_control(self):
+        from mlsecops import final_evidence
+        from mlsecops.contracts import now
+        from scripts import m18_promotion_replay
+
+        state = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        proposal, policy = {"test": "original proposal"}, {"test": "original policy"}
+
+        def hash_json(doc):
+            return digest(canonical(doc))
+
+        keys = {"trust": "controlled-policy-root"}
+        values = {
+            k: hash_json(k) for k in ("source_fingerprint", *final_evidence.BINDINGS["M10"].split())
+        }
+        values.update(
+            source_revision="a" * 40,
+            image_id="sha256:" + hash_json("image"),
+            policy=hash_json("local policy"),
+            proposal_reference=hash_json(proposal),
+            policy_reference=hash_json(policy),
+        )
+        source = {k: values[k] for k in ("source_fingerprint", "source_revision", "image_id")}
+        frozen_path = state / "evidence/release-native.json"
+        write_json(
+            frozen_path, {"source": source, "proposal_reference": values["proposal_reference"]}
+        )
+        freeze = {"evidence/release-native.json": digest(bounded_read(frozen_path))}
+        packet, observations = self.promotion_evidence(values, keys, freeze, proposal, policy)
+        control = packet["controlled"]
         report = dict(
             schema_version=1,
             gate="M10",
@@ -277,14 +293,7 @@ class MatrixContracts(unittest.TestCase):
                 k: values[k]
                 for k in ("source_fingerprint", *final_evidence.BINDINGS["M10"].split())
             },
-            cases=[dict(id=k, expected=v, actual=v, status="pass") for k, v in outcomes.items()],
-            metrics=dict(
-                checks=len(outcomes),
-                actual_release_authorization="inconclusive",
-                actual_sequence=0,
-                controlled_sequence=1,
-                controlled_negative_cases=len(gate.NEGATIVES),
-            ),
+            **observations,
         )
 
         def verify():

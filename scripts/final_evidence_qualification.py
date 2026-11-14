@@ -13,6 +13,7 @@ from mlsecops import acceptance, data_source
 from mlsecops import final_evidence as final
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, now, write_json
 from mlsecops.signing import create_key, sign
+from scripts import promotion_gate_qualification as promotion
 from scripts import release_authorization_qualification as releases
 from scripts.image_audit_qualification import fixtures as image_fixture
 
@@ -280,43 +281,17 @@ class FinalEvidenceContracts(unittest.TestCase):
         self.make_challenges()
         for gate, key in final.PRIMARY.items():
             self.reports[gate]["artifact_hashes"][key] = self.put(self.primaries[gate])
-        first = dict(
-            subject_sha256=self.placeholder,
-            proposal_reference=self.placeholder,
-            sequence=1,
-            release_ready=False,
-            state="recorded-not-activated",
+        matrix = promotion.MatrixContracts()
+        self.addCleanup(matrix.doCleanups)
+        packet, observations = matrix.promotion_evidence(
+            self.values,
+            self.keys,
+            self.freeze,
+            self.package["envelope"],
+            self.release.policy_envelope,
         )
-        m10 = dict(
-            scope="T13-pre-promotion-mechanism-actual-refusal-separate-controlled-authorization",
-            actual_subject=self.values["release_subject"],
-            actual_model=self.values["model"],
-            actual_proposal=self.package["envelope"],
-            actual_policy=self.release.policy_envelope,
-            input_files=self.freeze,
-            actual=dict(
-                request=dict(
-                    proposal_reference=self.values["proposal_reference"],
-                    policy_reference=self.values["policy_reference"],
-                    approval_reference=None,
-                    assurance_reference=None,
-                ),
-                reason="release_assurance_required",
-                before=dict(head=dict(sequence=0)),
-                after=dict(head=dict(sequence=0)),
-            ),
-            controlled=dict(
-                subject=self.placeholder,
-                request=dict(proposal_reference=self.placeholder),
-                first=first,
-                retry=first,
-                committed=dict(head=dict(sequence=1)),
-            ),
-        )
-        self.reports["M10"]["artifact_hashes"]["promotion_primary"] = self.put(m10)
-        self.reports["M10"]["metrics"].update(
-            actual_release_authorization="inconclusive", actual_sequence=0, controlled_sequence=1
-        )
+        self.reports["M10"].update(observations)
+        self.reports["M10"]["artifact_hashes"]["promotion_primary"] = self.put(packet)
         for gate, key in (
             ("M10", "actual_proposal_report"),
             ("M16", "proposal_packet"),
@@ -814,6 +789,24 @@ class FinalEvidenceContracts(unittest.TestCase):
         self.assertFalse(report["production_authorized"])
         self.assertNotIn("M18", self.index["reports"])
         self.assertEqual(report["artifact_hashes"]["M02"], self.index["reports"]["M02"])
+
+    def test_final_index_requires_signed_promotion_denials_even_after_report_and_index_are_resealed(
+        self,
+    ):
+        self.build()
+        report = self.reports["M10"]
+        packet = decode(final.blob(self.state, report["artifact_hashes"]["promotion_primary"]))
+        audit = packet["actual"]["audit"]
+        first, second = audit["incidents"]
+        for incidents in ([], [first, second | {"receipt": first["receipt"]}]):
+            with self.subTest(count=len(incidents)), patch.dict(audit, incidents=incidents):
+                report["artifact_hashes"]["promotion_primary"] = self.put(packet)
+                self.seal()
+                result = self.run_report()
+                self.assertEqual(result["status"], "fail")
+                self.assertEqual(result["exit_code"], 1)
+                self.assertEqual(result["metrics"]["verified_gates"], len(final.CHILDREN) - 1)
+                self.assertTrue(any(r.startswith("M10/") for r in result["residual_risks"]))
 
     def test_missing_and_foreign_children_are_all_diagnosed(self):
         self.build()
