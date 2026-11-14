@@ -33,7 +33,7 @@ def ledger(name):
     return validate_ledger(decode(admin(name, ledger_sql() + ";", timeout=65).encode()))
 
 
-def validate_toc(content, *, include_promotion=False, promotion_migration=None):
+def validate_toc(content, *, include_promotion=False, promotion_migration=None, data_tables=TABLES):
     try:
         lines = content.decode("utf-8").splitlines()
     except UnicodeError as error:
@@ -48,7 +48,7 @@ def validate_toc(content, *, include_promotion=False, promotion_migration=None):
         if match is None:
             raise Rejected("restore_archive_toc_invalid")
         names.append((match[1], match[2]))
-    expected = {("ml", name) for name in TABLES}
+    expected = {("ml", name) for name in data_tables}
     if include_promotion:
         history = (
             promotion_recovery.migration() if promotion_migration is None else promotion_migration
