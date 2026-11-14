@@ -310,6 +310,60 @@ class CandidateCampaign(unittest.TestCase):
             **{"include_key_revocation": True, "include_trust_lifecycle": True, **modes},
         )
 
+    def test_pinned_m12_real_window_and_separate_authority(self):
+
+        arguments = (self.root, self.root, "image")
+        prepared = (self.profile, self.refusal)
+        for conflict in (
+            dict(privacy=True),
+            dict(security=True),
+            dict(qualification_key=self.root / "key"),
+        ):
+            with (
+                self.subTest(conflict=conflict),
+                self.assertRaisesRegex(Rejected, "pinned_M12_mode"),
+            ):
+                native.qualify(*arguments, prepared=prepared, pinned_m12=True, **conflict)
+        with self.assertRaisesRegex(Rejected, "pinned_M12_mode"):
+            native.qualify(*arguments, pinned_m12=True)
+        for seconds in (239, 240):
+            self.clock = 2000 - seconds
+            with (
+                self.subTest(seconds=seconds),
+                patch.object(
+                    native, "campaign_authority", return_value=(self.root / "original", "root")
+                ),
+                patch.object(
+                    native,
+                    "invoke",
+                    return_value={"model_sha256": self.model, "subject_sha256": self.subject},
+                ) as invoke,
+            ):
+                if seconds == 239:
+                    with self.assertRaisesRegex(Rejected, "candidate_inference_window"):
+                        native.qualify(*arguments, prepared=prepared, pinned_m12=True)
+                    invoke.assert_not_called()
+                    native.trust_authority.update.assert_not_called()
+                else:
+                    report = native.qualify(*arguments, prepared=prepared, pinned_m12=True)
+                    self.assertEqual(report["proposal_expires_at"], 2000)
+                    self.assertEqual(report["proposal_reference"], self.refusal["proposal"])
+                    self.assertEqual(
+                        invoke.call_args.kwargs["trust_target"], Target.MODEL_REVOCATION
+                    )
+                    config = invoke.call_args.args[2]
+                    self.assertEqual(config["trust_target"], Target.MODEL_REVOCATION.value)
+                    self.assertEqual(config["permit_envelope"]["payload"]["expires_at"], 2000)
+                    backend = native.trust_authority.install.call_args.kwargs["backend"]
+                    self.assertEqual(backend.keywords, {"target": Target.MODEL_REVOCATION})
+                    self.assertIs(
+                        native.trust_authority.update.call_args.kwargs["backend"], backend
+                    )
+                    self.assertEqual(
+                        native.trust_authority.update.call_args.args[2].name,
+                        "qualification-authority.pem",
+                    )
+
     def test_eight_post_root_jobs_share_one_return_and_same_permit(self):
         report = self.qualify()
         self.assertEqual(

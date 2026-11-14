@@ -1,6 +1,8 @@
 """Controlled regression tests for pinned M12 scheduling and evidence ownership."""
 
 import copy
+import io
+import runpy
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,6 +15,130 @@ from scripts import m12_pinned_native as staged
 
 
 class PinnedWindowTests(unittest.TestCase):
+    def test_module_entrypoint_rejects_missing_host_without_publishing(self):
+        with (
+            TemporaryDirectory() as directory,
+            patch.dict(
+                staged.os.environ, {"GITHUB_OUTPUT": str(Path(directory) / "output")}, clear=True
+            ),
+            patch("sys.stdout", new_callable=io.StringIO),
+            self.assertRaises(SystemExit) as exit_code,
+        ):
+            runpy.run_path(staged.__file__, run_name="__main__")
+        self.assertEqual(exit_code.exception.code, 1)
+
+    def test_owner_revalidates_both_proposal_copies_source_cluster_and_inputs(self):
+        with TemporaryDirectory() as directory:
+            state = Path(directory)
+            source = {
+                "source_revision": "a" * 40,
+                "source_fingerprint": "b" * 64,
+                "image_id": "image",
+            }
+            proposal = {"campaign_id": "0" * 32, "source": source}
+            frozen = state / "evidence/release-native.json"
+            sibling = state / "release-proposals" / proposal["campaign_id"] / "report.json"
+            for path in (frozen, sibling):
+                write_json(path, proposal)
+            pin = digest(bounded_read(frozen))
+            names = ("storage-demo.json", "storage-trust.json", "trusted-keys.json")
+            for name in names:
+                write_json(state / name, {})
+            runner = dict(GITHUB_JOB="job", GITHUB_RUN_ID="run", GITHUB_RUN_ATTEMPT="1")
+            with (
+                patch.dict(staged.os.environ, runner),
+                patch.object(
+                    staged.cluster,
+                    "validate_cluster",
+                    return_value={"namespace_uid": "cluster", "workspace_id": "workspace"},
+                ),
+                patch.object(staged, "source", return_value=source) as current,
+            ):
+                owner = staged.owner(state, state, "image", pin)
+                self.assertEqual(owner["runner"], runner)
+                self.assertEqual(owner["workspace"], "workspace")
+                self.assertEqual(owner["cluster"], "cluster")
+                self.assertEqual(
+                    owner["inputs"], {name: digest(bounded_read(state / name)) for name in names}
+                )
+                current.return_value = {**source, "image_id": "other"}
+                with self.assertRaises(Rejected):
+                    staged.owner(state, state, "image", pin)
+                current.return_value = source
+                sibling.write_bytes(b"{}")
+                with self.assertRaises(Rejected):
+                    staged.owner(state, state, "image", pin)
+
+    def test_capture_rejects_shared_storage_root_or_changed_primary_before_publish(self):
+        fields = ("host", "volume_uid_sha256", "ca_sha256", "resources_sha256", "root_sha256")
+        primary = {"identity": {k: "primary" for k in fields}}
+        actual = {"native": {"cases": []}, "proposal_expires_at": 2000, "finished_at": "end"}
+        for collision in ("none", "primary_changed", *fields):
+            peer = {"identity": {k: "primary" if k == collision else "peer" for k in fields}}
+            with (
+                self.subTest(collision=collision),
+                patch("sys.stdout", new_callable=io.StringIO),
+                patch.object(staged, "hosted"),
+                patch.object(staged, "owner", return_value={}),
+                patch.object(staged.promotion_state, "install"),
+                patch.object(
+                    staged.kube_serving_native,
+                    "prepare",
+                    return_value={"profile": {}, "actual": {}},
+                ),
+                patch.object(staged.kube_candidate_native, "qualify", return_value=actual),
+                patch.object(
+                    staged.kube_authority_pair,
+                    "read",
+                    side_effect=[primary, peer, {} if collision == "primary_changed" else primary],
+                ),
+                patch.object(staged, "verify") as verify,
+            ):
+                if collision == "none":
+                    result = staged.capture("root", "state", "image", "pin")
+                    self.assertEqual(result["peer"], peer)
+                    verify.assert_called_once_with("state", result)
+                else:
+                    with self.assertRaises(Rejected):
+                        staged.capture("root", "state", "image", "pin")
+                    verify.assert_not_called()
+
+    def test_capture_cli_only_exports_pin_after_success(self):
+        for args, success in ((["capture"], True), (["capture"], False), (["other"], False)):
+            with (
+                self.subTest(args=args, success=success),
+                patch("sys.stdout", new_callable=io.StringIO) as output,
+                patch.object(staged, "hosted"),
+                patch.object(staged.sys, "argv", ["staged", *args]),
+                patch.dict(staged.os.environ, M12_PROPOSAL_SHA256="pin"),
+                patch.object(
+                    staged, "capture", side_effect=None if success else Rejected("private sentinel")
+                ),
+                patch.object(staged, "publish_pin") as publish,
+            ):
+                self.assertEqual(staged.main(), int(not success))
+                self.assertEqual(publish.call_count, int(success))
+                self.assertNotIn("private sentinel", output.getvalue())
+
+    def test_pinned_gate_dispatches_to_finish_before_contracts_without_recapturing(self):
+        root = Path(staged.__file__).resolve().parents[1]
+        with (
+            TemporaryDirectory() as directory,
+            patch.dict(gate.os.environ, M12_PROPOSAL_SHA256="pin", M12_EARLY_SHA256="early"),
+            patch.object(gate, "hosted"),
+            patch.object(
+                staged, "finish", return_value=("start", {"started_at": "prepare"})
+            ) as finish,
+            patch.object(gate, "contracts", side_effect=Rejected("controlled_contract_failure")),
+            patch.object(gate.kube_serving_native, "prepare") as prepare,
+            self.assertRaisesRegex(Rejected, "controlled_contract_failure"),
+        ):
+            gate.qualify(root, Path(directory))
+        finish.assert_called_once_with(
+            root, Path(directory).resolve(), "trusted-mlsecops:dev", "pin", "early"
+        )
+        prepare.assert_not_called()
+
     def test_verify_retained_bytes_signature_identity_and_original_expiry(self):
         with TemporaryDirectory() as directory:
             state = Path(directory)
