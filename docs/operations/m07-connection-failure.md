@@ -146,3 +146,25 @@ budget cap, TLS, retries и workflows этим fix round не меняются.
 Финальная проверка fix round 1 на pinned Python 3.12.15: 102 tests pass,
 0 skips за 26.026 s с `-B -W error`; из них 7 pipe tests. Ruff check/format,
 check_docs и diff check прошли. Это локальная проверка, не native M07 pass.
+
+### Дополнительная qualification cleanup branches
+
+Отдельный test-only follow-up к `9c6343d` добавляет отказ kill, wait timeout и
+wait OSError, проверку `local_cleanup_incomplete`, image/source guards и output
+limits. При отказе kill настоящий child и pipe threads остаются живы до fixture
+cleanup: проверяется исходный `worker_deadline` и точная secondary note, затем
+fixture обходит внедрённый отказ и завершает child, join и закрытие обоих pipes.
+Wait-failure cases внедряют ошибку API после реального завершения child; проверяют
+notes при первичном отказе и явный `Rejected` после успешного worker. Это controlled
+process contract, не доказательство настоящего OS kill/wait failure.
+
+```bash
+python -B -Werror -m coverage run --branch --data-file=.runtime/pipe-review.coverage --source=mlsecops.sandbox -m unittest scripts.sandbox_pipe_qualification scripts.worker_privacy_qualification
+python -B -m coverage report --data-file=.runtime/pipe-review.coverage -m
+```
+
+Результат на pinned Python 3.12.15: 24 tests pass, 0 skips, 9.351 s.
+Sandbox: 92/93 statements, **27/28 branches (96.43%)**, 98% combined.
+Все новые cleanup branches покрыты; единственная оставшаяся непокрытая ветвь
+строки 109 относится к прежнему `worker_empty_output`. Production code в этом
+follow-up не менялся; native qualification остаётся за parent.
