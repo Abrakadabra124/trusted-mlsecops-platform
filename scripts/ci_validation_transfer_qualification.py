@@ -397,6 +397,32 @@ class ValidationTransferTests(unittest.TestCase):
                 self.verify(sealed)
             self.no_plaintext()
 
+    def test_seal_rechecks_600_second_window_after_ciphertext_hash(self):
+        packet = self.retain()
+        boundary_ns = (self.fixture.fx.values["proposal_expires_at"] - 600) * 10**9
+        current_ns = boundary_ns
+        hashed = []
+        original_digest = companion.digest
+
+        def delayed_digest(content):
+            nonlocal current_ns
+            result = original_digest(content)
+            if content.startswith(ci_transfer.MAGIC):
+                hashed.append(result)
+                # Exactly 0.01 s beyond the 600-second boundary. Keep integer
+                # nanoseconds so the real conservative clock cannot round down.
+                current_ns += 10_000_000
+            return result
+
+        with (
+            patch.object(time, "time_ns", side_effect=lambda: current_ns),
+            patch.object(companion, "digest", side_effect=delayed_digest),
+            self.rejected(),
+        ):
+            self.seal(packet)
+        self.assertEqual(len(hashed), 1)
+        self.assertEqual(current_ns, boundary_ns + 10_000_000)
+
     def test_failure_messages_and_streams_do_not_disclose_inputs(self):
         output = io.StringIO()
         with redirect_stdout(output), redirect_stderr(output):

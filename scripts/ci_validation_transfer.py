@@ -114,12 +114,13 @@ def seal(root, state, packet, *, key, freeze_pin, freeze, expected, run_owner, p
         )
         context = bridge._context(owner, "validation-" + phase, digest(packet), issued, expires)
         envelope = ci_transfer.seal(packet, key=key, context=context)
+        ciphertext_pin = digest(envelope)
         values, current = bridge._fresh(root, state, owner)
         bridge._window(context, values, current)
         return dict(
             envelope=envelope,
             context=context,
-            ciphertext_sha256=digest(envelope),
+            ciphertext_sha256=ciphertext_pin,
             handling="private",
             release_ready=False,
         )
