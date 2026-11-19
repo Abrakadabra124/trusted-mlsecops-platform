@@ -332,11 +332,13 @@ def verify_evaluation(root, state, values, pin):
     final_evidence.primary("M07", report, lambda ref: final_evidence.blob(state, ref), values)
 
 
-def verify_early(root, state, values, pins):
+def verify_early(root, state, values, pins, *, intake_only=False):
     # The expected outcomes belong to the checked-out policy and precede the run.
+    final_evidence.need(type(intake_only) is bool, "early-profile")
+    primary = {"M02": PRIMARY["M02"]} if intake_only else PRIMARY
     expected = decode(bounded_read(root / "policies/m18-foundation-intake.json"))
-    final_evidence.same(sorted(pins), sorted(PRIMARY), "early-gates")
-    for gate, filename in PRIMARY.items():
+    final_evidence.same(sorted(pins), sorted(primary), "early-gates")
+    for gate, filename in primary.items():
         report = final_evidence.published_report(state, gate, pins[gate])
         inventory = expected[gate]
         artifacts = final_evidence.check_gate(
