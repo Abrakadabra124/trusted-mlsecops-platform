@@ -10,6 +10,8 @@
 [точный пакет и verifier](operations/frozen-candidate-transfer.md),
 [аутентифицированное шифрование](operations/ci-transfer.md).
 Это проверенные локальные компоненты; hosted handoff ещё не подключён.
+Их соединение с проверкой исходных подписей и окна после расшифровки:
+[candidate transfer](operations/ci-candidate-transfer.md).
 
 Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
 [serving primary](operations/m18-serving-primary.md). Отказ по времени

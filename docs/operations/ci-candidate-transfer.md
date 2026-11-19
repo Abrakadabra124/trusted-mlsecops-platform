@@ -25,7 +25,11 @@ sealed = seal(root, original_state, key=key, phase="M11-M12", **authority)
 
 # Receiver expectations arrive through the independently trusted handoff.
 with materialize(
-    root, received_envelope, key=key, phase="M11-M12", **receiver_authority,
+    root,
+    received_envelope,
+    key=key,
+    phase="M11-M12",
+    **receiver_authority,
     expected_context=trusted_context,
     ciphertext_pin=trusted_ciphertext_sha256,
     manifest_pin=trusted_manifest_sha256,

@@ -84,3 +84,20 @@ replay возвращает `release_ready: false`: итоговую полно�
 контролируемых семействах fixtures; их join подменён в тестах, поскольку у них
 разные кандидаты. Поэтому эти тесты не доказывают native связывание одного
 кандидата. Новому workflow всё ещё требуется такой hosted запуск с cleanup.
+
+## Hosted проверка фиксированного перечня
+
+[Run 43629988590](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43629988590)
+на `8ddfd3db7f78b65cc2fb9484916cbb0aeaa71b93` завершился success 14 ноября 2026.
+Результат и очистка повторно прочитаны 20 ноября. Все 136 критериев имеют pass;
+hash их перечня совпадает с закреплённым до измерений значением выше.
+Штатный verifier проверил 28 окон и 28 000 observations: ready 8, outage 9,
+attempt 10, recover 1. Максимальная доставка среди семи маршрутов составила
+14 ms; heartbeat notice 90,987 s, sequence notices 90,388 и 91,066 s.
+
+SHA-256 исходного опубликованного JSON, пересчитанный как canonical JSON с LF:
+`06debe69422c6b910fdd004432f978820f8dfbe2bcfa468870f16cd93a06359a`.
+Candidate: `193558bfb9554b0a084892408087bb85c020879d13677b45e72842ddad98eb59`.
+Source SQL остановлен, кластер удалён, обычный M23 replay выполнен после cleanup.
+Этот запуск подтверждает новый перечень и обычную M23, но не интегрированный
+M18 collector: отдельный workflow не выполнял capture/replay его object index.

@@ -1,5 +1,18 @@
 # Статус и границы доказательств
 
+20 ноября интегрирован [мост приватной передачи кандидата](docs/operations/ci-candidate-transfer.md):
+68 проверок с настоящими подписями fixtures и AES-GCM прошли, отдельное review
+не выявило блокирующих дефектов. Provisioning нового hosted consumer, доставка
+ключей и общий parallel workflow ещё не реализованы. Четыре Kubernetes inventory
+на `f3b31b4` также проверены отдельно и интегрированы; версии `(devel)` остаются
+неразрешёнными, coverage по-прежнему 6/14 и image audit fail. Исключений для
+Critical/High/Unknown не добавлено.
+
+20 ноября повторно проверен [M23 run 43629988590](docs/operations/m18-security-primary.md#hosted-проверка-фиксированного-перечня)
+на `8ddfd3d`: success, 136/136 заранее закреплённых критериев, 28 000 observations,
+семь event routes, cleanup и обычный replay после него успешны. Новый M18 retention
+index этим отдельным workflow не проверялся. Общий R1 остаётся открытым.
+
 [Совместный M11/M12 на 983db0c](docs/operations/shared-serving.md#повтор-с-единым-ownership-scope-на-983db0c)
 прошёл в run 43627872163: M11 149 критериев, M12 201 / 62 native, SQL остался
 остановленным, cluster teardown и повторная сверка отчётов успешны. Исходные
