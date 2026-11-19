@@ -3,7 +3,8 @@
 Неделя 13, T21. Scope: безопасная диагностика конкретного native отказа и
 исправление отдельно подтверждённого незакрытого stdout pipe. Причина native
 connection failure пока не установлена; M07 не объявлен исправленным.
-Parent владеет последующей hosted qualification. Workflow не меняется.
+Последующая hosted qualification использует отдельный scoped workflow;
+основная цепочка R1 от этого не считается пройденной.
 
 ## Подтверждённые факты
 
@@ -168,3 +169,34 @@ Sandbox: 92/93 statements, **27/28 branches (96.43%)**, 98% combined.
 Все новые cleanup branches покрыты; единственная оставшаяся непокрытая ветвь
 строки 109 относится к прежнему `worker_empty_output`. Production code в этом
 follow-up не менялся; native qualification остаётся за parent.
+
+
+## Воспроизведение на отдельном hosted runner
+
+[Scoped workflow](../../.github/workflows/m07-connection.yml) запускается push
+в ветку `qualify/m07-connection-native` либо через workflow_dispatch, когда
+GitHub предоставляет этот workflow на default branch. Последний commit
+для push не должен содержать skip-ci marker.
+
+Цепочка сохраняет существующие шаги storage-recovery: pinned build, новый
+owned cluster и source SQL, M01, M02, начало M21, затем исходная M07 с
+`R1_SCOPED_TRAINING=1`. Свежий workspace и pin M21 передаются как раньше.
+Восемь блоков, включая остановку SQL и удаление кластера, совпадают с
+исходным workflow. Финальный отчёт печатается только после успешной
+очистки обоих ресурсов; отказ M07 не заменяется повторной оценкой.
+
+Preflight проверяет четыре security modules по отдельности: не менее 95%
+строк и 95% branches для storage_connection_diagnostics, holdout_diagnostics,
+holdout_budget и sandbox. Общий средний процент не заменяет этот порог.
+На интегрированном source локально проверены 38 diagnostic/budget tests
+(114/114 statements, 32/32 branches) и 24 pipe/privacy tests
+(sandbox 92/93 statements, 27/28 branches). Чистый checkout опубликованной
+базы также прошёл 34 transfer/image inventory tests. Эти результаты не
+заменяют native SQL concurrency evidence.
+
+После запуска сохранить run/job/source, исходный статус M07, безопасную
+диагностику connection_failures и итоги cleanup. Если M07 пройдёт, это
+подтвердит конкретный запуск; единственное успешное повторение не объясняет
+причину прежнего отказа. Raw SQL logs, credentials и private artifacts
+публично не выкладывать. Локальную инфраструктуру для этой проверки
+не запускать.

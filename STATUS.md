@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+20 ноября добавлен [scoped M07 diagnostic workflow](docs/operations/m07-connection-failure.md#воспроизведение-на-отдельном-hosted-runner).
+Безопасная диагностика сохраняет причину отказа соединения в ограниченной схеме,
+не меняя cap 32, TLS, timeout или правильный отказ сверх бюджета. Worker cleanup
+проверяет завершение локального процесса, потоков и закрытие pipes даже после
+отказа Docker cleanup. 38 diagnostic/budget и 24 real-pipe/privacy tests прошли;
+coverage каждого изменённого security module превышает 95% строк и branches.
+Native повторение ещё требуется, M07 и общий R1 этим patch не закрываются.
+
 20 ноября интегрирован [мост приватной передачи кандидата](docs/operations/ci-candidate-transfer.md):
 68 проверок с настоящими подписями fixtures и AES-GCM прошли, отдельное review
 не выявило блокирующих дефектов. Provisioning нового hosted consumer, доставка

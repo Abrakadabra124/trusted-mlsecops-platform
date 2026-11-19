@@ -1,0 +1,147 @@
+name: M07 scoped connection diagnostic
+on:
+  push:
+    branches: [qualify/m07-connection-native]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: m07-connection-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  evaluation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify bounded diagnostics and owning pipe cleanup
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.data_source_lock_qualification scripts.storage_connection_diagnostics_qualification scripts.sandbox_pipe_qualification scripts.holdout_budget_qualification scripts.evaluation_gate_qualification
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/m07-diagnostic.coverage" --source=mlsecops.storage_connection_diagnostics,mlsecops.holdout_diagnostics,mlsecops.holdout_budget,mlsecops.sandbox -m unittest scripts.storage_connection_diagnostics_qualification scripts.holdout_budget_qualification scripts.sandbox_pipe_qualification scripts.worker_privacy_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/m07-diagnostic.coverage" -o "$RUNNER_TEMP/m07-diagnostic.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'm07-diagnostic.json').read_bytes())['files']
+          expected = {'mlsecops/' + n + '.py' for n in ('storage_connection_diagnostics', 'holdout_diagnostics', 'holdout_budget', 'sandbox')}
+          if set(files) != expected:
+              raise SystemExit('M07 diagnostic coverage inventory differs')
+          for name, item in files.items():
+              stats = item['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] * 100 < 95 * stats[total]:
+                      raise SystemExit('M07 diagnostic coverage below 95%: ' + name)
+          PY
+      - name: Prepare pinned CPU runtime
+        run: |
+          uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -B -m mlsecops build
+      - name: Start the owned disposable cluster and its private storage
+        id: cluster
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
+          test ! -e .runtime/kubeconfig && test ! -e .runtime/cluster.json
+          echo 'started_empty=true' >> "$GITHUB_OUTPUT"
+          uv run --locked python -B -m mlsecops.cluster bootstrap
+          uv run --locked python -B -m mlsecops.kube_storage
+          uv run --locked python -B -m mlsecops.controller_bootstrap
+      - name: Start owned source storage
+        id: sql
+        run: |
+          uv run --locked python -B -m mlsecops.storage_bootstrap
+          uv run --locked python - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.storage_bootstrap import validate
+          from mlsecops.contracts import bounded_read, digest
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
+              print("workspace=" + validate(Path(".runtime"))["workspace_id"], file=out)
+              print("workspace_file=" + digest(bounded_read(Path(".runtime/workspace.json"))), file=out)
+          PY
+      - name: Verify the actual cluster, worker, pinned tools and clean bootstrap
+        id: foundation
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M01 --output .runtime/evidence/M01.json
+          echo "sha256=$(sha256sum .runtime/evidence/M01.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Verify intake, quarantine and locked training source
+        id: intake
+        run: |
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json
+          echo "sha256=$(sha256sum .runtime/evidence/M02.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Begin M21 on the empty owned source before the controller training
+        id: intake_start
+        run: uv run --locked python -B -W error -m scripts.controller_intake begin
+      - name: Verify SQL integrity and role isolation, then evaluate the same training run
+        id: evaluated
+        env:
+          M21_START_SHA256: ${{ steps.intake_start.outputs.start }}
+          R1_SCOPED_TRAINING: "1"
+          M07_FRESH_WORKSPACE_ID: ${{ steps.sql.outputs.workspace }}
+        run: |
+          result=0
+          uv run --locked python -B -W error -m mlsecops.acceptance --gate M07 --output .runtime/evidence/M07.json || result=$?
+          if test "$result" -ne 0; then
+            uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          report = read_json(Path(".runtime/evidence/M07.json"))
+          print(canonical({"gate": "M07", "status": report["status"], "diagnostics": report.get("diagnostics", {})}).decode())
+          PY
+            exit "$result"
+          fi
+          echo "sha256=$(sha256sum .runtime/evidence/M07.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "demo=$(sha256sum .runtime/storage-demo.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "integrity=$(sha256sum .runtime/evidence/M03.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "access=$(sha256sum .runtime/evidence/M04.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Stop and verify owned storage
+        id: stop_sql
+        if: always() && steps.sql.outcome != 'skipped'
+        env:
+          BOOTSTRAP: ${{ steps.sql.outcome }}
+        run: |
+          if test "$BOOTSTRAP" = success; then test -f .runtime/storage.json; fi
+          uv run --locked python -B -m scripts.m17_recovery_native stop
+          if test "$BOOTSTRAP" = success; then
+            uv run --locked python -c 'from pathlib import Path; from scripts.shared_serving_receipt import offline_pin; print("source_state=" + offline_pin(Path(".runtime")))' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Remove the owned cluster and verify its absence
+        id: stop_cluster
+        if: always() && steps.cluster.outputs.started_empty == 'true'
+        run: |
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then
+            if test -f .runtime/cluster.json; then
+              uv run --locked python -c 'from pathlib import Path; from mlsecops.cluster import validate_cluster; validate_cluster(Path(".runtime"))'
+            else
+              test "$(docker inspect --format '{{ index .Config.Labels "io.x-k8s.kind.cluster" }}' trusted-mlsecops-control-plane)" = trusted-mlsecops
+            fi
+            kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
+          fi
+          kind get clusters > "$RUNNER_TEMP/mlsecops-clusters.txt"
+          if grep -Fxq trusted-mlsecops "$RUNNER_TEMP/mlsecops-clusters.txt"; then exit 1; fi
+      - name: Read the original M07 report after cleanup
+        if: always() && steps.stop_sql.outcome == 'success' && steps.stop_cluster.outcome == 'success'
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.contracts import canonical, read_json
+          report = Path('.runtime/evidence/M07.json')
+          if report.is_file():
+              print(canonical(read_json(report)).decode())
+          else:
+              print('No completed M07 report; inspect the earlier failed stage')
+          PY
