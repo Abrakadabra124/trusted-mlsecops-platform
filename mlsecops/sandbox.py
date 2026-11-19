@@ -91,6 +91,7 @@ def run_worker(image, request, timeout=600):
     reader.start()
     writer.start()
     started = time.monotonic()
+    primary = None
     try:
         while process.poll() is None:
             if oversized.is_set():
@@ -114,12 +115,44 @@ def run_worker(image, request, timeout=600):
             "cpu_limit": 2,
             "deadline_seconds": timeout,
         }
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        subprocess.run(
-            ["docker", "rm", "--force", name], capture_output=True, timeout=30, check=False
-        )
-        if process.poll() is None:
-            process.kill()
-        process.wait(timeout=10)
+        failures = []
+        try:
+            subprocess.run(
+                ["docker", "rm", "--force", name], capture_output=True, timeout=30, check=False
+            )
+        except subprocess.TimeoutExpired:
+            failures.append("docker_rm_timeout")
+        except OSError:
+            failures.append("docker_rm_unavailable")
+        # Docker cleanup and local CLI/pipe ownership are independent obligations.
+        try:
+            if process.poll() is None:
+                process.kill()
+        except OSError:
+            failures.append("process_stop_failed")
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            failures.append("process_wait_timeout")
+        except OSError:
+            failures.append("process_wait_failed")
         reader.join(timeout=5)
         writer.join(timeout=5)
+        if (
+            process.poll() is None
+            or reader.is_alive()
+            or writer.is_alive()
+            or not process.stdin.closed
+            or not process.stdout.closed
+        ):
+            failures.append("local_cleanup_incomplete")
+        if failures:
+            diagnostic = "worker_cleanup_failed:" + ",".join(failures)
+            if primary is not None:
+                primary.add_note(diagnostic)
+            else:
+                raise Rejected(diagnostic)

@@ -115,3 +115,34 @@ cleanup после patch остаются за parent. M18/R1 и независ�
 и promotion recovery. Coverage `storage_connection_diagnostics`,
 `holdout_diagnostics`, `holdout_budget`: 114/114 statements, 32/32 branches.
 Это не coverage всего storage/sandbox runtime. Ruff check/format и check_docs pass.
+
+## Review fix round 1: отказ Docker cleanup
+
+На `6f1577e` вызов `docker rm` предшествовал local process kill/wait и join
+reader/writer threads. Его `TimeoutExpired`/`OSError` пропускал остаток cleanup
+и заменял исходный `worker_deadline`. Red-test с настоящим Python child,
+который не читает stdin, 1 MiB input и deadline 1 s подтвердил живой процесс
+после выхода executor. Fixture всегда завершает принадлежащий ей child,
+дожидается потоков и закрывает pipes, включая отрицательный baseline.
+
+Cleanup Docker и local CLI теперь независимы: отказ `rm` не пропускает
+kill/wait/join; проверяется конечное состояние child, двух потоков и pipes.
+Семантика best-effort `rm` с `check=False` сохранена: исходный `docker run --rm`
+может уже удалить контейнер до этого вызова. Повторов нет.
+Первичное исключение и его cause сохраняются; вторичная ошибка добавляется
+через `add_note` как `worker_cleanup_failed:<constant categories>` и видна
+в обычном traceback/`__notes__`. Consumer, выводящий только `str(error)`, должен
+отдельно читать notes для диагностики cleanup. Raw stderr/commands/paths не
+добавляются. Если worker завершился успешно, cleanup failure запрещает success
+и поднимает `Rejected` с тем же безопасным diagnostic. Warning filters не меняются.
+
+Проверки охватывают обычный `rm`, timeout, OSError, прежний best-effort exit status, блокировку
+1 MiB stdin, сохранение deadline, явный отказ cleanup после успешного worker,
+мёртвый child, завершённые потоки и закрытые pipes до fixture cleanup.
+Остановка local Docker CLI при отказе `rm` не доказывает удаление контейнера:
+эта native ownership-проверка остаётся parent. SQL/M07 diagnostic helpers,
+budget cap, TLS, retries и workflows этим fix round не меняются.
+
+Финальная проверка fix round 1 на pinned Python 3.12.15: 102 tests pass,
+0 skips за 26.026 s с `-B -W error`; из них 7 pipe tests. Ruff check/format,
+check_docs и diff check прошли. Это локальная проверка, не native M07 pass.
