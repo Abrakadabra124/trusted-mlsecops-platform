@@ -2,7 +2,8 @@
 
 Неделя 13, T21. Scope: безопасная диагностика конкретного native отказа и
 исправление отдельно подтверждённого незакрытого stdout pipe. Причина native
-connection failure пока не установлена; M07 не объявлен исправленным.
+connection failure пока не установлена. Ниже отдельно зафиксирован успешный
+native повтор на новом source; он не доказывает причину старого отказа.
 Последующая hosted qualification использует отдельный scoped workflow;
 основная цепочка R1 от этого не считается пройденной.
 
@@ -200,3 +201,43 @@ holdout_budget и sandbox. Общий средний процент не зам�
 причину прежнего отказа. Raw SQL logs, credentials и private artifacts
 публично не выкладывать. Локальную инфраструктуру для этой проверки
 не запускать.
+
+
+## Native повтор на 25cf982
+
+[Run 44635725751 / job 135953588490](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44635725751/job/135953588490)
+завершился success 20 ноября 2026 МСК. Checkout:
+`25cf98272a3db47e078e511515fde6e0e9eeb830`, source_dirty=false.
+M07 выполнялась с 23:15:46.354764 до 23:24:47.313610 UTC 19 ноября
+(02:15:46-02:24:47 МСК 20 ноября), профиль local-cpu.
+
+- **97/97 cases pass**, exit_code=0.
+- Из 32 конкурентных попыток 31 получила точные slots 2-32, последняя
+  получила ровно `holdout_budget_exhausted`; invalid_receipts=0,
+  complete=true. `storage_connection_rejected` в новом отчёте отсутствует.
+- Оценены 3000 holdout rows, из них 1222 positives. AUPRC:
+  0.9132159424391436, dummy AUPRC: 0.4073333333333333.
+- M01, M02 и начало M21 завершились успешно. Source SQL остановлен,
+  owned cluster удалён и отсутствие проверено. Исходный M07 report прочитан
+  после обоих cleanup steps; они success.
+- В прочитанном полном журнале нет `ResourceWarning`. Это наблюдение этого
+  запуска, не доказательство отсутствия любых утечек во всех режимах.
+
+| Привязка | SHA-256 |
+| --- | --- |
+| Candidate | `08b355ea752af4018207c9500c3eccc65bdd4a9547b86546bd7255d284cdaa82` |
+| Evaluation | `fec2b1a162b9462a7330845234fdd595a28e993c48bbe37078cb58874fe5dd88` |
+| ONNX model | `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46` |
+| Worker image | `sha256:58595228f2e1a67c7bd69ce7d786e00f6344105ee7543e774a9707c656faffef` |
+| Source fingerprint | `b99b37bf8e73bde53012e4327cfca9e94997733195c1ce63e1934f5d269a549d` |
+| M07 report, canonical JSON + LF | `28123af1aabd66c07fe99729bdf6506ddc24df425cb5f226144a705784861063` |
+
+Последний hash вычислен из полного JSON отчёта, прочитанного из журнала
+после cleanup, с canonical serialization и LF. Это не отдельное скачивание
+исходного report-файла. Raw log и локальная копия отчёта остаются приватными,
+в Git не добавлены.
+
+Исходный budget contract, cap 32, таймауты и TLS не изменялись.
+Успешный повтор подтверждает M07 для указанного candidate/source; он не
+устанавливает причину прежнего транспортного отказа и не переносит успех
+на другие candidates или незавершённую общую M18/R1-приёмку.

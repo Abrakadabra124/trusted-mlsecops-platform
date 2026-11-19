@@ -61,8 +61,12 @@ sealed = validation.seal(root, original_state, packet, key=key, phase="M13", **a
 # Receiver: candidate_view already opened by ci_candidate_transfer.materialize
 # with its own independently trusted manifest/context/ciphertext expectations.
 with validation.materialize(
-    root, candidate_view, received_validation_envelope,
-    key=key, phase="M13", **receiver_original_authority,
+    root,
+    candidate_view,
+    received_validation_envelope,
+    key=key,
+    phase="M13",
+    **receiver_original_authority,
     expected_context=trusted_validation_context,
     ciphertext_pin=trusted_validation_ciphertext_sha256,
 ) as (validation_path, summary):
@@ -101,3 +105,32 @@ branches 2/2 (100%), без coverage exclusions. Ruff и `scripts/check_docs.py`
 Source-clean отказ проверяется controlled injection; fixture не является live
 source/runtime qualification. Hosted handoff, GitHub configuration, доставка
 ключей, SQL import/readback и M13/M14/M15 acceptance здесь не доказаны.
+
+
+## Review и проверка границы после ciphertext hash
+
+Review воспроизвело дефект sender: при остатке ровно 600 секунд хеширование
+ciphertext после финальной проверки времени позволяло вернуть уже просроченный
+для приёма пакет. Receiver продолжал корректно отклонять его; обход разрешения
+на выпуск не подтверждён. Полное покрытие строк этого порядка событий не выявляло.
+
+Исправление `d2bb318` перенесло SHA-256 ciphertext перед завершающими
+`_fresh/_window`. Новый regression test оставляет настоящие AES-GCM и SHA-256,
+сдвигает только часы на 10 мс во время хеширования и требует отказа.
+До исправления test давал `Rejected not raised`, после исправления проходит.
+Отдельный reviewer подтвердил исправление на commit; порог 600 секунд,
+округление UTC и исходный expiry сохранены.
+
+Этот helper не выбирает внешний канал хранения. В существующем публичном
+репозитории Actions artifacts доступны читателям репозитория, поэтому даже
+ciphertext нельзя выкладывать туда при текущей private-классификации.
+[Официальные правила доступа](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/download-workflow-artifacts).
+Hosted handoff требует разрешённого приватного канала; его наличие не
+подтверждено локальными тестами helper.
+
+Интегрированная версия после исправления: **24 tests pass, 0 skips, 65.013 s**.
+Coverage этого модуля: 93/93 statements и 2/2 branches, оба 100%.
+До исправления общий parent run validation + consumer-state прошёл 35 tests;
+consumer-state отдельно имел 42/42 statements и 4/4 branches. Его код после
+этого не менялся. Оба результата относятся к fixture qualification, не к
+настоящему межjob-переносу или работающему SQL consumer.

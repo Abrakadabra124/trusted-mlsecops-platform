@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+20 ноября подготовлены [необязательный validation companion](docs/operations/ci-validation-transfer.md)
+и [файлы нового consumer workspace](docs/operations/consumer-candidate-state.md).
+Первый проверяет исходные validation bytes по подписанному manifest; второй
+сохраняет original candidate/root key и готовит новый owned state. Оба API
+приватны и прошли scoped review; SQL import, приватный hosted transport,
+настройка ключей и общий parallel workflow ещё не реализованы. Публичные
+Actions artifacts не являются разрешённым каналом для этих пакетов.
+
 20 ноября [проверка происхождения Kubernetes modules](docs/evidence/image-kubernetes-provenance-2026-11-20.md)
 связала 96 экземпляров `(devel)` с 27 исходными модулями и exact manifests.
 Преобразования при публикации Go modules не позволяют доказать версии одним
@@ -13,9 +21,12 @@ Evidence прошло отдельное review, scanner inputs и исключ�
 проверяет завершение локального процесса, потоков и закрытие pipes даже после
 отказа Docker cleanup. 38 diagnostic/budget и 24 real-pipe/privacy tests прошли;
 coverage каждого изменённого security module превышает 95% строк и branches.
-[Native повторение](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44635725751)
-запущено на `25cf982`; результат ещё ожидается. M07 и общий R1 этим patch
-не закрываются.
+[Native повторение на 25cf982](docs/operations/m07-connection-failure.md#native-повтор-на-25cf982)
+прошло: 97/97 cases, 31 exact receipt для slots 2-32 и правильный
+`holdout_budget_exhausted` в 32-й попытке. SQL/cluster cleanup success,
+исходный report прочитан после cleanup. Причина старого connection failure
+не установлена; M07 pass относится только к этому candidate/source. Общий
+R1 остаётся открытым.
 
 20 ноября интегрирован [мост приватной передачи кандидата](docs/operations/ci-candidate-transfer.md):
 68 проверок с настоящими подписями fixtures и AES-GCM прошли, отдельное review
