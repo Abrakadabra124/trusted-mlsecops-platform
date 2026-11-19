@@ -24,7 +24,13 @@ from mlsecops.contracts import (
 from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import image_document
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
-from scripts import image_candidates, image_kubernetes_inventory, image_scope, tracking_spike
+from scripts import (
+    image_candidates,
+    image_etcd_candidate,
+    image_kubernetes_inventory,
+    image_scope,
+    tracking_spike,
+)
 from scripts.image_archive import identity
 from scripts.image_audit_contract import (
     GO_CONTROL_ADVISORIES,
@@ -390,6 +396,14 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         local_exports = {
             item["name"]: item for item in observed["targets"] if "containerd_reference" in item
         }
+        if any(
+            item["config_id"] == image_etcd_candidate.BASELINE_CONFIG
+            for item in observed["targets"]
+        ):
+            targets.append(
+                (image_etcd_candidate.NAME, "system", image_etcd_candidate.REFERENCE, None)
+            )
+            expected_configs[image_etcd_candidate.NAME] = image_etcd_candidate.CONFIG
     for name, role, reference, distro in targets:
         component = {
             "name": name,
