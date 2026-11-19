@@ -13,6 +13,12 @@ from scripts.image_audit_qualification import fixtures
 def qualify():
     cases = []
     scenarios = {
+        "runtime-etcd-candidate-clean": "fail",
+        "runtime-etcd-candidate-high": "fail",
+        "runtime-etcd-candidate-unknown": "fail",
+        "runtime-etcd-candidate-foreign": "fail",
+        "runtime-etcd-candidate-missing": "fail",
+        "runtime-etcd-candidate-empty": "fail",
         "node-proposal": "inconclusive",
         "node-known-worker": "inconclusive",
         "node-forged": "rejected",
@@ -106,6 +112,22 @@ def qualify():
                 "containers": [],
                 "pods": [],
             }
+            etcd_case = name.startswith("runtime-etcd-candidate-")
+            etcd_reference = "registry.k8s.io/etcd@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
+            etcd_config = "sha256:be2dd319600bac16f542b8e46e1b78511c35a31e46829ee9acc82a83c94aa377"
+            if etcd_case:
+                runtime_snapshot["targets"] = [
+                    {
+                        "name": f"runtime-{index:03}",
+                        "reference": f"registry.example/system-{index}@sha256:{index:064x}",
+                        "config_id": f"sha256:{index:064x}",
+                    }
+                    for index in range(14)
+                ]
+                runtime_snapshot["targets"][0].update(
+                    reference="registry.k8s.io/etcd@sha256:00edecc7baeaf69c61708ed713d55a8c928d539f200298d8d67cbfed59db9c7e",
+                    config_id="sha256:a17708350060c02414f0ecd9a0afd44404df2e4ed8cc9726a3a9c5776b40645e",
+                )
             if name == "runtime-source-mismatch":
                 runtime_snapshot["source_revision"] = "different-revision"
             if name == "runtime-local-export":
@@ -128,6 +150,18 @@ def qualify():
                 if name == "missing-image-pull" and len(calls) == 1:
                     raise Rejected("missing")
                 details = copy.deepcopy(inspected)
+                if etcd_case:
+                    for target in runtime_snapshot["targets"]:
+                        if reference == target["reference"]:
+                            details["Id"] = target["config_id"]
+                    if reference == etcd_reference:
+                        if name == "runtime-etcd-candidate-missing":
+                            raise Rejected("controlled_candidate_unavailable")
+                        details["Id"] = (
+                            "sha256:" + "b" * 64
+                            if name == "runtime-etcd-candidate-foreign"
+                            else etcd_config
+                        )
                 for item in node_binding["images"].values():
                     if reference == item["reference"]:
                         details["Id"] = item["config_id"]
@@ -171,6 +205,12 @@ def qualify():
                 path = run / f"{stage}.json"
                 document = copy.deepcopy(report)
                 observed_id = image_id
+                if etcd_case:
+                    for target in runtime_snapshot["targets"]:
+                        if stage.startswith(target["name"] + "-"):
+                            observed_id = target["config_id"]
+                    if stage.startswith("etcd-xnet-candidate-"):
+                        observed_id = etcd_config
                 for role, item in node_binding["images"].items():
                     if stage.startswith(f"node-{role}-"):
                         observed_id = item["config_id"]
@@ -397,6 +437,47 @@ def qualify():
                                 "type": "go-module",
                             }
                             document["matches"], returncode = [finding], 2
+                if etcd_case and stage.startswith(("runtime-", "etcd-xnet-candidate-")):
+                    candidate = stage.startswith("etcd-xnet-candidate-")
+                    packages = [
+                        {
+                            "id": binary,
+                            "name": "golang.org/x/net",
+                            "version": "v0.62.0" if candidate else "v0.61.0",
+                            "type": "go-module",
+                            "foundBy": "go-module-binary-cataloger",
+                            "locations": [{"path": "/usr/local/bin/" + binary}],
+                        }
+                        for binary in ("etcd", "etcdctl", "etcdutl")
+                    ]
+                    document["distro"] = None
+                    if stage.endswith("-sbom"):
+                        document["artifacts"] = (
+                            [] if candidate and name == "runtime-etcd-candidate-empty" else packages
+                        )
+                    else:
+                        document["matches"] = []
+                        severity = "Unknown" if name == "runtime-etcd-candidate-unknown" else "High"
+                        if stage == "runtime-000-scan" or (
+                            candidate
+                            and name
+                            in {"runtime-etcd-candidate-high", "runtime-etcd-candidate-unknown"}
+                        ):
+                            for package in packages:
+                                finding = copy.deepcopy(match)
+                                finding["artifact"] = {
+                                    key: package[key] for key in ("id", "name", "version", "type")
+                                }
+                                finding["vulnerability"].update(
+                                    id="CVE-2099-0001" if candidate else "GO-2026-6860",
+                                    severity=severity if candidate else "High",
+                                )
+                                document["matches"].append(finding)
+                        returncode = (
+                            2
+                            if document["matches"] and (not candidate or severity == "High")
+                            else 0
+                        )
                 write_json(path, document)
                 return returncode, path
 
@@ -474,6 +555,58 @@ def qualify():
                         **({"include_node_candidate": True} if name.startswith("node-") else {}),
                     )
                     outcome = result["status"]
+                    if etcd_case:
+                        components = {item["name"]: item for item in result["components"]}
+                        if (
+                            len(components) != 18
+                            or result["runtime_scope"]["expected_images"] != 14
+                            or result["runtime_scope"]["covered_images"] != 0
+                            or result["release_ready"] is not False
+                            or result["policy"]["allow_exceptions"] is not False
+                            or result["policy"]["threshold"] != "High"
+                            or result["policy"]["unknown_severity"] != "inconclusive"
+                        ):
+                            raise AssertionError(
+                                "candidate must add a scan without replacing 14 required targets"
+                            )
+                        for target in runtime_snapshot["targets"]:
+                            item = components[target["name"]]
+                            if (
+                                not item["scan_executed"]
+                                or item["image_config_id"] != target["config_id"]
+                            ):
+                                raise AssertionError("original runtime target lost or substituted")
+                        baseline = components["runtime-000"]
+                        if len(baseline["findings"]) != 3 or any(
+                            item["id"] != "GO-2026-6860"
+                            or item["installed"] != "v0.61.0"
+                            or item["severity"] != "High"
+                            for item in baseline["findings"]
+                        ):
+                            raise AssertionError("original High findings must remain visible")
+                        candidate = components["etcd-xnet-candidate"]
+                        invalid = name in {
+                            "runtime-etcd-candidate-foreign",
+                            "runtime-etcd-candidate-missing",
+                            "runtime-etcd-candidate-empty",
+                        }
+                        if (
+                            candidate["scan_executed"] != (not invalid)
+                            or candidate["coverage_profile"] != "unapproved-system"
+                        ):
+                            raise AssertionError(
+                                "unavailable or substituted candidate cannot claim a valid scan"
+                            )
+                        if not invalid and (
+                            candidate["sbom_validated"] is not False
+                            or candidate["status"]
+                            != ("fail" if name == "runtime-etcd-candidate-high" else "inconclusive")
+                            or len(candidate["findings"])
+                            != (0 if name == "runtime-etcd-candidate-clean" else 3)
+                        ):
+                            raise AssertionError(
+                                "candidate findings or missing coverage must not be hidden"
+                            )
                     if name in {"node-proposal", "node-known-worker"}:
                         nodes = [c for c in result["components"] if c["name"].startswith("node-")]
                         if (
