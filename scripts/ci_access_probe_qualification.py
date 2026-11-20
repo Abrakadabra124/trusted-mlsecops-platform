@@ -34,7 +34,7 @@ class ProbeTests(unittest.TestCase):
         self.key = Ed25519PrivateKey.generate()
         self.public = signing.encode64(self.key.public_key().public_bytes_raw())
         self.env = dict(
-            CANDIDATE_ACCESS_TOKEN="test-role-token",
+            CANDIDATE_ACCESS_TOKEN="github_pat_test-role-token",
             CANDIDATE_PROBE_NONCE=NONCE,
             CANDIDATE_PROBE_PUBLIC=self.public,
             GITHUB_RUN_ID="221",
@@ -93,7 +93,7 @@ class ProbeTests(unittest.TestCase):
 
     @contextmanager
     def response(self, host, method, path, headers, body=None):
-        self.assertEqual(headers["Authorization"], "Bearer test-role-token")
+        self.assertEqual(headers["Authorization"], "Bearer github_pat_test-role-token")
         self.calls.append((method, path))
         release = self.release | {"assets": self.rows}
         status, extra = 200, []
@@ -165,6 +165,7 @@ class ProbeTests(unittest.TestCase):
             ("CANDIDATE_PROBE_PUBLIC", "a" * 44),
             ("CANDIDATE_PROBE_PUBLIC", self.public[:-1] + "A"),
             ("CANDIDATE_ACCESS_TOKEN", ""),
+            ("CANDIDATE_ACCESS_TOKEN", "classic-test-token"),
             ("GITHUB_RUN_ID", "01"),
             ("GITHUB_RUN_ATTEMPT", "0"),
         ):

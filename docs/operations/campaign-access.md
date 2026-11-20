@@ -46,3 +46,5 @@ gh secret set CANDIDATE_STORE_WRITE --env candidate-store-write --repo Abrakadab
 прочитали ссылку его основной ветки. Для проверки записи издателем, отказа
 записи читателю и удаления временных данных требуется отдельная операция.
 [Запуск 44786664295](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44786664295).
+
+[Порядок проверки записи, отказа читателю и очистки по ID](store-access-proof.md).
