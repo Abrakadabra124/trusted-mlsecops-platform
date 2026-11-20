@@ -83,7 +83,7 @@ bootstrap. Если state неполон, требуется отдельное 
 В изолированном checkout с Python 3.12 и закреплёнными зависимостями:
 
 ```powershell
-$python = '../t20-recovery/.venv/Scripts/python.exe'
+$python = './.venv/Scripts/python.exe'
 $coverageFile = Join-Path ([IO.Path]::GetTempPath()) 'bootstrap-trust.coverage'
 & $python -B -W error -m coverage run --branch --data-file=$coverageFile --source=mlsecops.bootstrap -m unittest scripts.bootstrap_trust_qualification scripts.bootstrap_qualification scripts.foundation_qualification scripts.key_files_qualification scripts.consumer_candidate_state_qualification
 & $python -B -m coverage report --data-file=$coverageFile -m

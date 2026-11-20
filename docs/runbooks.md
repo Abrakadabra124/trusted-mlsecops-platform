@@ -1,5 +1,9 @@
 # Эксплуатационные процедуры
 
+Сохранение исходной trust identity при создании producer, неизменяющий retry
+и разбор неполного bootstrap:
+[original trust provisioning](operations/bootstrap-trust.md).
+
 Приватный тестовый канал между отдельными GitHub Actions jobs, управление
 временным ключом, проверка затрат и exact-run artifact cleanup:
 [private CI channel](operations/private-ci-channel.md).
