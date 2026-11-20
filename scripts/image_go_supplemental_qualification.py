@@ -87,6 +87,24 @@ def fixture(severities=(), timestamp=STAMP):
 
 
 class SupplementalContracts(unittest.TestCase):
+    def test_blank_fix_state_retains_finding_and_severity_decision(self):
+        # Grype's serialized Fix.State may be the empty Go string. This was
+        # also observed for GO-2025-3547 in the saved Kubernetes image reports.
+        for severity, expected in (
+            ("Low", "pass"),
+            ("High", "fail"),
+            ("Critical", "fail"),
+            ("Unknown", "inconclusive"),
+        ):
+            inputs = fixture([severity])
+            inputs["report"]["matches"][0]["vulnerability"]["fix"]["state"] = ""
+            with self.subTest(severity=severity):
+                result = contract.assess(**inputs)
+                self.assertEqual(result["status"], expected)
+                self.assertEqual(result["matches"], 1)
+                self.assertEqual(result["findings"][0]["fix"], {"state": "", "versions": []})
+                self.assertEqual(result["severity_counts"][severity], 1)
+
     def rejected(self, inputs):
         with self.assertRaises(Rejected) as caught:
             contract.assess(**inputs)

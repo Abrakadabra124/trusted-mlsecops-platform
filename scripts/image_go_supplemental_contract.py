@@ -185,7 +185,9 @@ def assess(module, version, report, cdx, trace, returncode, expected_database, t
             fix = vulnerability.get("fix", {})
             _need(type(fix) is dict)
             state, versions = fix.get("state"), fix.get("versions", [])
-            if state is not None:
+            # Grype models.Fix.State is a plain string, including its empty Go
+            # zero value. Preserve it without suppressing the finding/severity.
+            if state not in (None, ""):
                 _text(state, 64)
             _need(type(versions) is list and len(versions) <= 256)
             versions = [_text(value, 256) for value in versions]
