@@ -49,6 +49,10 @@ def _permission_denial(api, release_id, nonce, run, attempt):
     headers = api._headers(http._JSON) | {"Content-Type": http._BINARY}
     raw = payload(nonce, run, attempt, "reader")
     with http._response(http._UPLOADS, "POST", target, headers, raw) as response:
+        outcome = {201: "response_created", 403: "response_forbidden"}.get(
+            response.status, "response_other"
+        )
+        print("reader_check=" + outcome)
         _need(response.status == 403)
         _need(
             response.headers.get("Retry-After") is None
@@ -58,6 +62,7 @@ def _permission_denial(api, release_id, nonce, run, attempt):
         limit = _quota(response.headers, "Limit")
         used = _quota(response.headers, "Used")
         _need(remaining != 0 and limit != 0 and (limit is None or used is None or used < limit))
+        print("reader_check=denial_body")
         body = decode(http._read(response, 8192), 8192)
         _need(type(body) is dict and body.keys() <= {"message", "documentation_url", "status"})
         _need(
@@ -168,11 +173,15 @@ class Probe:
 
     def reader(self):
         name = "publisher.bin"
+        print("reader_check=publisher_bytes")
         _need(self.initial.keys() == {name})
         self.read(name, self.initial[name])
+        print("reader_check=inventory_before")
         _need(self.inventory() == self.initial)
         store._repo(self.api)
+        print("reader_check=write_request")
         _permission_denial(self.api, self.release_id, self.nonce, self.run, self.attempt)
+        print("reader_check=inventory_after")
         _need(self.inventory() == self.initial)
 
     def cleanup(self):
@@ -197,6 +206,8 @@ def main(arguments=None):
     stage = args[0] if len(args) == 1 and args[0] in STAGES else "invalid"
     try:
         _need(stage in STAGES)
+        if stage == "reader":
+            print("reader_check=fixture")
         token = os.environ["CANDIDATE_ACCESS_TOKEN"]
         _need(token.startswith("github_pat_"))
         api = http.Client(token, write=stage in ("upload", "cleanup"))
