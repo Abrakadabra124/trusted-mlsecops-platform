@@ -1,5 +1,16 @@
 # Статус и границы доказательств
 
+20 ноября соединён [original-candidate driver M13/M14/M15](docs/operations/ci-serving-native.md)
+с [отдельным hosted workflow](.github/workflows/serving-consumer.yml).
+Один исходный proposal и три приватных envelope передают candidate, validation
+и upstream reports в новый owned SQL. После обычных gates и двух transitions
+обязательны cleanup, private export, удаление consumer contexts и отдельный
+offline replay. Родительские 73 tests прошли за 220.251 s на Python 3.12.15.
+Statements/branches каждого модуля 100%: driver 225/225 и 24/24, lifecycle
+202/202 и 14/14, exporter 166/166 и 32/32, campaign 93/93 и 12/12.
+Driver и workflow прошли scoped review; исходные окна и критерии сохранены.
+Native trio ещё не проверен; M18/R1 и private cross-job transport остаются открытыми.
+
 20 ноября [original-candidate consumer на f9bf7c5](docs/evidence/consumer-native-2026-11-20.md#повтор-после-исправления)
 прошёл hosted run **44655346292**: M11 **149** и M12 **201** критерий,
 61 + 188 preflight tests, M07 pass. Producer cluster cleanup подтверждён 1/1;
@@ -20,8 +31,8 @@ scoped review. Родительские проверки на Python 3.12.15: li
 43 tests за 53.355 s и один original-primary test за 13.870 s; exporter
 24 tests за 236.653 s. Statements/branches: lifecycle 202/202 и 14/14,
 campaign 93/93 и 12/12, exporter 166/166 и 32/32. Это offline fixtures,
-а не native M13/M14/M15. Соединение в driver, hosted запуск, приватный
-transport между jobs и общий M18/R1 ещё не завершены.
+а не native M13/M14/M15. Driver соединён следующим increment выше;
+hosted запуск, приватный transport между jobs и общий M18/R1 ещё не завершены.
 
 20 ноября добавлен [импорт original validation в consumer SQL](docs/operations/consumer-validation-storage.md).
 Companion аутентифицируется прежним transport; curator записывает exact bytes,

@@ -1,0 +1,159 @@
+name: Original candidate serving trio consumer qualification
+on:
+  push:
+    branches: [qualify/original-serving-consumer-native]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: original-serving-consumer-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify transfer, consumer ownership and cleanup contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m unittest scripts.data_source_lock_qualification scripts.ci_candidate_transfer_qualification scripts.ci_validation_transfer_qualification scripts.consumer_candidate_state_qualification scripts.ci_upstream_transfer_qualification scripts.consumer_candidate_storage_qualification scripts.consumer_validation_storage_qualification
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/serving-consumer.coverage" --source=scripts.ci_serving_native,scripts.ci_serving_recovery,scripts.ci_serving_retention,scripts.serving_campaign -m unittest scripts.ci_serving_native_qualification scripts.ci_serving_recovery_qualification scripts.ci_serving_retention_qualification scripts.serving_campaign_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/serving-consumer.coverage" -o "$RUNNER_TEMP/serving-consumer-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'serving-consumer-coverage.json').read_bytes())['files']
+          expected = {
+              'scripts/ci_serving_native.py',
+              'scripts/ci_serving_recovery.py',
+              'scripts/ci_serving_retention.py',
+              'scripts/serving_campaign.py',
+          }
+          if set(files) != expected:
+              raise SystemExit('Serving consumer coverage inventory differs')
+          for name, item in files.items():
+              stats = item['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] * 100 < 95 * stats[total]:
+                      raise SystemExit('Serving consumer module coverage below 95%: ' + name)
+          PY
+      - name: Prepare pinned CPU runtime
+        run: |
+          uv run --locked python -B -m mlsecops bootstrap
+          uv run --locked python -B scripts/install_ci_tools.py
+          echo "$GITHUB_WORKSPACE/.runtime/bin" >> "$GITHUB_PATH"
+          uv run --locked python -B -m mlsecops build
+      - name: Start the owned disposable cluster and its private storage
+        id: cluster
+        run: GITHUB_OUTPUT="$GITHUB_WORKSPACE/.runtime/evidence/producer-cluster-outputs.private" uv run --locked python -B -W error -m scripts.ci_producer_cluster start
+      - name: Start owned source storage
+        id: sql
+        run: |
+          uv run --locked python - <<'PY' > .runtime/evidence/producer-sql-cli.log 2>&1
+          from pathlib import Path
+          from mlsecops.storage_bootstrap import bootstrap, validate
+          from mlsecops.contracts import write_json
+          from scripts.ci_consumer_native import private_output
+          state = Path('.runtime').resolve()
+          with private_output(state, 'producer-sql'):
+              result = bootstrap(state)
+              write_json(state / 'evidence/storage-bootstrap.json', result)
+              write_json(state / 'evidence/ci-producer-inputs.json', {'workspace': validate(state)['workspace_id']})
+          print('producer_sql=ready')
+          PY
+          echo 'sql=pass'
+      - name: Verify the actual cluster, worker, pinned tools and clean bootstrap
+        id: foundation
+        run: |
+          GITHUB_OUTPUT="$GITHUB_WORKSPACE/.runtime/evidence/producer-outputs.private" uv run --locked python -B -W error -m mlsecops.acceptance --gate M01 --output .runtime/evidence/M01.json > .runtime/evidence/producer-M01.log 2>&1
+          echo 'M01=pass'
+      - name: Verify intake, quarantine and locked training source
+        id: intake
+        run: |
+          GITHUB_OUTPUT="$GITHUB_WORKSPACE/.runtime/evidence/producer-outputs.private" uv run --locked python -B -W error -m mlsecops.acceptance --gate M02 --output .runtime/evidence/M02.json > .runtime/evidence/producer-M02.log 2>&1
+          echo 'M02=pass'
+      - name: Begin M21 on the empty owned source before the controller training
+        id: intake_start
+        run: |
+          uv run --locked python - <<'PY' > .runtime/evidence/producer-intake-cli.log 2>&1
+          import os
+          from pathlib import Path
+          from mlsecops import controller_intake
+          from mlsecops.contracts import read_json, write_json
+          from scripts.ci_consumer_native import private_output
+          root = Path.cwd().resolve()
+          state = root / '.runtime'
+          os.environ['GITHUB_OUTPUT'] = str(state / 'evidence/producer-outputs.private')
+          with private_output(state, 'producer-intake'):
+              inputs = read_json(state / 'evidence/ci-producer-inputs.json')
+              inputs['start'] = controller_intake.begin(root, state)
+              write_json(state / 'evidence/ci-producer-inputs.json', inputs)
+          print('M21_start=recorded')
+          PY
+          echo 'intake_start=pass'
+      - name: Verify SQL integrity and role isolation, then evaluate the same training run
+        id: evaluated
+        run: |
+          result=0
+          uv run --locked python -B -W error - <<'PY' > .runtime/evidence/producer-M07-cli.log 2>&1 || result=$?
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+          root = Path.cwd().resolve()
+          state = root / '.runtime'
+          inputs = json.loads((state / 'evidence/ci-producer-inputs.json').read_bytes())
+          environment = dict(os.environ,
+              GITHUB_OUTPUT=str(state / 'evidence/producer-outputs.private'),
+              M21_START_SHA256=inputs['start'], R1_SCOPED_TRAINING='1',
+              M07_FRESH_WORKSPACE_ID=inputs['workspace'],
+          )
+          completed = subprocess.run([
+              sys.executable, '-B', '-W', 'error', '-m', 'mlsecops.acceptance',
+              '--gate', 'M07', '--output', str(state / 'evidence/M07.json'),
+          ], cwd=root, env=environment, check=False)
+          raise SystemExit(completed.returncode)
+          PY
+          uv run --locked python -B -W error -m scripts.ci_m07_diagnostic 2> .runtime/evidence/producer-M07-diagnostic.private.log || printf '%s\n' '{"gate":"M07","status":"unavailable","exit_code":null,"reason":"unavailable","diagnostic_only":true,"release_ready":false}'
+          exit "$result"
+      - name: Remove producer cluster before opening the original proposal window
+        id: stop_producer_cluster
+        if: always() && steps.cluster.outcome != 'skipped'
+        run: GITHUB_OUTPUT="$GITHUB_WORKSPACE/.runtime/evidence/producer-cluster-outputs.private" uv run --locked python -B -W error -m scripts.ci_producer_cluster cleanup
+      - name: Verify original candidate in a new owned SQL and full M13 M14 M15
+        id: consumer_native
+        if: ${{ success() && steps.evaluated.outcome == 'success' && steps.stop_producer_cluster.outcome == 'success' }}
+        run: GITHUB_OUTPUT="$GITHUB_WORKSPACE/.runtime/evidence/consumer-outputs.private" uv run --locked python -B -W error -m scripts.ci_serving_native
+      - name: Stop and verify owned storage
+        id: stop_sql
+        if: always() && steps.sql.outcome != 'skipped'
+        run: |
+          test -f .runtime/storage.json
+          uv run --locked python - <<'PY' > .runtime/evidence/producer-stop-cli.log 2>&1
+          from pathlib import Path
+          from scripts.m17_recovery_native import stop_owned
+          from scripts.shared_serving_receipt import offline_pin
+          from scripts.ci_consumer_native import private_output
+          state = Path('.runtime').resolve()
+          with private_output(state, 'producer-stop'):
+              stop_owned(state)
+              offline_pin(state)
+          print('producer_sql=stopped_verified')
+          PY
+          echo 'stop_sql=pass'
+      - name: Verify or finish only recorded consumer cleanup
+        id: consumer_cleanup
+        if: always() && steps.consumer_native.outcome != 'skipped'
+        run: GITHUB_OUTPUT="$GITHUB_WORKSPACE/.runtime/evidence/consumer-outputs.private" uv run --locked python -B -W error -m scripts.ci_serving_native cleanup

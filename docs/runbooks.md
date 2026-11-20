@@ -27,8 +27,10 @@
 после удаления временного context: [serving lifecycle](operations/ci-serving-recovery.md).
 Сохранение исходных preimages и проверка архива обычными offline readers:
 [приватный serving export](operations/ci-serving-primary.md).
-Эти API прошли offline qualification и scoped review; их hosted driver и
-перенос приватного архива за пределы disposable runner ещё не подключены.
+Эти API прошли offline qualification и scoped review. Их
+[исполняемый driver и hosted playbook](operations/ci-serving-native.md)
+соединены; native результат и перенос приватного архива за пределы
+disposable runner ещё не подтверждены.
 
 Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
 [serving primary](operations/m18-serving-primary.md). Отказ по времени

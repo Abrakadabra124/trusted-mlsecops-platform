@@ -130,10 +130,12 @@ full same-candidate M01-M23 or M18 acceptance has been established by this chang
 
 ## Qualification
 
-Use the parent pinned Python 3.12.15. The exact combined parent preflight order is:
+Use pinned Python 3.12.15 and the repository lock. These commands run offline
+qualification fixtures only, not infrastructure. The combined preflight order is:
 
 ```powershell
-& '../t20-recovery/.venv/Scripts/python.exe' -B -m unittest scripts.ci_serving_native_qualification scripts.ci_serving_recovery_qualification scripts.ci_serving_retention_qualification scripts.serving_campaign_qualification
+uv sync --locked --no-build --python 3.12.15
+uv run --locked python -B -W error -m unittest scripts.ci_serving_native_qualification scripts.ci_serving_recovery_qualification scripts.ci_serving_retention_qualification scripts.serving_campaign_qualification
 ```
 
 The driver suite uses strict boundary fixtures, real file I/O, original driver
@@ -163,4 +165,45 @@ passed (1197 files, 394 Markdown documents, 2798 local links).
 
 These are controlled local qualifications and author self-review, not independent
 review or a hosted M13/M14/M15 run. No Docker/WSL/Kubernetes/SQL/native CI process,
-network request, external model, workflow change, publication or push was used.
+network request, external model, workflow change, publication or push was used
+in that author's qualification.
+
+## Parent integration and hosted playbook
+
+Parent repeated the same 73 tests on Python 3.12.15: pass in 220.251 seconds,
+with the four per-module statements/branches results above. Separate driver
+review approved exact author commit `7e4840d9fcba8ad98c086e17572380d649f9b1ca`.
+Workflow review and static checks confirmed 14 ordered steps, 12 valid Bash
+blocks and five parsed Python blocks. This is not a hosted trio result.
+
+The [workflow](../../.github/workflows/serving-consumer.yml) uses a public
+standard disposable `ubuntu-24.04` runner. It prepares the pinned CPU image,
+producer cluster and SQL, runs original M01/M02/M07, verifies producer cluster
+cleanup, then calls this driver. Two independent `always()` steps stop source
+SQL and invoke this driver's recorded consumer cleanup. It publishes no
+artifacts or candidate pins; dependency output and GITHUB_OUTPUT stay private.
+
+From the reviewed source commit in a clean checkout, the existing repository
+owner can start the scoped workflow without altering main:
+
+```powershell
+git status --short
+git rev-parse HEAD
+git push origin HEAD:refs/heads/qualify/original-serving-consumer-native
+gh run list --repo Abrakadabra124/trusted-mlsecops-platform --branch qualify/original-serving-consumer-native --workflow serving-consumer.yml
+```
+
+Require an empty status, then verify the run's exact `headSha`. Do not force-push
+over a different attempt or repeat dispatch after an observer timeout. Read
+the same run again; the [consumer observation runbook](ci-consumer-native.md) explains this case.
+Accept only terminal success with the driver's final `stage=complete`, all three
+gate counts, cleanup `required=4, verified=4`, successful separate cleanup CLI,
+and verified source SQL shutdown. A missing/skipped/failed step remains refusal.
+Record exact source, run/job, durations and the closed projection; keep raw logs,
+pins and primary archives private. The 60-minute job limit and original
+1800-second proposal/600-second phase requirements remain unchanged.
+
+No successful native trio, private transport between jobs, M18 acceptance or
+R1 release is claimed by this prepared workflow. Retained files survive consumer
+deletion on the runner; a separate private lifecycle is still needed to preserve
+them after runner disposal.
