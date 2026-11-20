@@ -11,9 +11,17 @@ Driver/recovery прошли 66 tests; соответственно 232/232 + 24
 Retention исходных M11/M12 прошёл scoped review и 24 родительских теста
 на Python 3.12.15: 196/196 statements, 34/34 branches. Producer cleanup
 прошёл 20 родительских tests: 63/63 statements, 8/8 branches. Workflow и все
-пять модулей интегрированы; новая hosted проверка ещё ожидается. Эти offline
-результаты не подтверждают native consumer, общий transport между jobs или
-M18/R1. Исходные gates, окна и независимые M22 challenges сохранены.
+пять модулей интегрированы. [Hosted run 44644611943](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44644611943)
+на `da34657` прошёл 61 transfer test, 133 tests объединённого набора и coverage
+checks, но остановился на M07 с exit code 1. Причина пока неизвестна: исходный
+report остался приватным на завершённом runner. Producer cluster cleanup
+подтверждён exact-ID проверкой 1/1; исходный SQL остановлен с `Running=false`.
+Consumer M11/M12 не запускался. Для следующего run восстановлен обычный CLI
+M07 и добавлена закрытая diagnostic projection: 52 родительских tests pass,
+45/45 statements и 16/16 branches, scoped privacy review APPROVE. Диагностика
+сохраняет исходный exit code и не публикует приватные отчёты. Native consumer,
+общий transport между jobs и M18/R1 ещё не подтверждены. Исходные gates, окна
+и независимые M22 challenges сохранены.
 
 [Native etcd candidate audit](docs/evidence/image-etcd-xnet-candidate-2026-11-20.md#native-scan-на-58ca2e2)
 на `58ca2e2` /44641028793 завершён: 18 scans, исходные 14 runtime targets

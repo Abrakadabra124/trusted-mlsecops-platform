@@ -148,3 +148,37 @@ fixture не заменяла эти package attributes. Изолированн�
 критерии, аргументы и gates не изменены. Повтор с предварительными импортами
 прошёл. Новый hosted run должен подтвердить весь объединённый набор и native
 цепочку; первый отказ не считается свидетельством прохождения M11/M12.
+
+## Второй hosted run: M07 refusal после успешного preflight
+
+[Run 44644611943](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44644611943)
+на `da34657f4acc2f4221828bb394bf52d78d05700a` подтвердил исправление fixture:
+61 transfer test и 133 tests объединённого набора прошли, включая per-module
+coverage checks. Build, producer cluster, исходный SQL, M01, M02 и начало M21
+завершились success. M07 завершился с exit code 1; consumer не запускался.
+
+Producer cluster cleanup вернул `required=1, verified=1`, а source SQL stop
+прошёл обязательную проверку marker и `Running=false`. Это первое native
+подтверждение нового producer cleanup. Общая цепочка M11/M12 этим run не принята.
+
+Точная причина M07 не установлена: отчёт и traceback остались приватными на
+уже завершённом runner. Этот отказ нельзя приписывать исторической connection
+ошибке без новых наблюдений. Следующий diagnostic run должен вывести только
+заранее разрешённые reason codes и проверенную схему holdout diagnostics.
+Raw logs, candidate pins и значения произвольных исключений остаются закрытыми;
+исходный M07 exit code управляет шагом независимо от diagnostic projection.
+
+M07 вызывается обычным `mlsecops.acceptance` CLI в отдельном процессе; launcher
+передаёт прежние workspace и M21 pins через environment. Это возвращает
+проверенный process boundary и создание начального inconclusive report, но
+само по себе не доказывает причину предыдущего отказа. Shell сохраняет exit
+code процесса до диагностического вывода и завершает шаг с тем же значением.
+
+[Diagnostic helper](../../scripts/ci_m07_diagnostic.py) читает не более 1 MiB,
+принимает только M07 status/exit-code пары и точные статические reason codes.
+Неизвестная причина становится `unclassified`; неверная вложенная схема -
+`diagnostic_invalid`; недоступный файл - `unavailable`. Счётчики и категории
+connection failures проходят закрытую проверку. Это диагностические данные,
+а не gate evidence или разрешение выпуска. 52 родительских теста на Python
+3.12.15 прошли; helper имеет 45/45 statements и 16/16 branches, privacy review
+одобрен. Ни эта проверка, ни восстановление CLI не заменяют новый hosted run.

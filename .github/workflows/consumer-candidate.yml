@@ -28,7 +28,7 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
           uv run --locked python -B -W error -m unittest scripts.data_source_lock_qualification scripts.ci_candidate_transfer_qualification scripts.ci_validation_transfer_qualification scripts.consumer_candidate_state_qualification
-          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/consumer-native.coverage" --source=scripts.consumer_candidate_storage,scripts.ci_consumer_native,scripts.ci_consumer_recovery,scripts.ci_producer_cluster,scripts.m18_shared_retention -m unittest scripts.consumer_candidate_storage_qualification scripts.ci_consumer_native_qualification scripts.ci_producer_cluster_qualification scripts.m18_shared_retention_qualification
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/consumer-native.coverage" --source=scripts.consumer_candidate_storage,scripts.ci_consumer_native,scripts.ci_consumer_recovery,scripts.ci_producer_cluster,scripts.m18_shared_retention,scripts.ci_m07_diagnostic -m unittest scripts.consumer_candidate_storage_qualification scripts.ci_consumer_native_qualification scripts.ci_producer_cluster_qualification scripts.m18_shared_retention_qualification scripts.ci_m07_diagnostic_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/consumer-native.coverage" -o "$RUNNER_TEMP/consumer-native-coverage.json"
           uv run --locked python - <<'PY'
           import json, os
@@ -40,6 +40,7 @@ jobs:
               'scripts/ci_consumer_recovery.py',
               'scripts/ci_producer_cluster.py',
               'scripts/m18_shared_retention.py',
+              'scripts/ci_m07_diagnostic.py',
           }
           if set(files) != expected:
               raise SystemExit('Consumer coverage inventory differs')
@@ -106,27 +107,29 @@ jobs:
       - name: Verify SQL integrity and role isolation, then evaluate the same training run
         id: evaluated
         run: |
-          uv run --locked python -B -W error - <<'PY' > .runtime/evidence/producer-M07-cli.log 2>&1
+          result=0
+          uv run --locked python -B -W error - <<'PY' > .runtime/evidence/producer-M07-cli.log 2>&1 || result=$?
+          import json
           import os
+          import subprocess
+          import sys
           from pathlib import Path
-          from mlsecops import acceptance
-          from mlsecops.contracts import canonical, read_json, write_json
-          from scripts.ci_consumer_native import private_output
           root = Path.cwd().resolve()
           state = root / '.runtime'
-          with private_output(state, 'producer-M07'):
-              inputs = read_json(state / 'evidence/ci-producer-inputs.json')
-              os.environ.update(
-                  GITHUB_OUTPUT=str(state / 'evidence/producer-outputs.private'),
-                  M21_START_SHA256=inputs['start'], R1_SCOPED_TRAINING='1',
-                  M07_FRESH_WORKSPACE_ID=inputs['workspace'],
-              )
-              report = acceptance.report('M07', 'local-cpu', root, state=state)
-              write_json(state / 'evidence/M07.json', report)
-          print(canonical({'gate': 'M07', 'status': report['status'], 'exit_code': report['exit_code']}).decode())
-          raise SystemExit(report['exit_code'])
+          inputs = json.loads((state / 'evidence/ci-producer-inputs.json').read_bytes())
+          environment = dict(os.environ,
+              GITHUB_OUTPUT=str(state / 'evidence/producer-outputs.private'),
+              M21_START_SHA256=inputs['start'], R1_SCOPED_TRAINING='1',
+              M07_FRESH_WORKSPACE_ID=inputs['workspace'],
+          )
+          completed = subprocess.run([
+              sys.executable, '-B', '-W', 'error', '-m', 'mlsecops.acceptance',
+              '--gate', 'M07', '--output', str(state / 'evidence/M07.json'),
+          ], cwd=root, env=environment, check=False)
+          raise SystemExit(completed.returncode)
           PY
-          echo 'evaluated=pass'
+          uv run --locked python -B -W error -m scripts.ci_m07_diagnostic 2> .runtime/evidence/producer-M07-diagnostic.private.log || printf '%s\n' '{"gate":"M07","status":"unavailable","exit_code":null,"reason":"unavailable","diagnostic_only":true,"release_ready":false}'
+          exit "$result"
       - name: Remove producer cluster before opening the original proposal window
         id: stop_producer_cluster
         if: always() && steps.cluster.outcome != 'skipped'
