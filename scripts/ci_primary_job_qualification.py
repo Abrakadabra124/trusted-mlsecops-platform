@@ -385,6 +385,71 @@ class PrimaryJobTests(unittest.TestCase):
         self.shared.assert_not_called()
         self.assertFalse((self.root / ".runtime").exists())
 
+    def test_operator_cli_replays_selected_role_with_only_independent_private_inputs(self):
+        record = dict(
+            role="serving",
+            release=RELEASE,
+            run_owner=RUN,
+            source=SOURCE,
+            trusted_public=RECEIVER,
+            owner=OWNER,
+            origin=ORIGIN,
+        )
+        self.enterContext(
+            patch.object(job, "__file__", str(self.root / "scripts" / "ci_primary_job.py"))
+        )
+        receipt = self.temp / "private-replay.json"
+        receipt.write_bytes(canonical(record))
+        receipt.chmod(0o600)
+        env = dict(
+            CANDIDATE_REPLAY_RECEIPT=str(receipt),
+            CANDIDATE_STORE_READ="scoped-reader",
+            CANDIDATE_TRANSFER_KEY=base64.b64encode(KEY).decode(),
+        )
+        self.handoff.replay.return_value = {"release_ready": False, "private": "retained details"}
+
+        def run(role, **changes):
+            with (
+                patch.dict(os.environ, env | changes, clear=True),
+                redirect_stdout(io.StringIO()) as out,
+            ):
+                code = job.main(["replay", role])
+            return code, out.getvalue()
+
+        with patch.object(
+            job.native, "command", side_effect=lambda cmd: SHA if "rev-parse" in cmd else ""
+        ):
+            self.assertEqual(run("serving"), (0, "primary_replay=pass\n"))
+            self.private.assert_called_once_with("scoped-reader", write=False)
+            self.handoff.replay.assert_called_once_with(
+                self.root,
+                PACKET,
+                role="serving",
+                run_owner=RUN,
+                source=SOURCE,
+                key=KEY,
+                trusted_public=RECEIVER,
+                owner=OWNER,
+                origin=ORIGIN,
+            )
+            self.store.put.assert_not_called()
+            self.assertEqual(run("shared")[0], 1)
+            for changes in (
+                dict(CANDIDATE_STORE_WRITE="unexpected-writer"),
+                dict(GITHUB_ACTIONS="true"),
+                dict(CANDIDATE_TRANSFER_KEY="invalid-secret"),
+                dict(CANDIDATE_REPLAY_RECEIPT="relative.json"),
+            ):
+                with self.subTest(keys=list(changes)):
+                    self.assertEqual(run("serving", **changes), (1, "primary_job=refused\n"))
+            self.private.assert_called_once()
+            self.handoff.replay.return_value = {"release_ready": True}
+            self.assertEqual(run("serving"), (1, "primary_job=refused\n"))
+        for observed in ([SHA, "modified"], ["b" * 40]):
+            with patch.object(job.native, "command", side_effect=observed):
+                self.assertEqual(run("serving"), (1, "primary_job=refused\n"))
+        self.assertEqual(self.store.get_unverified.call_count, 2)
+
     def test_remote_reader_passes_bytes_and_only_external_authority_to_replay(self):
         args = dict(role="serving", run_owner=RUN, source=SOURCE)
         authority = dict(key=KEY, trusted_public=RECEIVER, owner=OWNER, origin=ORIGIN)

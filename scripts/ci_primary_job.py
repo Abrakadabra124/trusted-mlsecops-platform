@@ -14,6 +14,7 @@ from mlsecops.ci_transfer import MAX_ENVELOPE_BYTES
 from mlsecops.contracts import (
     Rejected,
     _parent,
+    _stamp,
     atomic_write,
     bounded_read,
     canonical,
@@ -180,6 +181,41 @@ def replay_remote(
         )
 
 
+def _operator_replay(role):
+    """Reopen one independent primary from a private receipt without publisher credentials."""
+    _need(role in ("shared", "serving") and not os.environ.get("GITHUB_ACTIONS"))
+    _need("CANDIDATE_STORE_WRITE" not in os.environ)
+    root = Path.cwd()
+    _need(root == Path(__file__).resolve().parents[1])
+    path = Path(os.environ.pop("CANDIDATE_REPLAY_RECEIPT"))
+    _need(
+        path.is_absolute() and path == path.resolve(strict=True) and not path.is_relative_to(root)
+    )
+    with key_files.opened(path) as stream:
+        before = os.fstat(stream.fileno())
+        _need(0 < before.st_size <= CONTEXT_LIMIT)
+        raw = stream.read(CONTEXT_LIMIT + 1)
+        after = os.fstat(stream.fileno())
+        key_files.validate(after)
+        _need(len(raw) == before.st_size and _stamp(before) == _stamp(after))
+    record = decode(raw, CONTEXT_LIMIT)
+    require_fields(
+        record, ("role", "release", "run_owner", "source", "trusted_public", "owner", "origin")
+    )
+    _need(record["role"] == role)
+    guard.control.binding(record["run_owner"], record["source"])
+    _public(record["trusted_public"])
+    key = signing.decode64(_public(os.environ.pop("CANDIDATE_TRANSFER_KEY")))
+    token = os.environ.pop("CANDIDATE_STORE_READ")
+    _need(token)
+    with serving.private_process():
+        git = ["git", "-C", str(root)]
+        _need(native.command([*git, "rev-parse", "HEAD"]) == record["source"]["source_revision"])
+        _need(not native.command([*git, "status", "--porcelain", "--untracked-files=all"]))
+        result = replay_remote(root, api=PrivateClient(token, write=False), key=key, **record)
+        native.same(result, {"release_ready": False})
+
+
 def _execute(command):
     role = os.environ.get("GITHUB_JOB")
     _need(role in ("shared", "serving"))
@@ -217,6 +253,10 @@ def _execute(command):
 def main(arguments=None):
     try:
         args = sys.argv[1:] if arguments is None else arguments
+        if len(args) == 2 and args[0] == "replay":
+            _operator_replay(args[1])
+            print("primary_replay=pass")
+            return 0
         _need(len(args) == 1 and args[0] in ("capture", "publish"))
         public = _execute(args[0])
     except (Exception, KeyboardInterrupt):
