@@ -141,12 +141,32 @@ def cleanup_on_error(producer, original, run_owner, progress):
 
 
 def consumer(
-    root, producer, state, prepared, owner, sealed, key, progress, marker, offline, upstream_pins
+    root,
+    producer,
+    state,
+    prepared,
+    owner,
+    sealed,
+    key,
+    progress,
+    marker,
+    offline,
+    upstream_pins,
+    *,
+    cleanup_owner=None,
 ):
     original = {k: owner["expected"][k] for k in transfer.delivery.SOURCE}
+    local_owner = owner["run_owner"] if cleanup_owner is None else cleanup_owner
+    if cleanup_owner is not None:
+        need(
+            owner["run_owner"]["producer_job"] == "producer"
+            and canonical(local_owner)
+            == canonical(owner["run_owner"] | {"producer_job": "serving"})
+            and offline is None
+        )
     progress["stage"] = "consumer_tls"
     storage_pki.initialize(state)  # Consumer SQL TLS only, never release signing trust.
-    life = lifecycle.Lifecycle.begin(producer, state, run_owner=owner["run_owner"], source=original)
+    life = lifecycle.Lifecycle.begin(producer, state, run_owner=local_owner, source=original)
     progress["stage"] = "consumer_sql"
     storage_pin = life.bootstrap_sql(state)
     target = storage_bootstrap.validate(state)
@@ -221,8 +241,12 @@ def consumer(
             progress["stage"] = "transition_" + gate
             transitions.append(life.transition(state, gate, storage_pin))
     progress["stage"] = "cleanup"
-    recover(producer, original, owner["run_owner"], progress)
-    need(shared_serving_receipt.offline_pin(producer) == offline)
+    recover(producer, original, local_owner, progress)
+    if cleanup_owner is None:
+        need(shared_serving_receipt.offline_pin(producer) == offline)
+    else:
+        # The issuer witnessed its own SQL. Inspect the stopped receiver SQL here.
+        progress["consumer_offline"] = shared_serving_receipt.offline_pin(state)
     progress["stage"] = "retention"
     arguments = dict(
         **owner,
