@@ -24,10 +24,12 @@ API transport. Все 70 прошли без skips. На этом снимке c
 bootstrap: 73/73 statements, 26/26 branches. Каждый из трёх modules отдельно
 прошёл оба порога 95%. Hosted Linux должен пройти без skips.
 
-Hosted producer/receiver, фактический размер image, время исполнения, удаление
-GitHub artifact и внешний readback после настоящего run пока **pending**.
-Успех этих локальных тестов не снимает этот статус. Результаты будущего run нужно
-записать с его URL, SHA, attempt, artifact ID и итогом каждого job.
+Hosted producer/receiver и cleanup проверены на source `8b9b24d`, attempt 1:
+[run 44775977421](../evidence/source-image-transfer-2026-11-20.md), все три jobs
+success за 173 секунды. Linux: 130 tests без skips; gzip 129.63 MiB, raw archive
+407.80 MiB. Artifact `14650132011` удалён, отдельный readback подтвердил 404
+и доступный пустой список. Native image transport принят в указанном scope;
+настоящий frozen candidate и общий R1 этим результатом не принимаются.
 
 ## Предпосылки и ответственность
 
@@ -240,6 +242,7 @@ CRLF, поэтому проверка content digest правильно отка
 Review также выявил опасность preexisting `probe.cid` и удаления чужого
 `image.tar` очисткой только по имени. Исправление требует fresh owned namespace,
 external owner authority и точного начального набора receiver entries до Docker.
-Core и driver тестируют отказ без чужого удаления. Hosted подтверждение остаётся
-pending, как и actual build/upload/download/readback. Bootstrap qualification
+Core и driver тестируют отказ без чужого удаления. Hosted build/upload/download,
+обычный worker CLI и artifact delete/readback затем прошли в run 44775977421.
+Отмена реального run и её recovery отдельно не запускались. Bootstrap qualification
 проверяет временные trust fixtures; она не разрешает публикацию настоящих ключей.

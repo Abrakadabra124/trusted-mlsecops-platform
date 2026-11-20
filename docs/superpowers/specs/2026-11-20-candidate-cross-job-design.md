@@ -47,6 +47,12 @@ Public runner logs/outputs/artifacts must not contain private packet bytes or pi
    actual public source/run/attempt/producer job and fixed phase before accepting
    control data as expected pins. The read-only consumer cannot rewrite that
    record. A manifest taken from an untrusted downloaded archive is not authority.
+   Before enabling consumer primary-evidence uploads, resolve the separate write
+   boundary: repository-wide Contents write also permits changes to producer
+   records. Keep those records write-isolated, or verify a producer-only signature
+   against an independently delivered public key. A read-only download step followed
+   by a same-repository writer token is not read-only authority isolation. This
+   access decision remains open; no such credential has been provisioned.
 5. **Lifecycle.** Prepare image before opening original proposal; train/evaluate
    once, freeze once, seal phase-specific packets. Consumers use ordinary readers,
    fresh owned SQL/cluster and original gates. Preserve producer owner separately

@@ -1,5 +1,10 @@
 # Эксплуатационные процедуры
 
+Передача точного публичного source-only image между свежими hosted jobs,
+внешний owner witness и cleanup с readback:
+[source image runbook и playbook](operations/source-image-transfer.md).
+[Native evidence](evidence/source-image-transfer-2026-11-20.md).
+
 Сохранение исходной trust identity при создании producer, неизменяющий retry
 и разбор неполного bootstrap:
 [original trust provisioning](operations/bootstrap-trust.md).

@@ -42,10 +42,11 @@ Files: `mlsecops/bootstrap.py`, `scripts/bootstrap_trust_qualification.py`,
   bounded private-key reader. Existing callers remain unchanged. A fresh state
   uses supplied Ed25519 trust bytes from the beginning; existing state may only
   accept the same identity and must never rotate or overwrite it.
-- [ ] Verify actual signatures/public registry, unchanged adjacent roles, default
+- [x] Verify actual signatures/public registry, unchanged adjacent roles, default
   bootstrap idempotency, explicit failure and per-module 95% coverage. Review.
   Windows component/regression checks passed (78 methods, 4 POSIX-only skips);
-  parent source review completed. Native POSIX validation still pending.
+  parent source review completed. Native POSIX tests passed in run 44775977421,
+  within 130 Linux tests without skips. Actual campaign secret delivery is Task 4.
 
 ### Task 2: Exact source-only image handoff
 
@@ -57,9 +58,12 @@ Files: `scripts/ci_source_image.py`, its qualification tests,
 - [x] Implement bounded export/import of only the freshly built public source-only
   worker. Fix caps before native measurements; any over-cap result refuses and
   reports actual sizes without automatically enlarging storage limits.
-- [ ] Verify cross-job image ID/source labels and ordinary worker compatibility
+- [x] Verify cross-job image ID/source labels and ordinary worker compatibility
   on fresh public hosted runners. Retain no model/key/private input in this path.
-- [ ] Review, execute, verify exact artifact cleanup and publish safe evidence.
+- [x] Review, execute, verify exact artifact cleanup and publish safe evidence.
+  Source 8b9b24d / run 44775977421: all three jobs success, 173 seconds,
+  compressed image 129.63 MiB, exact-ID 404 plus accessible empty run listing.
+  [Evidence](../../evidence/source-image-transfer-2026-11-20.md).
 
 ### Task 3: Private asset adapter and access
 

@@ -110,10 +110,14 @@ Ruff lint/format и документационный validator прошли. П�
 
 ## Границы доказательства
 
-Native POSIX validation остаётся pending. Windows-прогон не доказывает POSIX
+Native POSIX component validation выполнена в [run 44775977421](../evidence/source-image-transfer-2026-11-20.md):
+все 130 tests общего Linux preflight прошли без skips, включая новые trust tests
+и существующие private-file/consumer regressions. Это реальные временные ключи
+в component tests с fixture inventory; provisioning настоящего campaign secret
+между jobs ещё не выполнен. Сам по себе Windows-прогон не доказывает POSIX
 ownership/mode enforcement, descriptor-relative no-follow или устойчивость к
-Linux filesystem races. POSIX-only tests должны пройти отдельно в разрешённом
-Linux окружении. Windows ACL/reparse и враждебная замена доверенных родительских
+Linux filesystem races. При последующих изменениях POSIX-only tests должны
+снова проходить в разрешённом Linux окружении. Windows ACL/reparse и враждебная замена доверенных родительских
 каталогов сохраняют ограничения существующего private-file helper.
 
 Вызовы для одного state должны выполняться последовательно: это не конкурентный

@@ -1,5 +1,16 @@
 # Статус и границы доказательств
 
+20 ноября [exact source image handoff](docs/evidence/source-image-transfer-2026-11-20.md)
+на `8b9b24d` / run **44775977421** завершился success во всех трёх jobs за
+**2 min 53 s**. Linux preflight: **130 tests, 0 skips**, individual 95% coverage
+thresholds пройдены. Один image передан с сохранением config ID/source и проверен
+обычным CLI на свежем runner; gzip **129.63 MiB** ниже fixed 384 MiB cap.
+Artifact удалён, независимый API readback подтвердил ID 404 и доступный пустой
+список. [Runbook](docs/operations/source-image-transfer.md) и
+[original trust bootstrap](docs/operations/bootstrap-trust.md) опубликованы.
+Это prerequisite для одного candidate; actual private candidate/primary handoff,
+scoped access, image findings, human M22 0/2 и общий M18/R1 остаются открытыми.
+
 20 ноября [private cross-job canary](docs/evidence/private-ci-channel-2026-11-20.md)
 на `932c2a4` прошёл private run **44681708741**: producer, receiver и cleanup
 success, 55 preflight tests, 7 actual crypto refusals. Exact public source
