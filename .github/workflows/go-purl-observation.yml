@@ -46,7 +46,7 @@ jobs:
           from scripts import image_audit as audit
           from scripts.ci_consumer_native import private_output
 
-          STATE = Path(".runtime/go-purl-observation")
+          STATE = Path(".runtime/go-purl-observation").absolute()
           CASES = {
               "control": ("golang.org/x/net", "v0.16.0"),
               "streaming": ("k8s.io/streaming", "v0.36.4"),

@@ -91,6 +91,22 @@ Parent: 19 controlled tests pass за 0.916 s; настоящая функция
 Это отказ запуска Docker до подтверждённого container ID; конкретная причина
 пока не установлена. Cleanup остаётся `0/1`, scanning results отсутствуют.
 
+[Run 44672723443](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44672723443)
+на `1766b820e576668be2fdab6fe824dd0e94b3fb2c` воспроизвёл exit `125` до CID.
+Закрытая диагностика подтвердила Docker client `28.0.4`,
+`invalid_mount_config=true`, `mount_source_not_absolute=true`; остальные
+классификаторы ошибок false. Переданный source имел вид `.runtime/.../cache`,
+а target `/cache` уже был абсолютным.
+
+В [parser Docker CLI 28.0.4](https://github.com/docker/cli/blob/v28.0.4/opts/mount.go#L94-L100)
+автоматически преобразуются `.` и пути с префиксом `./`, но не `.runtime/...`.
+Поэтому общая текущая документация о поддержке relative paths недостаточна для
+этой версии. Установленная причина воспроизведённого отказа - передача
+неабсолютного bind source. Исправление задаёт абсолютный `STATE` до создания
+run/cache/output paths; scanner version, isolation и cleanup не ослабляются.
+Native проверка исправления должна отдельно подтвердить обработку packages
+и отсутствие записанных контейнеров. Ранние попытки не переименовываются в pass.
+
 Для `stage=observe` статус `observations_captured` подтверждает собранные
 наблюдения, valid control, неизменную DB и проверенную очистку. Для
 `stage=cleanup` он подтверждает только cleanup зарегистрированных попыток
