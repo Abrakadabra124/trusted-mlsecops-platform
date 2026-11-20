@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+20 ноября [перепроверена полная source matrix Kubernetes](docs/evidence/kubernetes-module-mapping-2026-11-20.md):
+27 наблюдаемых modules / 96 instances, 6 242 Go files и 37 embed assets.
+Parent повторил первичные сравнения и независимо пересчитал Git tree hashes.
+Семь фиксированных path deltas сохранены; generic exceptions нет.
+У 27 modules 144 external dependencies / 1 280 bindings; с двумя auxiliary
+targets 145 / 1 368. Обоснованы inputs для будущих 28 supplemental PURL scans,
+но сами scans и объединение findings ещё не приняты. Coverage остаётся 6/14;
+compiler equivalence, общий B02/M18/R1 этим результатом не заявляются.
+
 20 ноября [original-candidate serving trio на 422accf7](docs/evidence/serving-consumer-native-2026-11-20.md)
 прошёл hosted run **44662206137**: M13 **514**, M14 **153**, M15 **188**
 критериев на одном исходном proposal. Preflight 131 + 73 tests без пропусков;
@@ -17,8 +26,9 @@ M22 challenges 0/2 остаются открытыми.
 TUF cache: 18 positive checks (10 bundles + 8 original SET), 5 ожидаемых
 отказов за 4.453 s. Исходные certificates/signatures и signing times сверены.
 Начальное доверие - официальный HTTPS release и pinned executable/source root.
-Соответствие 27 workspace modules опубликованным версиям ещё не доказано;
-coverage остаётся 6/14, findings и общий B02/M18/R1 не закрыты.
+Соответствие 27 workspace modules на этом этапе ещё не было доказано;
+последующий parent replay описан выше. Coverage остаётся 6/14, findings
+и общий B02/M18/R1 не закрыты.
 
 20 ноября [регрессия security event contracts на 422accf7](docs/evidence/security-contracts-regression-2026-11-20.md)
 завершилась success во всех трёх jobs run **44662205908**. Подтверждены
