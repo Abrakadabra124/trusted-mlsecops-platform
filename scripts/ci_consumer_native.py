@@ -4,7 +4,7 @@ import os
 import secrets
 import sys
 import traceback
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from mlsecops import acceptance, ci_transfer, cluster, kube_storage, storage_bootstrap
@@ -83,8 +83,13 @@ def private_output(producer, action):
     path = safe_child(producer, "evidence/ci-consumer-native-" + action + ".log")
     atomic_write(path, b"")
     # Both Python writers and child processes inheriting fd 1/2 stay private.
-    with path.open("a", encoding="utf-8") as log:
-        saved = [os.dup(1), os.dup(2)]
+    with path.open("a", encoding="utf-8") as log, ExitStack() as restore:
+        for descriptor in (1, 2):
+            original = os.dup(descriptor)
+            # Register each acquired descriptor immediately. Every callback runs
+            # even if flush, another restore, or another close raises.
+            restore.callback(os.close, original)
+            restore.callback(os.dup2, original, descriptor)
         try:
             sys.stdout.flush()
             sys.stderr.flush()
@@ -94,9 +99,6 @@ def private_output(producer, action):
                 yield
         finally:
             log.flush()
-            for descriptor, original in zip((1, 2), saved, strict=True):
-                os.dup2(original, descriptor)
-                os.close(original)
 
 
 @contextmanager

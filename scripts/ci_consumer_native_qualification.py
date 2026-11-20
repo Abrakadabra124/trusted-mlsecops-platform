@@ -1005,6 +1005,65 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual((result["status"], result["cause"]), ("fail", "local_io"))
 
 
+class PrivateOutputCleanupTests(unittest.TestCase):
+    def check_fault(self, fault):
+        from scripts import ci_consumer_native as driver
+
+        class Log(io.StringIO):
+            def fileno(self):
+                return 77
+
+            def flush(self):
+                if fault == "flush":
+                    raise OSError("controlled-private-flush")
+                return super().flush()
+
+        copies, redirects, closes = [], [], []
+
+        def duplicate(descriptor):
+            if fault == "second_dup" and descriptor == 2:
+                raise OSError("controlled-second-dup")
+            copies.append(descriptor + 100)
+            return descriptor + 100
+
+        def redirect(original, descriptor):
+            redirects.append((original, descriptor))
+            if fault == "restore_stderr" and original == 102:
+                raise OSError("controlled-restore-stderr")
+
+        def close(descriptor):
+            closes.append(descriptor)
+            if fault == "close_stdout" and descriptor == 101:
+                raise OSError("controlled-close-stdout")
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(driver, "atomic_write"),
+            patch.object(Path, "open", return_value=Log()),
+            patch.object(driver.os, "dup", side_effect=duplicate),
+            patch.object(driver.os, "dup2", side_effect=redirect),
+            patch.object(driver.os, "close", side_effect=close),
+            self.assertRaises(OSError),
+        ):
+            with driver.private_output(Path(temporary), "controlled"):
+                pass
+        self.assertEqual(sorted(closes), sorted(copies))
+        for descriptor in copies:
+            self.assertIn((descriptor, descriptor - 100), redirects)
+
+    def test_flush_failure_still_restores_and_closes_both_descriptors(self):
+        self.check_fault("flush")
+
+    def test_second_dup_failure_closes_the_first_saved_descriptor(self):
+        self.check_fault("second_dup")
+
+    def test_restore_failure_still_attempts_other_descriptor_and_closes_both(self):
+        self.check_fault("restore_stderr")
+
+    def test_close_failure_still_restores_and_closes_other_descriptor(self):
+        self.check_fault("close_stdout")
+
+
 def failure_case(event, stage):
     def test(self):
         self.failure = event
