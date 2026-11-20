@@ -1,5 +1,18 @@
 # Статус и границы доказательств
 
+20 ноября подготовлены [lifecycle M13/M14/M15](docs/operations/ci-serving-recovery.md)
+и [приватное сохранение serving primary](docs/operations/ci-serving-primary.md).
+Первый сохраняет тот же SQL между тремя owned clusters, допускает следующую
+фазу после проверенного удаления предыдущей и очищает записанные ресурсы
+после удаления consumer context. Второй сохраняет original bytes и проверяет
+их обычными readers без новой подписи или разрешения. Оба прошли отдельное
+scoped review. Родительские проверки на Python 3.12.15: lifecycle/campaign
+43 tests за 53.355 s и один original-primary test за 13.870 s; exporter
+24 tests за 236.653 s. Statements/branches: lifecycle 202/202 и 14/14,
+campaign 93/93 и 12/12, exporter 166/166 и 32/32. Это offline fixtures,
+а не native M13/M14/M15. Соединение в driver, hosted запуск, приватный
+transport между jobs и общий M18/R1 ещё не завершены.
+
 20 ноября добавлен [импорт original validation в consumer SQL](docs/operations/consumer-validation-storage.md).
 Companion аутентифицируется прежним transport; curator записывает exact bytes,
 publisher перечитывает их из того же pinned target с отдельной проверкой роли

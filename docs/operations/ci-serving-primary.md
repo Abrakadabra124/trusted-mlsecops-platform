@@ -55,9 +55,7 @@ assert result["release_ready"] is False
 index_pin = result["index_pin"]  # Сохранить только в private caller state.
 
 # После consumer __exit__, без исходного state и инфраструктуры:
-verified = ci_serving_retention.replay(
-    root, destination, index_pin=index_pin, **arguments
-)
+verified = ci_serving_retention.replay(root, destination, index_pin=index_pin, **arguments)
 assert verified["release_ready"] is False
 ```
 

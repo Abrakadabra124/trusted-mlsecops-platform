@@ -1,5 +1,16 @@
 # Реализация R1
 
+T21 2026-11-20: добавлены [фиксированный lifecycle serving consumer](operations/ci-serving-recovery.md)
+и [durable private primary](operations/ci-serving-primary.md). Lifecycle использует
+неизменённые exact-ID/labels/volume проверки Recovery, сохраняет SQL между
+M13/M14/M15 и независимую очистку в обратном порядке. Exporter выбирает только
+исходный frozen closure и обязательные primary files; перечитывает архив после
+удаления consumer без выпуска нового разрешения. Оба scoped reviews APPROVE.
+Родительские 44 lifecycle/campaign/primary и 24 exporter tests прошли;
+в каждом из трёх изменённых security modules statements и branches 100%.
+SQL/Docker/native observations заменены fixtures, обычные crypto/readers
+работают. Driver и hosted trio ещё требуются; M18/R1 этим не принимаются.
+
 CP4/T29 2026-11-12: [owned Kubernetes audit](evidence/kubernetes-audit-2026-11-12.md)
 проверен на4aeece4 /43102906649 success. Dedicated mTLS/registry, три role PVC,
 bootstrap Jobs с pin/UID readback, collector/observer и schema2 promoter соединены.

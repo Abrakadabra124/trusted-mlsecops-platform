@@ -23,6 +23,13 @@
 Это подготовленные механизмы; результат нового native workflow и общий R1
 требуют отдельной проверки, независимо от локальных qualification tests.
 
+Последовательные owned clusters M13/M14/M15 с тем же consumer SQL и cleanup
+после удаления временного context: [serving lifecycle](operations/ci-serving-recovery.md).
+Сохранение исходных preimages и проверка архива обычными offline readers:
+[приватный serving export](operations/ci-serving-primary.md).
+Эти API прошли offline qualification и scoped review; их hosted driver и
+перенос приватного архива за пределы disposable runner ещё не подключены.
+
 Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
 [serving primary](operations/m18-serving-primary.md). Отказ по времени
 qualification permit и порядок возврата serving identity:
