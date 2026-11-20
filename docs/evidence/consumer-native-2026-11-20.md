@@ -99,3 +99,13 @@ offline-дефекта, но не причину исторического от
 старого candidate на новый commit.
 
 [Порядок запуска и восстановления наблюдения](../operations/ci-consumer-native.md).
+
+## Повтор после исправления
+
+[Run 44655346292](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44655346292)
+проверяет source `f9bf7c5af538eb34a885e82659f4ac886787efc8`. Он включает
+нормализацию mounts, закрытые cleanup diagnostics и offline qualification
+validation-импорта в preflight. Этот run не запускает native M13/M14/M15.
+Его результат следует учитывать только после конечного состояния job,
+проверенного cleanup и обязательного retention/replay; факт запуска не
+является acceptance.
