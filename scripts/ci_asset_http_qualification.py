@@ -190,7 +190,11 @@ class AssetHttpTests(unittest.TestCase):
         self.assertIn(b"\r\nAuthorization: Bearer unit_test_token\r\n", wire)
 
     def test_lists_and_head_read_match_the_release_lifecycle(self):
-        for path in (REPO + "/releases?per_page=20", UPLOAD + "?per_page=6"):
+        for path in (
+            REPO + "/releases?per_page=20",
+            REPO + "/releases?per_page=100",
+            UPLOAD + "?per_page=6",
+        ):
             self.reply(200, b'[{"id":71}]')
             self.assertEqual(self.reader.json("GET", path), [{"id": 71}])
             self.assertTrue(self.requests[-1][2].startswith(f"GET /{path} HTTP/1.1\r\n".encode()))
@@ -203,13 +207,19 @@ class AssetHttpTests(unittest.TestCase):
                 self.reader.json("GET", REPO + "/git/ref/heads/" + branch), {"ref": "branch"}
             )
         for path in (
-            REPO + "/releases?per_page=100",
+            REPO + "/releases?per_page=101",
+            REPO + "/releases?per_page=100&page=2",
             UPLOAD + "?per_page=6&page=2",
             REPO + "/git/ref/heads/.",
             REPO + "/git/ref/heads/a//b",
         ):
             with self.subTest(path=path), self.assertRaises(Rejected):
                 self.reader.json("GET", path)
+
+    def test_list_with_pagination_link_refuses_even_when_short(self):
+        self.reply(200, b"[]", ['Link: <https://api.github.com/next>; rel="next"'])
+        with self.assertRaises(Rejected):
+            self.reader.json("GET", REPO + "/releases?per_page=20")
 
     def test_create_only_a_candidate_tag_ref_and_restrict_its_mutation_namespace(self):
         path = REPO + "/git/refs"

@@ -87,7 +87,8 @@ class StoreAPI:
                 "": self.repo,
                 "/git/ref/heads/qualify/store": self.branch,
                 "/git/ref/tags/" + TAG: self.tag,
-                "/releases?per_page=20": self.sibling + ([release] if release else []),
+                "/releases?per_page=20": (self.sibling + ([release] if release else []))[:20],
+                "/releases?per_page=100": (self.sibling + ([release] if release else []))[:100],
                 "/releases/tags/" + TAG: release,
                 "/releases/71": release,
                 "/releases/71/assets?per_page=6": list(self.assets.values()) if release else None,
@@ -572,6 +573,64 @@ class PrivateAssetsTests(unittest.TestCase):
 
         with self.assertRaises(Rejected):
             self.clean(receipt, authorize=unexpected)
+
+    def test_visibility_changes_on_final_listing_before_each_upload(self):
+        for count in range(5):
+            self.api = StoreAPI()
+
+            def publish_repo(method, path, rows):
+                if path == "/releases/71/assets?per_page=6" and len(rows) == count:
+                    self.api.repo.update(private=False, visibility="public")
+                return rows
+
+            self.api.hook = publish_repo
+            with self.subTest(already_uploaded=count):
+                with self.assertRaises(Rejected):
+                    self.publish()
+                self.assertEqual(sum(m == "UPLOAD" for m, _ in self.api.mutations), count)
+
+    def test_terminal_cleanup_with_new_unrelated_releases_preserves_all_siblings(self):
+        for size in (20, 21, 99):
+            self.api = StoreAPI()
+            others = [dict(id=1000 + i, tag_name=f"other-{i}") for i in range(size - 1)]
+            self.api.sibling = others[:18]
+            receipt = self.publish()
+            self.api.sibling.extend(others[18:])
+            with self.subTest(size=size):
+                self.clean(receipt)
+                self.assertEqual(self.api.sibling, others)
+                self.assertIsNone(self.api.release)
+                self.assertIsNone(self.api.tag)
+                self.assertFalse(self.api.assets)
+
+    def test_unrelated_releases_added_mid_cleanup_allow_final_tag_readback(self):
+        self.api.sibling = [dict(id=1000 + i, tag_name=f"other-{i}") for i in range(18)]
+        receipt = self.publish()
+
+        def add_releases(method, path, result):
+            if method == "DELETE" and path == "/releases/71":
+                self.api.sibling.extend(
+                    [dict(id=1200, tag_name="later"), dict(id=1201, tag_name="latest")]
+                )
+            return result
+
+        self.api.hook = add_releases
+        self.clean(receipt)
+        self.assertEqual(len(self.api.sibling), 20)
+        self.assertIsNone(self.api.release)
+        self.assertIsNone(self.api.tag)
+
+    def test_ambiguous_draft_after_first_twenty_and_full_listing_refuse_all_deletion(self):
+        for count, ambiguous in ((21, True), (99, False), (100, False)):
+            self.api = StoreAPI()
+            receipt = self.publish()
+            self.api.sibling = [dict(id=1000 + i, tag_name=f"other-{i}") for i in range(count)]
+            if ambiguous:
+                self.api.sibling[-1].update(tag_name=TAG, draft=True)
+            before = list(self.api.mutations)
+            with self.subTest(count=count, ambiguous=ambiguous), self.assertRaises(Rejected):
+                self.clean(receipt)
+            self.assertEqual(before, self.api.mutations)
 
 
 if __name__ == "__main__":

@@ -109,9 +109,11 @@ def _check_tag(api, receipt):
     _ref(api.json("GET", ROOT + "/git/ref/" + ref), ref, receipt["private_head"])
 
 
-def _visible_releases(api, tag, *, maximum=19):
-    # One bounded page; reject a full page instead of assuming there is no next page.
-    rows = api.json("GET", ROOT + "/releases?per_page=20")
+def _visible_releases(api, tag, *, publishing=False):
+    # Allow unrelated growth after admission. One short page avoids shifting offsets
+    # between requests, and the HTTP client rejects pagination links.
+    page_size, maximum = (20, 18) if publishing else (100, 99)
+    rows = api.json("GET", f"{ROOT}/releases?per_page={page_size}")
     _need(type(rows) is list and len(rows) <= maximum)
     result = []
     for row in rows:
@@ -281,7 +283,7 @@ def publish(api, expected, packets, seal_control, *, checkpoint=None):
     r = _new(owner, _head(api), int(time.time()))
     tag = r["tag"]
     ref = "tags/" + tag
-    _need(_visible_releases(api, tag, maximum=18) == [])
+    _need(_visible_releases(api, tag, publishing=True) == [])
     _need(api.json("GET", ROOT + "/releases/tags/" + tag, absent=True) is None)
     _need(api.json("GET", ROOT + "/git/ref/" + ref, absent=True) is None)
 
@@ -298,7 +300,7 @@ def publish(api, expected, packets, seal_control, *, checkpoint=None):
     remember()
     _check_tag(api, r)
     _repo(api)
-    _need(_visible_releases(api, tag, maximum=18) == [])
+    _need(_visible_releases(api, tag, publishing=True) == [])
     _need(api.json("GET", ROOT + "/releases/tags/" + tag, absent=True) is None)
     row = api.json("POST", ROOT + "/releases", body=_release_fields(r) | {"make_latest": "false"})
     r["release_id"] = _release(row, r)
@@ -310,6 +312,7 @@ def publish(api, expected, packets, seal_control, *, checkpoint=None):
         _wire(stem, content)
         _need(_inventory(api, r) == r["assets"])
         _open(r)
+        _repo(api)
         meta = api.upload(_endpoint(r) + "/assets", stem + ".bin", content)
         pin = _pin(stem, meta)
         _need(pin["size"] == len(content) and pin["sha256"] == digest(content))

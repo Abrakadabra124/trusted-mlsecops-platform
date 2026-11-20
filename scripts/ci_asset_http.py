@@ -21,7 +21,7 @@ _TAG = rf"ci-candidate-{_ID}-{_ID}"
 _RELEASE = rf"/releases/{_ID}"
 _ASSET = rf"/releases/assets/{_ID}"
 _UPLOAD = _RELEASE + "/assets"
-_LISTS = rf"/releases\?per_page=20|{_UPLOAD}\?per_page=6"
+_LISTS = rf"/releases\?per_page=(?:20|100)|{_UPLOAD}\?per_page=6"
 _READ = (
     rf"(?:|{_RELEASE}|{_ASSET}|{_LISTS}|/releases/tags/{_TAG}|/git/ref/tags/{_TAG}"
     rf"|/git/ref/heads/{_BRANCH_PART}(?:/{_BRANCH_PART})*)"
@@ -155,7 +155,10 @@ class Client:
                 _need(response.headers.get_all("Content-Length", []) in ([], ["0"]))
                 _need(response.headers.get("Transfer-Encoding") is None)
                 return {}
-            return _json_value(response, list if "?" in target else dict)
+            if "?" in target:
+                _need(response.headers.get("Link") is None)
+                return _json_value(response, list)
+            return _json_value(response)
 
     def upload(self, path, name, content) -> dict:
         _need(self._write and type(name) is str and re.fullmatch(_NAME, name))
