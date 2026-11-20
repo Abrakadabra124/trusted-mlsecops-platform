@@ -17,6 +17,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from mlsecops.contracts import Rejected, canonical
 
 REPOSITORY = "Abrakadabra124/trusted-mlsecops-platform"
+PRIVATE_REPOSITORY = "Abrakadabra124/trusted-mlsecops-ci-private"
+EXECUTION_REPOSITORIES = frozenset({REPOSITORY, PRIVATE_REPOSITORY})
 MAGIC = b"MLSCIT\x01"
 NONCE_BYTES = 12
 TAG_BYTES = 16
@@ -64,7 +66,7 @@ def _context(value):
     ctx = value.copy()
     if any(type(field) is not str for field in ctx) or ctx.keys() != CONTEXT_FIELDS:
         raise Rejected("ci_transfer_context")
-    if type(ctx["repository"]) is not str or ctx["repository"] != REPOSITORY:
+    if type(ctx["repository"]) is not str or ctx["repository"] not in EXECUTION_REPOSITORIES:
         raise Rejected("ci_transfer_context")
     for field in ("run_id", "run_attempt"):
         if not _integer(ctx[field], 1):

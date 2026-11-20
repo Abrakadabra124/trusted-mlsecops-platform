@@ -69,6 +69,58 @@ class TransferTests(unittest.TestCase):
             "ci_transfer_authentication", self.open, self.seal(), key=bytes(reversed(KEY))
         )
 
+    def test_private_execution_repository_roundtrip(self):
+        ctx = context(repository="Abrakadabra124/trusted-mlsecops-ci-private")
+        envelope = self.seal(ctx=ctx)
+        self.assertEqual(self.open(envelope, ctx=ctx), PAYLOAD)
+
+    def test_public_envelope_rejects_private_repository_with_authentication_failure(self):
+        envelope = self.seal()
+        self.rejected(
+            "ci_transfer_authentication",
+            self.open,
+            envelope,
+            ctx=context(repository="Abrakadabra124/trusted-mlsecops-ci-private"),
+        )
+
+    def test_private_envelope_rejects_public_repository_with_authentication_failure(self):
+        ctx = context(repository="Abrakadabra124/trusted-mlsecops-ci-private")
+        envelope = self.seal(ctx=ctx)
+        self.rejected("ci_transfer_authentication", self.open, envelope, ctx=context())
+
+    def test_foreign_and_noncanonical_execution_repositories_rejected_on_both_paths(self):
+        envelope = self.seal()
+        repositories = (
+            "other/trusted-mlsecops-ci-private",
+            "Abrakadabra124/unapproved-private",
+            "Abrakadabra124/trusted-mlsecops-ci-private-extra",
+            "abrakadabra124/trusted-mlsecops-ci-private",
+            "Abrakadabra124/Trusted-mlsecops-ci-private",
+            "abrakadabra124/trusted-mlsecops-platform",
+            "Abrakadabra124/Trusted-mlsecops-platform",
+            "Abrakadabra124/trusted-mlsecops-ci-private ",
+            "Abrakadabra124/trusted-mlsecops-ci-private\n",
+        )
+        for repository in repositories:
+            with self.subTest(repository=repository):
+                ctx = context(repository=repository)
+                self.rejected("ci_transfer_context", self.seal, ctx=ctx)
+                self.rejected("ci_transfer_context", self.open, envelope, ctx=ctx)
+
+    def test_execution_repository_requires_exact_string_type_on_both_paths(self):
+        class Repository(str):
+            pass
+
+        envelope = self.seal()
+        for repository in (
+            "Abrakadabra124/trusted-mlsecops-platform",
+            "Abrakadabra124/trusted-mlsecops-ci-private",
+        ):
+            with self.subTest(repository=repository):
+                ctx = context(repository=Repository(repository))
+                self.rejected("ci_transfer_context", self.seal, ctx=ctx)
+                self.rejected("ci_transfer_context", self.open, envelope, ctx=ctx)
+
     def test_every_context_binding_is_authenticated(self):
         envelope = self.seal()
         alternatives = {

@@ -36,7 +36,7 @@ payload = open(
 
 | Поля | Требование |
 | --- | --- |
-| `repository` | Ровно `Abrakadabra124/trusted-mlsecops-platform` |
+| `repository` | Фактический execution repo: ровно `Abrakadabra124/trusted-mlsecops-platform` или `Abrakadabra124/trusted-mlsecops-ci-private`, с указанным регистром |
 | `run_id`, `run_attempt` | Исходные run/attempt, целые от 1 до `2**53-1` |
 | `source_revision` | Полный commit SHA, 40 lowercase hex символов |
 | `source_fingerprint` | 64 lowercase hex символа |
@@ -52,6 +52,38 @@ AAD (additional authenticated data) - аутентифицируемый кон�
 использует separators `(',', ':')`, ASCII escaping и запрещает NaN.
 Формат конверта: `b"MLSCIT\x01" | nonce[12] | ciphertext | tag[16]`.
 Любой другой header/version отклоняется. Контекст получатель передает независимо.
+
+## Source identity и execution repository
+
+`REPOSITORY` сохраняет прежнее публичное имя для совместимости существующих
+callers. `PRIVATE_REPOSITORY` задает точное приватное имя, а неизменяемая
+`EXECUTION_REPOSITORIES` содержит только эти два значения. Принимается только
+обычный `str`: подклассы, другие repositories, иной регистр и пробелы отклоняются.
+Членство в allowlist не делает repositories взаимозаменяемыми: точное имя входит
+в AAD. Public ciphertext с private expectation и обратная подмена дают
+`ci_transfer_authentication` даже при правильных ключе и внешнем ciphertext pin.
+Схема контекста, canonical AAD и wire format не изменены.
+
+Публичный source origin остается `Abrakadabra124/trusted-mlsecops-platform`.
+`repository` обозначает владельца фактического запуска, а `source_revision` и
+`source_fingerprint` связывают исходники. Для будущего private canary требуется
+точное зеркало публичного Git DAG с тем же commit SHA. Перед шифрованием будущий
+hosted driver должен проверить live GitHub metadata: private visibility,
+repository ID `1465012664`, точное имя, публикацию утвержденного source commit
+в публичном origin и совпадение текущего checkout с фактическим `GITHUB_SHA`.
+Подмена `GITHUB_REPOSITORY` или `GITHUB_SHA` недопустима. Core не обращается к
+GitHub и сам не удостоверяет эти свойства.
+
+Этот срез добавляет только core-предпосылку private AES canary. Workflow,
+live guard, secrets, cross-job upload/download и cleanup здесь не реализованы;
+candidate/M18 acceptance не заявляется. Пять original-candidate callers пока
+сохраняют public-only ограничения. Их отдельная будущая интеграция затрагивает:
+
+- [ci_candidate_transfer._authority](../../scripts/ci_candidate_transfer.py);
+- [ci_consumer_native.run_owner](../../scripts/ci_consumer_native.py);
+- [ci_serving_recovery.binding](../../scripts/ci_serving_recovery.py);
+- [ci_validation_transfer.retain](../../scripts/ci_validation_transfer.py);
+- [consumer_candidate_storage.import_candidate](../../scripts/consumer_candidate_storage.py).
 
 ## Сроки, лимиты и обязательные внутренние проверки
 
@@ -126,6 +158,15 @@ cryptography 50.0.2, coverage 7.16.2. Coverage собирался в памят�
 payload/report. Родительский `.venv` launcher указывал на отсутствующий старый
 путь Python; использован существующий Python 3.12.15 с библиотеками этой `.venv`
 через process-local `PYTHONPATH`, без установки или изменения окружения проекта.
+
+Проверка allowlist 2026-11-20: прежние 32 и 5 новых tests, всего 37 pass,
+0 skips. Private roundtrip, подмена public/private в обоих направлениях с
+ожидаемым authentication failure, чужие имена, case drift и подклассы `str`
+проверены реальными `seal`/`open`. До правки core новые private сценарии дали
+RED: 1 failure и 2 errors с `ci_transfer_context`. После правки coverage в памяти:
+102/102 statements и 42/42 branches, оба 100%, exclusions 0; те же версии
+Python/cryptography/coverage. Ruff check и format check прошли. Hosted canary
+и original-candidate callers в этот результат не входят.
 
 Это только offline component qualification. GitHub configuration, доставка
 ключей, live encrypted handoff, CI-запуск и приватная передача между jobs здесь
