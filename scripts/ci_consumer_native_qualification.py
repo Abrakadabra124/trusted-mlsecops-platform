@@ -1031,6 +1031,32 @@ class OrchestrationTests(unittest.TestCase):
             b"nested-private", bounded_read(self.producer / "evidence/ci-consumer-native-run.log")
         )
 
+    def test_consumer_returns_original_replay_pins_outside_view(self):
+        consumer = self.d.consumer
+        completed = []
+
+        def capture(*args):
+            completed.append(consumer(*args))
+
+        with patch.object(self.d, "consumer", capture):
+            self.assertEqual(self.result()["status"], "pass")
+        self.assertFalse(self.view.exists())
+        self.assertIsInstance(completed[0], dict)
+        packet = read_json(self.producer / self.d.PRIVATE_PACKET)
+        info = completed[0]
+        self.assertEqual(info["index_pin"], packet["retention"]["index_pin"])
+        self.assertEqual(info["receipt"], packet["receipt"])
+        self.assertEqual(info["consumer_offline"], packet["consumer_offline"])
+        for name, value in packet["authority"].items():
+            self.assertEqual(info["arguments"][name], value)
+        self.assertEqual(
+            info["arguments"]["report_pins"],
+            {
+                g: digest(bounded_read(self.producer / self.d.recovery.DIRECTORY / (g + ".json")))
+                for g in ("M11", "M12")
+            },
+        )
+
     def test_partial_sql_failure_cleanup_happens_before_context_deletion(self):
         self.failure = "sql_partial"
         result = self.result()

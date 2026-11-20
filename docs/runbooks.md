@@ -33,6 +33,7 @@
 [восстановление приватного хранилища](operations/private-assets.md),
 [ограниченный доступ заданий](operations/campaign-access.md),
 [единая подготовка четырёх пакетов](operations/ci-campaign-producer.md),
+[приёмка M11/M12 в отдельном задании shared](operations/ci-shared-job.md),
 [точный пакет и verifier](operations/frozen-candidate-transfer.md),
 [аутентифицированное шифрование](operations/ci-transfer.md).
 Это проверенные локальные компоненты; hosted handoff ещё не подключён.

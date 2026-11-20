@@ -209,16 +209,16 @@ def consumer(root, producer, state, prepared, owner, sealed, witness, summary, p
         need(shared_serving_receipt.receipt(state, os.environ) == receipt)
         need(shared_serving_receipt.offline_pin(state) == offline)
         summary["stage"] = "retention"
-        retained = retain(
-            root,
-            state,
-            safe_child(producer, recovery.DIRECTORY + "/retained"),
+        arguments = dict(
             **owner,
             report_pins={
                 g: digest(bounded_read(state / ("evidence/" + g + ".json"))) for g in ("M11", "M12")
             },
             actual_pin=early_pin,
             native_pin=os.environ[shared.PIN],
+        )
+        retained = retain(
+            root, state, safe_child(producer, recovery.DIRECTORY + "/retained"), **arguments
         )
         need(retained["replay"]["receipt"] == receipt)
         for gate in ("M11", "M12"):
@@ -242,6 +242,12 @@ def consumer(root, producer, state, prepared, owner, sealed, witness, summary, p
                 retention=retained,
                 release_ready=False,
             ),
+        )
+        return dict(
+            index_pin=retained["index_pin"],
+            arguments=arguments,
+            receipt=receipt,
+            consumer_offline=offline,
         )
     except BaseException as error:
         primary = error
