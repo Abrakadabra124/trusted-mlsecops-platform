@@ -1,5 +1,9 @@
 # Эксплуатационные процедуры
 
+Приватный тестовый канал между отдельными GitHub Actions jobs, управление
+временным ключом, проверка затрат и exact-run artifact cleanup:
+[private CI channel](operations/private-ci-channel.md).
+
 Дополнительные проверки четырёх закреплённых Kubernetes images, объединение
 исходных findings, exact-ID cleanup и восстановление после отказа:
 [Kubernetes supplemental runbook и playbook](operations/kubernetes-supplemental-scans.md).

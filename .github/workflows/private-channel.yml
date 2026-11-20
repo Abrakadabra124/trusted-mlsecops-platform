@@ -1,0 +1,140 @@
+name: Private cross-job encrypted channel canary
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-channel-canary
+  cancel-in-progress: false
+jobs:
+  producer:
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-ci-private' && github.repository_id == '1465012664' && github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      context: ${{ steps.seal.outputs.context }}
+      pin: ${{ steps.seal.outputs.pin }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify offline transport contracts and per-module coverage
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/channel.coverage" --source=mlsecops.ci_transfer,scripts.ci_private_channel -m unittest scripts.ci_transfer_qualification scripts.ci_private_channel_qualification
+          uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/channel.coverage" -o "$RUNNER_TEMP/channel-coverage.json"
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'channel-coverage.json').read_bytes())['files']
+          assert set(files) == {'mlsecops/ci_transfer.py', 'scripts/ci_private_channel.py'}
+          for item in files.values():
+              stats = item['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  assert stats[total] > 0 and stats[covered] * 100 >= 95 * stats[total]
+          PY
+      - name: Verify private execution and encrypt only the canary
+        id: seal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_AES_KEY: ${{ secrets.CHANNEL_AES_KEY }}
+        run: uv run --locked python -B -W error -m scripts.ci_private_channel producer
+      - name: Store exact ciphertext in this private run
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: private-channel-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .runtime/private-channel/envelope.bin
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+      - name: Remove producer ciphertext from the disposable workspace
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.runtime/private-channel/envelope.bin')
+          assert not p.is_symlink()
+          p.unlink(missing_ok=True)
+          assert not p.exists()
+          PY
+  receiver:
+    needs: producer
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-ci-private' && github.repository_id == '1465012664' && github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - run: uv sync --locked --no-build --python 3.12.15
+      - name: Verify private scope and exact artifact before download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_ARTIFACT_ID: ${{ needs.producer.outputs.artifact }}
+        run: uv run --locked python -B -W error -m scripts.ci_private_channel precheck
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.producer.outputs.artifact }}
+          path: .runtime/private-channel
+      - name: Authenticate producer pins and exercise seven actual crypto refusals
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_AES_KEY: ${{ secrets.CHANNEL_AES_KEY }}
+          CHANNEL_CONTEXT: ${{ needs.producer.outputs.context }}
+          CHANNEL_PIN: ${{ needs.producer.outputs.pin }}
+        run: uv run --locked python -B -W error -m scripts.ci_private_channel receiver
+      - name: Remove any received ciphertext after failure
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.runtime/private-channel/envelope.bin')
+          assert not p.is_symlink()
+          p.unlink(missing_ok=True)
+          assert not p.exists()
+          PY
+  cleanup:
+    needs: [producer, receiver]
+    if: ${{ always() && github.repository == 'Abrakadabra124/trusted-mlsecops-ci-private' && github.repository_id == '1465012664' && github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - run: uv sync --locked --no-build --python 3.12.15
+      - name: Delete only this run artifact and verify absence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python -B -W error -m scripts.ci_private_channel cleanup
