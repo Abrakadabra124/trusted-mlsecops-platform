@@ -53,7 +53,7 @@ retention/replay этапы не были достигнуты. Точные gat
 
 ## Воспроизведённый дефект сравнения mounts
 
-При разборе [recovery](../../scripts/ci_consumer_recovery.py) воспроизведён
+При разборе [recovery](../../scripts/ci_consumer_recovery.py) на `4109c5d` воспроизведён
 отдельный дефект: одинаковые полные mount-словари в другом порядке приводят
 к отказу identity comparison. Шесть offline-проверок показали:
 
@@ -75,15 +75,26 @@ retention/replay этапы не были достигнуты. Точные gat
 ID/labels; сортировка требуется для текущего наблюдения и ранее записанного
 witness. Нельзя принимать новые ID или labels из текущего inventory, удалять
 узел только по имени либо ослаблять проверку эксклюзивности volumes.
-На момент фиксации этого отчёта исправление и следующий hosted replay ещё
-не подтверждены.
+## Исправление и offline-проверка
+
+Исправление `0da94dec7ae1c902ccd27aa0a6cffec4e22bf8d5` нормализует
+полные mount-записи с обеих сторон сравнения. Все поля и duplicates сохранены,
+legacy witness не перезаписывается. Дополнительно `cleanup_diagnostics`
+показывает только разрешённые статические этапы SQL/cluster cleanup; неизвестные
+значения становятся `unavailable`. Raw exceptions, пути, resource IDs и pins
+не экспортируются. Boolean cleanup result остаётся отдельным обязательным
+условием успеха.
+
+Родительская проверка на Python 3.12.15: **101 tests pass за 20.417 s**, включая
+producer wrapper. Покрытие native: 236/236 statements и 24/24 branches;
+recovery: 186/186 statements и 40/40 branches. Scoped review APPROVE, отдельно
+reviewer выполнил 35 выбранных tests. Эти результаты подтверждают исправление
+offline-дефекта, но не причину исторического отказа и не native cleanup pass.
+Новый hosted replay ещё требуется.
 
 ## Следующее действие
 
-Исправить воспроизведённое сравнение, проверить отрицательные сценарии и
-scoped review. Добавить закрытые cleanup stage codes без raw exceptions,
-путей, ID и pins, чтобы следующий отказ можно было локализовать. Затем
-выполнить один новый clean-checkout hosted run с новым явно указанным source.
+Выполнить один новый clean-checkout hosted run с новым явно указанным source.
 Не продлевать original proposal/permit windows и не переносить результат
 старого candidate на новый commit.
 

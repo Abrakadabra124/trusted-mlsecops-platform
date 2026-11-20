@@ -28,7 +28,7 @@ jobs:
           uv run --locked ruff format --check .
           uv run --locked python scripts/check_docs.py
           uv run --locked python -B -W error -m unittest scripts.data_source_lock_qualification scripts.ci_candidate_transfer_qualification scripts.ci_validation_transfer_qualification scripts.consumer_candidate_state_qualification
-          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/consumer-native.coverage" --source=scripts.consumer_candidate_storage,scripts.ci_consumer_native,scripts.ci_consumer_recovery,scripts.ci_producer_cluster,scripts.m18_shared_retention,scripts.ci_m07_diagnostic -m unittest scripts.consumer_candidate_storage_qualification scripts.ci_consumer_native_qualification scripts.ci_producer_cluster_qualification scripts.m18_shared_retention_qualification scripts.ci_m07_diagnostic_qualification
+          uv run --locked python -B -W error -m coverage run --branch --data-file="$RUNNER_TEMP/consumer-native.coverage" --source=scripts.consumer_candidate_storage,scripts.consumer_validation_storage,scripts.ci_consumer_native,scripts.ci_consumer_recovery,scripts.ci_producer_cluster,scripts.m18_shared_retention,scripts.ci_m07_diagnostic -m unittest scripts.consumer_candidate_storage_qualification scripts.consumer_validation_storage_qualification scripts.ci_consumer_native_qualification scripts.ci_producer_cluster_qualification scripts.m18_shared_retention_qualification scripts.ci_m07_diagnostic_qualification
           uv run --locked python -m coverage json --data-file="$RUNNER_TEMP/consumer-native.coverage" -o "$RUNNER_TEMP/consumer-native-coverage.json"
           uv run --locked python - <<'PY'
           import json, os
@@ -36,6 +36,7 @@ jobs:
           files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'consumer-native-coverage.json').read_bytes())['files']
           expected = {
               'scripts/consumer_candidate_storage.py',
+              'scripts/consumer_validation_storage.py',
               'scripts/ci_consumer_native.py',
               'scripts/ci_consumer_recovery.py',
               'scripts/ci_producer_cluster.py',

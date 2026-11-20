@@ -1,5 +1,15 @@
 # Статус и границы доказательств
 
+20 ноября добавлен [импорт original validation в consumer SQL](docs/operations/consumer-validation-storage.md).
+Companion аутентифицируется прежним transport; curator записывает exact bytes,
+publisher перечитывает их из того же pinned target с отдельной проверкой роли
+и PKI. Чужие SHA отклоняются до чтения payload. Финальные ownership/freshness
+checks идут после receipt I/O и cleanup временного файла; receipts остаются
+`observation, accepted=false`. Scoped review APPROVE; 26 родительских tests
+на Python 3.12.15 прошли за 131.127 s, 72/72 statements и 4/4 branches.
+Это offline qualification с заменёнными Docker/SQL boundaries; подключение
+native M13/M14/M15, их cleanup и retention ещё не выполнены.
+
 20 ноября [consumer run 44648432999 на 377cb4a](docs/evidence/consumer-native-2026-11-20.md)
 прошёл 61 + 147 preflight tests и M07. Holdout: 31 receipts для slots 2-32,
 один правильный отказ сверх бюджета, 0 invalid receipts. Producer cluster
@@ -7,7 +17,11 @@ cleanup подтверждён 1/1, но consumer завершился failure �
 SQL stop подтверждён, cluster cleanup - нет. Retention/replay не достигнуты,
 полный consumer M11/M12 не принят. При разборе воспроизведён offline-дефект
 сравнения порядка mounts; его связь с конкретным native отказом не доказана.
-Исправление и новый hosted replay ожидаются. M18/R1 остаются открытыми.
+Исправление сравнивает все mount-поля и duplicates независимо от порядка,
+включая legacy witness. 101 родительский test прошёл за 20.417 s; native
+236/236 statements, 24/24 branches и recovery 186/186, 40/40, scoped review
+APPROVE. Добавлены закрытые cleanup stage codes. Новый hosted replay ещё
+ожидается; M18/R1 остаются открытыми.
 
 20 ноября подготовлен [native consumer playbook](docs/operations/ci-consumer-native.md)
 для исходного candidate в новом owned SQL и полных M11/M12. Импорт прошёл
