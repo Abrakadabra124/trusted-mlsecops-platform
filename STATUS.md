@@ -1,5 +1,16 @@
 # Статус и границы доказательств
 
+20 ноября [original-candidate serving trio на 422accf7](docs/evidence/serving-consumer-native-2026-11-20.md)
+прошёл hosted run **44662206137**: M13 **514**, M14 **153**, M15 **188**
+критериев на одном исходном proposal. Preflight 131 + 73 tests без пропусков;
+per-module coverage thresholds пройдены. Producer cluster cleanup 1/1,
+consumer cleanup 4/4 и отдельный cleanup CLI pass. `stage=complete` включает
+private retention, удаление обоих consumer contexts и независимый replay
+после него. Job 30 min 57 s, driver 18 min 1 s. Исходные окна сохранены.
+Это same-job trio, не общий M18/R1: результат M11/M12 на f9bf7c5 относится
+к другой попытке. Private cross-job transport, image blockers и независимые
+M22 challenges 0/2 остаются открытыми.
+
 20 ноября [проверена цепочка доверенного издателя Kubernetes](docs/evidence/image-kubernetes-provenance-2026-11-20.md#проверка-доверенного-издателя).
 Официальный Cosign/TUF bootstrap подтвердил 8 image signatures и 2 SBOM;
 4 promotion identities отделены от 4 staging. Родительский повтор со свежим
@@ -27,7 +38,8 @@ offline replay. Родительские 73 tests прошли за 220.251 s н
 Statements/branches каждого модуля 100%: driver 225/225 и 24/24, lifecycle
 202/202 и 14/14, exporter 166/166 и 32/32, campaign 93/93 и 12/12.
 Driver и workflow прошли scoped review; исходные окна и критерии сохранены.
-Native trio ещё не проверен; M18/R1 и private cross-job transport остаются открытыми.
+Native trio затем проверен на том же source, как указано выше;
+M18/R1 и private cross-job transport остаются открытыми.
 
 20 ноября [original-candidate consumer на f9bf7c5](docs/evidence/consumer-native-2026-11-20.md#повтор-после-исправления)
 прошёл hosted run **44655346292**: M11 **149** и M12 **201** критерий,
@@ -36,7 +48,8 @@ consumer SQL остановлен, owned cluster/volumes удалены, отд�
 pass. Retention и offline replay после infrastructure cleanup достигнуты,
 основная проекция `stage=complete`, `release_ready=false`. Job 44 min 55 s,
 consumer 29 min 18 s. Это перенос внутри одного job; приватный cross-job
-канал, native M13/M14/M15 и общий M18/R1 ещё не приняты. Причина исторического
+канал и общий M18/R1 ещё не приняты. Отдельный trio run приведён выше.
+Причина исторического
 cleanup failure на `377cb4a` этим повтором не установлена.
 
 20 ноября подготовлены [lifecycle M13/M14/M15](docs/operations/ci-serving-recovery.md)

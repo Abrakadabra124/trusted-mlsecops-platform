@@ -6,6 +6,13 @@ ordinary M13/M14/M15 gates and two Lifecycle transitions, verified cleanup,
 private primary retention, context deletion and independent historical replay.
 This component is not M18 acceptance or a new proposal authority.
 
+Native validation on exact `422accf7` is now recorded in
+[run 44662206137 evidence](../evidence/serving-consumer-native-2026-11-20.md):
+M13 514, M14 153, M15 188, cleanup 4/4, retention and independent replay after
+consumer context deletion. The implementation/qualification notes below describe
+the original increment; this same-job result does not establish cross-job delivery
+or full same-candidate M18/R1 acceptance.
+
 ## Local implementation plan
 
 1. Write orchestration negatives first: authority/pin forwarding, foreign inputs,
@@ -125,8 +132,8 @@ owns eventual container/volume/network disposal. Partial imports may have writte
 the new owned SQL before a later rejection; cleanup is not transactional rollback.
 
 Rollback removes the new workflow caller integration; existing production modules
-and legacy gate contracts are unchanged. No live handoff, native trio success,
-full same-candidate M01-M23 or M18 acceptance has been established by this change.
+and legacy gate contracts are unchanged. The later native trio result above
+does not establish private cross-job handoff or full same-candidate M18 acceptance.
 
 ## Qualification
 
