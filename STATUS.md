@@ -7,6 +7,14 @@
 требуют проверки на реальном объекте.
 [GitHub Actions 44786664295](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44786664295).
 
+В чистом checkout на Ubuntu проверен перенос первичных свидетельств M11/M12
+и M13/M14/M15. Пройдены 462 теста с контролируемым хранилищем. При утрате
+локального каталога оператор восстанавливает файлы в новой рабочей области
+и запускает штатный replay. Следующей приёмке нужны оба результата реального
+запуска одного кандидата и подтверждённая очистка временного хранилища.
+[Прогон 44789599236](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44789599236),
+[ранбук](docs/operations/ci-primary-recovery.md).
+
 20 ноября [exact source image handoff](docs/evidence/source-image-transfer-2026-11-20.md)
 на `8b9b24d` / run **44775977421** завершился success во всех трёх jobs за
 **2 min 53 s**. Linux preflight: **130 tests, 0 skips**, individual 95% coverage
