@@ -52,6 +52,8 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 - Проверка: недоступный tool/несовместимый foundation блокирует bootstrap; повторная инвентаризация не меняет текущий runtime.
 
 ## T02
+
+21 ноября 2026 года в полном аудите подтверждены 10/14 runtime-целей, 18 основных сканов и 28 дополнительных координат. Остались прикладное покрытие четырёх образов и устранение блокирующих находок. [Измерение и отказ выпуска](../docs/evidence/kubernetes-supplemental-scans-2026-11-20.md).
 - [ ] Foundation P0 и совместимые зависимости. Зависимость: T01. Gate: M01.
 - CP2 image scope: [наблюдаемый inventory](../docs/container-audit.md#фактические-образы-среды-cp2) проверен в native [40750705961](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/40750705961): 14 images, полное coverage 4/14, before/after reconciliation пройдена, audit fail. Текущий collector: 18 methods / 66 branches pass; 185 audit cases pass. Application profiles и устранение findings ещё требуются; T02/R1-B02 открыты.
 - История CP2 2026-10-28 до adoption: [tracking включён в обязательный audit](../docs/container-audit.md#расширение-cp2-на-tracking), native scan выявил 56 High matches. [Brotli remediation](../docs/operations/image-audit-troubleshooting.md#cp2-brotli-в-закреплённых-wolfi-images) на `edc6862` прошла 74 worker / 435 storage checks, 1 000 golden rows/error 0.0; worker и оба candidates имели 0 Critical/High/Unknown, baseline storage оставался уязвим. Последующие publication, immutable readback, fresh-state adoption и five-workflow regression подтверждены [новым evidence](../docs/evidence/cp2-runtime-adoption-2026-10-28.md). Исторический failure сохранён; T02/CP2 не закрыты из-за полного runtime scope и model gates.
