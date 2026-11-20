@@ -70,6 +70,7 @@ def authorize(root, *, source_api, job, run_owner, source):
             head_branch=BRANCH,
             event="workflow_dispatch",
             path=WORKFLOW,
+            status="in_progress",
         ),
     )
     for field in ("repository", "head_repository"):
