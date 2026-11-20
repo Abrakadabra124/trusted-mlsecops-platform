@@ -65,12 +65,19 @@ def _permission_denial(api, release_id, nonce, run, attempt):
         print("reader_check=denial_body")
         raw = http._read(response, 8192)
         print("reader_check=denial_json")
+        if not raw:
+            print("reader_check=denial_empty")
         body = decode(raw, 8192)
         print("reader_check=denial_fields")
         _need(type(body) is dict and body.keys() <= {"message", "documentation_url", "status"})
         print("reader_check=denial_status")
         _need(body.get("status", "403") == "403")
         print("reader_check=denial_message")
+        # Fixed diagnostics for ambiguous replies. Neither permits an upload proof.
+        if body == {"message": "Forbidden"}:
+            print("reader_check=denial_generic")
+        elif body == {"message": "API rate limit exceeded"}:
+            print("reader_check=denial_rate_message")
         _need(
             body.get("message")
             in (
