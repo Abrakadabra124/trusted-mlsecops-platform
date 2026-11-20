@@ -7,9 +7,64 @@ Go-модулей и объединение дополнительных про�
 Это часть R1-B02. Она не закрывает полный список из 14 runtime images, M18,
 независимые challenge-кейсы M22 или общий R1.
 
-Native validation пока не принята. Результаты ниже относятся к проверке кода
-и повторному чтению ранее сохранённых наблюдений. Текущий подтверждённый
-runtime coverage остаётся **6/14**.
+[Native run 44678322868](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44678322868)
+на **79f3d7d7cc1505045a9961813ca0d534da2174ec** завершился `success`.
+Проверено **4/4 образа**, выполнены **4 исходных + 28 дополнительных сканов**,
+контрольные PyPI/Go module/Go stdlib проверки прошли. После удаления контейнеров
+повторно прочитаны исходные и дополнительные доказательства. Main cleanup и
+отдельный cleanup CLI подтвердили **40/40**. Job `136095396326` выполнялся
+05:02:14-05:06:55 UTC 20 ноября 2026, **4 min 41 s**.
+
+**Решение о выпуске: fail.** Проверка механизма завершена, но Grype обнаружил
+Critical/High во всех четырёх образах. `release_ready=false`; это проверенный
+отказ выпуска, не готовность R1. Последняя полная runtime сверка остаётся
+**6/14**. Отдельные 4/4 не объявляются новым результатом полного 14-target аудита.
+
+| Образ | Match occurrences | Уникальных scanner IDs | Critical | High | Medium | Low | Negligible | Unknown |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| kube-apiserver | 73 | 41 | 5 | 44 | 18 | 5 | 0 | 1 |
+| kube-controller-manager | 96 | 41 | 7 | 59 | 24 | 5 | 0 | 1 |
+| kube-proxy | 163 | 105 | 9 | 77 | 48 | 12 | 16 | 1 |
+| kube-scheduler | 96 | 41 | 7 | 59 | 24 | 5 | 0 | 1 |
+
+Occurrences сохраняют исходные и дополнительные находки, в том числе повторения
+по binaries. Числа уникальных ID между образами нельзя складывать. Это результат
+package/module matching, не доказательство достижимости или эксплуатации CVE.
+Critical/High имеют приоритет `fail`; Unknown сохранены и без C/H давали бы
+`inconclusive`, а не `pass`.
+
+DB snapshot digest: `a239d32da7837c7be4d5fd299d56e0a8b2922180a3b89938e298b206c05ae71e`.
+Application source fingerprint: `b99b37bf8e73bde53012e4327cfca9e94997733195c1ce63e1934f5d269a549d`.
+Git SHA и чистота checkout дополнительно связывают scripts/registry.
+Raw DB/reports/trace не экспортировались из disposable runner; внешний offline
+replay этих raw bytes не заявляется. Подтверждён повтор в том же job после cleanup.
+Отдельный cleanup CLI вернул exit 0 и cleanup pass; его default
+`validation_status=inconclusive` не является повторным scan verdict.
+
+## Первые native попытки
+
+[Run 44677035715](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44677035715)
+на `fb5466159c3be9d4d18733a08491f81daa4bf195` прошёл 86 preflight tests,
+но остановился с `contract_rejected` на supplemental index 23:
+`k8s.io/kubernetes@v1.36.4`. Оба cleanup readback подтвердили отсутствие
+**36/36 известных контейнеров**. Общий cleanup остался `inconclusive`, потому
+что `batch.pending` не позволял утверждать завершённость всей последовательности.
+Полный набор 28 scans и coverage 4/4 этой попыткой не доказаны.
+
+Commit `59a7ad863d3f68dc00c6835f31e5676c662db28e` добавил ограниченную диагностику:
+только фиксированный идентификатор модуля кода и номер строки, без значений
+отчёта, private paths и сырых traceback. Проверка canary подтверждает границу
+вывода. [Диагностический run 44677788707](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44677788707)
+прошёл 87 preflight tests и повторил отказ на index 23. Закрытая проекция
+указала `reader:189 -> reader:40 -> reader:36`, то есть проверку `fix.state`.
+Отсутствие известных контейнеров снова подтверждено 36/36; batch остался неполным.
+
+Проверка сохранённых исходных Kubernetes reports выявила пустое `fix.state`,
+допустимое по модели Grype. Regression воспроизвела ошибочный отказ. Commit
+`79f3d7d7cc1505045a9961813ca0d534da2174ec` сохраняет пустую строку и находку;
+решения для Low/High/Critical/Unknown остаются соответственно pass/fail/fail/inconclusive.
+Полная попытка после исправления подтвердила все 28 scans и успешный replay,
+как указано выше. Снижения требований к findings или coverage не выполнялось.
 
 ## От требования к реализации
 
@@ -39,7 +94,7 @@ JSON, CycloneDX и trace поступают из одной команды. По
 При объединении повторно читаются исходные SBOM/report и все 28 дополнительных
 результатов. Изменение байтов, базы, реестра или состава набора вызывает отказ.
 Исходные находки остаются в результате, включая C/H/U и raw versions.
-High/Critical сохраняют `fail`, Unknown сохраняет `inconclusive`.
+High/Critical сохраняют `fail`; при их отсутствии Unknown сохраняет `inconclusive`.
 Число occurrences и число уникальных уязвимостей учитываются раздельно.
 
 Основной [аудитор](../../scripts/image_audit.py) выполняет detection controls до
@@ -62,7 +117,7 @@ Parent повторил чтение фактических observations без 
 Отклонены 604 подмены observations, в том числе отдельное изменение версии
 каждой из 588 строк. Исходный packet не изменён. Проверены обе формы reference.
 
-Объединённый локальный прогон: **82 test methods, 0 failures/errors/skips**.
+Первый объединённый локальный прогон: **82 test methods, 0 failures/errors/skips**.
 Он включает новые модули и существующие проверки inventory, Go controls и scope.
 Отдельно прошли 70 проверок контракта аудита и 33 проверки его runner.
 Это управляемые проверки, не количество реальных сканирований.
@@ -72,11 +127,17 @@ Parent повторил чтение фактических observations без 
 | image_kubernetes_aliases | 73/73 | 26/26 |
 | image_go_supplemental_contract | 138/138 | 42/42 |
 | image_kubernetes_scans | 136/136 | 50/50 |
+| image_kubernetes_native | 246/251 (98,01%) | 44/46 (95,65%) |
+
+После диагностики отказа объединённый preflight повторён родителем: **88 tests,
+0 skips, pass**. Он включает 18 controlled tests native driver и регрессию
+сохранения findings с пустым `fix.state`. Для каждого
+нового production-модуля отдельно соблюдены оба порога 95%.
 
 Тесты отклоняют неполный, лишний и повторный набор результатов; изменение
 JSON/CDX/trace/CID; смену базы; неверную исходную привязку и обход покрытия
 через флаги. Отдельный интеграционный тест проверяет порядок вызовов основного
-аудитора. Успех этих тестов ещё не доказывает совместимость полного native trace.
+аудитора. Совместимость полного native trace подтверждена отдельно указанным hosted run.
 
 ## Исправления после review
 
@@ -116,3 +177,8 @@ JSON/CDX/trace/CID; смену базы; неверную исходную пр�
 и [vulnerability_matcher.go](https://github.com/anchore/grype/blob/v0.120.1/grype/vulnerability_matcher.go).
 Это первичные исходники поддерживаемой версии, а не восстановление текста
 ошибки из предыдущего диагностического CI-прогона.
+
+Пустое `Fix.State` является допустимым значением строкового поля закреплённой
+[модели Grype](https://github.com/anchore/grype/blob/v0.120.1/grype/presenter/models/vulnerability.go).
+Reader сохраняет это значение и саму находку; оно не означает наличие исправления
+и не изменяет решение High/Critical/Unknown.

@@ -1,5 +1,19 @@
 # Статус и границы доказательств
 
+20 ноября [Kubernetes supplemental validation](docs/evidence/kubernetes-supplemental-scans-2026-11-20.md)
+на `79f3d7d` / run **44678322868** завершилась success за **4 min 41 s**.
+**88 tests**, четыре новых модуля отдельно прошли пороги 95% statements/branches.
+Выполнены **4 original + 28 supplemental scans**, отдельный scope **4/4**,
+post-cleanup replay и две проверки очистки **40/40**. Политика выпуска дала
+**fail**: C/H есть во всех четырёх образах, Unknown сохранены. Raw reports/DB
+не экспортировались; повтор подтверждён внутри того же job после cleanup.
+Исправлены host-receipt cleanup authority, снятие постороннего reason и
+допустимое пустое Grype fix.state; сохранена история двух native refusals.
+[Runbook/playbook](docs/operations/kubernetes-supplemental-scans.md) опубликован.
+Это рабочая проверка и корректный отказ, не закрытие R1. Последний полный runtime
+результат остаётся **6/14**; M18 на общем candidate, private cross-job transport
+и независимые M22 challenges **0/2** по-прежнему открыты.
+
 20 ноября [native Go PURL observation](docs/evidence/go-purl-observation-2026-11-20.md)
 на `bfc5a5c` / run **44673045898** завершился success за 2 min 12 s.
 Три JSON/CycloneDX/trace observations и повторный cleanup **4/4** подтверждены.

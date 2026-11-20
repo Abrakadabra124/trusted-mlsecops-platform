@@ -1,8 +1,9 @@
 # Проверка четырёх Kubernetes images и supplemental scans
 
-Статус: реализация и controlled qualification. Настоящий hosted результат должен
-быть отдельно привязан к commit SHA и terminal job; этот документ не утверждает,
-что сканирование уже выполнено. Подпункт R1-B02 не закрывает общие B02/M18/R1.
+Статус: hosted validation проверена на `79f3d7d` / run `44678322868`: 4 original
+и 28 supplemental scans, post-cleanup replay, cleanup 40/40. Vulnerability decision
+остаётся `fail` из-за C/H findings. [Evidence и история отказов](../evidence/kubernetes-supplemental-scans-2026-11-20.md).
+Подпункт R1-B02 не закрывает общие B02/M18/R1.
 
 ## Назначение и границы
 
@@ -139,6 +140,15 @@ cleanup counts. Phase имеет фиксированный словарь; inde
 тест сначала воспроизвёл нарушение, затем подтвердил, что exact allowlist не
 передаёт чужой ID ни одной Docker-команде. Это результат controlled теста,
 не утверждение о production-инциденте.
+
+В реальных attempts `44677035715` и `44677788707` batch остановился на
+`k8s.io/kubernetes@v1.36.4`. Во второй попытке фиксированные module/line locations
+указали на проверку `fix.state`. Сохранённые Kubernetes reports содержали пустую
+строку, разрешённую моделью Grype, а reader ошибочно требовал непустой текст.
+Исправление принимает именно пустую строку и сохраняет находку. Оно не считает
+уязвимость исправленной и не меняет High/Critical/Unknown policy. Отдельная
+регрессия проверяет все четыре severity decisions. Полный результат после
+исправления фиксируется в [evidence](../evidence/kubernetes-supplemental-scans-2026-11-20.md).
 
 Из [предыдущего Go PURL observation](../evidence/go-purl-observation-2026-11-20.md)
 сохранено требование абсолютных bind sources. Здесь run/cache/archive paths

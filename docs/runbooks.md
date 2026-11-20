@@ -1,5 +1,10 @@
 # Эксплуатационные процедуры
 
+Дополнительные проверки четырёх закреплённых Kubernetes images, объединение
+исходных findings, exact-ID cleanup и восстановление после отказа:
+[Kubernetes supplemental runbook и playbook](operations/kubernetes-supplemental-scans.md).
+[Результаты и границы доказательств](evidence/kubernetes-supplemental-scans-2026-11-20.md).
+
 Наблюдение реальных JSON/CycloneDX/trace результатов закреплённого Go scanner,
 разбор DB-update/cleanup отказов и безопасный повтор:
 [Go PURL runbook и playbook](operations/go-purl-observation.md).
