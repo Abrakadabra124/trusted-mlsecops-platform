@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+20 ноября [регрессия security event contracts на 422accf7](docs/evidence/security-contracts-regression-2026-11-20.md)
+завершилась success во всех трёх jobs run **44662205908**. Подтверждены
+26 наборов / 1 248 выполнений тестовых методов с повторами, без пропусков,
+и шесть отдельных native component projections: 25/37/17/46/3/25 cases.
+Проверки включают owned cleanup, источник trust events, HTTP identity,
+intake/controller и восстановление после sequence gap. Это component
+regression на точном source; полный M23 gate и общий M18/R1 этим run
+не принимаются. Private logs и bindings не публикуются.
+
 20 ноября соединён [original-candidate driver M13/M14/M15](docs/operations/ci-serving-native.md)
 с [отдельным hosted workflow](.github/workflows/serving-consumer.yml).
 Один исходный proposal и три приватных envelope передают candidate, validation
