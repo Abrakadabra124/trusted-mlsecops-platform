@@ -1,6 +1,7 @@
 """Independent phase and cross-report contracts for the shared source campaign."""
 
 import copy
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
@@ -120,6 +121,55 @@ class SharedCampaignTests(unittest.TestCase):
                 campaign.chain(altered, self.pin)
         with self.assertRaises(Rejected):
             campaign.chain(steps, "0" * 64)
+
+    def test_trusted_hooks_preserve_archive_order_and_original_checks(self):
+        self.assertIn("delete", inspect.signature(campaign.transition).parameters)
+        command, create, storage = self.transition_mocks(["", "", ""])
+        retired = self.state / "retired"
+        calls = []
+
+        def delete():
+            self.assertTrue((self.state / "kubeconfig").exists())
+            calls.append("delete")
+
+        def bootstrap():
+            self.assertFalse((self.state / "kubeconfig").exists())
+            self.assertEqual((retired / "kubeconfig").read_bytes(), b"owned-config")
+            calls.append("bootstrap")
+
+        result = campaign.transition(
+            self.state, retired, self.pin, delete=delete, bootstrap=bootstrap
+        )
+        self.assertEqual(result["source_sql"], self.pin)
+        self.assertEqual(calls, ["delete", "bootstrap"])
+        create.assert_not_called()
+        storage.assert_called_once_with(self.state)
+        self.assertFalse(any("delete" in call.args[0] for call in command.call_args_list))
+
+    def test_partial_or_noncallable_hooks_refuse_before_any_action(self):
+        self.assertIn("bootstrap", inspect.signature(campaign.transition).parameters)
+        with patch.object(campaign, "identity") as identity:
+            for hooks in (
+                dict(delete=lambda: None),
+                dict(bootstrap=lambda: None),
+                dict(delete=1, bootstrap=2),
+            ):
+                with self.subTest(hooks=list(hooks)), self.assertRaises(Rejected):
+                    campaign.transition(self.state, self.state / "retired", self.pin, **hooks)
+            identity.assert_not_called()
+
+    def test_hook_failure_and_surviving_resources_block_next_bootstrap(self):
+        self.assertIn("delete", inspect.signature(campaign.transition).parameters)
+        self.transition_mocks([campaign.cluster.NAME])
+        with self.assertRaises(Rejected):
+            campaign.transition(
+                self.state,
+                self.state / "retired",
+                self.pin,
+                delete=lambda: None,
+                bootstrap=lambda: self.fail("must not bootstrap"),
+            )
+        self.assertTrue((self.state / "kubeconfig").exists())
 
     def test_source_join_checks_all_declared_inputs_and_exact_outcomes(self):
         inputs = {"source": "a" * 64, "data_lock": "b" * 64, "source_fingerprint": "c" * 64}

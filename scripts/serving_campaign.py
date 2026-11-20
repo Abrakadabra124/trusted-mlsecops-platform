@@ -44,7 +44,10 @@ def identity(state, source_pin):
     )
 
 
-def transition(state, retired, source_pin):
+def transition(state, retired, source_pin, *, delete=None, bootstrap=None):
+    # Trusted in-process lifecycle hooks only; the legacy path stays unchanged.
+    delivery.require((delete is None) == (bootstrap is None))
+    delivery.require(delete is None or (callable(delete) and callable(bootstrap)))
     # Validate all archive paths before deleting anything. kind may rewrite its
     # kubeconfig, so use a separate teardown copy and preserve the original.
     retired = safe_child(retired.parent, retired.name)
@@ -57,18 +60,21 @@ def transition(state, retired, source_pin):
     cleanup_config = retired / "teardown-kubeconfig"
     atomic_write(cleanup_config, bounded_read(state / "kubeconfig"))
     delivery.require(owned_node(state) == old)
-    command(
-        [
-            "kind",
-            "delete",
-            "cluster",
-            "--name",
-            cluster.NAME,
-            "--kubeconfig",
-            str(cleanup_config),
-        ],
-        timeout=180,
-    )
+    if delete is None:
+        command(
+            [
+                "kind",
+                "delete",
+                "cluster",
+                "--name",
+                cluster.NAME,
+                "--kubeconfig",
+                str(cleanup_config),
+            ],
+            timeout=180,
+        )
+    else:
+        delete()
     delivery.require(cluster.NAME not in command(["kind", "get", "clusters"]).splitlines())
     delivery.require(
         old["container"] not in command(["docker", "ps", "-aq", "--no-trunc"]).splitlines()
@@ -80,7 +86,10 @@ def transition(state, retired, source_pin):
     for marker in markers:
         if marker.exists():
             marker.rename(retired / marker.name)
-    cluster.bootstrap(state)
+    if bootstrap is None:
+        cluster.bootstrap(state)
+    else:
+        bootstrap()
     kube_storage.bootstrap(state)
     after = identity(state, source_pin)
     delivery.require(all(after[k] != before[k] for k in before))
