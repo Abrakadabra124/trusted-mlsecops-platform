@@ -29,6 +29,9 @@
 повторная проверка после teardown: [security primary](operations/m18-security-primary.md).
 
 Подготовка приватного переноса того же frozen candidate между заданиями:
+[проверка происхождения пакета и остановки издателя](operations/campaign-handoff.md),
+[восстановление приватного хранилища](operations/private-assets.md),
+[ограниченный доступ заданий](operations/campaign-access.md),
 [единая подготовка четырёх пакетов](operations/ci-campaign-producer.md),
 [точный пакет и verifier](operations/frozen-candidate-transfer.md),
 [аутентифицированное шифрование](operations/ci-transfer.md).
