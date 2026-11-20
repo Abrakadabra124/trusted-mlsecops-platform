@@ -53,6 +53,45 @@ jobs:
               "malformed-version": ("golang.org/x/net", "not-a-version"),
           }
           LABELS = ("db-update", *CASES)
+          DIAGNOSTICS = {}
+          PHASE = "pull"
+
+
+          def diagnostic(label):
+              if label not in LABELS:
+                  raise Rejected("observation_mode_invalid")
+              # Scanner flags describe this process invocation, including cleanup-only mode.
+              return DIAGNOSTICS.setdefault(
+                  label,
+                  {
+                      "case": label,
+                      "scanner_returned": False,
+                      "scanner_exit_code": None,
+                      "scanner_failed": False,
+                      "cid_present": False,
+                      "cid_valid": False,
+                      "cleanup_stage": "attempt_read",
+                  },
+              )
+
+
+          def failure_code(error):
+              known = {
+                  "image_audit_nonroot_host_required",
+                  "image_audit_mount_invalid",
+                  "image_audit_command_unavailable_or_timeout",
+                  "image_audit_cleanup_identity_invalid",
+                  "image_audit_cleanup_failed",
+                  "observation_cleanup_unconfirmed",
+                  "observation_pull_failed",
+                  "observation_database_update_failed",
+                  "observation_database_changed",
+                  "observation_reports_unavailable",
+                  "observation_scan_failed",
+                  "artifact_unavailable",
+              }
+              value = error.args[0] if isinstance(error, Rejected) and len(error.args) == 1 else None
+              return value if type(value) is str and value in known else "other"
 
 
           def project(label, report, cdx, log, code, db_same, cleanup_verified):
@@ -137,13 +176,22 @@ jobs:
               try:
                   if label not in LABELS:
                       return False
+                  entry = diagnostic(label)
+                  entry.update(cleanup_stage="attempt_read", cid_present=False, cid_valid=False)
                   run = STATE / "run"
                   if run.is_symlink() or bounded_read(run / f"{label}.attempt", 16) != b"attempted\n":
                       return False
-                  cid = bounded_read(run / f"{label}.cid", 128).decode("ascii").strip()
+                  entry["cleanup_stage"] = "cid_read"
+                  cidfile = run / f"{label}.cid"
+                  entry["cid_present"] = cidfile.exists() or cidfile.is_symlink()
+                  cid = bounded_read(cidfile, 128).decode("ascii").strip()
+                  entry["cleanup_stage"] = "cid_format"
                   if not re.fullmatch(r"[0-9a-f]{64}", cid):
                       return False
+                  entry["cid_valid"] = True
+                  entry["cleanup_stage"] = "list"
                   if not absent(cid):
+                      entry["cleanup_stage"] = "remove"
                       try:
                           audit.execute(
                               ["docker", "rm", "-f", cid],
@@ -152,7 +200,11 @@ jobs:
                           )
                       except Exception:
                           pass
-                  return absent(cid)
+                  entry["cleanup_stage"] = "post_absence"
+                  verified = absent(cid)
+                  if verified:
+                      entry["cleanup_stage"] = "verified"
+                  return verified
               except BaseException:
                   return False
 
@@ -171,13 +223,25 @@ jobs:
 
 
           def scan(label, arguments, mounts, network=False):
+              global PHASE
+              entry = diagnostic(label)
+              PHASE = label
               run = STATE / "run"
               with (run / f"{label}.attempt").open("xb") as marker:
                   marker.write(b"attempted\n")
+              scanner_failed = False
               try:
-                  return audit.scanner(run, label, audit.GRYPE_IMAGE, arguments, mounts, network=network)
+                  result = audit.scanner(run, label, audit.GRYPE_IMAGE, arguments, mounts, network=network)
+                  entry["scanner_returned"] = True
+                  if type(result[0]) is not int:
+                      raise Rejected("observation_scan_failed")
+                  entry["scanner_exit_code"] = result[0]
+                  return result
+              except BaseException:
+                  scanner_failed = entry["scanner_failed"] = True
+                  raise
               finally:
-                  if not cleanup_one(label):
+                  if not cleanup_one(label) and not scanner_failed:
                       raise Rejected("observation_cleanup_unconfirmed")
 
 
@@ -192,6 +256,7 @@ jobs:
 
 
           def observe(observations):
+              global PHASE
               run = STATE / "run"
               run.mkdir(mode=0o700)
               cache = run / "cache"
@@ -204,6 +269,7 @@ jobs:
               original = audit.snapshot(cache)
               expected_db = None
               for label, (name, version) in CASES.items():
+                  PHASE = label
                   out = run / f"{label}-out"
                   out.mkdir(mode=0o700)
                   code, path = scan(
@@ -249,13 +315,18 @@ jobs:
                   # Fault-case parse failure is an observation, never a claim of no findings.
                   if code not in (0, 1, 2):
                       raise Rejected("observation_scan_failed")
+              PHASE = "export"
               if audit.snapshot(cache) != original:
                   raise Rejected("observation_database_changed")
 
 
           def main(mode):
+              global PHASE
+              PHASE = "pull" if mode == "observe" else "export"
+              DIAGNOSTICS.clear()
               observations = []
               captured = False
+              failure = None
               expected, verified, clean = 0, 0, False
               try:
                   with private_output(STATE, "go-purl-" + mode):
@@ -265,19 +336,26 @@ jobs:
                           elif mode != "cleanup":
                               raise Rejected("observation_mode_invalid")
                           captured = True
-                      except BaseException:
-                          pass  # No exception text, paths or raw output can enter the public projection.
+                      except BaseException as error:
+                          failure = failure_code(error)
                       finally:
                           expected, verified, clean = cleanup()
-              except BaseException:
+              except BaseException as error:
                   # The existing capture helper restores FDs even on I/O faults; cleanup uses
                   # bounded file reads and subprocess capture, and never prints raw output.
                   expected, verified, clean = cleanup()
                   captured = False
+                  if failure is None:
+                      failure = failure_code(error)
+              if not clean and failure is None:
+                  failure = "observation_cleanup_unconfirmed"
               print(
                   json.dumps(
                       {
                           "stage": mode,
+                          "phase": PHASE,
+                          "failure_code": failure,
+                          "diagnostics": [DIAGNOSTICS[label] for label in LABELS if label in DIAGNOSTICS],
                           "scope": "fixed_public_purl_interface_only",
                           "status": "observations_captured" if captured and clean else "failed",
                           "cases": observations,
