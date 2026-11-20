@@ -194,6 +194,7 @@ class AssetHttpTests(unittest.TestCase):
             REPO + "/releases?per_page=20",
             REPO + "/releases?per_page=100",
             UPLOAD + "?per_page=6",
+            UPLOAD + "?per_page=7",
         ):
             self.reply(200, b'[{"id":71}]')
             self.assertEqual(self.reader.json("GET", path), [{"id": 71}])
@@ -210,6 +211,9 @@ class AssetHttpTests(unittest.TestCase):
             REPO + "/releases?per_page=101",
             REPO + "/releases?per_page=100&page=2",
             UPLOAD + "?per_page=6&page=2",
+            UPLOAD + "?per_page=7&page=2",
+            UPLOAD + "?per_page=8",
+            REPO + "/releases?per_page=7",
             REPO + "/git/ref/heads/.",
             REPO + "/git/ref/heads/a//b",
         ):
@@ -217,9 +221,11 @@ class AssetHttpTests(unittest.TestCase):
                 self.reader.json("GET", path)
 
     def test_list_with_pagination_link_refuses_even_when_short(self):
-        self.reply(200, b"[]", ['Link: <https://api.github.com/next>; rel="next"'])
-        with self.assertRaises(Rejected):
-            self.reader.json("GET", REPO + "/releases?per_page=20")
+        for path in (REPO + "/releases?per_page=20", UPLOAD + "?per_page=7"):
+            self.reply(200, b"[]", ['Link: <https://api.github.com/next>; rel="next"'])
+            with self.assertRaises(Rejected):
+                self.reader.json("GET", path)
+            self.assertFalse(self.responses)
 
     def test_create_only_a_candidate_tag_ref_and_restrict_its_mutation_namespace(self):
         path = REPO + "/git/refs"

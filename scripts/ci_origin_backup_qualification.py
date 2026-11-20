@@ -26,6 +26,9 @@ RELEASE = dict(
 )
 PATH = store._endpoint(RELEASE)
 ASSETS = store.ROOT + "/releases/assets/"
+ORIGIN_LIST = PATH + "/assets?per_page=7"
+TIP = b"MLSTIP\x01opaque caller-signed content"
+TIP_NAME = "journal-tip.bin"
 
 
 class PrivateStore(working.StoreAPI):
@@ -58,7 +61,7 @@ class PrivateStore(working.StoreAPI):
         self.calls.append((method, path))
         if path == PATH:
             value = self.origin | {"assets": self.rows}
-        elif path == PATH + "/assets?per_page=6":
+        elif path == ORIGIN_LIST:
             value = self.rows
         elif path.startswith(ASSETS) and int(path.removeprefix(ASSETS)) in self.saved:
             value = next(row for row in self.rows if str(row["id"]) == path.removeprefix(ASSETS))
@@ -71,7 +74,7 @@ class PrivateStore(working.StoreAPI):
         if path != PATH + "/assets":
             return super().upload(path, name, content)
         assert name not in [r["name"] for r in self.rows]
-        assert name in {stem + ".bin" for stem in store.LIMITS}
+        assert name == TIP_NAME or name in {stem + ".bin" for stem in store.LIMITS}
         self.writes.append(name)
         return self.hook("UPLOAD", path, self.install(name, content).copy())
 
@@ -228,7 +231,7 @@ class OriginTests(unittest.TestCase):
         allowed = {
             store.ROOT,
             PATH,
-            PATH + "/assets?per_page=6",
+            ORIGIN_LIST,
             *(ASSETS + str(i) for i in self.api.saved),
         }
         self.assertTrue(
@@ -276,7 +279,7 @@ class OriginTests(unittest.TestCase):
                 self.copy()
         with patch.dict(self.api.origin, {"immutable": True}), self.assertRaises(Rejected):
             self.copy()
-        self.api.hook = lambda op, path, v: [] if path == PATH + "/assets?per_page=6" else v
+        self.api.hook = lambda op, path, v: [] if path == ORIGIN_LIST else v
         with self.assertRaises(Rejected):
             self.copy()
         self.assertFalse(self.api.writes)
@@ -286,7 +289,7 @@ class OriginTests(unittest.TestCase):
 
         def reassigned(op, path, value):
             nonlocal listings
-            if path == PATH + "/assets?per_page=6":
+            if path == ORIGIN_LIST:
                 listings += 1
                 if listings == 2:
                     self.api.origin.update(name="ci-journal-other", tag_name="ci-journal-other")
@@ -365,6 +368,215 @@ class OriginTests(unittest.TestCase):
         self.api.hook = moved
         with self.assertRaises(Rejected):
             read(stem, size)
+
+    def put(self, raw=TIP, **changes):
+        return backup.put_witness(self.api, raw, **(self.args | changes))
+
+    def get(self, **changes):
+        readonly = SimpleNamespace(json=self.api.json, download=self.api.download)
+        return backup.get_witness(readonly, **(self.context | {"release": RELEASE} | changes))
+
+    def test_witness_roundtrip_and_historical_reader(self):
+        self.copy()
+        original_rows, original_bytes = deepcopy(self.api.rows), self.api.saved.copy()
+        with self.assertRaises(Rejected):
+            self.get()
+        raw = TIP.ljust(16384, b"!")
+        self.assertIsNone(self.put(raw))
+        self.assertIsNone(self.copy())
+        self.api.origin["immutable"] = True
+        self.assertIsNone(self.put(raw))
+        self.api.calls.clear()
+        self.api.release = self.api.tag = None
+        self.assertEqual(self.get(), raw)
+        tip_id = self.api.rows[-1]["id"]
+        allowed = {store.ROOT, PATH, ORIGIN_LIST, ASSETS + str(tip_id)}
+        self.assertTrue(all(path in allowed for _, path in self.api.calls))
+        read = self.reader()
+        with self.assertRaises(Rejected):
+            read("journal-tip", 16384)
+        for stem, expected in self.expected.items():
+            self.assertEqual(read(stem, len(expected)), expected)
+        self.assertEqual(self.api.rows[:-1], original_rows)
+        self.assertEqual({i: self.api.saved[i] for i in original_bytes}, original_bytes)
+        self.assertEqual(self.api.writes.count(TIP_NAME), 1)
+        self.assertEqual(len(self.api.writes), 6)
+        self.assertFalse(self.api.mutations)
+
+    def test_historical_reader_survives_sealing_but_detects_changed_tip_pin(self):
+        self.copy()
+        read = self.reader()
+        stem, raw = next(iter(self.expected.items()))
+        self.api.origin["immutable"] = True
+        self.assertEqual(read(stem, len(raw)), raw)
+        self.api.origin["immutable"] = False
+        self.put()
+        read = self.reader()
+        with (
+            patch.dict(self.api.rows[-1], digest="sha256:" + "a" * 64),
+            self.assertRaises(Rejected),
+        ):
+            read(stem, len(raw))
+        # Working storage keeps its own five-name contract, even with a well-formed tip.
+        tip = self.api.rows[-1]
+        with patch.dict(self.api.assets, {tip["id"]: tip}), self.assertRaises(Rejected):
+            store.fetch_control(self.api, self.working["expected"])
+
+    def test_original_id_change_during_prewrite_readback_stops_before_upload(self):
+        self.copy()
+        last_path = ASSETS + str(self.api.rows[-1]["id"])
+
+        def change(op, path, value):
+            if op == "DOWNLOAD" and path == last_path:
+                self.api.rows[0]["id"] += 100
+            return value
+
+        self.api.hook = change
+        with self.assertRaises(Rejected):
+            self.put()
+        self.assertNotIn(TIP_NAME, self.api.writes)
+        self.assertFalse(self.api.mutations)
+
+    def test_positive_upload_with_different_stored_bytes_fails_without_repair(self):
+        self.copy()
+
+        def damage(op, path, value):
+            if op == "UPLOAD":
+                self.api.saved[value["id"]] = TIP[:-1] + b"!"
+            return value
+
+        self.api.hook = damage
+        with self.assertRaises(Rejected):
+            self.put()
+        with self.assertRaises(Rejected):
+            self.put()
+        self.assertEqual(self.api.writes.count(TIP_NAME), 1)
+        self.assertFalse(self.api.mutations)
+
+    def test_witness_requires_complete_matching_originals_and_mutable_destination(self):
+        for state in self.steps[:-1]:
+            with self.assertRaises(Rejected):
+                self.put(checkpoint=state)
+        for raw in (None, bytearray(TIP), b"bad", TIP.ljust(16385, b"!")):
+            with self.assertRaises(Rejected):
+                self.put(raw)
+        for overrides in (
+            {"release": RELEASE | {"repository_id": True}},
+            {"release": RELEASE | {"name": "ci-origin-31-3"}},
+            {"source": self.context["source"] | {"image_id": "other"}},
+        ):
+            with self.assertRaises(Rejected):
+                self.get(**overrides)
+        self.assertFalse(self.api.calls)
+        for stem, data in self.expected.items():
+            with self.assertRaises(Rejected):
+                self.put()
+            self.api.install(stem + ".bin", data)
+        with patch.dict(self.api.origin, immutable=True), self.assertRaises(Rejected):
+            self.put()
+        first = self.api.rows[0]
+        for override in (
+            {"id": self.working["assets"][store.CONTROL]["id"]},
+            {"digest": "sha256:" + "c" * 64},
+        ):
+            with patch.dict(first, override), self.assertRaises(Rejected):
+                self.put()
+        with patch.dict(self.api.saved, {first["id"]: b"bad"}), self.assertRaises(Rejected):
+            self.put()
+        self.assertFalse(self.api.writes)
+
+    def test_witness_inventory_rejects_unknown_partial_duplicates_and_aliases(self):
+        self.copy()
+        tip = self.api.install(TIP_NAME, TIP)
+        valid = list(self.api.rows)
+        for rows in (
+            valid[1:],
+            valid + [tip],
+            valid[:-1] + [valid[0]],
+            valid[:-2] + [tip, tip],
+            valid[:-1] + [tip | {"name": "unknown.bin"}],
+            valid[:-1] + [tip | {"id": valid[0]["id"]}],
+            [valid[0] | {"size": True}, *valid[1:]],
+        ):
+            self.api.rows[:] = rows
+            for operation in (self.get, self.put, self.reader, self.copy):
+                with (
+                    self.subTest(rows=len(rows), op=operation.__name__),
+                    self.assertRaises(Rejected),
+                ):
+                    operation()
+        self.api.rows[:] = valid
+        with patch.dict(tip, id=self.working["assets"][store.CONTROL]["id"]):
+            for operation in (self.put, self.reader, self.copy):
+                with self.assertRaises(Rejected):
+                    operation()
+        self.assertEqual(len(self.api.writes), 5)
+
+    def test_witness_readback_refuses_metadata_bytes_and_membership_changes(self):
+        self.copy()
+        tip = self.api.install(TIP_NAME, TIP)
+        path = ASSETS + str(tip["id"])
+        for delta in (
+            {"name": "other.bin"},
+            {"state": "starter"},
+            {"size": True},
+            {"size": 16385},
+            {"digest": "sha256:bad"},
+            {"id": True},
+        ):
+            self.api.hook = lambda op, p, v: v | delta if op == "GET" and p == path else v
+            with self.assertRaises(Rejected):
+                self.get()
+        for corrupt in (TIP + b"!", TIP[:-1] + b"!", bytearray(TIP)):
+            with patch.dict(self.api.saved, {tip["id"]: corrupt}), self.assertRaises(Rejected):
+                self.api.hook = lambda op, p, v: v
+                self.get()
+        wrong = b"!" * len(TIP)
+        with (
+            patch.dict(tip, digest="sha256:" + digest(wrong)),
+            patch.dict(self.api.saved, {tip["id"]: wrong}),
+            self.assertRaises(Rejected),
+        ):
+            self.get()
+
+        def move_sibling(op, p, v):
+            if op == "DOWNLOAD" and p == path:
+                self.api.rows[0]["id"] += 100
+            return v
+
+        self.api.hook = move_sibling
+        with self.assertRaises(Rejected):
+            self.get()
+
+    def test_witness_ambiguous_create_does_not_retry_replace_or_delete(self):
+        self.copy()
+
+        def lost(op, path, value):
+            if op == "UPLOAD":
+                raise Rejected("controlled lost reply")
+            return value
+
+        self.api.hook = lost
+        with self.assertRaises(Rejected):
+            self.put()
+        self.api.hook = lambda op, path, value: value
+        with self.assertRaises(Rejected):
+            self.put(TIP + b"different")
+        self.assertIsNone(self.put())
+        self.assertEqual(self.get(), TIP)
+        self.assertEqual(self.api.writes.count(TIP_NAME), 1)
+        self.assertFalse(self.api.mutations)
+
+    def test_witness_upload_requires_positive_pin_and_matching_inventory(self):
+        self.copy()
+        for delta in ({"id": 44}, {"size": len(TIP) + 1}, {"digest": "sha256:" + "d" * 64}):
+            self.api.hook = lambda op, path, v: v | delta if op == "UPLOAD" else v
+            before = len(self.api.writes)
+            with self.assertRaises(Rejected):
+                self.put()
+            self.assertEqual(len(self.api.writes), before + 1)
+            self.assertFalse(self.api.mutations)
+            self.api.rows.pop()
 
 
 class TerminalIntegrationTests(unittest.TestCase):

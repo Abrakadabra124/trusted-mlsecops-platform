@@ -21,7 +21,7 @@ _TAG = rf"ci-candidate-{_ID}-{_ID}"
 _RELEASE = rf"/releases/{_ID}"
 _ASSET = rf"/releases/assets/{_ID}"
 _UPLOAD = _RELEASE + "/assets"
-_LISTS = rf"/releases\?per_page=(?:20|100)|{_UPLOAD}\?per_page=6"
+_LISTS = rf"/releases\?per_page=(?:20|100)|{_UPLOAD}\?per_page=[67]"
 _READ = (
     rf"(?:|{_RELEASE}|{_ASSET}|{_LISTS}|/releases/tags/{_TAG}|/git/ref/tags/{_TAG}"
     rf"|/git/ref/heads/{_BRANCH_PART}(?:/{_BRANCH_PART})*)"
