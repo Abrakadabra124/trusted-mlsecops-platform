@@ -9,30 +9,13 @@ from mlsecops import storage_pki
 from mlsecops.contracts import Rejected, canonical, require_fields, safe_child, write_json
 from scripts import ci_campaign_handoff as handoff
 from scripts import ci_serving_native as native
+from scripts.ci_campaign_guard import isolated_environment
 
 LOCAL = ".runtime/ci-serving-job"
-# Clients carry their credentials in memory. Child processes only need the runner
-# identity, tool paths and ordinary OS settings, never the workflow's secrets.
-RUNNER_ENV = frozenset(
-    """HOME PATH USER LOGNAME SHELL TMPDIR TMP TEMP LANG LC_ALL TZ VIRTUAL_ENV
-    RUNNER_TEMP RUNNER_ENVIRONMENT RUNNER_OS RUNNER_ARCH ImageOS
-    GITHUB_ACTIONS GITHUB_WORKSPACE GITHUB_REPOSITORY GITHUB_REPOSITORY_ID
-    GITHUB_EVENT_NAME GITHUB_REF GITHUB_WORKFLOW_REF GITHUB_WORKFLOW_SHA
-    GITHUB_SHA GITHUB_JOB GITHUB_RUN_ID GITHUB_RUN_ATTEMPT""".split()
-)
-COMMAND_FILES = (
-    "GITHUB_OUTPUT",
-    "GITHUB_ENV",
-    "GITHUB_PATH",
-    "GITHUB_STATE",
-    "GITHUB_STEP_SUMMARY",
-)
 
 
 @contextmanager
 def private_process():
-    before = dict(os.environ)
-    inherited = {k: os.environ[k] for k in RUNNER_ENV if k in os.environ}
     with open(os.devnull, "w", encoding="utf-8") as sink, ExitStack() as restore:
         sys.stdout.flush()
         sys.stderr.flush()
@@ -44,10 +27,8 @@ def private_process():
         restore.enter_context(redirect_stdout(sink))
         restore.enter_context(redirect_stderr(sink))
         try:
-            os.environ.clear()
-            os.environ.update(inherited)
-            os.environ.update(dict.fromkeys(COMMAND_FILES, os.devnull))
-            yield
+            with isolated_environment():
+                yield
         except BaseException as primary:
             # Private reader exceptions may contain paths or raw API responses.
             error = (
@@ -58,9 +39,6 @@ def private_process():
             if "serving_cleanup_unverified" in getattr(primary, "__notes__", ()):
                 error.add_note("serving_cleanup_unverified")
             raise error from None
-        finally:
-            os.environ.clear()
-            os.environ.update(before)
 
 
 def admit(root, source_api, run_owner, source):

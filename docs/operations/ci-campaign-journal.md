@@ -45,9 +45,15 @@ workflow все квитанции, зашифрованные записи, ID 
 from scripts import ci_campaign_journal
 
 write = ci_campaign_journal.publisher(
-    writer_api, journal=operator_release, run_owner=run_owner, source=source,
-    key=key, trusted_public=operator_public, key_path=producer_key_path,
+    writer_api,
+    journal=operator_release,
+    run_owner=run_owner,
+    source=source,
+    key=key,
+    trusted_public=operator_public,
+    key_path=producer_key_path,
 )
+
 
 def checkpoint(local_checkpoint):
     tip = write(local_checkpoint)
@@ -85,8 +91,13 @@ ID, владелец и приватность репозитория. Callback 
 
 ```python
 audit = ci_campaign_journal.recover(
-    reader_api, journal=operator_release, run_owner=run_owner, source=source,
-    key=key, trusted_public=operator_public, expected_tip=independent_tip,
+    reader_api,
+    journal=operator_release,
+    run_owner=run_owner,
+    source=source,
+    key=key,
+    trusted_public=operator_public,
+    expected_tip=independent_tip,
 )
 checkpoint = audit["checkpoint"]
 ```

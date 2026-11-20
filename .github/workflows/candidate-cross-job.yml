@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
-    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && (github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref == 'refs/heads/codex/cp4-m23-security-events-20261107' && github.event_name == 'workflow_dispatch' && inputs.operation == 'contracts')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -52,6 +52,7 @@ jobs:
               "ci_campaign_control", "ci_campaign_handoff", "ci_campaign_publish", "ci_campaign_guard",
               "ci_campaign_producer", "ci_consumer_native", "ci_serving_native",
               "ci_private_assets", "ci_asset_http", "ci_shared_job", "ci_store_access",
+              "ci_campaign_journal", "ci_campaign_terminal", "ci_serving_job",
           )
           modules = ["scripts." + name for name in names]
           tests = [module + "_qualification" for module in modules]
@@ -66,7 +67,7 @@ jobs:
           report = temp / "campaign-coverage.json"
           measured.json_report(outfile=str(report))
           files = json.loads(report.read_bytes())["files"]
-          if {Path(name).as_posix() for name in files} != {"scripts/" + name + ".py" for name in names}:
+          if {Path(name).as_posix() for name in files} != {module.replace(".", "/") + ".py" for module in modules}:
               raise SystemExit("Coverage module inventory differs")
           for path, entry in sorted(files.items()):
               stats = entry["summary"]

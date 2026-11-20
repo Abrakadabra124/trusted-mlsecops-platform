@@ -2,6 +2,7 @@
 
 import os
 import platform
+from contextlib import contextmanager
 
 from mlsecops.contracts import Rejected
 from scripts import ci_campaign_control as control
@@ -75,3 +76,35 @@ def authorize(root, *, source_api, job, run_owner, source):
     )
     for field in ("repository", "head_repository"):
         same(run.get(field), identity)
+
+
+# Clients carry their credentials in memory. Child processes only need the runner
+# identity, tool paths and ordinary OS settings, never the workflow's secrets.
+RUNNER_ENV = frozenset(
+    """HOME PATH USER LOGNAME SHELL TMPDIR TMP TEMP LANG LC_ALL TZ VIRTUAL_ENV
+    RUNNER_TEMP RUNNER_ENVIRONMENT RUNNER_OS RUNNER_ARCH ImageOS
+    GITHUB_ACTIONS GITHUB_WORKSPACE GITHUB_REPOSITORY GITHUB_REPOSITORY_ID
+    GITHUB_EVENT_NAME GITHUB_REF GITHUB_WORKFLOW_REF GITHUB_WORKFLOW_SHA
+    GITHUB_SHA GITHUB_JOB GITHUB_RUN_ID GITHUB_RUN_ATTEMPT""".split()
+)
+COMMAND_FILES = (
+    "GITHUB_OUTPUT",
+    "GITHUB_ENV",
+    "GITHUB_PATH",
+    "GITHUB_STATE",
+    "GITHUB_STEP_SUMMARY",
+)
+
+
+@contextmanager
+def isolated_environment():
+    before = dict(os.environ)
+    inherited = {name: os.environ[name] for name in RUNNER_ENV if name in os.environ}
+    try:
+        os.environ.clear()
+        os.environ.update(inherited)
+        os.environ.update(dict.fromkeys(COMMAND_FILES, os.devnull))
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(before)

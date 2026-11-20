@@ -8,6 +8,7 @@ from mlsecops import storage_pki
 from mlsecops.contracts import Rejected, atomic_write, canonical, safe_child, write_json
 from scripts import ci_consumer_native as driver
 from scripts import m18_shared_retention as retention
+from scripts.ci_campaign_guard import isolated_environment
 
 LOCAL = ".runtime/ci-shared-job"
 
@@ -66,12 +67,14 @@ def authorize(root, source_api, run_owner, source):
     return identity(root, run_owner, source)
 
 
+@isolated_environment()
 def cleanup(root, *, source_api, run_owner, source):
     """Repeat exact-ID cleanup from this runner's independent durable witness."""
     actual = authorize(root, source_api, run_owner, source)
     return clean_witness(safe_child(root, LOCAL), actual, source)
 
 
+@isolated_environment()
 def run(root, *, source_api, api, trust_key_path, key, trusted_public, run_owner, source):
     """Consume the signed shared packet; return replay inputs only after the view closes."""
     # Both closed maps contain only scalars. Pin the caller's expectations across I/O.

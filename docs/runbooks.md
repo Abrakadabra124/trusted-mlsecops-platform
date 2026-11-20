@@ -31,6 +31,9 @@
 Подготовка приватного переноса того же frozen candidate между заданиями:
 [проверка происхождения пакета и остановки издателя](operations/campaign-handoff.md),
 [восстановление приватного хранилища](operations/private-assets.md),
+[подписанный приватный журнал](operations/ci-campaign-journal.md),
+[проверка завершения и очистка](operations/ci-campaign-terminal.md),
+[отдельный получатель M13/M14/M15](operations/ci-serving-job.md),
 [ограниченный доступ заданий](operations/campaign-access.md),
 [единая подготовка четырёх пакетов](operations/ci-campaign-producer.md),
 [приёмка M11/M12 в отдельном задании shared](operations/ci-shared-job.md),

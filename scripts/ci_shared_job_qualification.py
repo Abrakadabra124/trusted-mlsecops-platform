@@ -192,6 +192,20 @@ class SharedJobTests(unittest.TestCase):
             self.execute()
         self.assertEqual(self.opens, 1)
 
+    def test_workflow_credentials_and_command_files_do_not_reach_host_commands(self):
+        def inspect_environment(*args, **kwargs):
+            self.assertFalse("PRIVATE_WORKFLOW_SECRET" in os.environ)
+            for field in ("GITHUB_ENV", "GITHUB_PATH", "GITHUB_STATE"):
+                self.assertEqual(os.environ.get(field), os.devnull)
+            return SOURCE.copy()
+
+        self.source.side_effect = inspect_environment
+        with patch.dict(os.environ, PRIVATE_WORKFLOW_SECRET="controlled", GITHUB_ENV="original"):
+            self.execute()
+            job.cleanup(self.root, source_api=self.args["source_api"], run_owner=RUN, source=SOURCE)
+            self.assertEqual(os.environ["GITHUB_ENV"], "original")
+            self.assertEqual(os.environ["PRIVATE_WORKFLOW_SECRET"], "controlled")
+
     def test_remote_workflow_refusal_precedes_private_reads_and_local_resource_claim(self):
         self.guard.side_effect = Rejected("controlled public guard rejection")
         with self.assertRaises(Rejected):
