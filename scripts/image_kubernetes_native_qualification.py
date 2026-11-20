@@ -330,6 +330,28 @@ class NativeTests(unittest.TestCase):
             )
             self.assertNotIn("PRIVATE", json.dumps(result))
 
+    def test_rejection_location_exposes_only_owned_module_and_line(self):
+        from scripts import image_go_supplemental_contract as reader
+
+        try:
+            reader.assess("PRIVATE-CANARY", "bad", {}, {}, b"private", 0, {})
+        except Rejected as error:
+            result = self.api.failure_context(
+                {"phase": "supplemental", "case_index": 23}, None, error
+            )
+        self.assertTrue(result["contract_locations"])
+        for location in result["contract_locations"]:
+            self.assertEqual(set(location), {"module", "line"})
+            self.assertEqual(location["module"], "reader")
+            self.assertIs(type(location["line"]), int)
+        self.assertNotIn("PRIVATE-CANARY", str(result))
+        self.assertNotIn(".py", str(result))
+        cycle = Rejected("PRIVATE-CANARY")
+        cycle.__context__ = cycle
+        self.assertNotIn(
+            "contract_locations", self.api.failure_context({"phase": "setup"}, None, cycle)
+        )
+
     def test_cleanup_failure_modes_never_certify_absence(self):
         path = self.state / "run" / "db-update.cid"
         path.write_text("e" * 64)

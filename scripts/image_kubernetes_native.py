@@ -259,6 +259,30 @@ def failure_context(progress, state, error):
         if isinstance(error, KeyboardInterrupt)
         else "unexpected_failure"
     )
+    # A generic rejection needs a location, not raw report values or a traceback.
+    # Only source lines in these exact loaded modules may enter the projection.
+    known = {
+        scans.__file__: "batch",
+        scans.single.__file__: "reader",
+        aliases.__file__: "registry",
+        contract.__file__: "original",
+    }
+    locations, seen, current = [], set(), error
+    for _ in range(4):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        frame = current.__traceback__
+        for _ in range(16):
+            if frame is None:
+                break
+            module = known.get(frame.tb_frame.f_code.co_filename)
+            if module is not None and 0 < frame.tb_lineno <= 2000:
+                locations.append({"module": module, "line": frame.tb_lineno})
+            frame = frame.tb_next
+        current = current.__context__
+    if locations:
+        context["contract_locations"] = locations
     return context
 
 
