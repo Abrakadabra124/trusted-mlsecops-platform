@@ -5,6 +5,9 @@
 [source image runbook и playbook](operations/source-image-transfer.md).
 [Native evidence](evidence/source-image-transfer-2026-11-20.md).
 
+Интерфейс для ручного запуска кампании, входы трёх получателей и подтверждение
+удаления описаны в [процедуре передачи образа кампании](operations/ci-campaign-image.md).
+
 Сохранение исходной trust identity при создании producer, неизменяющий retry
 и разбор неполного bootstrap:
 [original trust provisioning](operations/bootstrap-trust.md).

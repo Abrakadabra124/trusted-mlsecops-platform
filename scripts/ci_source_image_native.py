@@ -7,6 +7,7 @@ import secrets
 import stat
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, safe_child
 from mlsecops.inventory import command
@@ -21,6 +22,17 @@ ARCHIVE_LIMIT = 384 * 1024**2
 TAR_LIMIT = 2 * 1024**3
 ZIP_LIMIT = ARCHIVE_LIMIT + 1024**2
 SCOPE = "source-image-transfer"
+
+
+class Workflow(NamedTuple):
+    branch: str
+    path: str
+    events: tuple[str, ...]
+    active_only: bool
+    scope: str
+
+
+QUALIFICATION = Workflow(BRANCH, WORKFLOW, ("push", "workflow_dispatch"), False, SCOPE)
 
 
 def need(value):
@@ -41,7 +53,7 @@ def same(record, fields):
         need(type(record.get(key)) is type(value) and record[key] == value)
 
 
-def guard(api, environment, *, head, dirty, platform):
+def guard(api, environment, *, head, dirty, platform, workflow=QUALIFICATION):
     need(platform == "linux" and dirty is False)
     expected = dict(
         GITHUB_ACTIONS="true",
@@ -51,11 +63,11 @@ def guard(api, environment, *, head, dirty, platform):
         ImageOS="ubuntu24",
         GITHUB_REPOSITORY=REPOSITORY,
         GITHUB_REPOSITORY_ID=str(REPOSITORY_ID),
-        GITHUB_REF="refs/heads/" + BRANCH,
-        GITHUB_WORKFLOW_REF=f"{REPOSITORY}/{WORKFLOW}@refs/heads/{BRANCH}",
+        GITHUB_REF="refs/heads/" + workflow.branch,
+        GITHUB_WORKFLOW_REF=f"{REPOSITORY}/{workflow.path}@refs/heads/{workflow.branch}",
     )
     same(environment, expected)
-    need(environment.get("GITHUB_EVENT_NAME") in ("push", "workflow_dispatch"))
+    need(environment.get("GITHUB_EVENT_NAME") in workflow.events)
     need(type(head) is str and re.fullmatch(r"[a-f0-9]{40}", head) is not None)
     need(environment.get("GITHUB_SHA") == head and environment.get("GITHUB_WORKFLOW_SHA") == head)
     run, attempt = (
@@ -74,22 +86,24 @@ def guard(api, environment, *, head, dirty, platform):
             id=run,
             run_attempt=attempt,
             head_sha=head,
-            head_branch=BRANCH,
+            head_branch=workflow.branch,
             event=environment["GITHUB_EVENT_NAME"],
-            path=WORKFLOW,
+            path=workflow.path,
         ),
     )
+    if workflow.active_only:
+        same(record, dict(status="in_progress"))
     for field in ("repository", "head_repository"):
         same(record.get(field), identity)
     return run, attempt
 
 
-def authorize(api, environment, root):
+def authorize(api, environment, root, workflow=QUALIFICATION):
     head = command(["git", "-C", str(root), "rev-parse", "HEAD"])
     dirty = bool(
         command(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"])
     )
-    return guard(api, environment, head=head, dirty=dirty, platform=sys.platform)
+    return guard(api, environment, head=head, dirty=dirty, platform=sys.platform, workflow=workflow)
 
 
 def receipt(value, environment):
@@ -123,7 +137,7 @@ def artifact_path(identifier):
     return f"repos/{REPOSITORY}/actions/artifacts/{identifier}"
 
 
-def artifact_valid(item, environment):
+def artifact_valid(item, environment, *, branch=BRANCH):
     need(type(item) is dict)
     artifact_path(item.get("id"))
     run, attempt = number(environment["GITHUB_RUN_ID"]), number(environment["GITHUB_RUN_ATTEMPT"])
@@ -136,19 +150,19 @@ def artifact_valid(item, environment):
             repository_id=REPOSITORY_ID,
             head_repository_id=REPOSITORY_ID,
             head_sha=environment["GITHUB_SHA"],
-            head_branch=BRANCH,
+            head_branch=branch,
         ),
     )
     return item
 
 
-def artifact_check(api, environment, identifier):
-    item = artifact_valid(api("GET", artifact_path(identifier)), environment)
+def artifact_check(api, environment, identifier, *, branch=BRANCH):
+    item = artifact_valid(api("GET", artifact_path(identifier)), environment, branch=branch)
     need(item["id"] == identifier)
     return item
 
 
-def cleanup(api, environment, reauthorize):
+def cleanup(api, environment, reauthorize, *, branch=BRANCH):
     run = number(environment["GITHUB_RUN_ID"])
     path = f"repos/{REPOSITORY}/actions/runs/{run}/artifacts?per_page=100"
     listing = api("GET", path)
@@ -157,11 +171,11 @@ def cleanup(api, environment, reauthorize):
     need(type(listing.get("total_count")) is int and listing["total_count"] == len(rows) <= 1)
     # No DELETE until every identity in the complete, bounded run list is checked.
     for item in rows:
-        artifact_valid(item, environment)
-        need(artifact_check(api, environment, item["id"]) == item)
+        artifact_valid(item, environment, branch=branch)
+        need(artifact_check(api, environment, item["id"], branch=branch) == item)
     for item in rows:
         reauthorize()
-        need(artifact_check(api, environment, item["id"]) == item)
+        need(artifact_check(api, environment, item["id"], branch=branch) == item)
         owned = artifact_path(item["id"])
         api("DELETE", owned)
         need(api("GET", owned, absent=True) is None)
@@ -211,47 +225,60 @@ def owner_record(root, environment, *, create):
 
 def execute(action):
     environment = dict(os.environ)
-    jobs = {
-        "producer": "producer",
-        "receiver": "receiver",
-        "precheck": "receiver",
-        "cleanup": "cleanup",
-        "producer-cleanup": "producer",
-        "receiver-cleanup": "receiver",
+    actions = {
+        "producer": ("producer", "build"),
+        "receiver": ("receiver", "receive"),
+        "precheck": ("receiver", "precheck"),
+        "cleanup": ("cleanup", "cleanup"),
+        "producer-cleanup": ("producer", "local-cleanup"),
+        "receiver-cleanup": ("receiver", "local-cleanup"),
     }
     # Check the actual job before git, imports that can execute work, or API calls.
-    need(action in jobs and environment.get("GITHUB_JOB") == jobs[action])
+    need(action in actions and environment.get("GITHUB_JOB") == actions[action][0])
+    return transfer(actions[action][1], environment, QUALIFICATION)
+
+
+def transfer(action, environment, workflow):
+    """Execute a fixed operation after the entry point has admitted the job role."""
     root = Path.cwd().resolve()
 
     def reauthorize():
-        return authorize(request, environment, root)
+        return authorize(request, environment, root, workflow)
 
     reauthorize()
-    result = dict(status="pass", scope=SCOPE, release_ready=False)
+    result = dict(status="pass", scope=workflow.scope, release_ready=False)
     if action == "cleanup":
-        return result | {"artifacts_deleted": cleanup(request, environment, reauthorize)}
+        return result | {
+            "artifacts_deleted": cleanup(request, environment, reauthorize, branch=workflow.branch)
+        }
     directory = safe_child(root, DIRECTORY)
-    if action in ("precheck", "receiver"):
-        artifact_check(request, environment, number(environment["SOURCE_IMAGE_ARTIFACT_ID"]))
+    if action in ("precheck", "receive"):
+        artifact_check(
+            request,
+            environment,
+            number(environment["SOURCE_IMAGE_ARTIFACT_ID"]),
+            branch=workflow.branch,
+        )
         if action == "precheck":
             receipt(decode(environment["SOURCE_IMAGE_RECEIPT"].encode(), limit=4096), environment)
             owner = owner_record(root, environment, create=True)
             image_core().workspace_create(directory, owner)
             return result | {"artifact_checked": True}
     core = image_core()
-    if action in ("producer-cleanup", "receiver-cleanup"):
+    if action == "local-cleanup":
         if not owner_path(root, environment).exists():
             need(not directory.exists())
             return result | {"files_removed": 0}
         owner = owner_record(root, environment, create=False)
         return result | {"files_removed": core.cleanup(directory, owner=owner)}
-    if action == "producer":
+    if action == "build":
         owner = owner_record(root, environment, create=True)
         prepared = receipt(core.prepare(root, directory, owner=owner), environment)
         reauthorize()
         with Path(environment["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
             output.write("receipt=" + canonical(prepared).decode() + "\n")
         return result | {"image_prepared": True}
+    need(action == "receive")
     owner = owner_record(root, environment, create=False)
     try:
         expected = receipt(
@@ -265,16 +292,20 @@ def execute(action):
         core.cleanup(directory, owner=owner)
 
 
-def main(arguments=None):
+def cli(arguments, dispatch, scope):
     try:
         args = sys.argv[1:] if arguments is None else arguments
         need(len(args) == 1)
-        result = execute(args[0])
+        result = dispatch(args[0])
         print(canonical(result).decode())
         return 0
     except (Exception, KeyboardInterrupt):
-        print(canonical(dict(status="inconclusive", scope=SCOPE, release_ready=False)).decode())
+        print(canonical(dict(status="inconclusive", scope=scope, release_ready=False)).decode())
         return 1
+
+
+def main(arguments=None):
+    return cli(arguments, execute, SCOPE)
 
 
 if __name__ == "__main__":

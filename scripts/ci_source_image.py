@@ -137,6 +137,12 @@ def image_identity(details, source, identifier=None):
     return observed
 
 
+def inspect_image(reference, source, identifier=None):
+    details = decode(command(["docker", "image", "inspect", reference]).encode())
+    need(type(details) is list and len(details) == 1)
+    return image_identity(details[0], source, identifier)
+
+
 def validate_receipt(receipt, source):
     need(type(receipt) is dict)
     require_fields(
@@ -310,9 +316,7 @@ def prepare(root, directory, *, owner):
             ],
             timeout=900,
         )
-    details = decode(command(["docker", "image", "inspect", IMAGE]).encode())
-    need(type(details) is list and len(details) == 1)
-    identifier = image_identity(details[0], source)
+    identifier = inspect_image(IMAGE, source)
     tar = directory / "image.tar"
     need(execute(["docker", "image", "save", identifier], tar, 300, output_limit=TAR_LIMIT) == 0)
     tar_pin, tar_size = file_pin(tar, TAR_LIMIT)
@@ -352,9 +356,7 @@ def receive(root, directory, expected, *, owner):
     classic_store()
     absent_image()
     command(["docker", "image", "load", "--input", str(tar)], timeout=300)
-    details = decode(command(["docker", "image", "inspect", receipt["image_id"]]).encode())
-    need(type(details) is list and len(details) == 1)
-    identifier = image_identity(details[0], source, receipt["image_id"])
+    identifier = inspect_image(receipt["image_id"], source, receipt["image_id"])
     command(["docker", "image", "tag", identifier, IMAGE])
     probe_name = "trusted-source-image-" + owner
     arguments = [
@@ -419,6 +421,8 @@ def receive(root, directory, expected, *, owner):
             )
         )
         need(not invalid_cid)
+    # Downstream gates use the tag. The isolated worker probe above used the immutable ID.
+    inspect_image(IMAGE, source, identifier)
     return receipt
 
 

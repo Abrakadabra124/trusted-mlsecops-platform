@@ -261,6 +261,30 @@ class ImageTests(unittest.TestCase):
         cidfile.write_text("e" * 64, encoding="ascii")
         return 0
 
+    def test_receiver_refuses_if_ordinary_tag_resolves_to_another_image_after_probe(self):
+        self.packed()
+        inspected = []
+
+        def command(args, timeout=30):
+            if args[1] == "info":
+                return json.dumps(dict(OSType="linux", Driver="overlay2"))
+            if args[1:3] == ["image", "inspect"]:
+                inspected.append(args[-1])
+                result = self.inspected()
+                if args[-1] == channel.IMAGE:
+                    result["Id"] = "sha256:" + "0" * 64
+                return json.dumps([result])
+            return ""
+
+        with (
+            patch.object(channel, "source_contract", return_value=self.expected()),
+            patch.object(channel, "command", side_effect=command),
+            patch.object(channel, "execute", side_effect=self.probe),
+            self.assertRaises(Rejected),
+        ):
+            channel.receive(self.root, self.directory, self.receipt, owner=OWNER)
+        self.assertEqual(inspected, [self.identifier, channel.IMAGE])
+
     def test_probe_cleanup_requires_final_container_absence(self):
         self.packed()
 
