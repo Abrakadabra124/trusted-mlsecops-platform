@@ -1,0 +1,159 @@
+name: Bounded public source image transfer
+on:
+  push:
+    branches: [qualify/source-image-transfer]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: source-image-transfer
+  cancel-in-progress: false
+jobs:
+  producer:
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/source-image-transfer' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      receipt: ${{ steps.prepare.outputs.receipt }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify source, archive, hosted authority and bootstrap contracts
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check scripts/ci_source_image.py scripts/ci_source_image_qualification.py scripts/ci_source_image_native.py scripts/ci_source_image_native_qualification.py mlsecops/bootstrap.py scripts/bootstrap_trust_qualification.py
+          uv run --locked ruff format --check scripts/ci_source_image.py scripts/ci_source_image_qualification.py scripts/ci_source_image_native.py scripts/ci_source_image_native_qualification.py mlsecops/bootstrap.py scripts/bootstrap_trust_qualification.py
+          uv run --locked python scripts/check_docs.py
+          uv run --locked python -B -W error - <<'PY'
+          import os, unittest
+          from pathlib import Path
+          import coverage
+          modules = ['scripts.ci_source_image', 'scripts.ci_source_image_native', 'mlsecops.bootstrap']
+          tests = [
+              'scripts.ci_source_image_qualification',
+              'scripts.ci_source_image_native_qualification',
+              'scripts.bootstrap_trust_qualification',
+              'scripts.bootstrap_qualification',
+              'scripts.foundation_qualification',
+              'scripts.key_files_qualification',
+              'scripts.consumer_candidate_state_qualification',
+          ]
+          measured = coverage.Coverage(branch=True, source=modules,
+              data_file=str(Path(os.environ['RUNNER_TEMP']) / 'source-image.coverage'))
+          measured.start()
+          result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(tests))
+          measured.stop()
+          measured.save()
+          measured.json_report(outfile=str(Path(os.environ['RUNNER_TEMP']) / 'source-image-coverage.json'))
+          if not result.wasSuccessful() or result.skipped:
+              raise SystemExit('Source-image preflight failed or skipped checks')
+          PY
+          uv run --locked python - <<'PY'
+          import json, os
+          from pathlib import Path
+          files = json.loads((Path(os.environ['RUNNER_TEMP']) / 'source-image-coverage.json').read_bytes())['files']
+          expected = {'scripts/ci_source_image.py', 'scripts/ci_source_image_native.py', 'mlsecops/bootstrap.py'}
+          if set(files) != expected:
+              raise SystemExit('Source-image coverage inventory differs')
+          for name, item in files.items():
+              stats = item['summary']
+              for covered, total in (('covered_lines', 'num_statements'), ('covered_branches', 'num_branches')):
+                  if stats[total] <= 0 or stats[covered] * 100 < 95 * stats[total]:
+                      raise SystemExit('Source-image module coverage below 95%: ' + name)
+          PY
+      - name: Verify public authority and prepare only the reviewed source image
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python -B -W error -m scripts.ci_source_image_native producer
+      - name: Upload exactly one bounded public image archive
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: source-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .runtime/source-image/image.tar.gz
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+      - name: Remove explicit producer transient files
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python -B -W error -m scripts.ci_source_image_native producer-cleanup
+  receiver:
+    needs: producer
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/source-image-transfer' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - run: uv sync --locked --no-build --python 3.12.15
+      - name: Check producer pins and artifact identity and size before download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_IMAGE_ARTIFACT_ID: ${{ needs.producer.outputs.artifact }}
+          SOURCE_IMAGE_RECEIPT: ${{ needs.producer.outputs.receipt }}
+        run: uv run --locked python -B -W error -m scripts.ci_source_image_native precheck
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.producer.outputs.artifact }}
+          merge-multiple: true
+          path: .runtime/source-image
+      - name: Load exact producer image and check ordinary worker CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_IMAGE_ARTIFACT_ID: ${{ needs.producer.outputs.artifact }}
+          SOURCE_IMAGE_RECEIPT: ${{ needs.producer.outputs.receipt }}
+        run: uv run --locked python -B -W error -m scripts.ci_source_image_native receiver
+      - name: Remove explicit receiver transient files after any failure
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python -B -W error -m scripts.ci_source_image_native receiver-cleanup
+  cleanup:
+    needs: [producer, receiver]
+    if: ${{ always() && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/source-image-transfer' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - run: uv sync --locked --no-build --python 3.12.15
+      - name: Validate the complete run list, delete only its artifact and read back absence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --locked python -B -W error -m scripts.ci_source_image_native cleanup
