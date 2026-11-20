@@ -57,10 +57,14 @@ Files: `scripts/ci_private_channel.py`, its qualification tests,
   Core 102/102 statements and 42/42 branches; driver 177/178 and 23/24.
   Ruff/docs/static checks passed; scoped reviewer independently repeated 55 tests,
   confirmed coverage and approved. Publish public source before exact mirroring.
-- [ ] Verify private metadata and hard zero-spend prerequisite, provision one
+- [x] Verify private metadata and hard zero-spend prerequisite, provision one
   temporary AES secret, execute once, inspect every job and deletion readback.
-- [ ] Delete temporary secret, verify absence, publish only closed observations
+- [x] Delete temporary secret, verify absence, publish only closed observations
   and runbook. Record native refusal honestly and fix before a justified retry.
+
+Native outcome: [932c2a4 /44681708741](../../evidence/private-ci-channel-2026-11-20.md),
+all three jobs success, 7 crypto refusals, 1 artifact deleted, independent readback
+0 artifacts, temporary secret absent. Full candidate transport remains below.
 
 ### Remaining full R1 dependencies
 

@@ -1,5 +1,17 @@
 # Статус и границы доказательств
 
+20 ноября [private cross-job canary](docs/evidence/private-ci-channel-2026-11-20.md)
+на `932c2a4` прошёл private run **44681708741**: producer, receiver и cleanup
+success, 55 preflight tests, 7 actual crypto refusals. Exact public source
+зеркалирован в private execution repository, фактический run owner сохранён.
+Удалён 1 artifact, отдельный readback подтвердил 0 artifacts; временный AES
+secret удалён, активных runs нет. 60 adjacent tests прошли отдельно; два модуля
+преодолели individual 95% statement/branch thresholds и scoped review.
+[Runbook](docs/operations/private-ci-channel.md) описывает повтор и recovery.
+Это проверенный канал для canary. Перенос **настоящего frozen candidate** и
+его primary evidence, exact consumer image, общий M18/R1, image findings и
+независимые M22 challenges 0/2 остаются открытыми.
+
 20 ноября [Kubernetes supplemental validation](docs/evidence/kubernetes-supplemental-scans-2026-11-20.md)
 на `79f3d7d` / run **44678322868** завершилась success за **4 min 41 s**.
 **88 tests**, четыре новых модуля отдельно прошли пороги 95% statements/branches.

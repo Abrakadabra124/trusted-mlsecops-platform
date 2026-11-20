@@ -105,3 +105,7 @@ python -B scripts/check_docs.py
 
 Нужен отдельный coverage порог 95% statements и 95% branches каждого модуля.
 Native результат и точный source публикуются после фактического запуска.
+
+Проверено 2026-11-20: [source 932c2a4, run 44681708741](../evidence/private-ci-channel-2026-11-20.md),
+все три jobs success, 7 crypto refusals, artifact и temporary secret удалены
+с отдельным readback. Это canary-only evidence, не перенос actual candidate.
