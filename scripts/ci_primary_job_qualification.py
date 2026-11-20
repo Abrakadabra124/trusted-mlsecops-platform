@@ -38,7 +38,7 @@ WORKFLOW = ".github/workflows/candidate-cross-job.yml"
 
 class PrimaryJobTests(unittest.TestCase):
     def setUp(self):
-        self.temp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.temp = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         self.root = self.temp / "repo"
         self.root.mkdir(mode=0o700)
         self.trust = self.temp / "original.pem"

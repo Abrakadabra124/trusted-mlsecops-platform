@@ -83,3 +83,5 @@ python -B -W error -m unittest scripts.ci_shared_job_qualification scripts.ci_co
 штатные retention и replay. Транспорт, hosted guard и эффекты SQL и кластера
 в этих тестах контролируются локально. Дополнительный тест меняет retained-объект
 после удаления временной рабочей области и требует отказа replay.
+
+[Сохранение и восстановление первичных свидетельств после остановки runner](ci-primary-recovery.md).
