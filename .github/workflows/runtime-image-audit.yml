@@ -33,6 +33,7 @@ jobs:
           uv run --locked coverage json -o .coverage-scope.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-scope.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked python -m scripts.image_suite_qualification
+          uv run --locked python -B -W error -m unittest scripts.image_kubernetes_aliases_qualification scripts.image_go_supplemental_qualification scripts.image_kubernetes_scans_qualification scripts.image_kubernetes_integration_qualification scripts.image_kubernetes_export_qualification
       - name: Prepare isolated workspace and pinned tools
         run: |
           uv run --locked python -m mlsecops bootstrap
@@ -87,3 +88,14 @@ jobs:
             uv run --locked python -m mlsecops.cluster status
             kind delete cluster --name trusted-mlsecops --kubeconfig .runtime/kubeconfig
           fi
+          uv run --locked python - <<'PY'
+          from mlsecops.cluster import NAME
+          from mlsecops.contracts import Rejected
+          from mlsecops.inventory import command
+          if NAME in command(["kind", "get", "clusters"]).splitlines():
+              raise Rejected("runtime_audit_cluster_still_listed")
+          if command(["docker", "container", "ls", "--all", "--quiet", "--no-trunc",
+                      "--filter", "label=io.x-k8s.kind.cluster=" + NAME]):
+              raise Rejected("runtime_audit_node_still_present")
+          print("runtime_audit_cluster_absent=pass")
+          PY
