@@ -1,0 +1,75 @@
+name: Candidate handoff qualification
+on:
+  push:
+    branches: [qualify/candidate-cross-job]
+    paths:
+      - '.github/workflows/candidate-cross-job.yml'
+      - 'scripts/**'
+      - 'mlsecops/**'
+      - 'policies/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: candidate-cross-job-qualification
+  cancel-in-progress: false
+jobs:
+  contracts:
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify locked dependencies, code and documentation
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check .
+          uv run --locked ruff format --check .
+          uv run --locked python -I scripts/check_docs.py
+      - name: Verify both consumers and failure paths with controlled storage
+        run: |
+          uv run --locked python -B -W error - <<'PY'
+          import json
+          import os
+          import unittest
+          from pathlib import Path
+
+          import coverage
+
+          names = (
+              "ci_campaign_control", "ci_campaign_handoff", "ci_campaign_publish", "ci_campaign_guard",
+              "ci_campaign_producer", "ci_consumer_native", "ci_serving_native",
+              "ci_private_assets", "ci_asset_http",
+          )
+          modules = ["scripts." + name for name in names]
+          tests = [module + "_qualification" for module in modules]
+          tests += ["scripts.ci_private_channel_qualification", "scripts.ci_transfer_qualification"]
+          temp = Path(os.environ["RUNNER_TEMP"])
+          measured = coverage.Coverage(branch=True, source=modules, data_file=temp / "campaign.coverage")
+          measured.start()
+          result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromNames(tests))
+          measured.stop()
+          if not result.wasSuccessful() or result.skipped:
+              raise SystemExit("Qualification failed or skipped a test")
+          report = temp / "campaign-coverage.json"
+          measured.json_report(outfile=str(report))
+          files = json.loads(report.read_bytes())["files"]
+          if {Path(name).as_posix() for name in files} != {"scripts/" + name + ".py" for name in names}:
+              raise SystemExit("Coverage module inventory differs")
+          for path, entry in sorted(files.items()):
+              stats = entry["summary"]
+              for covered, total in (("covered_lines", "num_statements"), ("covered_branches", "num_branches")):
+                  print(path, covered, stats[covered], "/", stats[total])
+                  if stats[total] <= 0 or stats[covered] * 100 < stats[total] * 95:
+                      raise SystemExit("Per-module coverage below 95 percent")
+          PY
