@@ -3,6 +3,15 @@ on:
   push:
     branches: [qualify/candidate-cross-job]
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Verification to run
+        required: true
+        type: choice
+        default: contracts
+        options:
+          - contracts
+          - check-private-access
 permissions:
   contents: read
 concurrency:
@@ -42,7 +51,7 @@ jobs:
           names = (
               "ci_campaign_control", "ci_campaign_handoff", "ci_campaign_publish", "ci_campaign_guard",
               "ci_campaign_producer", "ci_consumer_native", "ci_serving_native",
-              "ci_private_assets", "ci_asset_http", "ci_shared_job",
+              "ci_private_assets", "ci_asset_http", "ci_shared_job", "ci_store_access",
           )
           modules = ["scripts." + name for name in names]
           tests = [module + "_qualification" for module in modules]
@@ -66,3 +75,43 @@ jobs:
                   if stats[total] <= 0 or stats[covered] * 100 < stats[total] * 95:
                       raise SystemExit("Per-module coverage below 95 percent")
           PY
+
+  access:
+    needs: contracts
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'check-private-access' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: reader
+            environment: candidate-store-read
+            credential: CANDIDATE_STORE_READ
+          - role: publisher
+            environment: candidate-store-write
+            credential: CANDIDATE_STORE_WRITE
+    environment: ${{ matrix.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Prepare without private credentials
+        run: |
+          uv sync --locked --no-build --python 3.12.15
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Verify private Contents read for this credential
+        env:
+          CANDIDATE_ACCESS_TOKEN: ${{ secrets[matrix.credential] }}
+          CANDIDATE_ACCESS_ROLE: ${{ matrix.role }}
+        run: .venv/bin/python -B -W error -m scripts.ci_store_access "$CANDIDATE_ACCESS_ROLE"
