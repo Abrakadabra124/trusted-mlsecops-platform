@@ -16,6 +16,9 @@ from mlsecops import signing
 from mlsecops.contracts import Rejected, canonical, digest, write_json
 from scripts import ci_campaign_control_qualification as control
 from scripts import ci_campaign_journal_qualification as journal
+from scripts import ci_operator_tip as operator_tip
+from scripts import ci_origin_backup as origin_backup
+from scripts import ci_origin_backup_qualification as origins
 from scripts import ci_original_publish as cli
 from scripts import ci_private_assets_qualification as working
 
@@ -153,11 +156,18 @@ class PublisherTests(unittest.TestCase):
         self.api = PrivateAPI()
         self.copies = {}
         self.copy = Mock(side_effect=self.copy_originals)
-        self.enterContext(
-            patch.dict(
-                sys.modules, {"scripts.ci_origin_backup": SimpleNamespace(copy_originals=self.copy)}
-            )
-        )
+        self.witness_bytes = None
+
+        def put_witness(api, raw, *, release, checkpoint, run_owner, source):
+            self.assertEqual(set(self.copies), set(cli.store.LIMITS))
+            self.assertIs(api, self.api)
+            self.assertEqual((release, run_owner, source), (ORIGIN, fx.run, fx.source))
+            self.assertEqual(checkpoint["storage"]["release_id"], self.api.working.release["id"])
+            self.witness_bytes = raw
+
+        self.put_witness = Mock(side_effect=put_witness)
+        self.archive = SimpleNamespace(copy_originals=self.copy, put_witness=self.put_witness)
+        self.enterContext(patch.dict(sys.modules, {"scripts.ci_origin_backup": self.archive}))
         self.public_api = Mock()
         self.enterContext(patch.object(working, "TAG", "ci-candidate-31-2"))
         self.enterContext(patch.object(working, "REF", "refs/tags/ci-candidate-31-2"))
@@ -259,6 +269,18 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(len(self.api.working.downloads), 11)
         self.assertEqual(self.api.working.downloads[-1], (104, len(self.copies[cli.store.CONTROL])))
         tip = recovered.call_args.kwargs["expected_tip"]
+        from scripts.ci_tip_witness import open_witness
+
+        archived = open_witness(
+            self.witness_bytes,
+            journal_release=journal.PIN,
+            origin_release=ORIGIN,
+            trusted_public=self.public,
+            key=control.KEY,
+            run_owner=self.fx.run,
+            source=self.fx.source,
+        )
+        self.assertEqual(archived, tip)
         self.assertEqual(
             tip, dict(step=8, asset_id=1007, sha256=digest(self.api.journal.data[1007]))
         )
@@ -277,6 +299,37 @@ class PublisherTests(unittest.TestCase):
         self.cluster.assert_called_once()
         self.stop.assert_called_once()
         self.copy.assert_called_once()
+
+    def test_operator_retains_actual_producer_tip_after_runner_loss(self):
+        self.api.working = origins.PrivateStore()
+        self.api.working.sibling = [self.api.journal.release, self.api.working.origin]
+        with patch.dict(sys.modules, {"scripts.ci_origin_backup": origin_backup}):
+            self.publish(origin_release=origins.RELEASE)
+        self.assertEqual(len(self.api.working.rows), 6)
+        expected = dict(step=8, asset_id=1007, sha256=digest(self.api.journal.data[1007]))
+        self.signer.unlink()
+        self.api.working.release = self.api.working.tag = None
+        self.api.working.contents.clear()
+        self.api.working.assets.clear()
+        folder = self.temp / "pinned"
+        ctx = dict(
+            journal_release=journal.PIN,
+            origin_release=origins.RELEASE,
+            trusted_public=self.public,
+            key=control.KEY,
+            run_owner=self.fx.run,
+            source=self.fx.source,
+        )
+        self.assertEqual(operator_tip.capture(folder, api=self.api, **ctx), expected)
+        self.api.working.saved.clear()
+        self.api.journal.data.clear()
+        self.assertEqual(operator_tip.read_pin(folder, **ctx), expected)
+
+    def test_final_tip_is_archived_before_a_public_key_can_be_released(self):
+        self.put_witness.side_effect = OSError("private details")
+        self.assertEqual(self.invoke(), (1, ["original_publish=refused"]))
+        self.put_witness.assert_called_once()
+        self.assertEqual(len(self.copies), 5)
 
     def test_late_publish_error_is_preserved_even_with_all_eight_checkpoints(self):
         original = Rejected("private late window refusal")

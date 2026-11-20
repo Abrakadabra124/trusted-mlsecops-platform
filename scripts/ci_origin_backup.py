@@ -5,10 +5,10 @@ from scripts import ci_campaign_control as control
 from scripts import ci_campaign_journal as journal
 from scripts import ci_private_assets as store
 from scripts.ci_source_image_native import same
+from scripts.ci_tip_witness import LIMIT as TIP_LIMIT
+from scripts.ci_tip_witness import MAGIC as TIP_MAGIC
 
 TIP_NAME = "journal-tip.bin"
-TIP_MAGIC = b"MLSTIP\x01"
-TIP_LIMIT = 16384
 
 
 def _need(ok):

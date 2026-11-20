@@ -183,7 +183,8 @@ def publish(
     # Closing normally restores fds/env without replacing the original failure or its cleanup notes.
     with closing(ExitStack()) as scope:
         scope.enter_context(private_process())
-        from scripts.ci_origin_backup import copy_originals
+        from scripts.ci_origin_backup import copy_originals, put_witness
+        from scripts.ci_tip_witness import seal
 
         root = Path(root)
         _need(os.environ["GITHUB_JOB"] == "producer")
@@ -248,6 +249,16 @@ def publish(
                 copy_originals(api, release=origin_release, checkpoint=closed, key=key, **binding)
                 is None
             )
+            witness = seal(
+                tip,
+                journal_release=descriptor,
+                origin_release=origin_release,
+                trusted_public=trusted_public,
+                key=key,
+                key_path=signer,
+                **binding,
+            )
+            put_witness(api, witness, release=origin_release, checkpoint=closed, **binding)
             _live(root, source_api, api, closed, public, key, binding)
             return public
         except BaseException as primary:
