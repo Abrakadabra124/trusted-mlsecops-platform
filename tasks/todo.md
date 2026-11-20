@@ -243,6 +243,7 @@ T01, T03-T06 и T26 завершены для synthetic-only профиля; о�
 
 ## T21
 - [ ] Сквозной release acceptance. Зависимости: T20, T25, T26, T27, T28, T29. Gate: M18.
+- Прогресс 2026-11-20: [original-candidate consumer f9bf7c5 /44655346292](../docs/evidence/consumer-native-2026-11-20.md#повтор-после-исправления) прошёл M11 149/M12 201, cleanup и retention/replay. Same-job scope; общий candidate/M18, private cross-job channel, native M13/M14/M15, image blockers и M22 independent 0/2 остаются открытыми.
 - Результат: M01-M17 и M19-M23 reports на одном candidate, completeness check и source fingerprint. M18 агрегирует все gates и выполняется последним.
 - Проверка: любой missing/fail/inconclusive report блокирует final acceptance; сканирование всего заявленного ML runtime scope.
 

@@ -224,5 +224,25 @@ hosted replay требуется после исправления и scoped rev
 Неизвестные значения становятся `unavailable`; raw exception и resource ID
 в публичную сводку не копируются. Сохранение SQL/cluster cleanup как двух
 независимых действий обязательно: отказ одной стороны не отменяет попытку
-очистки другой. 101 родительский offline test прошёл; для native результата
-нужен следующий hosted replay.
+очистки другой. 101 родительский offline test прошёл.
+
+## Успешный original-candidate consumer на f9bf7c5
+
+[Run 44655346292](../evidence/consumer-native-2026-11-20.md#повтор-после-исправления)
+завершился success: 61 + 188 preflight tests, M07, original M11 149 и M12 201
+критерий. Основная закрытая проекция дошла до `stage=complete` после receipt,
+verified cleanup, private retention и offline replay. SQL остановлен,
+записанные cluster IDs/volumes отсутствуют; повторный cleanup CLI тоже pass.
+
+Воспроизводить на точном `f9bf7c5af538eb34a885e82659f4ac886787efc8`:
+clean hosted checkout, pinned dependencies, producer preparation/M07,
+producer cluster cleanup, затем обычный consumer CLI и оба final cleanup steps.
+Порядок находится в [workflow](../../.github/workflows/consumer-candidate.yml).
+Не переносить этот native результат на последующие code commits без проверки.
+
+Consumer занял 29 min 18 s, весь job 44 min 55 s. Это наблюдение одного run,
+не гарантия времени. Исходные proposal/permit windows и timeout не продлены.
+После infrastructure cleanup replay использует приватный архив; отдельный
+native replay после удаления consumer file context не выполняется. Архив
+остаётся на disposable runner, cross-job private storage ещё не подключён.
+`release_ready=false`, M18/R1 и остальные обязательные gates сохраняются.

@@ -1,4 +1,4 @@
-# Исходный candidate в новом consumer: попытка 377cb4a
+# Исходный candidate в новом consumer: отказ и успешный повтор
 
 ## Идентичность проверки
 
@@ -89,10 +89,10 @@ legacy witness не перезаписывается. Дополнительно
 producer wrapper. Покрытие native: 236/236 statements и 24/24 branches;
 recovery: 186/186 statements и 40/40 branches. Scoped review APPROVE, отдельно
 reviewer выполнил 35 выбранных tests. Эти результаты подтверждают исправление
-offline-дефекта, но не причину исторического отказа и не native cleanup pass.
-Новый hosted replay ещё требуется.
+offline-дефекта, но не причину исторического отказа. Результат отдельного
+hosted replay приведён ниже; он не устанавливает причину прежнего failure.
 
-## Следующее действие
+## Порядок повторной проверки
 
 Выполнить один новый clean-checkout hosted run с новым явно указанным source.
 Не продлевать original proposal/permit windows и не переносить результат
@@ -106,6 +106,38 @@ offline-дефекта, но не причину исторического от
 проверяет source `f9bf7c5af538eb34a885e82659f4ac886787efc8`. Он включает
 нормализацию mounts, закрытые cleanup diagnostics и offline qualification
 validation-импорта в preflight. Этот run не запускает native M13/M14/M15.
-Его результат следует учитывать только после конечного состояния job,
-проверенного cleanup и обязательного retention/replay; факт запуска не
-является acceptance.
+Конечное состояние [job 136020067276](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44655346292/job/136020067276)
+и закрытые проекции проверены: **success**, основной consumer `status=pass`,
+`stage=complete`, `cause=none`. Source проекции совпадает с указанным выше SHA.
+
+| Участок | Проверенный результат |
+| --- | --- |
+| Transfer preflight | 61 tests pass за 50.475 s |
+| Объединённый consumer preflight | 188 tests pass за 116.759 s; отдельные thresholds statements/branches для семи modules пройдены |
+| M07 | CLI exit 0, diagnostic `status=pass`; 31 receipts slots 2-32, один `holdout_budget_exhausted`, 0 invalid receipts |
+| Producer cluster cleanup | `required=1`, `verified=1`, pass |
+| M11 | 149 критериев по проверенному original receipt |
+| M12 | 201 критерий по тому же original receipt |
+| Consumer cleanup | `sql=true`, `cluster=true`, оба diagnostic codes `none` |
+| Retention и offline replay | Достигнуты обязательные проверки перед `stage=complete`; original receipt совпал с replay |
+| Source SQL stop | success с marker/offline проверкой |
+| Повторный consumer cleanup CLI | pass, SQL/cluster снова подтверждены |
+
+Job выполнялся 01:40:42-02:25:37 UTC, 44 min 55 s. Основной consumer шаг:
+01:56:14-02:25:32 UTC, 29 min 18 s. Отдельный cleanup CLI завершился
+02:25:35 UTC. Один TLS timeout наблюдателя был перепроверен через API;
+нового dispatch из-за него не создавалось.
+
+SQL cleanup означает подтверждённую остановку записанного контейнера,
+а не удаление его network/volume. Для cluster проверены отсутствие записанных
+Docker IDs, owned volumes и имени kind. Retention/replay идут после очистки
+инфраструктуры, пока owning file context ещё открыт; затем context удаляется.
+Второй native replay после удаления файлов consumer этим driver не выполняется.
+Такой сценарий отдельно проверен offline qualification самого retention helper.
+Приватные primary, pins и ключи не экспортировались с disposable runner.
+
+Это успешный original-candidate consumer M11/M12 внутри одного hosted job,
+не cross-job transport и не завершённый R1. `release_ready=false` сохранён.
+M13/M14/M15, общий candidate/M18, image audit blockers и независимые M22
+challenges остаются обязательными. Native success на `f9bf7c5` не переносится
+на более новые commits и не доказывает точную причину отказа на `377cb4a`.

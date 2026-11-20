@@ -1,5 +1,15 @@
 # Статус и границы доказательств
 
+20 ноября [original-candidate consumer на f9bf7c5](docs/evidence/consumer-native-2026-11-20.md#повтор-после-исправления)
+прошёл hosted run **44655346292**: M11 **149** и M12 **201** критерий,
+61 + 188 preflight tests, M07 pass. Producer cluster cleanup подтверждён 1/1;
+consumer SQL остановлен, owned cluster/volumes удалены, отдельный повтор cleanup
+pass. Retention и offline replay после infrastructure cleanup достигнуты,
+основная проекция `stage=complete`, `release_ready=false`. Job 44 min 55 s,
+consumer 29 min 18 s. Это перенос внутри одного job; приватный cross-job
+канал, native M13/M14/M15 и общий M18/R1 ещё не приняты. Причина исторического
+cleanup failure на `377cb4a` этим повтором не установлена.
+
 20 ноября подготовлены [lifecycle M13/M14/M15](docs/operations/ci-serving-recovery.md)
 и [приватное сохранение serving primary](docs/operations/ci-serving-primary.md).
 Первый сохраняет тот же SQL между тремя owned clusters, допускает следующую
@@ -33,8 +43,8 @@ SQL stop подтверждён, cluster cleanup - нет. Retention/replay не
 Исправление сравнивает все mount-поля и duplicates независимо от порядка,
 включая legacy witness. 101 родительский test прошёл за 20.417 s; native
 236/236 statements, 24/24 branches и recovery 186/186, 40/40, scoped review
-APPROVE. Добавлены закрытые cleanup stage codes. Новый hosted replay ещё
-ожидается; M18/R1 остаются открытыми.
+APPROVE. Добавлены закрытые cleanup stage codes. Отдельный hosted replay
+на `f9bf7c5` прошёл, как указано выше; M18/R1 остаются открытыми.
 
 20 ноября подготовлен [native consumer playbook](docs/operations/ci-consumer-native.md)
 для исходного candidate в новом owned SQL и полных M11/M12. Импорт прошёл
