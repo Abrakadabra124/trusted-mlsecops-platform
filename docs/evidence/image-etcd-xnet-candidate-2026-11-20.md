@@ -1,5 +1,44 @@
 # B02: etcd x/net candidate, 2026-11-20
 
+## Native scan на 58ca2e2
+
+[Run 44641028793 / job 135971823687](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44641028793/job/135971823687)
+завершён на source `58ca2e270eb7042cf1041837e24173a7ae4ae526`,
+`source_dirty=false`. Общий audit: **fail**. Все 14 runtime targets просканированы;
+вместе с тремя baseline components и отдельным candidate выполнены 18 scans.
+Статусы: 4 pass, 13 fail, 1 inconclusive. Runtime application coverage остаётся 6/14.
+
+В `etcd-xnet-candidate` подтверждены три x/net observations версии `v0.62.0`
+на путях `etcd`, `etcdctl`, `etcdutl`. Его scan не содержит `GO-2026-6860`
+и `CVE-2026-78661`. Исходный etcd сохранён отдельно с тремя observations
+`v0.61.0` и тремя High findings `GO-2026-6860`. Candidate пока **inconclusive**:
+0 Critical, 0 High, но 3 Medium и 2 Unknown observations для
+`GHSA-q7gw-24fr-5p69` и `GO-2026-5932`; application coverage не одобрено.
+Отсутствие конкретного finding относится к этой scanner/DB snapshot и не
+подтверждает совместимость control plane. Baseline не заменён, B02/R1 не закрыты.
+
+Grype `0.120.1`, DB `v6.1.10`, built `2026-11-19T18:41:05Z`, valid,
+одинаковая для всех 18 компонентов. Debian, Wolfi, Go module и Go stdlib
+detection controls прошли. Отказ обусловлен findings, не обрывом scanner/DB.
+
+Три cleanup steps завершились success. Tracking stop receipt подтверждает
+остановку двух контейнеров, volumes сохраняются. SQL step содержит validate и
+проверку `Running=false` внутри marker guard; отдельного branch receipt нет.
+Kind сообщил об удалении node, но workflow не выполняет отдельный post-absence
+readback контейнера/volumes. Поэтому полная очистка остатков этим run не доказана.
+
+Две копии report из audit и publication совпали. SHA-256 canonical JSON + LF,
+восстановленного из этих log records:
+
+```text
+c6f21ae7c1db53af875e3de2c90584032a26d5c6b335b60aaa9d91c3dea5911b
+```
+
+Parent отдельно сверил bytes/hash, source API, 18 компонентов, отсутствие двух
+целевых advisory IDs в candidate и статусы cleanup. Raw logs/API/report остаются
+в приватной `.runtime/evidence/image-audit-44641028793/` рабочего checkout.
+Разделы ниже сохраняют подготовку и исходные критерии до этого запуска.
+
 ## Один исправляемый finding
 
 Основание: [actual runtime audit 43625404562 / job 132539994035](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43625404562/job/132539994035),

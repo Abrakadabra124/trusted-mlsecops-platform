@@ -62,19 +62,32 @@ from scripts import ci_upstream_transfer as upstream
 from scripts import consumer_candidate_state as consumer
 
 sealed = upstream.seal(
-    root, original_state, key=key, phase="M13",
-    reports=original_report_pins, **original_authority,
+    root,
+    original_state,
+    key=key,
+    phase="M13",
+    reports=original_report_pins,
+    **original_authority,
 )
 
 with consumer.materialize(
-    root, candidate_envelope, key=key, phase="M13", **original_authority,
+    root,
+    candidate_envelope,
+    key=key,
+    phase="M13",
+    **original_authority,
     trust_key_path=separately_provisioned_original_trust_key,
     expected_context=trusted_candidate_context,
     ciphertext_pin=trusted_candidate_ciphertext_pin,
     manifest_pin=trusted_candidate_manifest_pin,
 ) as (state, consumer_info):
     with upstream.materialize(
-        root, state, upstream_envelope, key=key, phase="M13", **original_authority,
+        root,
+        state,
+        upstream_envelope,
+        key=key,
+        phase="M13",
+        **original_authority,
         reports=trusted_original_report_pins,
         expected_context=trusted_upstream_context,
         ciphertext_pin=trusted_upstream_ciphertext_pin,

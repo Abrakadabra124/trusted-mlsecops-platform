@@ -13,6 +13,16 @@
 Их соединение с проверкой исходных подписей и окна после расшифровки:
 [candidate transfer](operations/ci-candidate-transfer.md).
 
+Перенос в новый owned SQL и совместная hosted-проверка M11/M12:
+[сквозной consumer playbook](operations/ci-consumer-native.md),
+[проверка SQL ownership и исходных bytes](operations/consumer-candidate-storage.md).
+Сохранение первичных M11/M12 до удаления consumer state и historical replay:
+[shared primary](operations/m18-shared-primary.md).
+Сохранение исходных M02/M03/M07 для следующих serving phases:
+[upstream receipts](operations/ci-upstream-transfer.md).
+Это подготовленные механизмы; результат нового native workflow и общий R1
+требуют отдельной проверки, независимо от локальных qualification tests.
+
 Сохранение и повторная проверка оригинальных M13/M14/M15 packets:
 [serving primary](operations/m18-serving-primary.md). Отказ по времени
 qualification permit и порядок возврата serving identity:

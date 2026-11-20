@@ -42,8 +42,8 @@ from scripts.m18_shared_retention import retain, replay
 arguments = dict(
     **owner,  # freeze_pin, freeze, expected, run_owner from the trusted caller
     report_pins=report_pins,  # exact raw evidence/M11.json and evidence/M12.json hashes
-    actual_pin=actual_pin,   # original shared-serving-actual.json bytes
-    native_pin=native_pin,   # original shared-serving-native.json bytes
+    actual_pin=actual_pin,  # original shared-serving-actual.json bytes
+    native_pin=native_pin,  # original shared-serving-native.json bytes
 )
 index_pin = retain(root, state, destination, **arguments)
 checked = replay(root, destination, index_pin=index_pin, **arguments)

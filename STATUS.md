@@ -1,11 +1,34 @@
 # Статус и границы доказательств
 
+20 ноября подготовлен [native consumer playbook](docs/operations/ci-consumer-native.md)
+для исходного candidate в новом owned SQL и полных M11/M12. Импорт прошёл
+23 родительских tests: 125/125 statements и 6/6 branches. Передача исходных
+M02/M03/M07 прошла 24 tests: 146/146 statements и 28/28 branches.
+Driver/recovery прошли 66 tests; соответственно 232/232 + 24/24 и
+156/156 + 38/38 statements/branches. Scoped review одобрил эти компоненты.
+Исправлен cleanup fd после ошибки приватного log flush/dup; workflow review
+потребовал закрыть step outputs и отделить producer cleanup от Kubernetes API.
+Retention исходных M11/M12 прошёл scoped review и 24 родительских теста
+на Python 3.12.15: 196/196 statements, 34/34 branches. Producer cleanup
+прошёл 20 родительских tests: 63/63 statements, 8/8 branches. Workflow и все
+пять модулей интегрированы; новая hosted проверка ещё ожидается. Эти offline
+результаты не подтверждают native consumer, общий transport между jobs или
+M18/R1. Исходные gates, окна и независимые M22 challenges сохранены.
+
+[Native etcd candidate audit](docs/evidence/image-etcd-xnet-candidate-2026-11-20.md#native-scan-на-58ca2e2)
+на `58ca2e2` /44641028793 завершён: 18 scans, исходные 14 runtime targets
+сохранены, coverage 6/14. Целевой x/net High finding отсутствует в candidate,
+но там остаются Medium/Unknown и неподтверждённое application coverage.
+Общий audit fail; baseline не заменён. Все cleanup steps success, отдельный
+post-absence readback cluster/volumes отсутствует и не заявляется.
+
 20 ноября подготовлены [необязательный validation companion](docs/operations/ci-validation-transfer.md)
 и [файлы нового consumer workspace](docs/operations/consumer-candidate-state.md).
 Первый проверяет исходные validation bytes по подписанному manifest; второй
 сохраняет original candidate/root key и готовит новый owned state. Оба API
-приватны и прошли scoped review; SQL import, приватный hosted transport,
-настройка ключей и общий parallel workflow ещё не реализованы. Публичные
+приватны и прошли scoped review. SQL import добавлен в описанный выше consumer;
+приватный hosted transport, настройка ключей и общий parallel workflow ещё
+не реализованы. Публичные
 Actions artifacts не являются разрешённым каналом для этих пакетов.
 
 20 ноября [проверка происхождения Kubernetes modules](docs/evidence/image-kubernetes-provenance-2026-11-20.md)
