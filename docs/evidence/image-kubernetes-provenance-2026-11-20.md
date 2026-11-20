@@ -12,6 +12,11 @@ image audit не изменены: полной доказанной подст�
 Это source-level evidence для дальнейшей проверки, не доказательство того,
 что все экземпляры являются опубликованными модулями `v0.36.4`.
 
+Позднее 20 ноября [проверка доверенного издателя](#проверка-доверенного-издателя)
+подтвердила исходные image/SBOM signatures через официальный Sigstore bootstrap.
+Она закрывает authentication gap, но не доказывает module-version correspondence
+и не повышает application coverage.
+
 Последний разобранный native image report остаётся историческим:
 [43625404562 / job 132539994035](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43625404562/job/132539994035),
 source `f3b31b4`, report SHA-256
@@ -49,8 +54,8 @@ M22 не закрыты.
    Суммарный размер последних 27 файлов: 75 690 байт.
 5. Подписи двух SBOM математически проверены относительно приложенных
    сертификатов; subject содержит официальную release identity.
-   **Доверенная certificate chain и transparency log не проверены.**
-   Поэтому результат не называется полной проверкой доверенного издателя.
+   На этом первичном этапе trusted certificate chain и transparency log ещё
+   не проверялись; последующая проверка описана отдельно ниже.
    [Официальная процедура](https://kubernetes.io/docs/tasks/administer-cluster/verify-signed-artifacts/)
    требует проверки identity/issuer средствами Sigstore.
 6. Для каждого из четырёх amd64 manifest получены два Cosign signature
@@ -60,6 +65,86 @@ M22 не закрыты.
    `sha256-<digest>.att` endpoints вернули 404, OCI referrers endpoints
    вернули пустые manifests. Это наблюдение только для проверенных
    digest/endpoints, не утверждение об отсутствии любых upstream attestations.
+
+## Проверка доверенного издателя
+
+Использован официальный [Cosign v3.1.4](https://github.com/sigstore/cosign/releases/tag/v3.1.4)
+Windows/amd64 без установки в PATH или изменения project dependencies.
+Executable SHA-256 `cbe953787074611f1334cbf37dc1cf953995bb8c45398eb4fc7bb781d29c1f2a`
+совпал с release API digest и checksums file. Начальное доверие основано на
+официальной HTTPS-дистрибуции Sigstore и закреплённых байтах release;
+независимая проверка подписи самого executable здесь не заявляется.
+
+[Embedded root из закреплённого sigstore-go source](https://raw.githubusercontent.com/sigstore/sigstore-go/22d3691c7b8e0c5530fae3c05577690bfef5cd00/pkg/tuf/repository/root.json)
+побайтово найден в executable: version 14, SHA-256
+`a0dfcc5d51c1ce4a66b541a3fff0afa97225ccc40456b21140bb2e2f113122e2`.
+Штатный TUF client проверил rotation 14 -> 15 -> 16 и metadata до
+`trusted_root.json`, SHA-256
+`6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66`.
+Root 16 действовал до 2027-04-22, timestamp 839 до 2026-11-26 UTC.
+Истёкший embedded root обновлён обычным TUF-путём, без сдвига часов или
+отключения expiry checks. CA из проверяемого packet не становился anchor.
+Роль TUF описана в [документации Sigstore](https://docs.sigstore.dev/cosign/signing/overview/).
+
+По [официальной политике Kubernetes](https://kubernetes.io/docs/tasks/administer-cluster/verify-signed-artifacts/)
+четыре promotion image signatures проверены с identity
+`krel-trust@k8s-releng-prod.iam.gserviceaccount.com`, два SBOM с identity
+`krel-staging@k8s-releng-prod.iam.gserviceaccount.com`; issuer везде
+`https://accounts.google.com`. Ещё четыре staging image signatures проверены
+отдельно с `krel-staging`, но не засчитаны вместо promotion identity.
+
+Для десяти существующих signatures получены Rekor inclusion proofs/checkpoints.
+Bundle assembly не подписывал новые artifacts. Обновлённые SET (signed entry
+timestamps) отличались от исходных; body, integratedTime, logIndex и logID
+совпали. Все восемь исходных SET дополнительно проверены в copies bundles.
+Artifact-specific signing time release SBOM `2026-08-20T11:43:50Z` и source
+SBOM `2026-08-20T11:43:51Z` попал в срок исходных leaf certificates. Это
+подтверждение подписи artifact в Rekor, а не только SCT сертификата.
+
+Родительский повтор с отдельным свежим TUF cache прошёл за **4.453 s**:
+18 positive checks (10 bundles + 8 original SET), 5 ожидаемых отказов.
+Отдельно сверены exact bytes исходных certificates/signatures всех 10 packets,
+исходные SET fields и попадание authenticated time в срок leaf certificates.
+Подмена payload, SET, CT key, CA и staging identity вместо promotion дали
+соответствующие отказы. Verification subprocesses использовали недоступный
+proxy с пустым `NO_PROXY`; это не изоляция сети средствами ОС. Получение
+TUF metadata и proofs до этого использовало официальный HTTPS.
+
+### Повтор publisher verification
+
+Работать в новом приватном каталоге с проверенным executable выше. Для SBOM
+получить exact `release`, `release.sig`, `release.cert` из
+`https://sbom.k8s.io/v1.36.4/` и проверить release SHA-256 из пункта 3.
+`$cosignExe` ниже - полный путь к проверенному executable. Пример использует
+новый TUF cache и восстанавливает прежнее значение переменной окружения.
+
+```powershell
+$taskTufRoot = Join-Path (Get-Location) 'tuf-new'
+if (Test-Path -LiteralPath $taskTufRoot) { throw 'Use a new private TUF cache' }
+$priorTufRoot = $env:TUF_ROOT
+try {
+    $env:TUF_ROOT = $taskTufRoot
+    & $cosignExe initialize --timeout=45s
+    if ($LASTEXITCODE -ne 0) { throw 'TUF initialization failed' }
+    & $cosignExe bundle create --artifact ./release --signature ./release.sig --certificate ./release.cert --out ./release.sigstore.json --rekor-url https://rekor.sigstore.dev --timeout=25s
+    if ($LASTEXITCODE -ne 0) { throw 'Rekor proof retrieval failed' }
+    & $cosignExe verify-blob --bundle ./release.sigstore.json --trusted-root "$taskTufRoot/tuf-repo-cdn.sigstore.dev/targets/trusted_root.json" --certificate-identity krel-staging@k8s-releng-prod.iam.gserviceaccount.com --certificate-oidc-issuer https://accounts.google.com ./release --timeout=25s
+    if ($LASTEXITCODE -ne 0) { throw 'Publisher verification failed' }
+} finally {
+    $env:TUF_ROOT = $priorTufRoot
+}
+```
+
+`initialize` очищает выбранный cache: не запускать поверх сохранённого evidence.
+При отказе сохранить hashes, версии и private diagnostics; проверить identity,
+issuer, время, TUF metadata и artifact binding. Не включать insecure-ignore
+flags, clock rollback или packet-root fallback. Позднейший повтор проверяет
+актуальные подписанные metadata; исторический hash не запрещает rotation.
+Этот пример воспроизводит SBOM publisher verification, не весь B02 или image scan.
+
+Private bundles/logs/receipts остаются вне Git. Production verifier, scanner
+inputs, lockfiles и CI не менялись. Module/compiler-input correspondence и
+реальный дополнительный scan остаются обязательными, coverage по-прежнему 6/14.
 
 ## Почему tag-to-version замена не принята
 
@@ -88,9 +173,10 @@ dependency bindings. Полное такое соответствие для 27 
 Release/source SBOM даёт файловую provenance-цепочку; он не является готовой
 таблицей scanner-compatible версий этих workspace modules.
 
-Для безопасного повышения application coverage недостаёт:
+Состояние обязательных условий повышения application coverage:
 
-1. Проверенной trusted publisher chain для используемой release/source provenance.
+1. Проверенная trusted publisher chain получена описанным выше повтором.
+   Это prerequisite, а не доказательство module-version correspondence.
 2. Полной привязки каждого workspace module к конкретной опубликованной версии
    с проверкой compiler inputs и учётом publishing transformations, либо
    поддерживаемого сканером способа оценить точную source identity без
