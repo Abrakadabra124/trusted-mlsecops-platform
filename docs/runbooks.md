@@ -1,5 +1,9 @@
 # Эксплуатационные процедуры
 
+Наблюдение реальных JSON/CycloneDX/trace результатов закреплённого Go scanner,
+разбор DB-update/cleanup отказов и безопасный повтор:
+[Go PURL runbook и playbook](operations/go-purl-observation.md).
+
 Финальное сведение одного frozen candidate описано в
 [процедуре M18](operations/final-evidence.md).
 

@@ -55,6 +55,51 @@ jobs:
           LABELS = ("db-update", *CASES)
           DIAGNOSTICS = {}
           PHASE = "pull"
+          CLIENT_VERSION = None
+
+
+          def docker_stderr(label):
+              # Phrase observations only. Unknown/missing/oversize logs remain "other".
+              # Docker bind-mount docs, CLI vendored client/pflag and Linux errno messages.
+              try:
+                  raw = bounded_read(STATE / "run" / f"{label}.log", 2 * 1024**2)
+              except Exception:
+                  raw = b""
+              bind = b'invalid mount config for type "bind"' in raw
+              flags = {
+                  "invalid_mount_config": b"invalid mount config for type " in raw,
+                  "mount_source_not_absolute": bind
+                  and b"invalid mount path:" in raw
+                  and b"mount path must be absolute" in raw,
+                  "mount_source_missing": bind and b"bind source path does not exist:" in raw,
+                  "unknown_flag": b"unknown flag: --" in raw or b"unknown shorthand flag: " in raw,
+                  "daemon_unavailable": b"Cannot connect to the Docker daemon" in raw,
+                  "permission_denied": b"permission denied" in raw,
+                  "resource_error": any(
+                      phrase in raw
+                      for phrase in (
+                          b"no space left on device",
+                          b"cannot allocate memory",
+                          b"resource temporarily unavailable",
+                      )
+                  ),
+              }
+              flags["other"] = not any(flags.values())
+              return flags
+
+
+          def client_version(run, collect=False):
+              output = run / "docker-client.json"
+              try:
+                  if collect and audit.execute(["docker", "--version"], output, 15, output_limit=4096):
+                      return None
+                  match = re.fullmatch(
+                      rb"Docker version ([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})(?:[-+][A-Za-z0-9.-]{1,64})?, build [^\r\n]{1,128}\r?\n?",
+                      bounded_read(output, 4096),
+                  )
+                  return [int(part) for part in match.groups()] if match else None
+              except Exception:
+                  return None
 
 
           def diagnostic(label):
@@ -177,6 +222,7 @@ jobs:
                   if label not in LABELS:
                       return False
                   entry = diagnostic(label)
+                  entry["docker_stderr"] = docker_stderr(label)
                   entry.update(cleanup_stage="attempt_read", cid_present=False, cid_valid=False)
                   run = STATE / "run"
                   if run.is_symlink() or bounded_read(run / f"{label}.attempt", 16) != b"attempted\n":
@@ -256,11 +302,12 @@ jobs:
 
 
           def observe(observations):
-              global PHASE
+              global PHASE, CLIENT_VERSION
               run = STATE / "run"
               run.mkdir(mode=0o700)
               cache = run / "cache"
               cache.mkdir(mode=0o700)
+              CLIENT_VERSION = client_version(run, collect=True)
               if audit.execute(["docker", "pull", audit.GRYPE_IMAGE], run / "pull.json", 120):
                   raise Rejected("observation_pull_failed")
               code, _ = scan("db-update", ["db", "update"], [(cache, "/cache", True)], network=True)
@@ -321,8 +368,9 @@ jobs:
 
 
           def main(mode):
-              global PHASE
+              global PHASE, CLIENT_VERSION
               PHASE = "pull" if mode == "observe" else "export"
+              CLIENT_VERSION = None
               DIAGNOSTICS.clear()
               observations = []
               captured = False
@@ -333,7 +381,9 @@ jobs:
                       try:
                           if mode == "observe":
                               observe(observations)
-                          elif mode != "cleanup":
+                          elif mode == "cleanup":
+                              CLIENT_VERSION = client_version(STATE / "run")
+                          else:
                               raise Rejected("observation_mode_invalid")
                           captured = True
                       except BaseException as error:
@@ -354,6 +404,7 @@ jobs:
                       {
                           "stage": mode,
                           "phase": PHASE,
+                          "docker_client_version": CLIENT_VERSION,
                           "failure_code": failure,
                           "diagnostics": [DIAGNOSTICS[label] for label in LABELS if label in DIAGNOSTICS],
                           "scope": "fixed_public_purl_interface_only",

@@ -46,7 +46,7 @@
 - [x] Validate YAML, each extracted Bash block and each inline Python block. Run `python scripts/check_docs.py` and `git diff --check`.
 - [x] Exercise the observation projection with controlled wrong-identity, missing-secondary-output and malformed-log inputs. Check that arbitrary private text cannot enter public output. These checks validate the diagnostic boundary, not production package coverage.
 - [x] Perform one scoped workflow/privacy/cleanup review and fix its concrete findings. Review approved workflow blob `16ff3deb9ce2851ed588ca2677eab2e750e3d3ec`; no material findings.
-- [ ] Verify repository visibility is public, then push the reviewed source only to the dedicated branch. Record the exact run ID and SHA; do not restart after an observer timeout.
+- [x] Verify repository visibility is public, then push the reviewed source only to the dedicated branch. Record the exact run ID and SHA; do not restart after an observer timeout. Runs `44670568366` / `0feb2637` and `44672008908` / `9c7eca66` are terminal failures before package observations; see the [runbook](../../operations/go-purl-observation.md).
 - [ ] Read terminal job state, closed observations and cleanup proof. Retain raw diagnostics privately. Document the actual supported report/trace contract and any unresolved behavior.
 
 ## Next required integration
@@ -54,3 +54,5 @@
 Use the observed protocol, the full 27-module/96-instance source matrix and the separate main-module assessment to implement bound supplemental scans: 28 unique PURLs, comprising 27 published workspace modules and the existing known Kubernetes root coordinate. Every derived coordinate needs its own justified mapping; no tag arithmetic or raw version replacement. Preserve all original findings and all 14 runtime targets. A later Kubernetes coverage profile requires complete original inventory, complete mappings, actual additional scans and unchanged database/input bindings. Full same-candidate M18, independent M22 and the remaining R1 requirements still apply.
 
 Parent verification before native execution: 17 controlled tests passed in 0.819 s on Python 3.12.15, all four Bash blocks passed syntax checks, inline Python passed compile/AST/Ruff, and documentation passed. Controlled tests substitute the Docker boundary; they are not native scanner evidence. The workflow contains no production coverage authorization.
+
+The diagnostic follow-up preserves the original scanner exception if cleanup also fails. Parent reran 19 tests in 0.916 s, including the real scanner command builder with only its process boundary substituted. The second native run returned Docker exit 125 without a recorded CID. The underlying cause remains unresolved; closed failure classification is the next bounded step, not an assertion of a repaired scanner.
