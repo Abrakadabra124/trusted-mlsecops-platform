@@ -1,5 +1,15 @@
 # Статус и границы доказательств
 
+20 ноября [native Go PURL observation](docs/evidence/go-purl-observation-2026-11-20.md)
+на `bfc5a5c` / run **44673045898** завершился success за 2 min 12 s.
+Три JSON/CycloneDX/trace observations и повторный cleanup **4/4** подтверждены.
+Control обнаружил 23 matches с exit 2; streaming и даже `not-a-version`
+вернули 0 matches / exit 0. Это подтверждает необходимость проверки exact
+published coordinate до scanner, а не доверия пустому report. Исправлен
+relative bind source для Docker 28.0.4, сохранена история трёх failures.
+21 parent controlled test прошёл; runtime coverage остаётся 6/14.
+Все 28 supplemental scans, B02/M18 и общий R1 ещё не приняты.
+
 20 ноября [перепроверена полная source matrix Kubernetes](docs/evidence/kubernetes-module-mapping-2026-11-20.md):
 27 наблюдаемых modules / 96 instances, 6 242 Go files и 37 embed assets.
 Parent повторил первичные сравнения и независимо пересчитал Git tree hashes.
