@@ -78,6 +78,12 @@ store runbook, next workflow integration.
 - [ ] Validate live transport using the new scoped credentials only after they
   exist; do not reinterpret existing private canary as proof of this adapter.
 
+The closed producer signature, bounded release adapter, two access roles and controlled
+Linux readback passed 272 tests at e48a7db. The operator verified both empty
+GitHub environments allow only the exact campaign branch. Durable interruption
+recovery, issued credentials and actual private transport are still pending.
+[Qualification evidence](../../evidence/candidate-cross-job-2026-11-20.md).
+
 ### Task 4: Actual frozen candidate and consumers
 
 - [ ] Separate existing producer freeze/seal from consumers, without changing
