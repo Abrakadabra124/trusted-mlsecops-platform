@@ -12,6 +12,15 @@ on:
         options:
           - contracts
           - check-private-access
+          - verify-store-permissions
+      probe_nonce:
+        description: Public one-use fixture challenge
+        required: false
+        type: string
+      probe_public:
+        description: Public verification key for the private fixture descriptor
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -19,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
-    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && (github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref == 'refs/heads/qualify/store-access-v1' && github.event_name == 'workflow_dispatch' && (inputs.operation == 'contracts' || inputs.operation == 'verify-store-permissions'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -51,7 +60,7 @@ jobs:
           names = (
               "ci_campaign_control", "ci_campaign_handoff", "ci_campaign_publish", "ci_campaign_guard",
               "ci_campaign_producer", "ci_consumer_native", "ci_serving_native",
-              "ci_private_assets", "ci_asset_http", "ci_shared_job", "ci_store_access",
+              "ci_private_assets", "ci_asset_http", "ci_shared_job", "ci_store_access", "ci_access_probe",
           )
           modules = ["scripts." + name for name in names]
           tests = [module + "_qualification" for module in modules]
@@ -115,3 +124,57 @@ jobs:
           CANDIDATE_ACCESS_TOKEN: ${{ secrets[matrix.credential] }}
           CANDIDATE_ACCESS_ROLE: ${{ matrix.role }}
         run: .venv/bin/python -B -W error -m scripts.ci_store_access "$CANDIDATE_ACCESS_ROLE"
+
+  probe_upload:
+    needs: contracts
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v1' }}
+    environment: candidate-store-write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PROBE_PHASE: upload
+      PROBE_CREDENTIAL: CANDIDATE_STORE_WRITE
+    steps: &probe_steps
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Prepare locked checkout without private credentials
+        run: |
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          uv sync --locked --no-build --python 3.12.15
+      - name: Verify the scoped private operation
+        env:
+          CANDIDATE_PROBE_NONCE: ${{ inputs.probe_nonce }}
+          CANDIDATE_PROBE_PUBLIC: ${{ inputs.probe_public }}
+          CANDIDATE_ACCESS_TOKEN: ${{ secrets[env.PROBE_CREDENTIAL] }}
+        run: .venv/bin/python -B -W error -m scripts.ci_access_probe "$PROBE_PHASE"
+
+  probe_reader:
+    needs: probe_upload
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v1' }}
+    environment: candidate-store-read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PROBE_PHASE: reader
+      PROBE_CREDENTIAL: CANDIDATE_STORE_READ
+    steps: *probe_steps
+
+  probe_cleanup:
+    needs: [probe_upload, probe_reader]
+    if: ${{ always() && needs.probe_upload.result != 'skipped' && github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v1' }}
+    environment: candidate-store-write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PROBE_PHASE: cleanup
+      PROBE_CREDENTIAL: CANDIDATE_STORE_WRITE
+    steps: *probe_steps

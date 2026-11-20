@@ -197,9 +197,9 @@ def main(arguments=None):
     stage = args[0] if len(args) == 1 and args[0] in STAGES else "invalid"
     try:
         _need(stage in STAGES)
-        api = http.Client(
-            os.environ["CANDIDATE_ACCESS_TOKEN"], write=stage in ("upload", "cleanup")
-        )
+        token = os.environ["CANDIDATE_ACCESS_TOKEN"]
+        _need(token.startswith("github_pat_"))
+        api = http.Client(token, write=stage in ("upload", "cleanup"))
         probe = Probe(
             api,
             os.environ["CANDIDATE_PROBE_NONCE"],
