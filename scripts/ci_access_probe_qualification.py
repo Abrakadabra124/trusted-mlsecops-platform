@@ -151,10 +151,38 @@ class ProbeTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()) as out, redirect_stderr(io.StringIO()) as err:
             code = probe.main([action])
         self.assertEqual(code, 0 if passed else 1)
-        self.assertEqual(
-            out.getvalue(), f"access_probe_{action}={'pass' if passed else 'refused'}\n"
-        )
+        lines = out.getvalue().splitlines()
+        self.assertEqual(lines.pop(), f"access_probe_{action}={'pass' if passed else 'refused'}")
+        if action == "reader":
+            for line in lines:
+                self.assertRegex(
+                    line,
+                    r"^reader_check=(fixture|publisher_bytes|inventory_before|write_request|"
+                    r"response_created|response_other|response_forbidden|denial_body|inventory_after)$",
+                )
+        else:
+            self.assertEqual(lines, [])
         self.assertEqual(err.getvalue(), "")
+        return lines
+
+    def test_reader_reports_last_verification_boundary_without_disclosing_remote_body(self):
+        self.stage("upload", True)
+        original = self.raw[51]
+        self.raw[51] = b"X" * len(original)
+        self.assertEqual(self.stage("reader", False)[-1:], ["reader_check=publisher_bytes"])
+        self.raw[51] = original
+        for status, body, last in (
+            (404, {"message": "private-detail"}, "response_other"),
+            (403, {"message": "private-detail"}, "denial_body"),
+            (403, DENIAL, "inventory_after"),
+            (201, {}, "response_created"),
+        ):
+            with self.subTest(status=status, last=last):
+                self.denial = (status, body, [])
+                self.assertEqual(
+                    self.stage("reader", last == "inventory_after")[-1:],
+                    ["reader_check=" + last],
+                )
 
     def fixture(self, role):
         return probe.payload(NONCE, 221, 3, role)

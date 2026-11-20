@@ -65,6 +65,7 @@ jobs:
               "ci_campaign_image", "ci_source_image", "ci_source_image_native",
               "ci_campaign_source", "ci_primary_carrier", "ci_primary_store", "ci_primary_handoff",
               "ci_primary_job", "ci_terminal_primary",
+              "ci_original_bootstrap", "ci_original_publish", "ci_origin_backup",
           )
           modules = ["scripts." + name for name in names]
           tests = [module + "_qualification" for module in modules]

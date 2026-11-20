@@ -1,5 +1,7 @@
 """Independent historical primary replay for ci_campaign_terminal.cleanup."""
 
+from copy import deepcopy
+
 from mlsecops.contracts import Rejected, canonical, digest, require_fields
 from scripts import ci_campaign_control as control
 from scripts import ci_campaign_journal as journal
@@ -86,3 +88,76 @@ def replayer(root, *, api, release, key, receiver_keys, read_asset):
         return dict(verified=True, binding_sha256=binding_pin, read_asset=read_asset)
 
     return replay
+
+
+def cleanup_from_archives(
+    root,
+    *,
+    source_api,
+    reader_api,
+    writer_api,
+    run_owner,
+    source,
+    journal_release,
+    origin_release,
+    primary_release,
+    journal_public,
+    receiver_keys,
+    key,
+    expected_tip,
+    expected_jobs,
+):
+    """Retire the working release using a separately verified journal and two private archives."""
+    from scripts import ci_campaign_terminal as terminal
+    from scripts import ci_origin_backup as backup
+
+    archives = (journal_release, origin_release, primary_release)
+    ids = set()
+    for item in archives:
+        require_fields(item, ("repository_id", "release_id", "name", "target_commitish"))
+        _need(assets._number(item["repository_id"]) == assets.REPOSITORY_ID)
+        ids.add(assets._number(item["release_id"]))
+    _need(len(ids) == len(archives))
+    _need(reader_api is not writer_api)
+    receiver_keys = deepcopy(receiver_keys)
+    journal_release, origin_release, primary_release = [dict(item) for item in archives]
+
+    def recover(**expectations):
+        return journal.recover(
+            reader_api,
+            journal=journal_release,
+            trusted_public=journal_public,
+            key=key,
+            **expectations,
+        )
+
+    def replay(**binding):
+        checkpoint = binding["checkpoint"]
+        _need(checkpoint["storage"]["release_id"] not in ids)
+        retained = backup.reader(
+            reader_api,
+            release=origin_release,
+            checkpoint=checkpoint,
+            run_owner=binding["run_owner"],
+            source=binding["source"],
+        )
+        verify = replayer(
+            root,
+            api=reader_api,
+            release=primary_release,
+            key=key,
+            receiver_keys=receiver_keys,
+            read_asset=retained,
+        )
+        return verify(**binding)
+
+    return terminal.cleanup(
+        writer_api,
+        source_api=source_api,
+        run_owner=run_owner,
+        source=source,
+        expected_jobs=expected_jobs,
+        expected_tip=expected_tip,
+        read_journal=recover,
+        replay_retained=replay,
+    )

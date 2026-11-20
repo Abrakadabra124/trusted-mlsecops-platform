@@ -150,6 +150,27 @@ def create(api, folder):
     return nonce, state["public"]
 
 
+def confirm(api, folder):
+    """Reconcile an ambiguous PATCH response using the operator's original signed bytes."""
+    state = read_json(folder / LOCAL)
+    need(state["stage"] in ("signing", "ready"))
+    record = state["descriptor"]
+    tag = tag_for(record["nonce"])
+    need(record["repository_id"] == store.REPOSITORY_ID)
+    need(signing.verify(decode(state["signed_body"].encode()), KIND, state["public"]) == record)
+    row = live(api, state)
+    need(row is not None and row.get("body") == state["signed_body"])
+    empty(api, state, row)
+    store._ref(
+        api.json("GET", store.ROOT + "/git/ref/tags/" + tag),
+        "tags/" + tag,
+        record["target_commitish"],
+    )
+    state["stage"] = "ready"
+    write_json(folder / LOCAL, state)
+    return record["nonce"], state["public"]
+
+
 def retire(api, folder):
     state = read_json(folder / LOCAL)
     require_fields(state, ("stage", "descriptor", "public", "signed_body"))
@@ -201,7 +222,7 @@ def main(args):
     try:
         need(
             len(args) == 2
-            and args[0] in ("create", "retire")
+            and args[0] in ("create", "confirm", "retire")
             and not os.environ.get("GITHUB_ACTIONS")
         )
         folder = Path(args[1])
@@ -211,8 +232,9 @@ def main(args):
             and folder.parent.is_dir()
             and not folder.is_relative_to(Path(__file__).resolve().parents[1])
         )
-        if args[0] == "create":
-            nonce, public = create(Gh(), folder)
+        if args[0] in ("create", "confirm"):
+            operation = create if args[0] == "create" else confirm
+            nonce, public = operation(Gh(), folder)
             print("probe_nonce=" + nonce)
             print("probe_public=" + public)
         else:

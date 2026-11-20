@@ -133,6 +133,58 @@ class TerminalPrimaryTests(unittest.TestCase):
             self.clean(**changes)
         self.assertEqual(self.caller.private.mutations, [])
 
+    def test_cleanup_from_archives_routes_reads_and_mutations_to_separate_clients(self):
+        from scripts import ci_origin_backup as backup
+
+        args = dict(
+            source_api=self.caller.public_api,
+            reader_api=self.api,
+            writer_api=self.caller.private,
+            **self.binding,
+            journal_release=journal_fixture.PIN.copy(),
+            origin_release=dict(self.release, release_id=702, name="ci-origin-123-1"),
+            primary_release=self.release,
+            journal_public="out-of-band",
+            receiver_keys=self.keys,
+            key=campaign.KEY,
+            expected_tip=terminal.TIP,
+            expected_jobs=terminal.JOBS,
+        )
+        with (
+            patch.object(
+                journal,
+                "recover",
+                return_value=dict(complete=True, tip=terminal.TIP, checkpoint=self.fx.journal[-1]),
+            ) as recover,
+            patch.object(backup, "reader", return_value=self.read) as reader,
+        ):
+            for change in (dict(origin_release=self.release), dict(reader_api=self.caller.private)):
+                with self.subTest(field=next(iter(change))), self.assertRaises(Rejected):
+                    verifier.cleanup_from_archives(self.fx.root, **(args | change))
+            recover.assert_not_called()
+            working_id = self.fx.journal[-1]["storage"]["release_id"]
+            with self.assertRaises(Rejected):
+                verifier.cleanup_from_archives(
+                    self.fx.root,
+                    **(
+                        args
+                        | dict(origin_release=dict(args["origin_release"], release_id=working_id))
+                    ),
+                )
+            reader.assert_not_called()
+            self.assertEqual(self.caller.private.mutations, [])
+            verifier.cleanup_from_archives(self.fx.root, **args)
+            reader.assert_called_once_with(
+                self.api,
+                release=args["origin_release"],
+                checkpoint=self.fx.journal[-1],
+                **self.binding,
+            )
+            self.assertIs(recover.call_args.args[0], self.api)
+            self.assertEqual(recover.call_args.kwargs["expected_tip"], terminal.TIP)
+            self.assertIsNone(self.caller.private.release)
+            self.assertIsNone(self.caller.private.tag)
+
     def test_remote_anchored_terminal_cleanup_after_expiry(self):
         remote = journal_fixture.JournalAPI()
         path = self.fx.root / "terminal-journal-fixture.pem"

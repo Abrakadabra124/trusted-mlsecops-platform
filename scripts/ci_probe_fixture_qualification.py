@@ -87,6 +87,12 @@ class OperatorTests(unittest.TestCase):
         probe = Probe(self.api, state["descriptor"]["nonce"], state["public"], 123, 1)
         self.assertEqual(probe.release_id, state["descriptor"]["release_id"])
         self.assertEqual(probe.initial, {})
+        state["stage"] = "signing"
+        fixture.write_json(self.folder / "fixture.json", state)
+        self.assertEqual(
+            fixture.confirm(self.api, self.folder), (state["descriptor"]["nonce"], state["public"])
+        )
+        self.assertEqual(read_json(self.folder / "fixture.json")["stage"], "ready")
         self.assertEqual([f.name for f in self.folder.iterdir()], ["fixture.json"])
         fixture.retire(self.api, self.folder)
         self.assertIsNone(self.api.tag)
