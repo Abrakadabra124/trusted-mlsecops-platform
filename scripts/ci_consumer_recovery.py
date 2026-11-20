@@ -6,6 +6,7 @@ from mlsecops.contracts import (
     Rejected,
     atomic_write,
     bounded_read,
+    canonical,
     read_json,
     safe_child,
     write_json,
@@ -16,6 +17,27 @@ DIRECTORY = "ci-consumer-native"
 RECORD = DIRECTORY + "/recovery.json"
 KUBE = DIRECTORY + "/kubeconfig"
 KIND_LABEL = "io.x-k8s.kind.cluster"
+CLEANUP_STAGES = {
+    "sql": {"unavailable", "none", "baseline", "identity", "stop", "post_stop"},
+    "cluster": {
+        "unavailable",
+        "none",
+        "baseline",
+        "identity",
+        "volume_check",
+        "delete",
+        "volume_delete",
+        "post_absence",
+    },
+}
+
+
+def cleanup_diagnostics(value):
+    value = value if isinstance(value, dict) else {}
+    return {
+        kind: code if type(code := value.get(kind)) is str and code in allowed else "unavailable"
+        for kind, allowed in CLEANUP_STAGES.items()
+    }
 
 
 def need(value):
@@ -43,16 +65,27 @@ def cluster_inventory():
     return rows
 
 
-def identity(rows):
+def ordered_mounts(identities):
+    # Order is not ownership. Keep every dictionary field and duplicate entry,
+    # including in legacy witnesses, without rewriting the stored identities.
     return {
-        handle: {
-            "id": row["Id"],
-            "name": row["Name"],
-            "labels": row["Config"]["Labels"],
-            "mounts": row["Mounts"],
-        }
-        for handle, row in rows.items()
+        handle: {**row, "mounts": sorted(row["mounts"], key=canonical)}
+        for handle, row in identities.items()
     }
+
+
+def identity(rows):
+    return ordered_mounts(
+        {
+            handle: {
+                "id": row["Id"],
+                "name": row["Name"],
+                "labels": row["Config"]["Labels"],
+                "mounts": row["Mounts"],
+            }
+            for handle, row in rows.items()
+        }
+    )
 
 
 def volumes():
@@ -151,31 +184,43 @@ class Recovery:
             atomic_write(safe_child(self.producer, KUBE), bounded_read(path, 1024 * 1024))
 
     def stop_sql(self):
+        self._cleanup_stage = "baseline"
         need(self.record["baseline_empty"] is True)
         entry = self.record["sql"]
         if entry is None:  # No SQL creation was armed by this invocation.
             return
+        self._cleanup_stage = "identity"
         need(entry["observed"] is True)
         rows = sql_inventory(entry["spec"])
-        need(identity(rows) == entry["containers"])
+        expected = ordered_mounts(entry["containers"])
+        need(identity(rows) == expected)
         failures = []
         for handle, row in rows.items():
             try:
                 if row["State"]["Running"]:
+                    self._cleanup_stage = "stop"
                     sql.docker(["stop", "--time", "20", handle])
+                self._cleanup_stage = "identity"
                 current = sql.inspect("container", handle)
-                need(identity({handle: current}) == {handle: entry["containers"][handle]})
+                need(identity({handle: current}) == {handle: expected[handle]})
+                self._cleanup_stage = "post_stop"
                 need(current["State"]["Running"] is False)
             except Exception:
-                failures.append(handle)
+                failures.append(self._cleanup_stage)
+        if failures:
+            self._cleanup_stage = failures[0]
         need(not failures)
+        self._cleanup_stage = "identity"
         final = sql_inventory(entry["spec"])
-        need(identity(final) == entry["containers"])
+        need(identity(final) == expected)
+        self._cleanup_stage = "post_stop"
         need(all(row["State"]["Running"] is False for row in final.values()))
 
     def delete_cluster(self):
+        self._cleanup_stage = "baseline"
         need(self.record["baseline_empty"] is True)
         entry = self.record["cluster"]
+        self._cleanup_stage = "identity"
         rows = cluster_inventory()
         if entry is None:
             need(not rows)
@@ -184,7 +229,9 @@ class Recovery:
             # A recorded live ID must not disappear merely by changing its name/labels.
             rows.update({k: v for k, v in containers().items() if k in entry["containers"]})
             observed = identity(rows)
-            need(all(entry["containers"].get(k) == v for k, v in observed.items()))
+            expected = ordered_mounts(entry["containers"])
+            need(all(expected.get(k) == v for k, v in observed.items()))
+            self._cleanup_stage = "volume_check"
             present = volumes()
             for row in rows.values():
                 need(node_volumes(row) <= present)
@@ -193,28 +240,38 @@ class Recovery:
                     need(volume_identity(name) == volume["identity"])
                     users = {volume["container"]} if volume["container"] in rows else set()
                     need(set(containers("volume=" + name)) == users)
+            self._cleanup_stage = "delete"
             for handle in rows:
                 # Never kind delete --name: deletion addresses only recorded Docker IDs.
                 sql.docker(["rm", "--force", handle])
+            self._cleanup_stage = "post_absence"
             need(not cluster_inventory())
             need(not (containers().keys() & entry["containers"].keys()))
             for name, volume in entry["volumes"].items():
+                self._cleanup_stage = "volume_check"
                 if name in volumes():
                     need(volume_identity(name) == volume["identity"])
                     need(not containers("volume=" + name))
+                    self._cleanup_stage = "volume_delete"
                     sql.docker(["volume", "rm", name])
+            self._cleanup_stage = "post_absence"
             need(not (volumes() & entry["volumes"].keys()))
+        self._cleanup_stage = "post_absence"
         need(cluster.NAME not in cluster.command(["kind", "get", "clusters"]).splitlines())
 
     def cleanup(self):
         result = {"sql": False, "cluster": False}
+        diagnostics = {}
         for kind, action in (("sql", self.stop_sql), ("cluster", self.delete_cluster)):
+            self._cleanup_stage = "unavailable"
             try:
                 action()
                 result[kind] = True
+                diagnostics[kind] = "none"
             except Exception:
                 # A failed side must never prevent attempting the other side.
-                pass
+                diagnostics[kind] = self._cleanup_stage
         self.record["cleanup"] = result
+        self.record["cleanup_diagnostics"] = cleanup_diagnostics(diagnostics)
         self.save()
         return result

@@ -151,6 +151,16 @@ def observed(callback):
         callback()
 
 
+def cleanup_owned(witness, summary):
+    try:
+        summary["cleanup"] = witness.cleanup()
+    finally:
+        # Diagnostic stages never replace the verified boolean cleanup result.
+        summary["cleanup_diagnostics"] = recovery.cleanup_diagnostics(
+            witness.record.get("cleanup_diagnostics")
+        )
+
+
 def consumer(root, producer, state, prepared, owner, sealed, witness, summary, producer_marker):
     primary = None
     try:
@@ -213,7 +223,7 @@ def consumer(root, producer, state, prepared, owner, sealed, witness, summary, p
         receipt = shared_serving_receipt.receipt(state, os.environ)
         need(shared_serving_receipt.offline_pin(state) == offline)
         summary["stage"] = "cleanup"
-        summary["cleanup"] = witness.cleanup()
+        cleanup_owned(witness, summary)
         need(all(summary["cleanup"].values()))
         summary["stage"] = "recheck"
         need(shared_serving_receipt.receipt(state, os.environ) == receipt)
@@ -259,7 +269,7 @@ def consumer(root, producer, state, prepared, owner, sealed, witness, summary, p
     finally:
         if primary is not None:
             try:
-                summary["cleanup"] = witness.cleanup()
+                cleanup_owned(witness, summary)
                 if not all(summary["cleanup"].values()):
                     primary.add_note("consumer_cleanup_incomplete")
             except Exception:
@@ -323,7 +333,7 @@ def run(root, producer, summary):
     except BaseException as error:
         # Also covers failure before entering, or while leaving, the owning file context.
         try:
-            summary["cleanup"] = witness.cleanup()
+            cleanup_owned(witness, summary)
         except Exception:
             error.add_note("consumer_cleanup_unverified")
         raise
@@ -339,6 +349,7 @@ def projection():
         cause="rejected",
         gate_counts={"M11": 0, "M12": 0},
         cleanup={"sql": False, "cluster": False},
+        cleanup_diagnostics=recovery.cleanup_diagnostics(None),
         release_ready=False,
     )
 
@@ -357,7 +368,7 @@ def execute(root, *, cleanup=False):
                     summary["source_commit"] = hexadecimal(
                         witness.record["source"]["source_revision"], 40
                     )
-                    summary["cleanup"] = witness.cleanup()
+                    cleanup_owned(witness, summary)
                     need(all(summary["cleanup"].values()))
                 else:
                     run(root, producer, summary)

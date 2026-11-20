@@ -1,5 +1,6 @@
 """Boundary-only native orchestration and real-file recovery contracts; no infrastructure."""
 
+import copy
 import importlib.util
 import io
 import os
@@ -29,6 +30,27 @@ def workspace(path, identity):
         path / "workspace.json",
         dict(schema_version=1, product="trusted-mlsecops", workspace_id=identity),
     )
+
+
+def bind_mounts():
+    return [
+        dict(
+            Type="bind",
+            Source="/fixture/modules",
+            Destination="/lib/modules",
+            Mode="ro",
+            RW=False,
+            Propagation="rprivate",
+        ),
+        dict(
+            Type="bind",
+            Source="/fixture/device",
+            Destination="/dev/fixture",
+            Mode="",
+            RW=True,
+            Propagation="rprivate",
+        ),
+    ]
 
 
 class NativeDriverTests(unittest.TestCase):
@@ -318,6 +340,189 @@ class RecoveryTests(unittest.TestCase):
             Name=name, Driver="local", CreatedAt="created", Labels=None, Options=None
         )
         self.docker.rows["2" * 64]["Mounts"].append(dict(Type="volume", Name=name))
+
+    def full_mounts(self):
+        self.w.arm_sql(self.view)
+        self.sql_row()
+        self.docker.rows["1" * 64]["Mounts"] = bind_mounts()
+        self.w.observe_sql()
+        self.w.arm_cluster()
+        self.cluster_row()
+        self.node_volume()
+        mounts = bind_mounts() + [
+            dict(
+                Type="volume",
+                Name="node-private",
+                Source="/fixture/volumes/node-private/_data",
+                Destination="/var",
+                Driver="local",
+                Mode="",
+                RW=True,
+                Propagation="",
+            )
+        ]
+        self.docker.rows["2" * 64]["Mounts"] = mounts
+        atomic_write(self.view / "kubeconfig", b"private-fixture-config")
+        self.w.observe_cluster(self.view)
+        return mounts
+
+    def test_full_mount_identity_unchanged_cleanup(self):
+        self.full_mounts()
+        self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": True})
+        self.assertNotIn("2" * 64, self.docker.rows)
+        self.assertNotIn("node-private", self.docker.volumes)
+
+    def test_full_mount_reordering_does_not_change_owned_resources(self):
+        self.full_mounts().reverse()
+        self.docker.rows["1" * 64]["Mounts"].reverse()
+        before = copy.deepcopy(self.w.record)
+        self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": True})
+        self.assertEqual(self.w.record["sql"], before["sql"])
+        self.assertEqual(self.w.record["cluster"], before["cluster"])
+        self.assertFalse(self.docker.rows["1" * 64]["State"]["Running"])
+        self.assertNotIn("2" * 64, self.docker.rows)
+        self.assertNotIn("node-private", self.docker.volumes)
+
+    def test_legacy_unsorted_witness_is_compared_without_rewriting_ownership(self):
+        self.full_mounts()
+        original = read_json(self.producer / self.r.RECORD)
+        for kind, handle in (("sql", "1" * 64), ("cluster", "2" * 64)):
+            mounts = original[kind]["containers"][handle]["mounts"]
+            original[kind]["containers"][handle]["mounts"] = sorted(
+                mounts, key=canonical, reverse=True
+            )
+            self.docker.rows[handle]["Mounts"] = sorted(mounts, key=canonical)
+        write_json(self.producer / self.r.RECORD, original)
+        restored = self.r.Recovery(self.producer)
+        self.assertEqual(restored.cleanup(), {"sql": True, "cluster": True})
+        saved = read_json(self.producer / self.r.RECORD)
+        for kind in ("sql", "cluster"):
+            self.assertEqual(saved[kind], original[kind])
+
+    def test_mount_fields_are_not_discarded_when_order_is_normalized(self):
+        mounts = self.full_mounts()
+        original = copy.deepcopy(mounts)
+        for field, value in (
+            ("Type", "tmpfs"),
+            ("Source", "/foreign"),
+            ("Destination", "/foreign"),
+            ("Mode", "rw"),
+            ("RW", True),
+            ("Propagation", "rshared"),
+            ("unexpected", {"private": "field"}),
+        ):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(original)
+                changed[0][field] = value
+                self.docker.rows["2" * 64]["Mounts"] = changed[::-1]
+                self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": False})
+                self.assertIn("2" * 64, self.docker.rows)
+                self.assertIn("node-private", self.docker.volumes)
+        self.assertFalse(any(c[0] in ("rm", "volume") for c in self.docker.mutations))
+
+    def test_mount_duplicate_multiplicity_is_preserved(self):
+        mounts = self.full_mounts()
+        mounts.append(copy.deepcopy(mounts[0]))
+        self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": False})
+        self.assertIn("2" * 64, self.docker.rows)
+        self.assertIn("node-private", self.docker.volumes)
+        self.assertFalse(any(c[0] in ("rm", "volume") for c in self.docker.mutations))
+
+    def test_same_duplicate_multiset_may_be_reordered(self):
+        mounts = self.full_mounts()
+        mounts.append(copy.deepcopy(mounts[0]))
+        self.w.observe_cluster(self.view)
+        mounts.reverse()
+        self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": True})
+
+    def test_shared_node_volume_remains_refused_after_mount_reordering(self):
+        self.full_mounts().reverse()
+        self.docker.add("9" * 64, "foreign", {})
+        self.docker.rows["9" * 64]["Mounts"] = [dict(Type="volume", Name="node-private")]
+        self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"), {"sql": "none", "cluster": "volume_check"}
+        )
+        self.assertIn("2" * 64, self.docker.rows)
+        self.assertIn("9" * 64, self.docker.rows)
+        self.assertIn("node-private", self.docker.volumes)
+        self.assertFalse(any(c[0] in ("rm", "volume") for c in self.docker.mutations))
+
+    def test_cleanup_diagnostic_distinguishes_stop_and_delete_failures(self):
+        self.full_mounts()
+        self.docker.fail_stop = self.docker.fail_remove = True
+        self.assertEqual(self.w.cleanup(), {"sql": False, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"), {"sql": "stop", "cluster": "delete"}
+        )
+        self.assertEqual(len(self.docker.mutations), 2)
+
+    def test_cleanup_diagnostic_identity_is_not_refreshed(self):
+        self.full_mounts()
+        self.docker.rows["1" * 64]["Mounts"][0]["RW"] = True
+        self.docker.rows["2" * 64]["Mounts"][0]["RW"] = True
+        before = copy.deepcopy(self.w.record)
+        self.assertEqual(self.w.cleanup(), {"sql": False, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"), {"sql": "identity", "cluster": "identity"}
+        )
+        self.assertEqual(self.w.record["sql"], before["sql"])
+        self.assertEqual(self.w.record["cluster"], before["cluster"])
+        self.assertFalse(self.docker.mutations)
+
+    def test_cleanup_diagnostic_noop_mutations_fail_postconditions(self):
+        self.full_mounts()
+        original = self.docker.docker
+
+        def no_mutation(args, **kwargs):
+            if args[0] in ("stop", "rm"):
+                return SimpleNamespace(stdout=b"", stderr=b"", returncode=0)
+            return original(args, **kwargs)
+
+        with patch.object(self.r.sql, "docker", no_mutation):
+            self.assertEqual(self.w.cleanup(), {"sql": False, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"),
+            {"sql": "post_stop", "cluster": "post_absence"},
+        )
+        self.assertIn("2" * 64, self.docker.rows)
+
+    def test_cleanup_diagnostic_volume_delete_failure_and_postabsence(self):
+        self.full_mounts()
+        original = self.docker.docker
+
+        def failed(args, **kwargs):
+            if args[:2] == ["volume", "rm"]:
+                raise OSError("private-volume-canary")
+            return original(args, **kwargs)
+
+        with patch.object(self.r.sql, "docker", failed):
+            self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"), {"sql": "none", "cluster": "volume_delete"}
+        )
+        self.assertNotIn("2" * 64, self.docker.rows)
+        self.assertIn("node-private", self.docker.volumes)
+
+        def ignored(args, **kwargs):
+            if args[:2] == ["volume", "rm"]:
+                return SimpleNamespace(stdout=b"", stderr=b"", returncode=0)
+            return original(args, **kwargs)
+
+        with patch.object(self.r.sql, "docker", ignored):
+            self.assertEqual(self.w.cleanup(), {"sql": True, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"), {"sql": "none", "cluster": "post_absence"}
+        )
+        self.assertNotIn("private-volume-canary", str(self.w.record))
+
+    def test_cleanup_diagnostic_baseline_refusal_still_checks_both_sides(self):
+        self.w.record["baseline_empty"] = False
+        self.assertEqual(self.w.cleanup(), {"sql": False, "cluster": False})
+        self.assertEqual(
+            self.w.record.get("cleanup_diagnostics"), {"sql": "baseline", "cluster": "baseline"}
+        )
+        self.assertFalse(self.docker.mutations)
 
     def test_node_private_volume_deleted_after_exact_node_and_no_references(self):
         self.w.arm_cluster()
@@ -833,6 +1038,91 @@ class OrchestrationTests(unittest.TestCase):
         self.assertFalse(self.docker.rows["b" * 64]["State"]["Running"])
         self.assertNotIn("import", self.events)
         self.assertFalse(self.view.exists())
+
+    def test_native_mount_reorder_reaches_retention_and_verified_cleanup(self):
+        original_cluster, original_late = self.cluster, self.late
+
+        def bootstrap(state):
+            original_cluster(state)
+            self.docker.rows["c" * 64]["Mounts"] = bind_mounts()
+
+        def late(*args):
+            value = original_late(*args)
+            self.docker.rows["c" * 64]["Mounts"].reverse()
+            return value
+
+        with (
+            patch.object(self.d.cluster, "bootstrap", bootstrap),
+            patch.object(self.d.shared, "late", late),
+        ):
+            result = self.result()
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["stage"], "complete")
+        self.assertEqual(result["gate_counts"], {"M11": 7, "M12": 7})
+        self.assertEqual(result["cleanup"], {"sql": True, "cluster": True})
+        self.assertEqual(result.get("cleanup_diagnostics"), {"sql": "none", "cluster": "none"})
+        self.assertEqual(self.events.count("M11"), 1)
+        self.assertEqual(self.events.count("M12"), 1)
+        self.assertEqual(self.events.count("receipt"), 2)
+        self.assertLess(self.events.index("retain"), self.events.index("view_exit"))
+        self.assertNotIn("c" * 64, self.docker.rows)
+        self.assertIn("retention", read_json(self.producer / self.d.PRIVATE_PACKET))
+
+    def test_native_and_cleanup_cli_publish_only_closed_cleanup_diagnostics(self):
+        self.failure, self.cleanup_cluster_failure = "actual", True
+        result = self.result()
+        self.assertEqual(result["status"], "fail")
+        self.assertEqual(result["cleanup"], {"sql": True, "cluster": False})
+        self.assertEqual(result.get("cleanup_diagnostics"), {"sql": "none", "cluster": "delete"})
+        original = bounded_read(self.producer / self.d.PUBLIC_REPORT)
+        output = io.StringIO()
+        with (
+            patch.object(self.d, "__file__", str(self.root / "scripts/ci_consumer_native.py")),
+            redirect_stdout(output),
+        ):
+            code = self.d.main(["cleanup"])
+        self.assertEqual(code, 1)
+        cleanup = read_json(self.producer / self.d.CLEANUP_REPORT)
+        self.assertEqual(cleanup["cleanup"], {"sql": True, "cluster": False})
+        self.assertEqual(cleanup.get("cleanup_diagnostics"), {"sql": "none", "cluster": "delete"})
+        self.assertEqual(output.getvalue(), canonical(cleanup).decode() + "\n")
+        for canary in ("private", "c" * 64, str(self.root)):
+            self.assertNotIn(canary, output.getvalue())
+            self.assertNotIn(canary.encode(), original)
+        self.assertEqual(bounded_read(self.producer / self.d.PUBLIC_REPORT), original)
+        self.assertFalse(self.docker.rows["b" * 64]["State"]["Running"])
+        self.assertIn("c" * 64, self.docker.rows)
+
+    def test_unknown_or_malformed_cleanup_diagnostics_are_unavailable(self):
+        self.failure, self.cleanup_cluster_failure = "actual", True
+        original = self.d.recovery.Recovery.cleanup
+        canary = "private-diagnostic-canary"
+        cases = (
+            None,
+            [],
+            canary,
+            {"sql": "delete", "cluster": "stop", canary: canary},
+            {"sql": [canary], "cluster": {canary: canary}},
+            {"sql": canary, "cluster": canary},
+        )
+        self.result()
+        for value in cases:
+            with self.subTest(value=value):
+
+                def corrupted(witness):
+                    result = original(witness)
+                    witness.record["cleanup_diagnostics"] = value
+                    return result
+
+                with patch.object(self.d.recovery.Recovery, "cleanup", corrupted):
+                    result = self.d.execute(self.root, cleanup=True)
+                self.assertEqual(result["status"], "fail")
+                self.assertEqual(result["cleanup"], {"sql": True, "cluster": False})
+                self.assertEqual(
+                    result.get("cleanup_diagnostics"),
+                    {"sql": "unavailable", "cluster": "unavailable"},
+                )
+                self.assertNotIn(canary, canonical(result).decode())
 
     def test_partial_cluster_failure_uses_exact_ids_and_private_kubeconfig(self):
         self.failure = "cluster_partial"
