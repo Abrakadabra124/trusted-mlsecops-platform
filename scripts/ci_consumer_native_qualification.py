@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from mlsecops import ci_transfer
 from mlsecops.contracts import (
     Rejected,
     atomic_write,
@@ -23,6 +24,7 @@ from mlsecops.contracts import (
     read_json,
     write_json,
 )
+from scripts import m18_delivery_freeze, release_native
 
 
 def workspace(path, identity):
@@ -64,7 +66,7 @@ class NativeDriverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             with patch.object(driver, "hosted", side_effect=Rejected("private-host")):
-                with patch.object(driver.release_native, "qualify") as proposal:
+                with patch.object(release_native, "qualify") as proposal:
                     result = driver.execute(root)
             self.assertEqual(result["status"], "fail")
             self.assertEqual(result["stage"], "preflight")
@@ -736,7 +738,7 @@ class OrchestrationTests(unittest.TestCase):
             patch.dict(
                 os.environ,
                 dict(
-                    GITHUB_REPOSITORY=driver.ci_transfer.REPOSITORY,
+                    GITHUB_REPOSITORY=ci_transfer.REPOSITORY,
                     GITHUB_RUN_ID="17",
                     GITHUB_RUN_ATTEMPT="2",
                     GITHUB_JOB="consumer",
@@ -759,8 +761,8 @@ class OrchestrationTests(unittest.TestCase):
                 lambda state: read_json(state / "storage.json"),
             )
         )
-        self.enterContext(patch.object(driver.release_native, "qualify", self.proposal))
-        self.enterContext(patch.object(driver.m18_delivery_freeze, "capture", self.freeze))
+        self.enterContext(patch.object(release_native, "qualify", self.proposal))
+        self.enterContext(patch.object(m18_delivery_freeze, "capture", self.freeze))
         self.enterContext(patch.object(driver.transfer.delivery, "frozen", self.frozen))
         self.enterContext(patch.object(driver.bridge, "seal", self.seal))
         self.enterContext(
@@ -1234,6 +1236,12 @@ class OrchestrationTests(unittest.TestCase):
         result = self.result()
         self.assertEqual(result["status"], "fail")
         self.assertEqual(self.events.count("proposal"), 1)
+
+    def test_foreign_frozen_image_blocks_seal_on_shared_path(self):
+        self.expected["image_id"] = "sha256:" + "0" * 64
+        result = self.result()
+        self.assertEqual((result["status"], result["stage"]), ("fail", "freeze"))
+        self.assertNotIn("seal", self.events)
 
     def test_cleanup_cli_rechecks_run_binding_and_saved_ids_without_consumer_files(self):
         self.assertEqual(self.result()["status"], "pass")

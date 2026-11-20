@@ -7,7 +7,7 @@ import traceback
 from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from mlsecops import acceptance, ci_transfer, cluster, kube_storage, storage_bootstrap
+from mlsecops import acceptance, cluster, kube_storage, storage_bootstrap
 from mlsecops.contracts import (
     Rejected,
     atomic_write,
@@ -16,9 +16,9 @@ from mlsecops.contracts import (
     decode,
     digest,
     safe_child,
-    write_json,
 )
 from mlsecops.security_events import hexadecimal
+from scripts import ci_campaign_producer as campaign
 from scripts import (
     ci_candidate_transfer as bridge,
 )
@@ -28,8 +28,6 @@ from scripts import (
 from scripts import (
     consumer_candidate_state,
     m17_recovery_native,
-    m18_delivery_freeze,
-    release_native,
     shared_serving_receipt,
 )
 from scripts import (
@@ -38,10 +36,10 @@ from scripts import (
 from scripts import (
     shared_serving_native as shared,
 )
+from scripts.ci_campaign_producer import IMAGE, put, run_owner
 from scripts.kube_trust_native import hosted
 from scripts.serving_output_native import source
 
-IMAGE = "trusted-mlsecops:dev"
 PUBLIC_REPORT = "evidence/ci-consumer-native-public.json"
 CLEANUP_REPORT = "evidence/ci-consumer-native-cleanup-public.json"
 PRIVATE_PACKET = recovery.DIRECTORY + "/packet.json"
@@ -58,24 +56,6 @@ PINS = (
 def need(value):
     if not value:
         raise Rejected("ci_consumer_native_rejected")
-
-
-def run_owner():
-    need(os.environ["GITHUB_REPOSITORY"] == ci_transfer.REPOSITORY)
-    return dict(
-        repository=ci_transfer.REPOSITORY,
-        run_id=int(os.environ["GITHUB_RUN_ID"]),
-        run_attempt=int(os.environ["GITHUB_RUN_ATTEMPT"]),
-        producer_job=os.environ["GITHUB_JOB"],
-    )
-
-
-def put(state, relative, value):
-    path = safe_child(state, relative)
-    write_json(path, value)
-    raw = canonical(value) + b"\n"
-    need(bounded_read(path) == raw)
-    return digest(raw)
 
 
 @contextmanager
@@ -282,28 +262,10 @@ def run(root, producer, summary):
     summary["source_commit"] = hexadecimal(original["source_revision"], 40)
     owner_run = run_owner()
     marker = storage_bootstrap.validate(producer)
-    need(not (producer / transfer.delivery.PROPOSAL).exists())
-    proposals = safe_child(producer, "release-proposals")
-    need(not proposals.exists() or not any(proposals.iterdir()))
+    campaign.require_unproposed(producer)
     witness = recovery.Recovery.begin(producer, owner_run, original)
     try:
-        summary["stage"] = "proposal"
-        proposal = release_native.qualify(root, producer, IMAGE)
-        put(producer, transfer.delivery.PROPOSAL, proposal)
-        need(
-            proposal["status"] == "pass"
-            and proposal["source"] == original
-            and proposal["source_dirty"] is False
-        )
-        summary["stage"] = "freeze"
-        freeze = {name: digest(bounded_read(producer / name)) for name in transfer.delivery.FILES}
-        freeze_pin = m18_delivery_freeze.capture(
-            root, producer, freeze, original["source_revision"]
-        )
-        index = transfer.delivery.pinned(producer / transfer.RECEIPT, freeze_pin)
-        values, _, _ = transfer.delivery.frozen(root, producer, index)
-        expected = {field: values[field] for field in transfer.IDENTITY}
-        owner = dict(freeze_pin=freeze_pin, freeze=freeze, expected=expected, run_owner=owner_run)
+        owner = campaign.freeze_original(root, producer, original, owner_run, summary)
         key = secrets.token_bytes(32)
         summary["stage"] = "seal"
         sealed = bridge.seal(root, producer, key=key, **owner, phase="M11-M12")
@@ -314,7 +276,7 @@ def run(root, producer, summary):
         witness.save()
         summary["stage"] = "materialize"
         with (
-            pins(freeze),
+            pins(owner["freeze"]),
             consumer_candidate_state.materialize(
                 root,
                 sealed["envelope"],

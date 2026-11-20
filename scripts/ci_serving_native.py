@@ -19,18 +19,16 @@ from mlsecops.contracts import (
     require_fields,
     safe_child,
 )
+from scripts import ci_campaign_producer as campaign
 from scripts import ci_candidate_transfer as bridge
 from scripts import ci_consumer_native as driver
 from scripts import ci_producer_cluster as producer_cluster
 from scripts import ci_serving_recovery as lifecycle
 from scripts import ci_serving_retention as exporter
 from scripts import ci_upstream_transfer as upstream
-from scripts import ci_validation_transfer as validation
 from scripts import (
     consumer_candidate_state,
     m17_recovery_native,
-    m18_delivery_freeze,
-    release_native,
     serving_retention,
     shared_serving_receipt,
 )
@@ -251,52 +249,14 @@ def run(root, producer, progress):
     offline = None
     try:
         marker = storage_bootstrap.validate(producer)
-        need(not safe_child(producer, transfer.delivery.PROPOSAL).exists())
-        proposals = safe_child(producer, "release-proposals")
-        need(not proposals.exists() or not any(proposals.iterdir()))
+        campaign.require_unproposed(producer)
         safe_child(producer, DIRECTORY).mkdir(mode=0o700, exist_ok=False)
         progress["stage"] = "producer_cleanup"
         producer_cluster.cleanup(producer)
-        progress["stage"] = "proposal"
-        proposal = release_native.qualify(root, producer, driver.IMAGE)
-        driver.put(producer, transfer.delivery.PROPOSAL, proposal)
-        need(
-            proposal["status"] == "pass"
-            and proposal["source"] == original
-            and proposal["source_dirty"] is False
-        )
-        progress["stage"] = "freeze"
-        freeze = {
-            name: digest(bounded_read(safe_child(producer, name)))
-            for name in transfer.delivery.FILES
-        }
-        freeze_pin = m18_delivery_freeze.capture(
-            root, producer, freeze, original["source_revision"]
-        )
-        index = transfer.delivery.pinned(producer / transfer.RECEIPT, freeze_pin)
-        values, _, _ = transfer.delivery.frozen(root, producer, index)
-        expected = {field: values[field] for field in transfer.IDENTITY}
-        need({k: expected[k] for k in transfer.delivery.SOURCE} == original)
-        owner = dict(freeze_pin=freeze_pin, freeze=freeze, expected=expected, run_owner=run_owner)
-        reports = {
-            g: digest(bounded_read(safe_child(producer, "evidence/" + g + ".json")))
-            for g in upstream.GATES
-        }
+        owner = campaign.freeze_original(root, producer, original, run_owner, progress)
         key = secrets.token_bytes(32)
         progress["stage"] = "seal"
-        sealed = {"candidate": bridge.seal(root, producer, key=key, **owner, phase="M13")}
-        sealed["upstream"] = upstream.seal(
-            root, producer, key=key, **owner, reports=reports, phase="M13"
-        )
-        values, _ = bridge._fresh(root, producer, owner)
-        descriptor = validation._descriptor(producer, values)
-        raw = storage.get(
-            safe_child(producer, "storage-clients/publisher"), "validation", descriptor["sha256"]
-        )
-        packet = validation.retain(root, producer, raw, **owner)
-        sealed["validation"] = validation.seal(
-            root, producer, packet, key=key, **owner, phase="M13"
-        )
+        reports, sealed = campaign.seal_serving(root, producer, owner, key)
         progress["stage"] = "producer_offline"
         m17_recovery_native.stop_owned(producer)
         offline = shared_serving_receipt.offline_pin(producer)

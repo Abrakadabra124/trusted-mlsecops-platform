@@ -14,7 +14,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, atomic_write, bounded_read, canonical, decode, digest
+from scripts import ci_validation_transfer as validation
 from scripts import frozen_candidate_transfer as transfer
+from scripts import m18_delivery_freeze, release_native
 from scripts.ci_producer_cluster_qualification import OWNER, SOURCE
 
 GATES = ("M13", "M14", "M15")
@@ -104,8 +106,8 @@ class DriverTests(unittest.TestCase):
             self.m.producer_cluster, "cleanup", lambda producer: self.event("producer_cleanup")
         )
         self.mock(self.m.storage_bootstrap, "validate", self.marker_for)
-        self.mock(self.m.release_native, "qualify", self.proposal)
-        self.mock(self.m.m18_delivery_freeze, "capture", self.freeze_capture)
+        self.mock(release_native, "qualify", self.proposal)
+        self.mock(m18_delivery_freeze, "capture", self.freeze_capture)
         self.mock(transfer.delivery, "pinned", lambda *a: {"freeze": self.freeze})
         self.mock(transfer.delivery, "frozen", lambda *a: (self.values, {}, {}))
         self.enterContext(
@@ -119,13 +121,13 @@ class DriverTests(unittest.TestCase):
         )
         self.mock(self.m.bridge, "seal", lambda *a, **kw: self.seal("candidate", *a, **kw))
         self.mock(self.m.upstream, "seal", lambda *a, **kw: self.seal("upstream", *a, **kw))
-        self.mock(self.m.validation, "seal", lambda *a, **kw: self.seal("validation", *a, **kw))
+        self.mock(validation, "seal", lambda *a, **kw: self.seal("validation", *a, **kw))
         self.mock(
-            self.m.validation,
+            validation,
             "_descriptor",
             lambda state, values: {"sha256": digest(self.validation)},
         )
-        self.mock(self.m.validation, "retain", self.validation_retain)
+        self.mock(validation, "retain", self.validation_retain)
         self.mock(self.m.storage, "get", self.validation_get)
         self.mock(self.m.bridge, "_fresh", self.fresh)
         self.mock(self.m.bridge, "_window", lambda context, values, now: self.event("window"))
