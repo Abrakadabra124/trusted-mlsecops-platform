@@ -205,6 +205,7 @@ class SupplementalScanContracts(unittest.TestCase):
             "scan_executed": True,
             "reason": "image_audit_kubernetes_module_versions_unresolved",
             "status": self.original(severity)["status"],
+            "findings": self.original(severity)["findings"],
             "catalogued_packages": 138,
         }
         self.target = {
@@ -245,6 +246,7 @@ class SupplementalScanContracts(unittest.TestCase):
     def test_join_unknown_stays_inconclusive_and_empty_passes(self):
         self.join_fixture("Unknown")
         self.assertEqual(self.joined()["status"], "inconclusive")
+        self.component["findings"] = []
         with patch.object(scans, "assess", return_value=self.original()):
             result = self.joined()
         self.assertEqual(result["status"], "pass")
@@ -292,6 +294,14 @@ class SupplementalScanContracts(unittest.TestCase):
         self.component["status"] = "fail"
         with self.assertRaises(Rejected):
             self.joined()
+
+    def test_same_status_cannot_replace_or_drop_duplicate_original_findings(self):
+        self.join_fixture("High")
+        original = self.component["findings"][0]
+        for rows in ([], [original, original], [original | {"id": "different"}]):
+            self.component["findings"] = rows
+            with self.subTest(rows=rows), self.assertRaises(Rejected):
+                self.joined()
 
     def test_profile_or_boolean_alone_cannot_grant_coverage(self):
         from scripts import image_scope

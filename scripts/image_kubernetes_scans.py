@@ -11,9 +11,10 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from mlsecops.contracts import Rejected, bounded_read, decode, digest, safe_child
+from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, safe_child
 from scripts import image_go_supplemental_contract as single
 from scripts import image_kubernetes_aliases as aliases
+from scripts import image_kubernetes_export
 from scripts.image_audit_contract import SEVERITIES, assess, observe_packages
 
 LIMIT = 64 * 1024**2
@@ -229,6 +230,8 @@ def join(
         raise Rejected("kubernetes_scan_original_database_changed")
     if component.get("status") != original["status"]:
         raise Rejected("kubernetes_scan_original_decision_changed")
+    if canonical(component.get("findings")) != canonical(original["findings"]):
+        raise Rejected("kubernetes_scan_original_findings_changed")
     all_results = read_batch(batch, expected_database, timestamp)
     required = {tuple(pair) for pair in mapping["coordinates"]}
     supplemental = [r for r in all_results if (r["module"], r["version"]) in required]
@@ -249,6 +252,10 @@ def join(
         },
     )
     result.pop("reason", None)
+    if "containerd_export" in component:
+        result["kubernetes_supplemental"]["containerd_export_sha256"] = (
+            image_kubernetes_export.evidence_pin(component)
+        )
     return result
 
 
@@ -258,7 +265,15 @@ def coverage_valid(component, target):
         if "reason" in component:
             return False
         evidence = component["kubernetes_supplemental"]
-        mapping = aliases.resolve(component["package_observation"], target["reference"])
+        pin = (
+            image_kubernetes_export.evidence_pin(component)
+            if "containerd_export" in component
+            else None
+        )
+        if evidence.get("containerd_export_sha256") != pin:
+            return False
+        reference = image_kubernetes_export.binding_reference(component, target)
+        mapping = aliases.resolve(component["package_observation"], reference)
         if (
             mapping is None
             or mapping != evidence["mapping"]

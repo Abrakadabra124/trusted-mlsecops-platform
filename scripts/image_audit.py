@@ -28,6 +28,7 @@ from scripts import (
     image_candidates,
     image_etcd_candidate,
     image_kubernetes_aliases,
+    image_kubernetes_export,
     image_kubernetes_inventory,
     image_kubernetes_scans,
     image_scope,
@@ -345,7 +346,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         except Rejected:
             command(["docker", "pull", "--platform", "linux/amd64", image], timeout=300)
             inspect_image(image)
-    sboms, kubernetes = {}, {}
+    sboms = {}
     required = {
         ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
         ("debian", "coredns"): {"github.com/coredns/coredns", "stdlib", "base-files"},
@@ -419,6 +420,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         report["components"].append(component)
         archive = run / f"{name}.tar"
         expected_distro = None
+        local_exported = False
         try:
             try:
                 details = (
@@ -426,6 +428,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                     if name in local_exports
                     else inspect_image(reference)
                 )
+                local_exported = name in local_exports
             except Rejected:
                 if role != "system" or "@sha256:" not in reference:
                     raise
@@ -454,7 +457,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                     raise Rejected("image_audit_tracking_materials_mismatch")
                 component["recipe_digest"] = tracking_materials
             component["runtime_image_id"] = details["Id"]
-            if name not in local_exports:
+            if not local_exported:
                 command(
                     ["docker", "image", "save", "--output", str(archive), details["Id"]],
                     timeout=300,
@@ -490,7 +493,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
             sbom = decode(bounded_read(path, LIMIT), LIMIT)
             if role == "system":
                 component["observed_reference"] = reference
-                if name in local_exports:
+                if local_exported:
                     component["local_alias"] = local_exports[name]["containerd_reference"]
                 component["host_roles"] = sorted(
                     {
@@ -505,11 +508,6 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 )
                 if version_diagnostic is not None:
                     component["application_inventory"] = version_diagnostic
-                    mapping = image_kubernetes_aliases.resolve(
-                        component["package_observation"], reference
-                    )
-                    if mapping is not None:
-                        kubernetes[name] = reference
                 if observed is not None and coredns_inventory_matches(
                     component["package_observation"]
                 ):
@@ -540,6 +538,20 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
             component["sbom_validated"] = not diagnostic
             sboms[name] = path
             component["sbom_digest"] = file_hash(path)
+            if local_exported and config_id in image_kubernetes_inventory.INVENTORIES:
+                try:
+                    proof = image_kubernetes_export.verify(archive, reference, config_id)
+                    if file_hash(archive) != component["archive_digest"]:
+                        raise Rejected("image_audit_local_archive_changed")
+                    component["containerd_export"] = proof | {
+                        "archive_sha256": component["archive_digest"]
+                    }
+                except Rejected as error:
+                    component["containerd_export_error"] = str(error)
+                except OSError:
+                    component["containerd_export_error"] = (
+                        "image_audit_kubernetes_evidence_unavailable"
+                    )
         except Rejected as error:
             component["reason"] = str(error)
         finally:
@@ -647,11 +659,12 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 raise Rejected("image_audit_go_database_changed")
             observation["status"] = "pass"
             write_json(safe_child(root, REPORT), report)
-    module_batch = (
-        image_kubernetes_scans.run_batch(run, cache, control_database, db_files)
-        if kubernetes
-        else None
-    )
+    kubernetes = {
+        target["name"]: target
+        for target in (observed or {}).get("targets", [])
+        if target["config_id"] in image_kubernetes_inventory.INVENTORIES
+    }
+    originals = {}
     for component in report["components"]:
         name = component["name"]
         if name not in sboms:
@@ -665,9 +678,10 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 ["sbom:/input/sbom.json", "--fail-on", "high", "-o", "json"],
                 [(cache, "/cache", False), (path, "/input/sbom.json", False)],
             )
+            original_report = bounded_read(scan_path, LIMIT)
             result = assess(
                 decode(bounded_read(path, LIMIT), LIMIT),
-                decode(bounded_read(scan_path, LIMIT), LIMIT),
+                decode(original_report, LIMIT),
                 component["image_config_id"],
                 required[(component["distro"], component["coverage_profile"])]
                 if component["coverage_profile"] != "unapproved-system"
@@ -686,20 +700,10 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 result,
                 scan_executed=True,
                 vulnerability_count=result["unique_vulnerabilities"],
-                report_digest=file_hash(scan_path),
+                report_digest=digest(original_report),
             )
             if name in kubernetes:
-                component.update(
-                    image_kubernetes_scans.join(
-                        component,
-                        path,
-                        scan_path,
-                        exit_code,
-                        module_batch,
-                        kubernetes[name],
-                        control_database,
-                    )
-                )
+                originals[name] = (component, path, scan_path, exit_code)
             if component["coverage_profile"] == "unapproved-system":
                 component["reason"] = component.get("application_inventory", {}).get(
                     "reason", "image_audit_runtime_application_coverage_unapproved"
@@ -708,6 +712,65 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                     component["status"] = "inconclusive"
         except Rejected as error:
             component["reason"] = str(error)
+        write_json(safe_child(root, REPORT), report)
+    if kubernetes:
+        try:
+            configs = {row["config_id"] for row in kubernetes.values()}
+            if (
+                originals.keys() != kubernetes.keys()
+                or len(kubernetes) != len(configs)
+                or configs != image_kubernetes_inventory.INVENTORIES.keys()
+            ):
+                raise Rejected("image_audit_kubernetes_originals_incomplete")
+            references = {}
+            for name, (component, *_) in originals.items():
+                if "containerd_export_error" in component:
+                    raise Rejected(component["containerd_export_error"])
+                references[name] = image_kubernetes_export.binding_reference(
+                    component, kubernetes[name]
+                )
+                if (
+                    image_kubernetes_aliases.resolve(
+                        component["package_observation"], references[name]
+                    )
+                    is None
+                ):
+                    raise Rejected("image_audit_kubernetes_mapping_missing")
+            batch = image_kubernetes_scans.run_batch(run, cache, control_database, db_files)
+            for name, (component, sbom, scan, code) in originals.items():
+                try:
+                    joined = image_kubernetes_scans.join(
+                        component,
+                        sbom,
+                        scan,
+                        code,
+                        batch,
+                        references[name],
+                        control_database,
+                    )
+                    # join returns a fresh component with the resolved inventory reason removed.
+                    component.clear()
+                    component.update(joined)
+                except (Rejected, OSError) as error:
+                    component["reason"] = (
+                        str(error)
+                        if isinstance(error, Rejected)
+                        else "image_audit_kubernetes_evidence_unavailable"
+                    )
+                    report["kubernetes_supplemental_error"] = (
+                        "image_audit_kubernetes_join_incomplete"
+                    )
+        except Rejected as error:
+            report["kubernetes_supplemental_error"] = str(error)
+        except OSError:
+            report["kubernetes_supplemental_error"] = "image_audit_kubernetes_evidence_unavailable"
+        if "kubernetes_supplemental_error" in report:
+            # Retain verified findings, including joins that completed before a replay failure.
+            for component, *_ in originals.values():
+                component["sbom_validated"] = False
+                component.setdefault("reason", report["kubernetes_supplemental_error"])
+                if component["status"] == "pass":
+                    component["status"] = "inconclusive"
         write_json(safe_child(root, REPORT), report)
     if (
         snapshot(cache) != db_files
@@ -729,7 +792,9 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     report["status"] = (
         "fail" if "fail" in statuses else "inconclusive" if "inconclusive" in statuses else "pass"
     )
-    if all(component["scan_executed"] for component in report["components"]):
+    if "kubernetes_supplemental_error" not in report and all(
+        component["scan_executed"] for component in report["components"]
+    ):
         report["vulnerability_count"] = len(
             {
                 finding["id"]
