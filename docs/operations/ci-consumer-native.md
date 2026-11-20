@@ -190,3 +190,22 @@ connection failures проходят закрытую проверку. Это �
 а не gate evidence или разрешение выпуска. 52 родительских теста на Python
 3.12.15 прошли; helper имеет 45/45 statements и 16/16 branches, privacy review
 одобрен. Ни эта проверка, ни восстановление CLI не заменяют новый hosted run.
+
+## Отказ consumer cleanup после M07 pass
+
+[Попытка 377cb4a](../evidence/consumer-native-2026-11-20.md) прошла M07,
+но вернула `stage=cleanup`, `sql=true`, `cluster=false`. Отдельный cleanup
+CLI также отказал. Не считать такой run принятым даже при ранее проверенных
+M11/M12 reports: retention и replay после очистки обязательны.
+
+Нулевые итоговые gate counters заполняются только после retention, поэтому
+не доказывают отсутствие выполненных проверок. Сначала сверить exact source,
+основную и cleanup-проекции, состояние job и доступные приватные witnesses.
+При неполных доказательствах оставить причину неизвестной. Не обновлять
+доверенные ID/labels из текущего inventory и не применять name-only deletion.
+
+Offline обнаружено, что порядок одинаковых mount-записей ошибочно влияет на
+ownership comparison. Корректное сравнение обязано сохранять все поля и
+duplicates, но учитывать одинаковое содержимое независимо от порядка. Новый
+hosted replay требуется после исправления и scoped review; успешный offline
+тест не закрывает native cleanup.

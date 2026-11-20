@@ -1,5 +1,14 @@
 # Статус и границы доказательств
 
+20 ноября [consumer run 44648432999 на 377cb4a](docs/evidence/consumer-native-2026-11-20.md)
+прошёл 61 + 147 preflight tests и M07. Holdout: 31 receipts для slots 2-32,
+один правильный отказ сверх бюджета, 0 invalid receipts. Producer cluster
+cleanup подтверждён 1/1, но consumer завершился failure на `stage=cleanup`:
+SQL stop подтверждён, cluster cleanup - нет. Retention/replay не достигнуты,
+полный consumer M11/M12 не принят. При разборе воспроизведён offline-дефект
+сравнения порядка mounts; его связь с конкретным native отказом не доказана.
+Исправление и новый hosted replay ожидаются. M18/R1 остаются открытыми.
+
 20 ноября подготовлен [native consumer playbook](docs/operations/ci-consumer-native.md)
 для исходного candidate в новом owned SQL и полных M11/M12. Импорт прошёл
 23 родительских tests: 125/125 statements и 6/6 branches. Передача исходных
