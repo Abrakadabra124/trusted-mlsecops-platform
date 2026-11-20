@@ -158,7 +158,9 @@ class ProbeTests(unittest.TestCase):
                 self.assertRegex(
                     line,
                     r"^reader_check=(fixture|publisher_bytes|inventory_before|write_request|"
-                    r"response_created|response_other|response_forbidden|denial_body|inventory_after)$",
+                    r"response_created|response_other|response_forbidden|denial_body|denial_json|"
+                    r"denial_fields|denial_status|denial_message|denial_documentation|"
+                    r"denial_empty|denial_generic|denial_rate_message|inventory_after|inventory_unchanged)$",
                 )
         else:
             self.assertEqual(lines, [])
@@ -171,18 +173,30 @@ class ProbeTests(unittest.TestCase):
         self.raw[51] = b"X" * len(original)
         self.assertEqual(self.stage("reader", False)[-1:], ["reader_check=publisher_bytes"])
         self.raw[51] = original
-        for status, body, last in (
+        for status, body, boundary in (
             (404, {"message": "private-detail"}, "response_other"),
-            (403, {"message": "private-detail"}, "denial_body"),
-            (403, DENIAL, "inventory_after"),
+            (403, b"x" * 8193, "denial_body"),
+            (403, b"private-detail", "denial_json"),
+            (403, b"", "denial_empty"),
+            (403, {"message": "Forbidden"}, "denial_generic"),
+            (403, {"message": "API rate limit exceeded"}, "denial_rate_message"),
+            (403, {"message": "Forbidden", "status": "403"}, "denial_message"),
+            (403, DENIAL | {"unexpected": "private-detail"}, "denial_fields"),
+            (403, DENIAL | {"status": "other"}, "denial_status"),
+            (403, {"message": "private-detail"}, "denial_message"),
+            (403, DENIAL | {"documentation_url": "private-rate-limit"}, "denial_documentation"),
+            (403, DENIAL, "denial_documentation"),
             (201, {}, "response_created"),
         ):
-            with self.subTest(status=status, last=last):
+            with self.subTest(status=status, boundary=boundary):
                 self.denial = (status, body, [])
-                self.assertEqual(
-                    self.stage("reader", last == "inventory_after")[-1:],
-                    ["reader_check=" + last],
-                )
+                before = len(self.writes)
+                lines = self.stage("reader", body == DENIAL)
+                self.assertEqual(len(self.writes), before + 1)
+                after = lines.index("reader_check=inventory_after")
+                self.assertEqual(lines[after - 1], "reader_check=" + boundary)
+                self.assertEqual("reader_check=inventory_unchanged" in lines, status != 201)
+                self.assertEqual(self.calls[-1], ("GET", LIST))
 
     def fixture(self, role):
         return probe.payload(NONCE, 221, 3, role)

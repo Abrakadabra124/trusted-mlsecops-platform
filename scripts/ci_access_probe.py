@@ -63,16 +63,29 @@ def _permission_denial(api, release_id, nonce, run, attempt):
         used = _quota(response.headers, "Used")
         _need(remaining != 0 and limit != 0 and (limit is None or used is None or used < limit))
         print("reader_check=denial_body")
-        body = decode(http._read(response, 8192), 8192)
+        raw = http._read(response, 8192)
+        print("reader_check=denial_json")
+        if not raw:
+            print("reader_check=denial_empty")
+        body = decode(raw, 8192)
+        print("reader_check=denial_fields")
         _need(type(body) is dict and body.keys() <= {"message", "documentation_url", "status"})
+        print("reader_check=denial_status")
+        _need(body.get("status", "403") == "403")
+        print("reader_check=denial_message")
+        # Fixed diagnostics for ambiguous replies. Neither permits an upload proof.
+        if body == {"message": "Forbidden"}:
+            print("reader_check=denial_generic")
+        elif body == {"message": "API rate limit exceeded"}:
+            print("reader_check=denial_rate_message")
         _need(
-            body.get("status", "403") == "403"
-            and body.get("message")
+            body.get("message")
             in (
                 "Resource not accessible by personal access token",
                 "Resource not accessible by integration",
             )
         )
+        print("reader_check=denial_documentation")
         url = body.get("documentation_url", "")
         _need(type(url) is str and not re.search(r"rate[\s_-]*limit|abuse", url, re.I))
 
@@ -180,9 +193,13 @@ class Probe:
         _need(self.inventory() == self.initial)
         store._repo(self.api)
         print("reader_check=write_request")
-        _permission_denial(self.api, self.release_id, self.nonce, self.run, self.attempt)
-        print("reader_check=inventory_after")
-        _need(self.inventory() == self.initial)
+        try:
+            _permission_denial(self.api, self.release_id, self.nonce, self.run, self.attempt)
+        finally:
+            # A malformed denial or lost HTTP reply can still follow an accepted write.
+            print("reader_check=inventory_after")
+            _need(self.inventory() == self.initial)
+            print("reader_check=inventory_unchanged")
 
     def cleanup(self):
         remaining = self.initial.copy()

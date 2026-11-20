@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
-    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && (github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref == 'refs/heads/qualify/store-access-v2' && github.event_name == 'workflow_dispatch' && (inputs.operation == 'contracts' || inputs.operation == 'verify-store-permissions'))) }}
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && (github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref_protected && github.ref == 'refs/heads/qualify/store-access-v3' && github.event_name == 'workflow_dispatch' && (inputs.operation == 'contracts' || inputs.operation == 'verify-store-permissions'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -127,7 +127,7 @@ jobs:
 
   probe_upload:
     needs: contracts
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v2' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref_protected && github.ref == 'refs/heads/qualify/store-access-v3' }}
     environment: candidate-store-write
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -159,7 +159,7 @@ jobs:
 
   probe_reader:
     needs: probe_upload
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v2' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref_protected && github.ref == 'refs/heads/qualify/store-access-v3' }}
     environment: candidate-store-read
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -170,7 +170,7 @@ jobs:
 
   probe_cleanup:
     needs: [probe_upload, probe_reader]
-    if: ${{ always() && needs.probe_upload.result != 'skipped' && github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v2' }}
+    if: ${{ always() && needs.probe_upload.result != 'skipped' && github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref_protected && github.ref == 'refs/heads/qualify/store-access-v3' }}
     environment: candidate-store-write
     runs-on: ubuntu-24.04
     timeout-minutes: 5
