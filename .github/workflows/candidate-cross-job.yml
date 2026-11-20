@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && ((github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref == 'refs/heads/qualify/store-access-v1' && github.event_name == 'workflow_dispatch' && (inputs.operation == 'contracts' || inputs.operation == 'verify-store-permissions'))) || (github.ref == 'refs/heads/codex/cp4-m23-security-events-20261107' && github.event_name == 'workflow_dispatch' && inputs.operation == 'contracts')) }}
+    if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && ((github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref == 'refs/heads/qualify/store-access-v2' && github.event_name == 'workflow_dispatch' && (inputs.operation == 'contracts' || inputs.operation == 'verify-store-permissions'))) || (github.ref == 'refs/heads/codex/cp4-m23-security-events-20261107' && github.event_name == 'workflow_dispatch' && inputs.operation == 'contracts')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -117,10 +117,12 @@ jobs:
               sha = _hex(pin["head_sha"], 40)
               path = f"repos/{REPOSITORY}/actions/runs/{run}"
               exact = path + f"/attempts/{attempt}"
-              for url in (path, exact):
-                  record = api("GET", url)
+              latest = api("GET", path)
+              branch = latest.get("head_branch")
+              need(branch in ("qualify/store-access-v1", "qualify/store-access-v2"))
+              for record in (latest, api("GET", exact)):
                   same(record, dict(id=run, run_attempt=attempt, head_sha=sha,
-                       head_branch="qualify/store-access-v1", event="workflow_dispatch",
+                       head_branch=branch, event="workflow_dispatch",
                        path=".github/workflows/candidate-cross-job.yml",
                        status="completed", conclusion="success"))
                   for field in ("repository", "head_repository"):
@@ -192,7 +194,7 @@ jobs:
 
   probe_upload:
     needs: contracts
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v1' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v2' }}
     environment: candidate-store-write
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -224,7 +226,7 @@ jobs:
 
   probe_reader:
     needs: probe_upload
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v1' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v2' }}
     environment: candidate-store-read
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -235,7 +237,7 @@ jobs:
 
   probe_cleanup:
     needs: [probe_upload, probe_reader]
-    if: ${{ always() && needs.probe_upload.result != 'skipped' && github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v1' }}
+    if: ${{ always() && needs.probe_upload.result != 'skipped' && github.event_name == 'workflow_dispatch' && inputs.operation == 'verify-store-permissions' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref == 'refs/heads/qualify/store-access-v2' }}
     environment: candidate-store-write
     runs-on: ubuntu-24.04
     timeout-minutes: 5

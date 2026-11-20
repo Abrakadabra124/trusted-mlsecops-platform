@@ -239,6 +239,11 @@ class CampaignWorkflowTests(unittest.TestCase):
             return routes[path]
 
         verify(api, pin)
+        with patch.dict(run, head_branch="qualify/store-access-v2"):
+            with self.assertRaises(Exception):
+                verify(api, pin)
+            with patch.dict(routes[root + "/attempts/2"], head_branch="qualify/store-access-v2"):
+                verify(api, pin)
         for row, changes in (
             (run, {"run_attempt": 3}),
             (run, {"head_branch": "main"}),
