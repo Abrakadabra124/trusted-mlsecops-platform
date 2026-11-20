@@ -5,7 +5,7 @@ import os
 import re
 import textwrap
 import unittest
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -243,6 +243,18 @@ class CampaignWorkflowTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 verify(api, pin)
             with patch.dict(routes[root + "/attempts/2"], head_branch="qualify/store-access-v2"):
+                verify(api, pin)
+        # A third proof is valid only for the separately reviewed and locked commit.
+        exact_sha = "d8c8878fec5b6124b178a45eb8afbb6be2a25b2c"
+        with ExitStack() as stack:
+            for row in (run, routes[root + "/attempts/2"]):
+                stack.enter_context(patch.dict(row, head_branch="qualify/store-access-v3"))
+            with self.assertRaises(Exception):
+                verify(api, pin)
+            for row in (pin, run, routes[root + "/attempts/2"], *jobs):
+                stack.enter_context(patch.dict(row, head_sha=exact_sha))
+            verify(api, pin)
+            with patch.dict(jobs[2], conclusion="skipped"), self.assertRaises(Exception):
                 verify(api, pin)
         for row, changes in (
             (run, {"run_attempt": 3}),

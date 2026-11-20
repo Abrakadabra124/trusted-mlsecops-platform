@@ -120,7 +120,9 @@ jobs:
               exact = path + f"/attempts/{attempt}"
               latest = api("GET", path)
               branch = latest.get("head_branch")
-              need(branch in ("qualify/store-access-v1", "qualify/store-access-v2"))
+              need(branch in ("qualify/store-access-v1", "qualify/store-access-v2") or (
+                  branch == "qualify/store-access-v3" and
+                  sha == "d8c8878fec5b6124b178a45eb8afbb6be2a25b2c"))
               for record in (latest, api("GET", exact)):
                   same(record, dict(id=run, run_attempt=attempt, head_sha=sha,
                        head_branch=branch, event="workflow_dispatch",
