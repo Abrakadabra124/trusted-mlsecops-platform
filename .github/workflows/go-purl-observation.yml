@@ -1,0 +1,327 @@
+name: Fixed public Go PURL interface observation
+# Diagnostic only: a captured observation grants no 27-module coverage or B02/M18 acceptance.
+# Source contracts: anchore/grype v0.120.1 grype/presenter/cyclonedx/presenter.go,
+# grype/vulnerability_matcher.go and internal/format/writer.go; anchore/clio v0.1.1 logging.go.
+on:
+  push:
+    branches: [qualify/go-purl-observation]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: go-purl-observation-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Prepare private fixed-input probe
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p .runtime
+          mkdir .runtime/go-purl-observation
+          cat > .runtime/go-purl-observation/probe.py <<'PY'
+          import json
+          import re
+          import signal
+          import subprocess
+          import sys
+          import uuid
+          from datetime import UTC, datetime
+          from pathlib import Path
+
+          from mlsecops.contracts import Rejected, bounded_read, decode
+          from scripts import image_audit as audit
+          from scripts.ci_consumer_native import private_output
+
+          STATE = Path(".runtime/go-purl-observation")
+          CASES = {
+              "control": ("golang.org/x/net", "v0.16.0"),
+              "streaming": ("k8s.io/streaming", "v0.36.4"),
+              "malformed-version": ("golang.org/x/net", "not-a-version"),
+          }
+          LABELS = ("db-update", *CASES)
+
+
+          def project(label, report, cdx, log, code, db_same, cleanup_verified):
+              name, version = CASES[label]
+              purl = f"pkg:golang/{name}@{version}"
+              json_ok, cdx_ok = type(report) is dict, type(cdx) is dict
+              report, cdx = report if json_ok else {}, cdx if cdx_ok else {}
+              matches, components = report.get("matches"), cdx.get("components")
+              component = (
+                  components[0]
+                  if type(components) is list and len(components) == 1 and type(components[0]) is dict
+                  else {}
+              )
+              properties = component.get("properties")
+              go_type = (
+                  [
+                      p.get("value")
+                      for p in properties
+                      if type(p) is dict and p.get("name") == "syft:package:type"
+                  ]
+                  if type(properties) is list
+                  else []
+              )
+              # Counts of recognized log messages, NOT invented processed-package fields.
+              lines = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", log).splitlines()
+              trace = [line for line in lines if "searching for vulnerability matches" in line]
+              binding = re.compile(
+                  r'(?:^|\s)package=(?:"' + re.escape(purl) + r'"|' + re.escape(purl) + r")(?:\s|$)"
+              )
+              summary = re.compile(r"\bfound [0-9]+ vulnerability matches across [0-9]+ packages\b")
+              return {
+                  "case": label,
+                  "json_parseable": json_ok,
+                  "cdx_parseable": cdx_ok,
+                  "source_binding": report.get("source") == {"type": "purl", "target": purl},
+                  "cdx_count": len(components) if type(components) is list else None,
+                  "cdx_name_binding": component.get("name") == name,
+                  "cdx_version_binding": component.get("version") == version,
+                  "cdx_purl_binding": component.get("purl") == purl,
+                  "cdx_library_type": component.get("type") == "library",
+                  "cdx_go_type": go_type == ["go-module"],
+                  "json_matches_count": len(matches) if type(matches) is list else None,
+                  "exit_code": code,
+                  "db_same": db_same,
+                  "trace_message_hits": len(trace),
+                  "trace_expected_purl_hits": sum(bool(binding.search(line)) for line in trace),
+                  "final_summary_hits": sum(bool(summary.search(line)) for line in lines),
+                  "zero_summary_hits": sum(
+                      bool(re.search(r"\bfound 0 vulnerability matches across 1 packages\b", line))
+                      for line in lines
+                  ),
+                  "matcher_error_hits": sum("matcher returned error" in line for line in lines),
+                  "search_error_hits": sum(
+                      "error(s) returned from searchDBForMatches" in line for line in lines
+                  ),
+                  "error_level_count": sum(
+                      bool(
+                          re.search(
+                              r"(?:^|\s)(?:ERROR|FATAL|PANIC)(?:\s|$)|\blevel=(?:error|fatal|panic)\b", line
+                          )
+                      )
+                      for line in lines
+                  ),
+                  "cleanup_verified": cleanup_verified,
+              }
+
+
+          def absent(cid):
+              result = subprocess.run(
+                  ["docker", "container", "ls", "--all", "--no-trunc", "--quiet", "--filter", f"id={cid}"],
+                  capture_output=True,
+                  timeout=15,
+                  check=False,
+              )
+              if result.returncode or result.stdout.strip() not in (b"", cid.encode()):
+                  raise Rejected("observation_cleanup_unconfirmed")
+              return not result.stdout.strip()
+
+
+          def cleanup_one(label):
+              # These files can only originate in this job's exclusively created private run.
+              try:
+                  if label not in LABELS:
+                      return False
+                  run = STATE / "run"
+                  if run.is_symlink() or bounded_read(run / f"{label}.attempt", 16) != b"attempted\n":
+                      return False
+                  cid = bounded_read(run / f"{label}.cid", 128).decode("ascii").strip()
+                  if not re.fullmatch(r"[0-9a-f]{64}", cid):
+                      return False
+                  if not absent(cid):
+                      try:
+                          audit.execute(
+                              ["docker", "rm", "-f", cid],
+                              run / f"cleanup-{uuid.uuid4().hex}.json",
+                              30,
+                          )
+                      except Exception:
+                          pass
+                  return absent(cid)
+              except BaseException:
+                  return False
+
+
+          def cleanup():
+              run = STATE / "run"
+              if run.is_symlink():
+                  return 0, 0, False
+              attempted = [
+                  label
+                  for label in LABELS
+                  if (run / f"{label}.attempt").exists() or (run / f"{label}.attempt").is_symlink()
+              ]
+              verified = sum(cleanup_one(label) for label in attempted)
+              return len(attempted), verified, verified == len(attempted)
+
+
+          def scan(label, arguments, mounts, network=False):
+              run = STATE / "run"
+              with (run / f"{label}.attempt").open("xb") as marker:
+                  marker.write(b"attempted\n")
+              try:
+                  return audit.scanner(run, label, audit.GRYPE_IMAGE, arguments, mounts, network=network)
+              finally:
+                  if not cleanup_one(label):
+                      raise Rejected("observation_cleanup_unconfirmed")
+
+
+          def document(path, limit):
+              if not path.exists() and not path.is_symlink():
+                  return False, False, None
+              raw = bounded_read(path, limit)  # Oversize/unsafe reads always fail, including the fault case.
+              try:
+                  return True, True, decode(raw, limit)
+              except Rejected:
+                  return True, False, None
+
+
+          def observe(observations):
+              run = STATE / "run"
+              run.mkdir(mode=0o700)
+              cache = run / "cache"
+              cache.mkdir(mode=0o700)
+              if audit.execute(["docker", "pull", audit.GRYPE_IMAGE], run / "pull.json", 120):
+                  raise Rejected("observation_pull_failed")
+              code, _ = scan("db-update", ["db", "update"], [(cache, "/cache", True)], network=True)
+              if code:
+                  raise Rejected("observation_database_update_failed")
+              original = audit.snapshot(cache)
+              expected_db = None
+              for label, (name, version) in CASES.items():
+                  out = run / f"{label}-out"
+                  out.mkdir(mode=0o700)
+                  code, path = scan(
+                      label,
+                      [
+                          f"pkg:golang/{name}@{version}",
+                          "-vvv",
+                          "--fail-on",
+                          "high",
+                          "-o",
+                          "json",
+                          "-o",
+                          "cyclonedx-json=/out/package.cdx.json",
+                      ],
+                      [(cache, "/cache", False), (out, "/out", True)],
+                  )
+                  json_present, json_parsed, report = document(path, audit.LIMIT)
+                  cdx_present, cdx_parsed, cdx = document(out / "package.cdx.json", 1024**2)
+                  log = bounded_read(path.with_suffix(".log"), 2 * 1024**2).decode("utf-8", errors="replace")
+                  # Match descriptor identity when available; independently pin the actual DB files.
+                  observed_db = audit.database(report, datetime.now(UTC)) if type(report) is dict else None
+                  if label == "control":
+                      expected_db = observed_db
+                  db_same = audit.snapshot(cache) == original and (
+                      observed_db is None or observed_db == expected_db
+                  )
+                  item = project(label, report, cdx, log, code, db_same, True)
+                  item.update(
+                      json_present=json_present,
+                      cdx_present=cdx_present,
+                      json_parseable=json_parsed,
+                      cdx_parseable=cdx_parsed,
+                  )
+                  observations.append(item)
+                  if not db_same:
+                      raise Rejected("observation_database_changed")
+                  if label != "malformed-version" and (
+                      item["json_matches_count"] is None or not item["cdx_parseable"] or code not in (0, 2)
+                  ):
+                      raise Rejected("observation_reports_unavailable")
+                  if label == "control":
+                      audit.go_detection_control(report, code, "module", datetime.now(UTC))
+                  # Fault-case parse failure is an observation, never a claim of no findings.
+                  if code not in (0, 1, 2):
+                      raise Rejected("observation_scan_failed")
+              if audit.snapshot(cache) != original:
+                  raise Rejected("observation_database_changed")
+
+
+          def main(mode):
+              observations = []
+              captured = False
+              expected, verified, clean = 0, 0, False
+              try:
+                  with private_output(STATE, "go-purl-" + mode):
+                      try:
+                          if mode == "observe":
+                              observe(observations)
+                          elif mode != "cleanup":
+                              raise Rejected("observation_mode_invalid")
+                          captured = True
+                      except BaseException:
+                          pass  # No exception text, paths or raw output can enter the public projection.
+                      finally:
+                          expected, verified, clean = cleanup()
+              except BaseException:
+                  # The existing capture helper restores FDs even on I/O faults; cleanup uses
+                  # bounded file reads and subprocess capture, and never prints raw output.
+                  expected, verified, clean = cleanup()
+                  captured = False
+              print(
+                  json.dumps(
+                      {
+                          "stage": mode,
+                          "scope": "fixed_public_purl_interface_only",
+                          "status": "observations_captured" if captured and clean else "failed",
+                          "cases": observations,
+                          "cleanup_expected": expected,
+                          "cleanup_verified_count": verified,
+                          "cleanup_verified": clean,
+                      },
+                      sort_keys=True,
+                  )
+              )
+              return 0 if captured and clean else 1
+
+
+          def interrupted(signum, frame):
+              raise KeyboardInterrupt
+
+
+          if __name__ == "__main__":
+              signal.signal(signal.SIGTERM, interrupted)
+              signal.signal(signal.SIGINT, interrupted)
+              raise SystemExit(main(sys.argv[1]))
+          PY
+      - name: Install locked dependencies privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          uv sync --locked --no-build --python 3.12.15 > .runtime/go-purl-observation/install.private.log 2>&1 || {
+            printf '%s\n' '{"stage":"dependencies","status":"failed"}'
+            exit 1
+          }
+      - name: Observe three fixed public PURLs
+        id: probe
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          PYTHONPATH="$GITHUB_WORKSPACE" .venv/bin/python -B .runtime/go-purl-observation/probe.py observe 2> .runtime/go-purl-observation/python.private.log
+      - name: Verify or finish recorded container cleanup
+        if: always() && steps.prepare.outcome == 'success'
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          PYTHONPATH="$GITHUB_WORKSPACE" .venv/bin/python -B .runtime/go-purl-observation/probe.py cleanup 2> .runtime/go-purl-observation/cleanup.private.log
