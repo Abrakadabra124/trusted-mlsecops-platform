@@ -1,11 +1,13 @@
 """Exercise both consumers with one signed controlled candidate and ordinary private readers."""
 
+import secrets
 import unittest
 from contextlib import contextmanager
+from copy import deepcopy
 from unittest.mock import patch
 
-from mlsecops import release_bundle
-from mlsecops.contracts import Rejected, bounded_read, canonical
+from mlsecops import release_bundle, signing
+from mlsecops.contracts import Rejected, bounded_read, canonical, digest
 from scripts import candidate_lineage_qualification as lineage
 from scripts import ci_campaign_control as control
 from scripts import ci_campaign_handoff as handoff
@@ -208,6 +210,15 @@ class HandoffTests(unittest.TestCase):
         with patch("time.time", return_value=self.receipt["expires_at"] + 20):
             self.assertTrue(control.verify_retained_control(raw, retained, **args))
             self.assertTrue(control.verify_retained_control(raw, self.journal[-1], **args))
+            with self.assertRaises(Rejected):
+                control.retained_identity(raw, retained, **args)
+            with patch.object(
+                bridge, "_now", side_effect=AssertionError("historical reader consulted live clock")
+            ):
+                self.assertEqual(
+                    control.retained_identity(raw, self.journal[-1], **args),
+                    dict(owner=self.owner, origin=self.origin, reports=self.reports),
+                )
             with self.assertRaises(Rejected), self.view("serving"):
                 self.fail("expired campaign admitted")
         for changed in (
@@ -231,3 +242,30 @@ class HandoffTests(unittest.TestCase):
                 key=KEY,
                 checkpoint=None,
             )
+
+    def test_authenticated_historical_identity_still_requires_valid_ordinary_authority(self):
+        journal = deepcopy(self.journal[-1])
+        pin = journal["storage"]["assets"][handoff.store.CONTROL]
+        args = dict(key=KEY, run_owner=self.owner["run_owner"], source=self.source)
+        record = control.read(self.api.contents[pin["id"]], trusted_public=self.public, **args)
+        path = self.root / "historical-issuer-fixture.pem"
+        journal["issuer"]["public"] = signing.create_key(path)
+        aad = control.binding(args["run_owner"], self.source)
+        for changes in (
+            dict(origin=self.origin | {"workspace_id": "foreign"}),
+            dict(owner=self.owner | {"freeze": None}),
+            dict(owner=self.owner | {"run_owner": args["run_owner"] | {"run_attempt": 2}}),
+            dict(
+                owner=self.owner
+                | {"expected": self.owner["expected"] | {"source_revision": "0" * 40}}
+            ),
+            dict(reports=self.reports | {"M03": "bad pin"}),
+        ):
+            signed = canonical(signing.sign(record | changes, control.KIND, path))
+            nonce = secrets.token_bytes(12)
+            raw = control.MAGIC + nonce + control.cipher(KEY).encrypt(nonce, signed, aad)
+            pin.update(size=len(raw), sha256=digest(raw))
+            journal["issuer"]["control_sha256"] = pin["sha256"]
+            self.assertTrue(control.verify_retained_control(raw, journal, **args))
+            with self.subTest(field=next(iter(changes))), self.assertRaises(Rejected):
+                control.retained_identity(raw, journal, **args)

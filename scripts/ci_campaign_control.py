@@ -57,7 +57,7 @@ def binding(run_owner, source):
     return MAGIC + canonical({"run_owner": run_owner, "source": source})
 
 
-def checked(record, run_owner, source):
+def _identity(record, run_owner, source):
     require_fields(record, ("owner", "origin", "reports", "packets", "storage", "schema_version"))
     need(type(record["schema_version"]) is int and record["schema_version"] == 1)
     origin = record["origin"]
@@ -69,13 +69,19 @@ def checked(record, run_owner, source):
     require_fields(owner, ("freeze_pin", "freeze", "expected", "run_owner"))
     # The freeze reader supports environment lookup for legacy callers. Wire data must be explicit.
     require_fields(owner["freeze"], transfer.delivery.FILES)
-    now = candidate._now()
-    transfer.authority(**owner, clock=now)
+    # Historical authority validates the signed identifiers without opening a window.
+    transfer.authority(**owner, clock=1)
     need(canonical(run_owner) == canonical(owner["run_owner"]))
     need({k: owner["expected"][k] for k in transfer.delivery.SOURCE} == source)
     require_fields(record["reports"], upstream.GATES)
     for pin in record["reports"].values():
         object_id(pin)
+    return dict(owner=owner, origin=origin, reports=record["reports"])
+
+
+def checked(record, run_owner, source):
+    owner = _identity(record, run_owner, source)["owner"]
+    now = candidate._now()
     storage = store.producer_receipt(
         record["storage"], run_owner | {"source_revision": source["source_revision"]}
     )
@@ -188,8 +194,7 @@ def read(raw, *, trusted_public, key, run_owner, source):
     return checked(record, run_owner, source)
 
 
-def verify_retained_control(raw, journal, *, key, run_owner, source):
-    """Audit retained bytes against a trusted publisher journal. Return no admission authority."""
+def _retained(raw, journal, *, key, run_owner, source, closed):
     require_fields(journal, ("storage", "issuer"))
     issuer = journal["issuer"]
     require_fields(issuer, ("public", "control_sha256", "storage_sha256"))
@@ -200,8 +205,23 @@ def verify_retained_control(raw, journal, *, key, run_owner, source):
     r = store._receipt(
         journal["storage"], run_owner | {"source_revision": source["source_revision"]}
     )
+    if closed:
+        require_fields(r["assets"], store.LIMITS)
     pin = r["assets"].pop(store.CONTROL, None)
     if pin is not None:
         need(pin["size"] == len(raw) and pin["sha256"] == digest(raw))
-    need(r == record["storage"] and digest(canonical(r)) == issuer["storage_sha256"])
+    storage = canonical(r)
+    need(storage == canonical(record["storage"]) and digest(storage) == issuer["storage_sha256"])
+    return record
+
+
+def verify_retained_control(raw, journal, *, key, run_owner, source):
+    """Audit the original control, including an issuer checkpoint made before its upload."""
+    _retained(raw, journal, key=key, run_owner=run_owner, source=source, closed=False)
     return True
+
+
+def retained_identity(raw, journal, *, key, run_owner, source):
+    """Return signed historical owner, origin and report pins from a closed checkpoint."""
+    record = _retained(raw, journal, key=key, run_owner=run_owner, source=source, closed=True)
+    return _identity(record, run_owner, source)
