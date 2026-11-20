@@ -64,6 +64,14 @@ gh run list --repo Abrakadabra124/trusted-mlsecops-platform --workflow consumer-
 до конечного состояния; timeout команды наблюдения не является основанием
 повторно запускать обучение.
 
+Если `gh run watch` завершился с `TLS handshake timeout`, отдельно запросить
+`gh run view <run-id> --json headSha,status,conclusion,jobs`. Ошибка связи
+оператора с API не является результатом job. Если exact `headSha` совпадает
+и job ещё выполняется, восстановить наблюдение за тем же run. Не делать новый
+workflow dispatch и не останавливать ресурсы из-за ошибки наблюдения. В попытке
+44648432999 это произошло после успешного M07: повторный API read подтвердил
+продолжающийся consumer на `377cb4a`, новый workflow не запускался.
+
 ## Диагностика отказа
 
 Публичный результат driver содержит только фиксированный stage, категорию
