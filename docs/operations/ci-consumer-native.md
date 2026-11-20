@@ -128,3 +128,23 @@ Native результат для этого нового workflow ещё не п
 workflow покрыт на 100% statements и branches отдельно. Scoped reviews пройдены;
 12 shell blocks и 5 inline Python blocks проверены на синтаксис. Это offline
 qualification с контролируемыми границами инфраструктуры, не native evidence.
+
+## Первый hosted preflight: зависимость теста от порядка импортов
+
+[Run 44644016424](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44644016424)
+на `f17f847a78cc6d5e038c32d541e8d6b6c7e66047` остановился до bootstrap.
+61 transfer test прошёл. В объединённом наборе из 133 tests один test
+`test_delayed_helpers_receive_independent_pins_and_replay_is_required` получил
+`TypeError` из-за четырёх отсутствующих keyword-only arguments.
+
+Причина установлена: предыдущие tests уже импортировали настоящие helpers и
+Python сохранил их в package `scripts`. Подмена только `sys.modules` в driver
+fixture не заменяла эти package attributes. Изолированный запуск driver suite
+не воспроизводил тот же порядок импортов; это дефект изоляции test fixture.
+
+Локальный повтор с предварительным импортом обоих helpers воспроизвёл тот же
+отказ. Fixture исправлена подменой функций настоящих modules через `patch.object`
+с восстановлением исходных attributes после test. Production importer, driver,
+критерии, аргументы и gates не изменены. Повтор с предварительными импортами
+прошёл. Новый hosted run должен подтвердить весь объединённый набор и native
+цепочку; первый отказ не считается свидетельством прохождения M11/M12.

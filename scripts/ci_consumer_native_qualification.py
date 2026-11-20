@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import (
@@ -123,9 +123,9 @@ class NativeDriverTests(unittest.TestCase):
 
     def test_delayed_helpers_receive_independent_pins_and_replay_is_required(self):
         from scripts import ci_consumer_native as driver
+        from scripts import consumer_candidate_storage as importer
+        from scripts import m18_shared_retention as retainer
 
-        importer = ModuleType("scripts.consumer_candidate_storage")
-        retainer = ModuleType("scripts.m18_shared_retention")
         seen = []
 
         def imported(root, state, **args):
@@ -140,13 +140,12 @@ class NativeDriverTests(unittest.TestCase):
             seen.append(("replay", root, destination, index_pin, args))
             return {"release_ready": False}
 
-        importer.import_candidate, retainer.retain, retainer.replay = imported, retain, replay
-        with patch.dict(
-            sys.modules,
-            {
-                "scripts.consumer_candidate_storage": importer,
-                "scripts.m18_shared_retention": retainer,
-            },
+        # Patch the real module attributes: earlier tests may already have cached
+        # these modules on the scripts package, independently of sys.modules.
+        with (
+            patch.object(importer, "import_candidate", imported),
+            patch.object(retainer, "retain", retain),
+            patch.object(retainer, "replay", replay),
         ):
             owner = {"freeze_pin": "a" * 64, "freeze": {"original": "pin"}}
             self.assertEqual(driver.import_candidate("root", "state", **owner), {"status": "pass"})
