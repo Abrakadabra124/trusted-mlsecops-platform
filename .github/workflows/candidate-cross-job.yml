@@ -2,13 +2,6 @@ name: Candidate handoff qualification
 on:
   push:
     branches: [qualify/candidate-cross-job]
-    paths:
-      - '.github/workflows/candidate-cross-job.yml'
-      - 'scripts/**'
-      - 'mlsecops/**'
-      - 'policies/**'
-      - 'pyproject.toml'
-      - 'uv.lock'
   workflow_dispatch:
 permissions:
   contents: read
