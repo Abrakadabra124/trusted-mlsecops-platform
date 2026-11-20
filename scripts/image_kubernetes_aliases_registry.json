@@ -1,0 +1,1223 @@
+{
+  "compiler_equivalence": false,
+  "coordinates": [
+    [
+      "k8s.io/api",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/apiextensions-apiserver",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/apimachinery",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/apiserver",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/client-go",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/cloud-provider",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/cluster-bootstrap",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/component-base",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/component-helpers",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/controller-manager",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/cri-api",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/cri-client",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/csi-translation-lib",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/dynamic-resource-allocation",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/endpointslice",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/externaljwt",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kms",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kube-aggregator",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kube-controller-manager",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kube-proxy",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kube-scheduler",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kubectl",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kubelet",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/kubernetes",
+      "v1.36.4"
+    ],
+    [
+      "k8s.io/metrics",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/mount-utils",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/pod-security-admission",
+      "v0.36.4"
+    ],
+    [
+      "k8s.io/streaming",
+      "v0.36.4"
+    ]
+  ],
+  "fixed_path_deltas": [
+    {
+      "direction": "source",
+      "mode": "100644",
+      "module": "k8s.io/client-go",
+      "path": "dynamic/testdata/TestGoldenRequest/.gitattributes",
+      "published_commit": "4e24acf5e20d3be54d345c5f747261e650ea9edf",
+      "sha256": "6bf9a3fb67c31f96d8b4584f2927dbde226df0f2cd97bdbbc7679270f516e660",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    },
+    {
+      "direction": "source",
+      "mode": "100644",
+      "module": "k8s.io/client-go",
+      "path": "dynamic/testdata/TestGoldenResponse/.gitattributes",
+      "published_commit": "4e24acf5e20d3be54d345c5f747261e650ea9edf",
+      "sha256": "6bf9a3fb67c31f96d8b4584f2927dbde226df0f2cd97bdbbc7679270f516e660",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    },
+    {
+      "direction": "source",
+      "mode": "100644",
+      "module": "k8s.io/client-go",
+      "path": "pkg/version/.gitattributes",
+      "published_commit": "4e24acf5e20d3be54d345c5f747261e650ea9edf",
+      "sha256": "5a39a1223ecf8fc43115a19e843f1bb69da2a0c8d84c3817cd52eef40bd59e47",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    },
+    {
+      "direction": "published",
+      "mode": "100644",
+      "module": "k8s.io/client-go",
+      "path": "CHANGELOG.md",
+      "published_commit": "4e24acf5e20d3be54d345c5f747261e650ea9edf",
+      "sha256": "0fe80aa16358dadc314f5e3a0bdf146ebe7d3d473d6f840ce1f820b6ef51f415",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    },
+    {
+      "direction": "source",
+      "mode": "100644",
+      "module": "k8s.io/component-base",
+      "path": "version/.gitattributes",
+      "published_commit": "9c647e249da0bfb86eccc5113c0253ee280161ed",
+      "sha256": "5a39a1223ecf8fc43115a19e843f1bb69da2a0c8d84c3817cd52eef40bd59e47",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    },
+    {
+      "direction": "published",
+      "mode": "100755",
+      "module": "k8s.io/kube-aggregator",
+      "path": "hack/godep-deps.sh",
+      "published_commit": "b8111105f01801dc437eb138a88d17a053247d96",
+      "sha256": "e27d3f08118379a9ef20c8cd092828ccb5ed6b7b222ed9fa2a2968c5aeafde89",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    },
+    {
+      "direction": "published",
+      "mode": "100755",
+      "module": "k8s.io/kube-aggregator",
+      "path": "hack/sync-from-kubernetes.sh",
+      "published_commit": "b8111105f01801dc437eb138a88d17a053247d96",
+      "sha256": "cb202a1190ad9b66355370a0f65febbcaa4c6bff35897f6210bce1ab378e3d06",
+      "source_revision": "bb826b1d48562f110659e64e8ec444327433db95"
+    }
+  ],
+  "images": {
+    "sha256:11ce0d8bbc73b7c08c30bb040fac58fac8ba3405b92b85451b643ee1c08dcd9f": {
+      "full_rows_sha256": "7891ee94ebe3ef537bfe8be3f8970eb0a6b36b02d0184061ad1a4de8d5855eb6",
+      "instances": [
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/api",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/apiextensions-apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-log-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/client-go",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/cloud-provider",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-log-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/component-base",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/component-helpers",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/controller-manager",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/csi-translation-lib",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/dynamic-resource-allocation",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/kms",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/kube-scheduler",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/kubelet",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/kubernetes",
+          "observed_version": "v1.36.4",
+          "version": "v1.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-scheduler",
+          "module": "k8s.io/streaming",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        }
+      ],
+      "manifest_digest": "sha256:883d4d505bf015f73cea8bfead8b9d9d1ec3a9f19bcad6c004f929d666102c2a",
+      "scanner_rows_sha256": "86e25a319010367b59dc5794ef4ca9f2a762e9ddd8fadb383f8ff542f2eca7c7"
+    },
+    "sha256:a5280d36e1aa3602794efd60dc157d55bbd1bed8f755b5c12e0a6ca5dce9d3bd": {
+      "full_rows_sha256": "0a0bbcce64dc561b6e333ceb5f853f09aa7e4720bac2eb408ef504fe76261ac6",
+      "instances": [
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/api",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/apiextensions-apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-log-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/client-go",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/cloud-provider",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-log-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/component-base",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/component-helpers",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/controller-manager",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/cri-api",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/cri-client",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/kms",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/kube-proxy",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/kubelet",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/kubernetes",
+          "observed_version": "v1.36.4",
+          "version": "v1.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-proxy",
+          "module": "k8s.io/streaming",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        }
+      ],
+      "manifest_digest": "sha256:70f5e02ebce27a7a3b1bc9b164f64e1982acf46f4ed68348c9a7b94a43d6d014",
+      "scanner_rows_sha256": "885b6b2a3978f0c1712136a3ac59811aa765e1fb7cc7f92d7abc327b31600064"
+    },
+    "sha256:b0f70fa6ec47eb5682e7030c5799ea8ba42e52f5e7ea24f0f46bd9e8170b183c": {
+      "full_rows_sha256": "69b8c4bc403ac7cf73815b52a96f316d4a0a21498748d051d84bea5822c1431c",
+      "instances": [
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/api",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/apiextensions-apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/client-go",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/cloud-provider",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/cluster-bootstrap",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/component-base",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/component-helpers",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/controller-manager",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/csi-translation-lib",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/dynamic-resource-allocation",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/endpointslice",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/externaljwt",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kms",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kube-aggregator",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kube-controller-manager",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kube-proxy",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kube-scheduler",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kubectl",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kubelet",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/kubernetes",
+          "observed_version": "v1.36.4",
+          "version": "v1.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/metrics",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/mount-utils",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/pod-security-admission",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-apiserver",
+          "module": "k8s.io/streaming",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        }
+      ],
+      "manifest_digest": "sha256:feb6509b541379d76b37cf6e7a5c1e3767458f7468288525f75574672fee1b18",
+      "scanner_rows_sha256": "d8e6b17b3339aab12bdebd7ffbfc055f2c6c74f77cbd8a98b48c607b668a7e84"
+    },
+    "sha256:c27613cea70f9808cc25955886c764ad38de589a9faeb2a8341cb27af6714684": {
+      "full_rows_sha256": "12d319831756ff7151c9433d522fe4b88348660dc5c53d8c3d876368416d4c9e",
+      "instances": [
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/api",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/apiextensions-apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-log-runner",
+          "module": "k8s.io/apimachinery",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/apiserver",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/client-go",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/cloud-provider",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/cluster-bootstrap",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/go-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/component-base",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-log-runner",
+          "module": "k8s.io/component-base",
+          "observed_version": "v0.0.0-20260820030627-bb826b1d4856",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/component-helpers",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/controller-manager",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/cri-api",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/cri-client",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/csi-translation-lib",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/dynamic-resource-allocation",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/endpointslice",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/externaljwt",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kms",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kube-aggregator",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kube-controller-manager",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kube-proxy",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kube-scheduler",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kubectl",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kubelet",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/kubernetes",
+          "observed_version": "v1.36.4",
+          "version": "v1.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/metrics",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/mount-utils",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/pod-security-admission",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        },
+        {
+          "binary_path": "/usr/local/bin/kube-controller-manager",
+          "module": "k8s.io/streaming",
+          "observed_version": "UNKNOWN",
+          "version": "v0.36.4"
+        }
+      ],
+      "manifest_digest": "sha256:ff4b86d6ed3cb2a8ef22c2fea31054bdc16099e583c343aabf3d54d212480c8e",
+      "scanner_rows_sha256": "7f340e1a0642035f112f70b222c1c8b0009487e35f9709fb0ccfdb4d5ee20663"
+    }
+  },
+  "known_root": {
+    "module": "k8s.io/kubernetes",
+    "origin": "https://github.com/kubernetes/kubernetes",
+    "source_revision": "bb826b1d48562f110659e64e8ec444327433db95",
+    "version": "v1.36.4"
+  },
+  "materials": {
+    "auth_assessment_sha256": "af0b082120c8b861b20d5dd28d81e7066b66f80919c826a33cbfafa5bd1f1e1f",
+    "auth_exact_original_bindings_sha256": "f62ead1b49a5c222df3293a975f9ded023489b77b23c135a550cd52734da2ed3",
+    "auth_packet_verification_results_sha256": "4e31c09ccbd1678c9d919e2cd23e194f520e6336c15ce19cacb190de0d3f67f3",
+    "main_identity_assessment_sha256": "f38eb2828caa371486a8cf34c065a8f479fec91746466009156f19af2a0767da",
+    "main_identity_recipe_sha256": "9d41d464e7c537bdb6a9b13408c1ce56d24b6bfb10edfde2c153d2e79c156e21",
+    "parent_primary_replay_sha256": "4291f6f073997fac910f16ca2829845c5bdfc94ce49d34854ec69eb3fe1c923b",
+    "parent_replayed_matrix_sha256": "2691b29bcc6cb89cb75f9541b4f8982552431bb9e91a6e5da08feec41ccfbfd2",
+    "root_module_sha256": "ea5ffffb6a035493157a3ed65e6a335156d4be8be8689f31e182ed9fbdbb84ce",
+    "root_proxy_info_sha256": "77e7f8cd7052340a273c4bc8f5384472bfaaa1b696a7494fae2db39b68d899b8",
+    "source_authentication_result_sha256": "fec8217ba36113cbc32f360737da288963a78b4f855a3be2f761fda415dff40c",
+    "source_go_work_sha256": "5767a2d74f9df4c4bcc0ed4ef6c4de322d6d48ae4a041b0af8016a4f178cf234",
+    "source_sigstore_bundle_sha256": "74e7a8adb4648633eb1bcf347f8de44d97eb102e354dea7518fcd0f52b64d73a",
+    "source_spdx_sha256": "fde4662d04b0c44a403a8951f8d539bfabf745ed24180dcc10662a49f364b34d",
+    "source_vendor_modules_sha256": "fcb436d5bff88ece5856c88fd9836704d7f649b978966e24a9aa46c06c48cd50",
+    "trusted_root_sha256": "6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66"
+  },
+  "modules": [
+    {
+      "archive_sha256": "a9e261da39923253dc9b43364b29c8ca0825777ec89bdc43801f066948cc45ac",
+      "auxiliary": false,
+      "inventory_sha256": "e6d2356db2b7e1b07d71ecb83e558c66fd0ce6b967a322315d34cff3d99f865d",
+      "module": "k8s.io/api",
+      "published_commit": "9a6751a483334b2c0209afd37e790f2b37c5e524",
+      "published_tree": "b5aaf65225d28083d41ee48911cfa4c2f32d098c",
+      "refs_sha256": "34aa87b7583f292a1409d78a9d115d854664cf2b6b7525ddacb6725fe6b1319c",
+      "source_path": "staging/src/k8s.io/api",
+      "source_tree": "86808dcba9d03b96914029e14f2d3f91c24a6cb9",
+      "tag_object": "e00f5b427255f1be29957ef9f1ae4f0cdc71ddf1",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "de86f49bc02e34f6eb1cdce06b1aa0956138076395a148bc883e76fae9f5b8ab",
+      "auxiliary": false,
+      "inventory_sha256": "d29eadab9f9d8e54e7c45c3bfb2fcf9b903a8f21259118ca49eb0ecb41a81f52",
+      "module": "k8s.io/apiextensions-apiserver",
+      "published_commit": "88434be12dc0d0eabbe7228435e1fcf47a9f3b07",
+      "published_tree": "2ecdb81b53e57eafb5e1e7a182aa5a80a0a745bf",
+      "refs_sha256": "acd92f54f0749275e11dbca765b9bd78f7e73a4c91ffbd1c4ddd2ce3ce9d83bd",
+      "source_path": "staging/src/k8s.io/apiextensions-apiserver",
+      "source_tree": "5e4d78c3e733273f8e2ef12f8571d24bb8870b2e",
+      "tag_object": "025711835ba3c5d573be0544ba2d221a7e6a650f",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "d777552836ecc0698015d41fb4da32637d721aee0984fbe16a9541f080a288a0",
+      "auxiliary": false,
+      "inventory_sha256": "0ad2f88cbadfc6efa73cd25f69729e425bfb2e1af8676fe2362f3dc3a27a24e3",
+      "module": "k8s.io/apimachinery",
+      "published_commit": "612c0eced3341bcb6be9f19fb99d5b79cb4cd617",
+      "published_tree": "b112da261c649cd586f833449f71c2f7a5c0e6a6",
+      "refs_sha256": "47925e0d5cd91ea1ec29b93cff84a0f790bf7d6979ba1b2d577d1ce9630ba91f",
+      "source_path": "staging/src/k8s.io/apimachinery",
+      "source_tree": "31058064f5fee5f2a5316101418f4541634eced4",
+      "tag_object": "7fc5b2cc3c5bfb45b3057d3dca06e47510919c82",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "1bacde5b1928307cb86ab8e1c4daba867e706bf6d04c081305c33d2a4dc81004",
+      "auxiliary": false,
+      "inventory_sha256": "b634da78672a85d4f47cccad30ed8d0bfb25424590f6793fd0685e8eb54cf563",
+      "module": "k8s.io/apiserver",
+      "published_commit": "ce1e90128d081102d136f3bea05c1ca4fbfad9e3",
+      "published_tree": "a3a65ab1492022b54cf7d07d2f58f73d3710b39a",
+      "refs_sha256": "a42c1d2a482106b75cb8ae7afdf2d936506abbb2e37326b9c3fb3e62d81d0f0d",
+      "source_path": "staging/src/k8s.io/apiserver",
+      "source_tree": "3710fda3b1a0669636b6c2348d82eb62a613fb29",
+      "tag_object": "29ad8fa3075fa42d51381e8252cd71f76aec0141",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "2898b328cfe06b85f0d20869e9291da47d8313cd5332308842381ea7289bd2bf",
+      "auxiliary": true,
+      "inventory_sha256": "43dc783f3b58f20877a16ec0f44b0c5306731c37d68d671adb3d07150889d32f",
+      "module": "k8s.io/cli-runtime",
+      "published_commit": "0f6ca0028d61419ad1ccf0117c14cc801bd45ba3",
+      "published_tree": "54f790073a0fab197d2756b1691f98dc258b3454",
+      "refs_sha256": "6f83a651f109d99e4247555d2c41cfc7d50c3fb263f2ea01973e69e3b7fa4335",
+      "source_path": "staging/src/k8s.io/cli-runtime",
+      "source_tree": "b63c99e8006675fecd4aa8d5f4be9f91ab120646",
+      "tag_object": "0147ff2a1c995d254d87f7e8d5b3bf7410fb2480",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "d0195765399b5c83f559da95f722f7aa3893cf58ca83b5c52e433e43fce416b3",
+      "auxiliary": false,
+      "inventory_sha256": "dfcd3d3753bae95165ac4ce3ab32ece330aecf02a683224a88650db821a1b84e",
+      "module": "k8s.io/client-go",
+      "published_commit": "4e24acf5e20d3be54d345c5f747261e650ea9edf",
+      "published_tree": "8d19902bb78837acf81e37470880d9e6b00a2728",
+      "refs_sha256": "7987193cb77b0d295ff6a1fbee221996caf2a07427b2a7db63de40c6dd5bf3d1",
+      "source_path": "staging/src/k8s.io/client-go",
+      "source_tree": "a99224c7423d131e07272a0556b8876e17e17886",
+      "tag_object": "f9400dcd5ed92806bf6e1709789c6036e01c2301",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "cb76b84d94742ac06b7e4d0cb34e26fe26a690e7e52f991a5fee47ba0bc7bff6",
+      "auxiliary": false,
+      "inventory_sha256": "b7fd682a75127f73738a383b631c5d66ff3700beea900ffbd7fd4aa76d558395",
+      "module": "k8s.io/cloud-provider",
+      "published_commit": "4576165ed1e6c64bc1039b8fc8e080604c20bba5",
+      "published_tree": "19048f3bddd8db3d828a37a13a456f191d0d60f9",
+      "refs_sha256": "f6daeb61b32b5ebe3c3f3f85a430e10ec203722c7c986aa0843336929f93554d",
+      "source_path": "staging/src/k8s.io/cloud-provider",
+      "source_tree": "6e603024fb238bb9c5735b34b1e56326651382b2",
+      "tag_object": "c3db6e6953df751a1ddd950ae2bed22fe4aea540",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "8fe881e57e6a26207145bfc5426bd4e3f09ea67f8a49b6efe3f5224c8567befc",
+      "auxiliary": false,
+      "inventory_sha256": "8d8480f09b2c8f4158952c3492cfb2fdb799710c1b9ce9d584caa4b54c1bbc5b",
+      "module": "k8s.io/cluster-bootstrap",
+      "published_commit": "985296fc4b4e6e5cd3cbaf6f7fdf31d3ca84cbaf",
+      "published_tree": "c9f5aa1bff7714c553342d32f346babfd2f52409",
+      "refs_sha256": "30987997f2466f3a8fd871cef762146e2cfeb655544d6916f9d69e24c61043a1",
+      "source_path": "staging/src/k8s.io/cluster-bootstrap",
+      "source_tree": "69e89cac2e89945db452348cbaf11977d93ddefd",
+      "tag_object": "4f0119c85d7b30da00c2fd859860c6b4f5f86c50",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "adf1e7b21e5fa992270274ec2637e377bb32f9e9ea973900d64897d303c2e5a1",
+      "auxiliary": true,
+      "inventory_sha256": "b26590465db6d6176e14c2c96dee2a60c5843f9c76b08629b413a5e0c826bfb7",
+      "module": "k8s.io/code-generator",
+      "published_commit": "738eaded9fd6fdc6639fbfa55f6ae7ab3c62e156",
+      "published_tree": "4a467c007b15b182515d99cbe95a455e61a0a2cc",
+      "refs_sha256": "875ec4d40ab79fb41ae9b3690cf2ff54ecbd4dec65dbb52a462e053f2a7958c2",
+      "source_path": "staging/src/k8s.io/code-generator",
+      "source_tree": "e647dcf4b715addf7617f18a08feff41d337aa9a",
+      "tag_object": "46abfa8632a8baea147f7f7caa073cd6ce16f97e",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "6dfe2078c498bb515e60c40f94376de538ad32191ca9916340759b98cff583fd",
+      "auxiliary": false,
+      "inventory_sha256": "1d7740d7cdbc2e918641c8d41de55422fed5a5f67ec9f0a5cc24ddd264ac5831",
+      "module": "k8s.io/component-base",
+      "published_commit": "9c647e249da0bfb86eccc5113c0253ee280161ed",
+      "published_tree": "6c68a8987a7d6e79c461a83ae27edb5b5eba515d",
+      "refs_sha256": "b5a934ad71d212d8bd4b64e959fb785afe79e0448fd7ac0bba993e994d66db4c",
+      "source_path": "staging/src/k8s.io/component-base",
+      "source_tree": "c72820b6a5aa872eec11a232ddf5b91447811ceb",
+      "tag_object": "4cca127b9fed28d0c5719ef34e300ed9843aa2d2",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "b03e4e71358f26e1c0e5bac72bf19cbf8ba1d689033083dca41605ee00a25669",
+      "auxiliary": false,
+      "inventory_sha256": "d1e0eecc56e71a1992e8b441ded94c1d97cf007002639f3e38a13dbf1391443e",
+      "module": "k8s.io/component-helpers",
+      "published_commit": "186346dfc6aa9f6f6a43bd28e30ee30f60268d3d",
+      "published_tree": "d83895a555442522f06d422fd6ccb6940ecee342",
+      "refs_sha256": "744f782081fa925ee98c9d1123086d9009662a92fee88a80a88b74b5ae976dba",
+      "source_path": "staging/src/k8s.io/component-helpers",
+      "source_tree": "e02e4646a710dbcfb6383cbd7cc4b1547cc2e905",
+      "tag_object": "80276db6e5e1ae8b5c5438a3f2dad2d432dd4cfc",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "472d94d72507c8d0bdfce1cc853910bdd7621dc991e3bd900ca1c1814654e741",
+      "auxiliary": false,
+      "inventory_sha256": "0f3342e28ab2e756d73a1e318a95ccda0035610b4af1c80c01900886470e485a",
+      "module": "k8s.io/controller-manager",
+      "published_commit": "9de65bd412dcb63e8b2a9a5e28dd6e54f0582bfa",
+      "published_tree": "8b556a75c278027c056e9f0cc2d2c07d9aeb1e89",
+      "refs_sha256": "dc8e871abf7feab8d95cd4aae00fbc511098f5a30ac9b3da516e92ed2136a834",
+      "source_path": "staging/src/k8s.io/controller-manager",
+      "source_tree": "35d328adb09c5ddb0e656807ee00a06fa7ee4130",
+      "tag_object": "63fa452848317fd6062966b89826433914cb51b7",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "3015f4425a6ef8c4f4ae6e6af3679b496d5e0bf2f2bff6b290c37199b6bd5c5b",
+      "auxiliary": false,
+      "inventory_sha256": "d91a44b37848bc5b0f72933129ff25d4e2fb8b9af38441b889841e7912fe40c5",
+      "module": "k8s.io/cri-api",
+      "published_commit": "e1a9a066c64e03693a8214ec002d75da9a71e590",
+      "published_tree": "83aa9307e36ece28e3ce28f53d1e8cf36f42bd00",
+      "refs_sha256": "cea421c751fba17219abf040a7bdec1550e331312f094a5f933bc6abd4b72d6c",
+      "source_path": "staging/src/k8s.io/cri-api",
+      "source_tree": "510e5e7bcf625e1e017011e6e76b670822ab3503",
+      "tag_object": "dbe51162602e43e489b553bd9e78a486c30021fb",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "0cf599577b02da3c15dc2327f715c984babe7e92aa78fb116e068a0370513b2f",
+      "auxiliary": false,
+      "inventory_sha256": "00006316eaf1820b9996673e0ee70c5729058b950c765eefd7a59741776cc6a7",
+      "module": "k8s.io/cri-client",
+      "published_commit": "d68c86090f0dca93444b9edda029268a9a96328e",
+      "published_tree": "98e8a722c434f583c21e52b6bc0aa31eb1ffcbcb",
+      "refs_sha256": "84485e29a954c22b471acc2e543b8bd760cced3d2c8452dc460a8f8a9b54c8de",
+      "source_path": "staging/src/k8s.io/cri-client",
+      "source_tree": "36ffd12d5f095a79e815b89e61df98eeaadd2310",
+      "tag_object": "6767f76a9bc67cb550416f1f7f01ec19537bbbc7",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "4c088f8b8e9bcd6195cd2786f2ed972cea800ecadd3ee58133c57b4514f8d380",
+      "auxiliary": false,
+      "inventory_sha256": "40d968bb42a6a7adf3a7857cbec4bb5ac6b1062cc5af908f421765632ed99a91",
+      "module": "k8s.io/csi-translation-lib",
+      "published_commit": "4d60014463ff21c1dde634e77ccb658cd82db8fb",
+      "published_tree": "18a32c497bc32dfde09192b82b7f84797d613066",
+      "refs_sha256": "51b1632f80bdb00da932458041bc9b9ba6fe42ab3d5d7750a88d658a1bab3bb9",
+      "source_path": "staging/src/k8s.io/csi-translation-lib",
+      "source_tree": "270258a845d46567f6de60113801270b71050658",
+      "tag_object": "93039183813f15e06a0893c676c1ac8cca718654",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "af6ad2a177063ca22264b07211b1d9cd0d19a9b4d0c40bb76be30ce56ec202b2",
+      "auxiliary": false,
+      "inventory_sha256": "c81a1b62ab94ac4ec47a3c8b161a9856e6fb1ee99ffe871f2387a637068eb7be",
+      "module": "k8s.io/dynamic-resource-allocation",
+      "published_commit": "715ec060dc5fc59f4c51ef6fc1c279a648fb7c7e",
+      "published_tree": "2052a8295778c7fd2bc9aa94f2e616d8af181d17",
+      "refs_sha256": "33e3f45ac31f0091a5ed4ed32acb18e740643227e2056f36ee39a268681b3263",
+      "source_path": "staging/src/k8s.io/dynamic-resource-allocation",
+      "source_tree": "ab84622eea15977bc1d40e97d74a0051695d6a29",
+      "tag_object": "c37f6a5aaa68be24ac87dfa525c70eccfb5f4051",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "f8e2c4b49d68ba5a546e09ab6bdc3fd7410c6d515dc5772bed9ff465e26f629f",
+      "auxiliary": false,
+      "inventory_sha256": "8bbca5f2bb6aa9185fdde56860e989c1a6458407b0f31b86943d340418cc9058",
+      "module": "k8s.io/endpointslice",
+      "published_commit": "4ec71bd3186ab083c8893de56ec2271bf738988b",
+      "published_tree": "5efd8afd3a9cf4e731df0f8a8f11a12397fe586b",
+      "refs_sha256": "66f87164221ab0b4e6feb0bbd4ea0145578e92a6873eed265c044b713c46153b",
+      "source_path": "staging/src/k8s.io/endpointslice",
+      "source_tree": "eae360ed63df96b92b0ced318cd07ff6349d2cc1",
+      "tag_object": "1731e6eddbfa5e740c33e27fb39710cc8554b399",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "a67191db2a56cdbec9417f1833246ca56bcca60fc3c2eef76ab89a4959d54ac7",
+      "auxiliary": false,
+      "inventory_sha256": "aae3ba604005a4ec1b576836fc6a81efe38a7777863c203d322fb8fa246911bd",
+      "module": "k8s.io/externaljwt",
+      "published_commit": "c225e1714ecbc2ffbfe9e2c7ced8347e9c194463",
+      "published_tree": "f6af8d8becb285b053e2c5e1c2625f61a6031671",
+      "refs_sha256": "a7197a6c889c0026d12c080e6ce68ceb431eefadefc040c971f1620b92647d94",
+      "source_path": "staging/src/k8s.io/externaljwt",
+      "source_tree": "aa58f2c931225109d912df9e3a0406838e259c6c",
+      "tag_object": "e6192251c5d40e0dc91e2017ca0186d8d43dd8d9",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "29f9fa6e8446a038f73ea1ea5e04f51c37ae448cde8ca14cf1055983fe21089c",
+      "auxiliary": false,
+      "inventory_sha256": "fce86828e4ea347c8066b3f9ec64c7c975ff3be7bce7fd16f9f34fea03de65a9",
+      "module": "k8s.io/kms",
+      "published_commit": "385b536c1df495e260dcafe902e45305151f16ec",
+      "published_tree": "9e02152901c44691edb75dc687ae712b8d70e421",
+      "refs_sha256": "0c67c9843100d938d3838c88cd366844f3a8ff2257bef901280765b7a4091709",
+      "source_path": "staging/src/k8s.io/kms",
+      "source_tree": "5d14016add45e599f03aabe03cfa94d217446956",
+      "tag_object": "d6a651912138b6f27b8bda226082c8bb4bef8ca4",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "5d714a2196c86dc722c9ad47768b3846719881fec9fcebe4933885f19c77ffe6",
+      "auxiliary": false,
+      "inventory_sha256": "5148530fcab417fc84b4605ae438aaa13afe986534f79cf421a53ac83c7c6425",
+      "module": "k8s.io/kube-aggregator",
+      "published_commit": "b8111105f01801dc437eb138a88d17a053247d96",
+      "published_tree": "e66b7630b441284a7025405c5db05fced0fbbf03",
+      "refs_sha256": "2b848b09eb2a57f3ec3f65753be7f810b6ee1c7d3a4aba593299a93593fbf4f4",
+      "source_path": "staging/src/k8s.io/kube-aggregator",
+      "source_tree": "e498b2a8956f38b7c4a04df9a1493fe319b00a3b",
+      "tag_object": "6d4c5bc268eee4a1898c4bddb9704420d8f03f7a",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "793a611e75e84c213f394fc534db72a76c1969941dc7a6b4b41437c7a88bfe79",
+      "auxiliary": false,
+      "inventory_sha256": "35cd7b7bedd62d0a0cd546fedb4ccd6f5e58e0da017e67d0bc67fc40f4216c14",
+      "module": "k8s.io/kube-controller-manager",
+      "published_commit": "096ee99610d56ca82fd746eeb20672382dd2b956",
+      "published_tree": "45b6c04c0bf30ae84eb13dc0f54053cfb8e37fd9",
+      "refs_sha256": "3255e2a31bd8e6e9c3eab7104a644a5ce60cc26cac55b37bb8f4f8cea977583c",
+      "source_path": "staging/src/k8s.io/kube-controller-manager",
+      "source_tree": "2c61e1c3e80e67bffc195221c392f78833ef0e42",
+      "tag_object": "3465ee709bedd3bfae4852c2f905014e8caf9cfa",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "4e8a282d81185deb7c357999a3d2d3687b3b28fa3988a49d530699dc3fdc9e71",
+      "auxiliary": false,
+      "inventory_sha256": "ceecc727a9041036f999dbb67f4412f9a4ed833d6a2c5adb63f454dfed51502f",
+      "module": "k8s.io/kube-proxy",
+      "published_commit": "3b691f9f2caaa0025dddfc08c12181cdba757627",
+      "published_tree": "cae06c692446a8b1c2c2e5479c570d5fcbfaaf9f",
+      "refs_sha256": "35d83fa49250fb64a72554f547851cbf7028c48e106e570fe8ef60908b6e4c22",
+      "source_path": "staging/src/k8s.io/kube-proxy",
+      "source_tree": "1eb5bf0dff7be4bb884fdb9280e6f3c3b4b2c73f",
+      "tag_object": "0ff09abf7df58e09619bbae0db112ae0b48f6267",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "d7d6a7fb193e3135dcb45ce31782f46d550c8f2e1bd9d2d1a8ad898e712b3c85",
+      "auxiliary": false,
+      "inventory_sha256": "eb09458ca3e7306ba1a0d1711fb5cdf868eb0830750b1ff94eff155d2bf8ecca",
+      "module": "k8s.io/kube-scheduler",
+      "published_commit": "8b1bf938c42d6670bdc6880b36ce9a7e4eec1e74",
+      "published_tree": "db3dd33c230b86687e64b5952d068b790b29f869",
+      "refs_sha256": "170ab793e9e8d8bb5a4f0b0a906813bb8c4f72cf999865184bfaef1211d65622",
+      "source_path": "staging/src/k8s.io/kube-scheduler",
+      "source_tree": "9b537f004dfb9caf4dd3a010c36dcc6007aab3ec",
+      "tag_object": "20ae3d2d36da6772d9f013f504ef11a0e71bf70f",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "690ab4f8e982694d71334f12429a78a0e6746b5617e0ceb7001d1e56b3b838d8",
+      "auxiliary": false,
+      "inventory_sha256": "326c4e2f158a3cdc0bc2ae73139ce40368ec979655bbb9e090c5b0d9ce4398b3",
+      "module": "k8s.io/kubectl",
+      "published_commit": "1a900afeea47ada01fad463339b9fe8ade517ad5",
+      "published_tree": "c4d2bf05d4fe03b9ebafc35f4f1f98974db6f03e",
+      "refs_sha256": "16a8ee8c1d30b3efbb176d4002f09c0b0ac6de3724e3c90a66decf6f7ba92cd2",
+      "source_path": "staging/src/k8s.io/kubectl",
+      "source_tree": "0977720b9dbe26c0d7fcbe4cdb457691d4700342",
+      "tag_object": "48bb728501dd16d7f2156e65cd90b89194db5175",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "c65289298d0f1c9436843192cd321bb391dee4926403d8ea2d498c9739e4726a",
+      "auxiliary": false,
+      "inventory_sha256": "4afbcefc1729214a521410596109ddd75955db5a0664e6bbf0ff2090fa3a4b5d",
+      "module": "k8s.io/kubelet",
+      "published_commit": "9b6777eba239f1bd612ee54a083f666c214b2e39",
+      "published_tree": "fcf9e8a0b1ae1a954af92d03187046008fbd1c4a",
+      "refs_sha256": "41db466f3a57b5bd98c4c0426d1d1e3afe8e9d213a2e32523ca942523b133477",
+      "source_path": "staging/src/k8s.io/kubelet",
+      "source_tree": "263203dfc617a5311edb14815fa042ac9f15ce99",
+      "tag_object": "b54ed346bc4f73c70efd2883223f8da09aa12322",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "60b4240fbcb082b780693ed14927402629873ea90269ca1ba4f780f3b3fdb581",
+      "auxiliary": false,
+      "inventory_sha256": "f2403c3da4308d3b900090b155c4c82d63660de287d9336addc28b884eef361f",
+      "module": "k8s.io/metrics",
+      "published_commit": "03c96aa853521f1d0c9fe840f52824cff30a651a",
+      "published_tree": "cecd0510d26a9ffc9a9ad0f12195a725b9115123",
+      "refs_sha256": "3911fc97444b9c5d88ed2188d05d09004ab2254c3db159ac31ccfa6c5a2aeb9d",
+      "source_path": "staging/src/k8s.io/metrics",
+      "source_tree": "cefeca5a3ce9224434232256ca982199c5ad8981",
+      "tag_object": "4d798a5aed13df931943e1ee690d9c9ff6db7e76",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "dcedc451f1530a176d87ab3ce28a6f0c7de38c4f4a9f2efc5b5c918cae4d82c1",
+      "auxiliary": false,
+      "inventory_sha256": "869ce3060f612c6eb7eb1833f9ebfe9cda194b3e0aaec0f8a9e22d95a0de5ae2",
+      "module": "k8s.io/mount-utils",
+      "published_commit": "80cc1eaa96ee8b56e4d9bf5d61e7160d9add08ac",
+      "published_tree": "e574cb704b220fb6f7ee47c3d4e38ca8a899e324",
+      "refs_sha256": "ce1f9eb3d20a9184adda2b7ffd9669d054efb4f90e842adbd1bf94073d6b0125",
+      "source_path": "staging/src/k8s.io/mount-utils",
+      "source_tree": "068b5931f7a5e89fb120bf82d6b2be3e6abf3954",
+      "tag_object": "941affc4db3983a04557e5d23d7ef5c05afaa809",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "926f13728c58a39b3ffbc6dd03cd8617e9ac48badcb0ad176b5ffd91aa9ec900",
+      "auxiliary": false,
+      "inventory_sha256": "f992aa5ea0579f4c1826e43acf9d501c3ea8067b6107e18609794ae8515b5334",
+      "module": "k8s.io/pod-security-admission",
+      "published_commit": "8d3d261aa472e0c785bcc09bad38de77a4e7d76c",
+      "published_tree": "9c7da3b1196441fbf045fb748087e9976cd5e8bf",
+      "refs_sha256": "e6c8fdb2d5a9dc42c75dd8c153add3ab515b6a6816761b61e103c80b24b97fe1",
+      "source_path": "staging/src/k8s.io/pod-security-admission",
+      "source_tree": "f9a4254fbc0480b54973c289ef5281c7a32ab669",
+      "tag_object": "532a04efe612263622ddf01459084d35092be74a",
+      "version": "v0.36.4"
+    },
+    {
+      "archive_sha256": "912497dff9b2c6cb055bc019c9759eb6d1384fc1186d38ca534783a1fda7c5bb",
+      "auxiliary": false,
+      "inventory_sha256": "13a47ca689c74ef12d092a53ce3b50741c6a08fc16c0cab57a0ca1e464932bc9",
+      "module": "k8s.io/streaming",
+      "published_commit": "25f24fa10406de5e64c187a36f2538a6e85f9c4a",
+      "published_tree": "644bcc2663471faba07d6e42ca4b2fee459a2200",
+      "refs_sha256": "208e196931316bd8145bbd451bfe69168ae5e91527ad468a96b6ee563de37fde",
+      "source_path": "staging/src/k8s.io/streaming",
+      "source_tree": "0b66fca8054536d5000fe182aa51490ba90ca4e7",
+      "tag_object": "9df69c5e3ec558dba33ab8a2206e5086336620ca",
+      "version": "v0.36.4"
+    }
+  ],
+  "proof_method": "module-content-correspondence-with-seven-exact-publishing-deltas",
+  "recipes": {
+    "compare_all_sha256": "5bb354a52c04ba9dec18f69fde65f413ff110cd8f86e0e7e509b59bc0806e21a",
+    "finalize_matrix_sha256": "1b43e370c38752b2daafa204c45319a12419d3c8b8cf4f8da772c85d16006534",
+    "parent_verify_sha256": "bf5811b17f680c6c2509ef805b81dc80faedf1aa9ba43849ec2de279849fcf4c"
+  },
+  "schema_version": 1,
+  "source_revision": "bb826b1d48562f110659e64e8ec444327433db95",
+  "workspace_matrix_sha256": "4afe16e6ead8a659d15c333966dab1bd43840c01dfb2ffc399ccd0e198ef5c87"
+}

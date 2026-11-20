@@ -27,7 +27,9 @@ from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import (
     image_candidates,
     image_etcd_candidate,
+    image_kubernetes_aliases,
     image_kubernetes_inventory,
+    image_kubernetes_scans,
     image_scope,
     tracking_spike,
 )
@@ -343,7 +345,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         except Rejected:
             command(["docker", "pull", "--platform", "linux/amd64", image], timeout=300)
             inspect_image(image)
-    sboms = {}
+    sboms, kubernetes = {}, {}
     required = {
         ("debian", "worker"): {"libc6", "scikit-learn", "onnxruntime", "cryptography"},
         ("debian", "coredns"): {"github.com/coredns/coredns", "stdlib", "base-files"},
@@ -503,6 +505,11 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 )
                 if version_diagnostic is not None:
                     component["application_inventory"] = version_diagnostic
+                    mapping = image_kubernetes_aliases.resolve(
+                        component["package_observation"], reference
+                    )
+                    if mapping is not None:
+                        kubernetes[name] = reference
                 if observed is not None and coredns_inventory_matches(
                     component["package_observation"]
                 ):
@@ -640,6 +647,11 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 raise Rejected("image_audit_go_database_changed")
             observation["status"] = "pass"
             write_json(safe_child(root, REPORT), report)
+    module_batch = (
+        image_kubernetes_scans.run_batch(run, cache, control_database, db_files)
+        if kubernetes
+        else None
+    )
     for component in report["components"]:
         name = component["name"]
         if name not in sboms:
@@ -676,6 +688,18 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 vulnerability_count=result["unique_vulnerabilities"],
                 report_digest=file_hash(scan_path),
             )
+            if name in kubernetes:
+                component.update(
+                    image_kubernetes_scans.join(
+                        component,
+                        path,
+                        scan_path,
+                        exit_code,
+                        module_batch,
+                        kubernetes[name],
+                        control_database,
+                    )
+                )
             if component["coverage_profile"] == "unapproved-system":
                 component["reason"] = component.get("application_inventory", {}).get(
                     "reason", "image_audit_runtime_application_coverage_unapproved"

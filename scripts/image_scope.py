@@ -13,7 +13,7 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import image_config
 from mlsecops.storage_bootstrap import WORKSPACE_LABEL
 from mlsecops.storage_pki import workspace_id
-from scripts import tracking_service
+from scripts import image_kubernetes_scans, tracking_service
 from scripts.image_audit_contract import (
     COREDNS_CONFIG,
     LOCAL_PATH_CONFIG,
@@ -269,6 +269,10 @@ def coverage(snapshot, components):
                     item.get("coverage_profile") == "local-path-provisioner"
                     and target["config_id"] == LOCAL_PATH_CONFIG
                     and local_path_inventory_matches(item.get("package_observation") or {})
+                )
+                or (
+                    item.get("coverage_profile") == "kubernetes-supplemental"
+                    and image_kubernetes_scans.coverage_valid(item, target)
                 )
             )
             and type(item.get("catalogued_packages")) is int

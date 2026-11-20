@@ -1,0 +1,106 @@
+name: Fixed public Kubernetes supplemental validation
+# Four image targets only. No infrastructure, model, upload, or release acceptance.
+on:
+  push:
+    branches: [qualify/kubernetes-supplemental]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kubernetes-supplemental-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      KUBERNETES_REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Install locked dependencies privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p .runtime
+          mkdir .runtime/kubernetes-supplemental-bootstrap
+          uv sync --locked --no-build --python 3.12.15 > .runtime/kubernetes-supplemental-bootstrap/install.private.log 2>&1 || {
+            printf '%s\n' '{"stage":"dependencies","validation_status":"inconclusive","release_ready":false}'
+            exit 1
+          }
+      - name: Qualify contracts and native driver without Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          .venv/bin/python -B - <<'PY'
+          import contextlib
+          import json
+          import unittest
+          from coverage import Coverage
+
+          names = [
+              "scripts.image_kubernetes_native_qualification",
+              "scripts.image_kubernetes_aliases_qualification",
+              "scripts.image_kubernetes_scans_qualification",
+              "scripts.image_go_supplemental_qualification",
+              "scripts.image_kubernetes_integration_qualification",
+              "scripts.image_scope_qualification",
+          ]
+          modules = ["image_kubernetes_native", "image_kubernetes_aliases",
+                     "image_kubernetes_scans", "image_go_supplemental_contract"]
+          passed = False
+          counts = {"tests": 0, "skips": 0, "modules": {}}
+          with open(".runtime/kubernetes-supplemental-bootstrap/tests.private.log", "x") as log:
+              with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                  try:
+                      coverage = Coverage(data_file=None, config_file=False, branch=True,
+                                          source=["scripts." + name for name in modules])
+                      coverage.start()
+                      result = unittest.TextTestRunner(stream=log).run(
+                          unittest.defaultTestLoader.loadTestsFromNames(names))
+                      coverage.stop()
+                      counts.update(tests=result.testsRun, skips=len(result.skipped))
+                      passed = result.wasSuccessful() and not result.skipped
+                      for module in modules:
+                          filename = "scripts/" + module + ".py"
+                          _, statements, _, missing, _ = coverage.analysis2(filename)
+                          branches = coverage.branch_stats(filename)
+                          item = {"statements": len(statements) - len(missing), "statements_total": len(statements),
+                                  "branches": sum(taken for total, taken in branches.values()),
+                                  "branches_total": sum(total for total, taken in branches.values())}
+                          counts["modules"][module] = item
+                          passed = (passed and item["statements_total"] > 0 and item["branches_total"] > 0
+                                    and item["statements"] * 100 >= 95 * item["statements_total"]
+                                    and item["branches"] * 100 >= 95 * item["branches_total"])
+                  except BaseException:
+                      import traceback
+                      traceback.print_exc()
+          print(json.dumps({"stage": "preflight", "validation_status": "pass" if passed else "inconclusive",
+                            "release_ready": False, **counts}, sort_keys=True))
+          raise SystemExit(0 if passed else 1)
+          PY
+      - name: Scan four pinned images and all 28 fixed coordinates
+        id: native
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          .venv/bin/python -B -m scripts.image_kubernetes_native validate 2> .runtime/kubernetes-supplemental-bootstrap/python.private.log
+      - name: Verify or finish every recorded scanner cleanup
+        if: always() && steps.native.outcome != 'skipped'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          .venv/bin/python -B -m scripts.image_kubernetes_native cleanup 2> .runtime/kubernetes-supplemental-bootstrap/cleanup.private.log
