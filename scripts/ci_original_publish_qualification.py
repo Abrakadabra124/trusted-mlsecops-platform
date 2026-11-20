@@ -481,6 +481,22 @@ class PublisherTests(unittest.TestCase):
             (exit_status.exception.code, out.getvalue()), (1, "original_publish=refused\n")
         )
 
+    def test_portable_checks_reject_extra_tool_and_in_checkout_signer_without_posix_metadata(self):
+        tool_dir = self.state / "bin"
+        platform = SimpleNamespace(
+            name="nt", access=os.access, X_OK=os.X_OK, environ=os.environ, pathsep=os.pathsep
+        )
+        with patch.object(cli, "os", platform):
+            self.assertEqual(cli._signer(self.root, self.signer), self.signer)
+            cli._tools(self.state)
+            self.assertEqual(os.environ["PATH"].split(os.pathsep)[0], str(tool_dir))
+            unexpected = tool_dir / "unexpected"
+            unexpected.touch()
+            with self.assertRaises(Rejected):
+                cli._tools(self.state)
+            with self.assertRaises(Rejected):
+                cli._signer(self.root, unexpected)
+
     def test_signer_ancestry_and_tool_permissions_with_posix_metadata(self):
         # Exercise the hosted permission policy even on a Windows development host.
         with patch.object(cli, "os", wraps=os) as host:
