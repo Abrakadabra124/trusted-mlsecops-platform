@@ -13,6 +13,7 @@ on:
           - contracts
           - check-private-access
           - verify-store-permissions
+          - run-original-campaign
       probe_nonce:
         description: Public one-use fixture challenge
         required: false
@@ -28,6 +29,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
+    permissions:
+      contents: read
+      actions: read
     if: ${{ github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && ((github.ref == 'refs/heads/qualify/candidate-cross-job' || (github.ref == 'refs/heads/qualify/store-access-v1' && github.event_name == 'workflow_dispatch' && (inputs.operation == 'contracts' || inputs.operation == 'verify-store-permissions'))) || (github.ref == 'refs/heads/codex/cp4-m23-security-events-20261107' && github.event_name == 'workflow_dispatch' && inputs.operation == 'contracts')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -89,6 +93,61 @@ jobs:
                   print(path, covered, stats[covered], "/", stats[total])
                   if stats[total] <= 0 or stats[covered] * 100 < stats[total] * 95:
                       raise SystemExit("Per-module coverage below 95 percent")
+          PY
+
+      - name: Check the manual campaign entry contract offline
+        run: .venv/bin/python -B -W error -m unittest scripts.ci_campaign_workflow_qualification
+      - name: Require a completed operator-pinned store privilege proof
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'run-original-campaign' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref_protected && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+        env:
+          # Repository-owner pin for the successful attempt that exercised this credential pair.
+          CANDIDATE_STORE_PROOF: ${{ vars.CANDIDATE_STORE_PROOF }}
+          CANDIDATE_PUBLIC_TOKEN: ${{ github.token }}
+        run: |
+          .venv/bin/python -B -W error - <<'PY'
+          import os
+          from mlsecops.contracts import decode, require_fields
+          from scripts.ci_campaign_source import Client
+          from scripts.ci_source_image_native import REPOSITORY, REPOSITORY_ID, need, same
+          from scripts.ci_private_assets import _hex, _number
+
+          def verify(api, pin):
+              require_fields(pin, ("run_id", "run_attempt", "head_sha"))
+              run, attempt = _number(pin["run_id"]), _number(pin["run_attempt"])
+              sha = _hex(pin["head_sha"], 40)
+              path = f"repos/{REPOSITORY}/actions/runs/{run}"
+              exact = path + f"/attempts/{attempt}"
+              for url in (path, exact):
+                  record = api("GET", url)
+                  same(record, dict(id=run, run_attempt=attempt, head_sha=sha,
+                       head_branch="qualify/store-access-v1", event="workflow_dispatch",
+                       path=".github/workflows/candidate-cross-job.yml",
+                       status="completed", conclusion="success"))
+                  for field in ("repository", "head_repository"):
+                      same(record[field], dict(id=REPOSITORY_ID, full_name=REPOSITORY,
+                                               private=False, fork=False))
+              page = api("GET", exact + "/jobs?per_page=100")
+              rows = page["jobs"]
+              need(type(rows) is list and 4 <= len(rows) < 100)
+              same(page, dict(total_count=len(rows)))
+              required = {"contracts", "probe_upload", "probe_reader", "probe_cleanup"}
+              names, ids = set(), set()
+              for row in rows:
+                  name, identifier = row["name"], _number(row["id"])
+                  need(name not in names and identifier not in ids)
+                  names.add(name)
+                  ids.add(identifier)
+                  same(row, dict(run_id=run, run_attempt=attempt, head_sha=sha, status="completed"))
+                  if name in required:
+                      same(row, dict(conclusion="success"))
+              need(required <= names)
+
+          try:
+              verify(Client(os.environ.pop("CANDIDATE_PUBLIC_TOKEN")),
+                     decode(os.environ["CANDIDATE_STORE_PROOF"].encode(), 1024))
+          except Exception:
+              raise SystemExit("store_proof=refused") from None
+          print("store_proof=pass")
           PY
 
   access:
@@ -184,3 +243,395 @@ jobs:
       PROBE_PHASE: cleanup
       PROBE_CREDENTIAL: CANDIDATE_STORE_WRITE
     steps: *probe_steps
+
+  image:
+    needs: contracts
+    if: &campaign ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'run-original-campaign' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref_protected && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions: &campaign_read
+      contents: read
+      actions: read
+    outputs:
+      receipt: ${{ steps.build.outputs.receipt }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - &campaign_checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - &campaign_uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - &campaign_sync
+        run: uv sync --locked --no-build --no-cache --python 3.12.15
+      - name: Build and verify the public worker image
+        id: build
+        env: &image_api
+          GH_TOKEN: ${{ github.token }}
+        run: .venv/bin/python -B -W error -m scripts.ci_campaign_image build
+      - name: Upload exactly the public source image archive
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: source-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .runtime/source-image/image.tar.gz
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false
+      - name: Remove the owned image build files
+        if: always()
+        env: *image_api
+        run: .venv/bin/python -B -W error -m scripts.ci_campaign_image local-cleanup
+
+  producer:
+    needs: image
+    if: *campaign
+    environment: candidate-store-write
+    permissions: *campaign_read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      producer_public: ${{ steps.issue.outputs.producer_public }}
+    steps:
+      - *campaign_checkout
+      - *campaign_uv
+      - *campaign_sync
+      - &receive_image
+        uses: ./.github/actions/campaign-image-receive
+        with:
+          artifact: ${{ needs.image.outputs.artifact }}
+          receipt: ${{ needs.image.outputs.receipt }}
+      - name: Validate private configuration
+        # For an initially unknown run ID the operator pins the next attempt and reruns all jobs.
+        # Only presence booleans cross this boundary for the two independently provisioned PATs.
+        env:
+          READER_PRESENT: ${{ secrets.CANDIDATE_STORE_READ != '' }}
+          WRITER_PRESENT: ${{ secrets.CANDIDATE_STORE_WRITE != '' }}
+          TRUST_PRESENT: ${{ secrets.CANDIDATE_TRUST_PEM != '' }}
+          CANDIDATE_TRANSFER_KEY: ${{ secrets.CANDIDATE_TRANSFER_KEY }}
+          CANDIDATE_JOURNAL_PUBLIC: ${{ secrets.CANDIDATE_JOURNAL_PUBLIC }}
+          CANDIDATE_JOURNAL_SIGNER_PEM: ${{ secrets.CANDIDATE_JOURNAL_SIGNER_PEM }}
+          CANDIDATE_JOURNAL_RELEASE: ${{ secrets.CANDIDATE_JOURNAL_RELEASE }}
+          CANDIDATE_PRIMARY_RELEASE: ${{ secrets.CANDIDATE_PRIMARY_RELEASE }}
+          CANDIDATE_ORIGIN_RELEASE: ${{ secrets.CANDIDATE_ORIGIN_RELEASE }}
+        run: |
+          .venv/bin/python -B -W error - <<'PY'
+          import os, re
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from mlsecops.contracts import decode, require_fields
+          from mlsecops.signing import encode64
+          from scripts.ci_campaign_journal import _public
+          from scripts.ci_private_assets import REPOSITORY_ID, _hex, _number
+          from scripts.ci_source_image_native import need, number, same
+
+          def descriptors(journal, primary, origin, run, attempt):
+              ids = set()
+              for row in (journal, primary, origin):
+                  require_fields(row, ("repository_id", "release_id", "name", "target_commitish"))
+                  same(row, dict(repository_id=REPOSITORY_ID))
+                  ids.add(_number(row["release_id"]))
+                  _hex(row["target_commitish"], 40)
+              need(len(ids) == 3 and re.fullmatch(r"ci-journal-[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}", journal["name"]))
+              same(primary, dict(name=f"ci-primary-{run}-{attempt}"))
+              same(origin, dict(name=f"ci-origin-{run}-{attempt}"))
+
+          try:
+              # An incomplete integration or stale attempt must stop before M07.
+              from scripts.ci_original_publish import publish
+              from scripts.ci_origin_backup import copy_originals
+              env = os.environ
+              need(all(env[k] == "true" for k in ("READER_PRESENT", "WRITER_PRESENT", "TRUST_PRESENT")))
+              descriptors(*(decode(env["CANDIDATE_" + kind + "_RELEASE"].encode(), 4096)
+                            for kind in ("JOURNAL", "PRIMARY", "ORIGIN")),
+                          number(env["GITHUB_RUN_ID"]), number(env["GITHUB_RUN_ATTEMPT"]))
+              _public(env["CANDIDATE_TRANSFER_KEY"])
+              signer = serialization.load_pem_private_key(env.pop("CANDIDATE_JOURNAL_SIGNER_PEM").encode(), None)
+              need(isinstance(signer, Ed25519PrivateKey))
+              need(encode64(signer.public_key().public_bytes_raw()) == _public(env["CANDIDATE_JOURNAL_PUBLIC"]))
+          except Exception:
+              raise SystemExit("campaign_configuration=refused") from None
+          print("campaign_configuration=pass")
+          PY
+      - &reserve_keys
+        name: Reserve an owned directory outside the checkout
+        id: keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$RUNNER_TEMP" == "$(realpath -e -- "$RUNNER_TEMP")" && "$RUNNER_TEMP/" != "$GITHUB_WORKSPACE/"* ]]
+          dir="$RUNNER_TEMP/campaign-keys"
+          [[ ! -e "$dir.owner" && ! -L "$dir.owner" ]]
+          mkdir -m 700 -- "$dir"
+          ( set -C; stat -c '%d:%i' -- "$dir" > "$dir.owner" ) || { rmdir -- "$dir"; exit 1; }
+      - name: Prepare the original producer
+        id: prepare
+        env:
+          CAMPAIGN_COMMAND: scripts.ci_original_bootstrap prepare
+          CANDIDATE_PUBLIC_TOKEN: ${{ github.token }}
+          CANDIDATE_TRUST_PEM: ${{ secrets.CANDIDATE_TRUST_PEM }}
+          SOURCE_IMAGE_RECEIPT: ${{ needs.image.outputs.receipt }}
+        run: &native_command |
+          .venv/bin/python -B -W error - <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          from mlsecops import key_files
+          from scripts.ci_campaign_guard import COMMAND_FILES, RUNNER_ENV
+          from scripts.ci_campaign_journal import _public
+          from scripts.ci_source_image_native import need
+
+          def public_output(raw, status, field):
+              prefix = (status + "=pass\n").encode("ascii")
+              if field is None:
+                  need(raw == prefix)
+                  return None
+              prefix += (field + "=").encode("ascii")
+              need(raw.startswith(prefix) and raw.endswith(b"\n"))
+              return _public(raw[len(prefix):-1].decode("ascii"))
+
+          def invoke():
+              module, verb = os.environ["CAMPAIGN_COMMAND"].split()
+              trust = ("CANDIDATE_TRUST_PEM", "CANDIDATE_TRUST_FILE")
+              signer = ("CANDIDATE_JOURNAL_SIGNER_PEM", "CANDIDATE_JOURNAL_KEY_FILE")
+              status, field, keyfile, inputs = {
+                  ("scripts.ci_original_bootstrap", "prepare"): (
+                      "original_bootstrap", None, trust, "SOURCE_IMAGE_RECEIPT"),
+                  ("scripts.ci_original_publish", "publish"): (
+                      "original_publish", "producer_public", signer,
+                      "SOURCE_IMAGE_RECEIPT CANDIDATE_STORE_WRITE CANDIDATE_TRANSFER_KEY "
+                      "CANDIDATE_JOURNAL_RELEASE CANDIDATE_JOURNAL_PUBLIC CANDIDATE_ORIGIN_RELEASE"),
+                  ("scripts.ci_primary_job", "capture"): (
+                      "primary_capture", "receiver_public", trust,
+                      "CANDIDATE_STORE_READ CANDIDATE_TRANSFER_KEY CANDIDATE_PRODUCER_PUBLIC"),
+                  ("scripts.ci_primary_job", "publish"): (
+                      "primary_publish", None, None,
+                      "CANDIDATE_STORE_WRITE CANDIDATE_TRANSFER_KEY CANDIDATE_RECEIVER_PUBLIC CANDIDATE_PRIMARY_RELEASE"),
+              }[module, verb]
+              env = {k: os.environ[k] for k in RUNNER_ENV if k in os.environ}
+              for k in ("CANDIDATE_PUBLIC_TOKEN", *inputs.split()):
+                  env[k] = os.environ[k]
+              folder = Path(env["RUNNER_TEMP"]) / "campaign-keys"
+              info = folder.lstat()
+              need(folder == folder.resolve(strict=True) and not folder.is_relative_to(Path.cwd()))
+              need(info.st_uid == os.geteuid() and info.st_mode & 0o777 == 0o700)
+              need(folder.with_suffix(".owner").read_text() == f"{info.st_dev}:{info.st_ino}\n")
+              if keyfile:
+                  pem, target = keyfile
+                  path = folder / target
+                  with key_files.opened(path, create=True) as stream:
+                      stream.write(os.environ.pop(pem).encode())
+                  need(path.lstat().st_mode & 0o777 == 0o600)
+                  env[target] = str(path)
+              output = Path(os.environ["GITHUB_OUTPUT"])
+              env.update(dict.fromkeys(COMMAND_FILES, os.devnull))
+              env["PATH"] = str(Path.cwd() / ".runtime/bin") + os.pathsep + env["PATH"]
+              try:
+                  result = subprocess.run([sys.executable, "-B", "-W", "error", "-m", module, verb],
+                                          env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True)
+              finally:
+                  if keyfile:
+                      path.unlink()
+                      need(not os.path.lexists(path))
+              public = public_output(result.stdout, status, field)
+              if public is not None:
+                  line = f"{field}={public}"
+                  with output.open("a", encoding="ascii") as stream:
+                      print(line, file=stream)
+                  print(line)
+              print(status + "=pass")
+
+          try:
+              invoke()
+          except (Exception, KeyboardInterrupt):
+              raise SystemExit("campaign_command=refused") from None
+          PY
+      - name: Publish the original producer
+        id: issue
+        env:
+          CAMPAIGN_COMMAND: scripts.ci_original_publish publish
+          CANDIDATE_PUBLIC_TOKEN: ${{ github.token }}
+          CANDIDATE_STORE_WRITE: ${{ secrets.CANDIDATE_STORE_WRITE }}
+          CANDIDATE_TRANSFER_KEY: ${{ secrets.CANDIDATE_TRANSFER_KEY }}
+          CANDIDATE_JOURNAL_SIGNER_PEM: ${{ secrets.CANDIDATE_JOURNAL_SIGNER_PEM }}
+          CANDIDATE_JOURNAL_PUBLIC: ${{ secrets.CANDIDATE_JOURNAL_PUBLIC }}
+          CANDIDATE_JOURNAL_RELEASE: ${{ secrets.CANDIDATE_JOURNAL_RELEASE }}
+          CANDIDATE_ORIGIN_RELEASE: ${{ secrets.CANDIDATE_ORIGIN_RELEASE }}
+          SOURCE_IMAGE_RECEIPT: ${{ needs.image.outputs.receipt }}
+        run: *native_command
+      - name: Recover the recorded producer cluster after interrupted preparation
+        if: always() && (steps.prepare.outcome == 'failure' || steps.prepare.outcome == 'cancelled')
+        run: |
+          export PATH="$GITHUB_WORKSPACE/.runtime/bin:$PATH"
+          .venv/bin/python -B -W error -m scripts.ci_producer_cluster cleanup >/dev/null 2>&1
+      - name: Stop and verify the owned producer SQL independently of publication
+        if: always() && (steps.prepare.outcome == 'success' || steps.prepare.outcome == 'failure' || steps.prepare.outcome == 'cancelled')
+        env:
+          PREPARED: ${{ steps.prepare.outcome }}
+          SOURCE_IMAGE_RECEIPT: ${{ needs.image.outputs.receipt }}
+        run: |
+          .venv/bin/python -B -W error - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import decode, read_json, safe_child
+          from mlsecops import storage_bootstrap, storage_pki
+          from scripts import ci_campaign_producer, ci_producer_cluster, m17_recovery_native
+          from scripts import ci_source_image_native as image, shared_serving_receipt
+          from scripts.ci_serving_job import private_process
+
+          def stop(root, raw, prepared):
+              state = safe_child(root, ".runtime")
+              image.owner_record(root, os.environ, create=False)
+              received = image.receipt(decode(raw.encode(), 4096), os.environ)
+              source = {k: received[k] for k in ("source_revision", "source_fingerprint", "image_id")}
+              witness = ci_producer_cluster.recovery.Recovery(safe_child(state, ci_producer_cluster.WITNESS))
+              image.same(witness.record, dict(run_owner=ci_campaign_producer.run_owner(), source=source,
+                         workspace_id=storage_pki.workspace_id(state), baseline_empty=True, sql=None))
+              marker = storage_bootstrap.validate(state)
+              image.same(marker, dict(workspace_id=witness.record["workspace_id"], port=15439))
+              ready = safe_child(state, "evidence/storage-bootstrap.json")
+              if prepared or ready.exists():
+                  image.same(read_json(ready), dict(status="ready", container_id=marker["container_id"]))
+              m17_recovery_native.stop_owned(state)
+              shared_serving_receipt.offline_pin(state)
+              image.need(storage_bootstrap.validate(state) == marker)
+
+          try:
+              # private_process strips non-runner inputs from children. Keep the receipt in memory.
+              root, received = Path.cwd(), os.environ.pop("SOURCE_IMAGE_RECEIPT")
+              prepared = os.environ["PREPARED"] == "success"
+              with private_process():
+                  stop(root, received, prepared)
+          except (Exception, KeyboardInterrupt):
+              raise SystemExit("producer_sql_cleanup=unconfirmed") from None
+          print("producer_sql_cleanup=pass")
+          PY
+      - &clean_keys
+        name: Remove and verify only this job's temporary keys
+        if: always() && steps.keys.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/campaign-keys"
+          [[ ! -L "$dir" && -d "$dir" && -O "$dir" && -f "$dir.owner" && ! -L "$dir.owner" ]]
+          [[ "$(stat -c '%d:%i' -- "$dir")" == "$(<"$dir.owner")" ]]
+          for key in "$dir/CANDIDATE_TRUST_FILE" "$dir/CANDIDATE_JOURNAL_KEY_FILE"; do
+            if [[ -e "$key" || -L "$key" ]]; then
+              [[ -f "$key" && ! -L "$key" && -O "$key" && "$(stat -c '%a:%h' -- "$key")" == '600:1' ]]
+              unlink -- "$key"
+            fi
+          done
+          rmdir -- "$dir"
+          unlink -- "$dir.owner"
+          [[ ! -e "$dir" && ! -L "$dir" && ! -e "$dir.owner" && ! -L "$dir.owner" ]]
+
+  shared:
+    needs: [image, producer]
+    if: *campaign
+    environment: candidate-store-write
+    permissions: *campaign_read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      receiver_public: ${{ steps.capture.outputs.receiver_public }}
+    steps: &receiver_steps
+      - *campaign_checkout
+      - *campaign_uv
+      - *campaign_sync
+      - *receive_image
+      - name: Check receiver capacity and install the pinned tools without private credentials
+        run: |
+          .venv/bin/python -B -W error - >/dev/null 2>&1 <<'PY'
+          from pathlib import Path
+          from mlsecops.inventory import collect
+          from scripts.ci_source_image_native import need
+          from scripts.install_ci_tools import main
+          inventory = collect(Path.cwd())
+          need(inventory["docker_cpus"] >= 4 and inventory["docker_memory_bytes"] >= 15 * 1024**3
+               and inventory["disk_free_bytes"] >= 12 * 1024**3)
+          main()
+          PY
+      - *reserve_keys
+      - name: Capture original receiver evidence
+        id: capture
+        env:
+          CAMPAIGN_COMMAND: scripts.ci_primary_job capture
+          CANDIDATE_PUBLIC_TOKEN: ${{ github.token }}
+          CANDIDATE_STORE_READ: ${{ secrets.CANDIDATE_STORE_READ }}
+          CANDIDATE_PRODUCER_PUBLIC: ${{ needs.producer.outputs.producer_public }}
+          CANDIDATE_TRANSFER_KEY: ${{ secrets.CANDIDATE_TRANSFER_KEY }}
+          CANDIDATE_TRUST_PEM: ${{ secrets.CANDIDATE_TRUST_PEM }}
+        run: *native_command
+      - name: Publish verified receiver evidence
+        env:
+          CAMPAIGN_COMMAND: scripts.ci_primary_job publish
+          CANDIDATE_PUBLIC_TOKEN: ${{ github.token }}
+          CANDIDATE_STORE_WRITE: ${{ secrets.CANDIDATE_STORE_WRITE }}
+          CANDIDATE_RECEIVER_PUBLIC: ${{ steps.capture.outputs.receiver_public }}
+          CANDIDATE_TRANSFER_KEY: ${{ secrets.CANDIDATE_TRANSFER_KEY }}
+          CANDIDATE_PRIMARY_RELEASE: ${{ secrets.CANDIDATE_PRIMARY_RELEASE }}
+        run: *native_command
+      - name: Recheck the receiver witness after a failed or interrupted capture
+        if: always() && (steps.capture.outcome == 'failure' || steps.capture.outcome == 'cancelled')
+        env:
+          CANDIDATE_PUBLIC_TOKEN: ${{ github.token }}
+          SOURCE_IMAGE_RECEIPT: ${{ needs.image.outputs.receipt }}
+        run: |
+          export PATH="$GITHUB_WORKSPACE/.runtime/bin:$PATH"
+          .venv/bin/python -B -W error - <<'PY'
+          import os
+          from pathlib import Path
+          from mlsecops.contracts import decode
+          from scripts import ci_shared_job, ci_serving_job, ci_source_image_native as image
+          from scripts.ci_campaign_source import Client
+          try:
+              root = Path.cwd()
+              role = os.environ["GITHUB_JOB"]
+              cleanup = {"shared": ci_shared_job.cleanup, "serving": ci_serving_job.cleanup}[role]
+              api = Client(os.environ.pop("CANDIDATE_PUBLIC_TOKEN"))
+              record = image.receipt(decode(os.environ["SOURCE_IMAGE_RECEIPT"].encode(), 4096), os.environ)
+              source = {k: record[k] for k in ("source_revision", "source_fingerprint", "image_id")}
+              owner = dict(repository=image.REPOSITORY, producer_job="producer",
+                           run_id=image.number(os.environ["GITHUB_RUN_ID"]),
+                           run_attempt=image.number(os.environ["GITHUB_RUN_ATTEMPT"]))
+              with ci_serving_job.private_process():
+                  cleanup(root, source_api=api, run_owner=owner, source=source)
+          except (Exception, KeyboardInterrupt):
+              raise SystemExit("receiver_cleanup=unconfirmed") from None
+          print("receiver_cleanup=pass")
+          PY
+      - *clean_keys
+
+  serving:
+    needs: [image, producer]
+    if: *campaign
+    environment: candidate-store-write
+    permissions: *campaign_read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      receiver_public: ${{ steps.capture.outputs.receiver_public }}
+    steps: *receiver_steps
+
+  image_cleanup:
+    needs: [image, producer, shared, serving]
+    if: ${{ always() && needs.image.result != 'skipped' && github.event_name == 'workflow_dispatch' && inputs.operation == 'run-original-campaign' && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && !github.event.repository.private && !github.event.repository.fork && github.ref_protected && github.ref == 'refs/heads/qualify/candidate-cross-job' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - *campaign_checkout
+      - *campaign_uv
+      - *campaign_sync
+      - name: Delete only the verified public artifact and check absence
+        env: *image_api
+        run: .venv/bin/python -B -W error -m scripts.ci_campaign_image cleanup

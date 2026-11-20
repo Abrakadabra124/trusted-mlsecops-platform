@@ -1,0 +1,34 @@
+name: Receive the exact campaign source image
+description: Verify the run artifact before download and load the checked image on this runner
+inputs:
+  artifact:
+    description: Public source image artifact ID
+    required: true
+  receipt:
+    description: Validated source image receipt
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SOURCE_IMAGE_ARTIFACT_ID: ${{ inputs.artifact }}
+        SOURCE_IMAGE_RECEIPT: ${{ inputs.receipt }}
+      run: .venv/bin/python -B -W error -m scripts.ci_campaign_image precheck
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      with:
+        artifact-ids: ${{ inputs.artifact }}
+        merge-multiple: true
+        path: .runtime/source-image
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SOURCE_IMAGE_ARTIFACT_ID: ${{ inputs.artifact }}
+        SOURCE_IMAGE_RECEIPT: ${{ inputs.receipt }}
+      run: .venv/bin/python -B -W error -m scripts.ci_campaign_image receive
+    - if: always()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: .venv/bin/python -B -W error -m scripts.ci_campaign_image local-cleanup
