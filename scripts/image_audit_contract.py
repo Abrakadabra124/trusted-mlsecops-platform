@@ -14,9 +14,27 @@ GO_CONTROLS = {
     "stdlib": ("stdlib", "go1.20.9"),
 }
 GO_CONTROL_ADVISORIES = {"GO-2023-2102", "CVE-2023-39325", "GHSA-4374-p667-p6c8"}
-COREDNS_CONFIG = "sha256:97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4"
-# Sorted (type, name, version) from /coredns Go build info and the image's dpkg database.
-COREDNS_PACKAGES_SHA256 = "9b512c14911df8ec933a65f4a6010b2dc14fb7c63ef5ec6d632f9999058dc862"
+COREDNS_MANIFEST = "sha256:3429e3bbffb1e839470c4a3541d4d78aca84a1394c75a539d0200c58c63196ac"
+COREDNS_CONFIG = "sha256:881cbdacb8c168aaba50f10b1458f36d1b976c5a856e72d3589bc9cd262f3442"
+COREDNS_REPOSITORY = "registry.k8s.io/coredns/coredns"
+COREDNS_REFERENCE = f"{COREDNS_REPOSITORY}@{COREDNS_MANIFEST}"
+COREDNS_SPEC_IMAGE = f"{COREDNS_REPOSITORY}:v1.15.0@{COREDNS_MANIFEST}"
+# config -> (platform reference, row count, SHA-256 of canonical full observation
+# with packages sorted by canonical JSON). v1.14.7 is from native run 44954907094.
+# v1.15.0 is independently projected from verified ELF and dpkg bytes (fixture).
+_COREDNS_INVENTORIES = {
+    COREDNS_CONFIG: (
+        COREDNS_REFERENCE,
+        202,
+        "0eec5fe63064753a5e3d8bcd63f79fff02dfc18e4bb2a542bc449b694ee3f5b5",
+    ),
+    "sha256:97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4": (
+        COREDNS_REPOSITORY
+        + "@sha256:2329f5f0e7e79fbe56dcdf11ecc4337ee2476bb251095bc275fe9461cb88a55b",
+        198,
+        "1c8a9c4801aa11930f1ac71a7cee398956f5a4ebc4d1e47f0e78a53789dbd013",
+    ),
+}
 LOCAL_PATH_CONFIG = "sha256:c82008e2cd0186ef96bfd05d6b49d3286768fae5bd7a961f70bd485a3785c006"
 # Independent binary build info + dpkg rows, with registry layers/config verified.
 # Provenance and all 61 rows: image_system_inventory_fixture.py.
@@ -50,25 +68,23 @@ def local_path_inventory_matches(observation):
         return False
 
 
-def coredns_inventory_matches(observation):
-    if (
-        observation.get("image_id") != COREDNS_CONFIG
-        or (observation["distro"] or {}).get("id") != "debian"
-    ):
+def coredns_inventory_matches(observation, reference):
+    """Bind the manifest and config to every normalized field, path and duplicate."""
+    if type(observation) is not dict or type(observation.get("image_id")) is not str:
         return False
-    rows = []
-    for p in observation["packages"]:
-        if p["type"] == "go-module":
-            if p["foundBy"] != "go-module-binary-cataloger" or p["paths"] != ["/coredns"]:
-                return False
-        elif (
-            p["type"] != "deb"
-            or p["foundBy"] != "dpkg-db-cataloger"
-            or f"/var/lib/dpkg/status.d/{p['name']}" not in p["paths"]
-        ):
-            return False
-        rows.append([p["type"], p["name"], p["version"]])
-    return digest(canonical(sorted(rows))) == COREDNS_PACKAGES_SHA256
+    spec = _COREDNS_INVENTORIES.get(observation["image_id"])
+    if spec is None or reference != spec[0]:
+        return False
+    packages = observation.get("packages")
+    if type(packages) is not list or len(packages) != spec[1]:
+        return False
+    if any(type(p) is not dict or type(p.get("paths")) is not list for p in packages):
+        return False
+    try:
+        ordered = {**observation, "packages": sorted(packages, key=canonical)}
+        return digest(canonical(ordered)) == spec[2]
+    except (Rejected, RecursionError):
+        return False
 
 
 def observe_packages(sbom, image_id):

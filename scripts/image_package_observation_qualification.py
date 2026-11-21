@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import image_audit_contract as contract
-from scripts import image_kubernetes_inventory, image_scope
+from scripts import image_coredns_fixture, image_kubernetes_inventory, image_scope
 from scripts.image_audit_contract import observe_packages
 from scripts.image_audit_qualification import fixtures
 from scripts.image_system_inventory_fixture import LOCAL_PATH_INVENTORY
@@ -32,6 +32,39 @@ def local_path_observation():
             for kind, name, version in evidence["rows"]
         ],
     }
+
+
+def coredns_observation():
+    sbom, _, _, _, _ = fixtures()
+    sbom["source"]["metadata"]["imageID"] = contract.COREDNS_CONFIG
+    sbom["distro"] = {"id": "debian", "versionID": "12.15"}
+    artifacts = []
+    for kind, records in (
+        ("deb", image_coredns_fixture.DEB),
+        ("go-module", image_coredns_fixture.GO_MODULES),
+    ):
+        for line in records.splitlines():
+            name, version = line.split()
+            status = f"/var/lib/dpkg/status.d/{name}"
+            paths = (
+                [status, status + ".md5sums", f"/usr/share/doc/{name}/copyright"]
+                if kind == "deb"
+                else ["/coredns"]
+            )
+            artifacts.append(
+                {
+                    "id": str(len(artifacts)),
+                    "name": name,
+                    "version": version,
+                    "type": kind,
+                    "foundBy": "dpkg-db-cataloger"
+                    if kind == "deb"
+                    else "go-module-binary-cataloger",
+                    "locations": [{"path": path} for path in paths],
+                }
+            )
+    sbom["artifacts"] = artifacts
+    return observe_packages(sbom, contract.COREDNS_CONFIG)
 
 
 class PackageObservationTests(unittest.TestCase):
@@ -193,46 +226,83 @@ class PackageObservationTests(unittest.TestCase):
                 image_scope.coverage(snapshot, [{**component, **change}])["covered_images"], 0
             )
 
-    def test_coredns_requires_the_reviewed_binary_and_complete_package_inventory(self):
-        packages = [
-            {
-                "name": "stdlib",
-                "version": "go1.26.6",
-                "type": "go-module",
-                "foundBy": "go-module-binary-cataloger",
-                "paths": ["/coredns"],
-            },
-            {
-                "name": "base-files",
-                "version": "12.4+deb12u15",
-                "type": "deb",
-                "foundBy": "dpkg-db-cataloger",
-                "paths": ["/var/lib/dpkg/status.d/base-files"],
-            },
-        ]
-        observation = {
-            "image_id": contract.COREDNS_CONFIG,
-            "distro": {"id": "debian", "versionID": "12"},
-            "packages": packages,
+    def test_coredns_requires_the_entire_independent_inventory_and_exact_manifest(self):
+        observed = coredns_observation()
+        ref = contract.COREDNS_REFERENCE
+        self.assertEqual(observed["package_types"], {"deb": 5, "go-module": 197})
+        self.assertTrue(contract.coredns_inventory_matches(observed, ref))
+        for bad_ref in (
+            None,
+            ref.replace("registry.k8s.io", "mirror"),
+            contract.COREDNS_CONFIG,
+            ref.replace("3429e3bb", "00000000"),
+        ):
+            with self.subTest(reference=bad_ref):
+                self.assertFalse(contract.coredns_inventory_matches(observed, bad_ref))
+        for change in (
+            lambda o: o.update(image_id="sha256:" + "0" * 64),
+            lambda o: o.update(
+                image_id="sha256:97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4"
+            ),
+            lambda o: o.update(distro=None),
+            lambda o: o["distro"].update(versionID="12"),
+            lambda o: o.update(package_count=202.0),
+            lambda o: o.update(status="pass"),
+            lambda o: o["package_types"].update(deb=4),
+            lambda o: o["packages"].pop(),
+            lambda o: o["packages"].append(o["packages"][0]),
+            lambda o: o["packages"].__setitem__(1, o["packages"][0]),
+            lambda o: o["packages"][0].update(version="UNKNOWN"),
+            lambda o: o["packages"][0].update(paths=["/other"]),
+            lambda o: o["packages"][0].update(foundBy="file-cataloger"),
+            lambda o: next(p for p in o["packages"] if p["type"] == "deb")["paths"].pop(),
+            lambda o: next(p for p in o["packages"] if p["name"] == "stdlib").update(
+                version="go1.26.6"
+            ),
+            lambda o: next(p for p in o["packages"] if p["name"] == "golang.org/x/net").update(
+                version="v0.57.0"
+            ),
+        ):
+            modified = copy.deepcopy(observed)
+            change(modified)
+            with self.subTest(change=change):
+                self.assertFalse(contract.coredns_inventory_matches(modified, ref))
+        observed["packages"].reverse()
+        self.assertTrue(contract.coredns_inventory_matches(observed, ref))
+
+    def test_coredns_coverage_binds_target_component_and_observation(self):
+        obs = coredns_observation()
+        ref, config = contract.COREDNS_REFERENCE, contract.COREDNS_CONFIG
+        target = {"name": "runtime-007", "config_id": config, "reference": ref}
+        item = {
+            "name": "runtime-007",
+            "observed_reference": ref,
+            "image_config_id": config,
+            "runtime_image_id": config,
+            "catalogued_packages": 202,
+            "scan_executed": True,
+            "sbom_validated": True,
+            "coverage_profile": "coredns",
+            "status": "fail",
+            "package_observation": obs,
         }
-        pin = digest(canonical(sorted([p["type"], p["name"], p["version"]] for p in packages)))
-        with patch.object(contract, "COREDNS_PACKAGES_SHA256", pin):
-            self.assertTrue(contract.coredns_inventory_matches(observation))
-            for change in (
-                lambda o: o.update(image_id="sha256:" + "0" * 64),
-                lambda o: o.update(distro=None),
-                lambda o: o["packages"].pop(),
-                lambda o: o["packages"].append(o["packages"][0]),
-                lambda o: o["packages"][0].update(version="UNKNOWN"),
-                lambda o: o["packages"][0].update(paths=["/other"]),
-                lambda o: o["packages"][0].update(foundBy="file-cataloger"),
-                lambda o: o["packages"][1].update(foundBy="file-cataloger"),
-                lambda o: o["packages"][1].update(paths=[]),
-            ):
-                modified = copy.deepcopy(observation)
-                change(modified)
-                with self.subTest(change=change):
-                    self.assertFalse(contract.coredns_inventory_matches(modified))
+
+        def covered(component, expected):
+            return image_scope.coverage({"targets": [expected]}, [component])["covered_images"]
+
+        self.assertEqual(covered(item, target), 1)
+        for field, value in (
+            ("catalogued_packages", 201),
+            ("runtime_image_id", "other"),
+            ("observed_reference", "other"),
+            ("scan_executed", False),
+            ("sbom_validated", False),
+            ("status", "inconclusive"),
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(covered({**item, field: value}, target), 0)
+        self.assertEqual(covered(item, {**target, "reference": "other"}), 0)
+        self.assertEqual(covered(item, {**target, "config_id": "other"}), 0)
 
     def test_bound_projection_retains_unknown_distro_without_granting_coverage(self):
         sbom, _, _, image, _ = fixtures()

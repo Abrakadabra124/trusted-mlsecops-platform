@@ -532,7 +532,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 if version_diagnostic is not None:
                     component["application_inventory"] = version_diagnostic
                 if observed is not None and coredns_inventory_matches(
-                    component["package_observation"]
+                    component["package_observation"], reference
                 ):
                     component["coverage_profile"] = "coredns"
                 elif observed is not None and local_path_inventory_matches(

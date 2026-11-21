@@ -15,7 +15,7 @@ nodes:
           local:
             imageTag: "3.6.17-0@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
         dns:
-          imageTag: "v1.14.7@sha256:2329f5f0e7e79fbe56dcdf11ecc4337ee2476bb251095bc275fe9461cb88a55b"
+          imageTag: "v1.15.0@sha256:3429e3bbffb1e839470c4a3541d4d78aca84a1394c75a539d0200c58c63196ac"
       - |
         kind: KubeletConfiguration
         podPidsLimit: 64

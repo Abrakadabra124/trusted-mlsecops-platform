@@ -20,7 +20,6 @@ from scripts import (
     tracking_service,
 )
 from scripts.image_audit_contract import (
-    COREDNS_CONFIG,
     LOCAL_PATH_CONFIG,
     coredns_inventory_matches,
     local_path_inventory_matches,
@@ -268,8 +267,14 @@ def coverage(snapshot, components):
                 item.get("coverage_profile") in {"worker", "storage", "tracking"}
                 or (
                     item.get("coverage_profile") == "coredns"
-                    and target["config_id"] == COREDNS_CONFIG
-                    and coredns_inventory_matches(item.get("package_observation") or {})
+                    and item.get("observed_reference") == target.get("reference")
+                    and item.get("runtime_image_id") == target["config_id"]
+                    and coredns_inventory_matches(
+                        item.get("package_observation"), target.get("reference")
+                    )
+                    and item["package_observation"]["image_id"] == target["config_id"]
+                    and item.get("catalogued_packages")
+                    == item["package_observation"]["package_count"]
                 )
                 or (
                     item.get("coverage_profile") == "local-path-provisioner"
