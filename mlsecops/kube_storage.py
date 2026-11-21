@@ -17,7 +17,13 @@ from mlsecops.contracts import (
     write_json,
 )
 from mlsecops.kube_storage_resources import CLASS, NAMESPACE, resources
-from mlsecops.storage_bootstrap import IMAGE, configuration, export_clients, migrate
+from mlsecops.storage_bootstrap import (
+    IMAGE,
+    SERVER_VERSION_CHECKSUMS,
+    configuration,
+    export_clients,
+    migrate,
+)
 from mlsecops.storage_schema import DATABASE
 from mlsecops.storage_snapshot import binary_command
 
@@ -188,7 +194,7 @@ def live_state(state, marker):
             state,
             "SELECT current_setting('server_version_num') || ':' || current_setting('data_checksums');",
         )
-        != "180006:on"
+        != SERVER_VERSION_CHECKSUMS
     ):
         raise Rejected("cluster_storage_server_version_or_checksums_invalid")
     if admin(state, "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL;") != "0":
