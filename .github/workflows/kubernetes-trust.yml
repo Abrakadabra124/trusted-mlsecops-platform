@@ -27,7 +27,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -m unittest scripts.trust_authority_qualification scripts.promotion_controller_qualification scripts.kube_trust_probe_qualification scripts.kube_trust_native_qualification
+          uv run --locked python -m unittest scripts.trust_authority_qualification scripts.promotion_controller_qualification scripts.kube_trust_probe_qualification scripts.kube_trust_native_qualification scripts.kube_coredns_probe_qualification scripts.image_package_observation_qualification
           uv run --locked coverage run --branch --data-file=.coverage-kube-trust --source=mlsecops.kube_trust -m unittest scripts.kube_trust_qualification
           uv run --locked coverage report --data-file=.coverage-kube-trust --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-trust -o .coverage-kube-trust.json
@@ -70,6 +70,8 @@ jobs:
           sys.exit(0 if status["version"] == "3.6.17" and type(leader) is int and leader > 0
               and leader == status["header"]["member_id"] and not status.get("errors") else 1)'
           echo "etcd=3.6.17 image=$manifest config=$config single_member_leader=verified"
+      - name: Verify the CoreDNS rollout, running image and kube-dns answer
+        run: uv run --locked python -m scripts.kube_coredns_probe
       - name: Bootstrap model storage prerequisite
         run: uv run --locked python -m mlsecops.kube_storage
       - name: Separate authority TLS, SQL, network, revocation and recovery

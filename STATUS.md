@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+## 22 ноября 2026 года, CoreDNS 1.15.0
+
+В свежем кластере обе реплики CoreDNS 1.15.0 прошли проверку манифеста и конфигурации работающего образа. Запрос к `kube-dns` вернул адрес Kubernetes API, затем прошли 79 проверок службы доверия. [Проверка изменений для main](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44959136733), [порядок диагностики](docs/runbooks.md).
+
+В предыдущем полном аудите у CoreDNS 1.14.7 зарегистрированы 3 Critical и 24 High. Для CoreDNS 1.15.0 в полном аудите остались 0 Critical, 2 High, 3 Medium и 1 Unknown. В обоих отчётах одна дата сборки базы Grype, хеши файлов базы в этих запусках различаются. На рабочей ревизии `e915167` общий итог `fail`, прикладное покрытие 11/14, 389 уникальных находок. [Предыдущий аудит](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44957782916), [аудит с CoreDNS 1.15.0](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44959047516).
+
 ## 22 ноября 2026 года, etcd 3.6.17 принят для новых кластеров
 
 В `main` закреплён образ etcd 3.6.17. В новом одноузловом кластере проверены манифест и конфигурация запущенного контейнера, версия сервера, лидер и 79 проверок службы доверия. [Изменение и ранбук](https://github.com/Abrakadabra124/trusted-mlsecops-platform/pull/9), [запуск](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44957210068).
