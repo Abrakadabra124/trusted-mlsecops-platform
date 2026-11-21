@@ -4,6 +4,7 @@ import copy
 import tempfile
 import unittest
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -11,6 +12,12 @@ from unittest.mock import patch
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import image_audit as audit
 from scripts import image_kubernetes_scans as scans
+from scripts.image_audit_qualification import fixtures as image_fixture
+from scripts.image_go_supplemental_qualification import fixture as module_fixture
+
+CILIUM_COORD = ("github.com/google/gops", "v0.3.29")
+CILIUM_PURL = "pkg:golang/github.com/google/gops@v0.3.29"
+CILIUM_REASON = "image_audit_runtime_application_coverage_unapproved"
 
 
 class SupplementalScanContracts(unittest.TestCase):
@@ -22,7 +29,9 @@ class SupplementalScanContracts(unittest.TestCase):
         self.cache.mkdir()
         (self.cache / "db").write_bytes(b"fixed")
         self.db_files = audit.snapshot(self.cache)
-        self.db = {"schema_version": "v6.1.3", "built": "2026-11-20T00:00:00Z"}
+        self.module_scan = module_fixture(timestamp=datetime.now(UTC))
+        self.db = self.module_scan["expected_database"]
+        self.original_code = 0
         self.coords = (("k8s.io/api", "v0.36.4"), ("k8s.io/kubernetes", "v1.36.4"))
         self.mapping = {
             "proof_digest": "a" * 64,
@@ -30,6 +39,18 @@ class SupplementalScanContracts(unittest.TestCase):
             "coordinates": [list(pair) for pair in self.coords],
             "instances": [{"module": "k8s.io/api", "version": "v0.36.4"}],
         }
+        self.cilium = SimpleNamespace(
+            PROFILE="cilium-operator-supplemental",
+            REFERENCE="quay.io/cilium/operator-generic@sha256:" + "1" * 64,
+            coordinates=lambda: (CILIUM_COORD,),
+            validate_coordinate=lambda m, v: f"pkg:golang/{m}@{v}",
+            proof_digest=lambda: "d" * 64,
+            resolve=lambda observation, reference: {
+                "image_config_id": observation["image_id"],
+                "proof_digest": "d" * 64,
+                "coordinates": [list(CILIUM_COORD)],
+            },
+        )
         self.patches = [
             patch.object(scans.aliases, "coordinates", return_value=self.coords),
             patch.object(scans.aliases, "proof_digest", return_value="a" * 64),
@@ -41,7 +62,6 @@ class SupplementalScanContracts(unittest.TestCase):
                 scans.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=b"")
             ),
             patch.object(audit, "scanner", side_effect=self.scanner),
-            patch.object(scans.single, "assess", side_effect=self.assess),
         ]
         for p in self.patches:
             p.start()
@@ -53,31 +73,68 @@ class SupplementalScanContracts(unittest.TestCase):
         self.assertTrue(all(path.is_absolute() for path, _, _ in mounts))
         self.assertEqual(mounts[0], (self.cache, "/cache", False))
         purl = arguments[0]
-        (run / f"{name}.json").write_bytes(canonical({"purl": purl}))
-        (run / f"{name}.log").write_bytes(b"trace")
+        report = self.module_scan["report"] | {"source": {"type": "purl", "target": purl}}
+        cdx = copy.deepcopy(self.module_scan["cdx"])
+        package = cdx["components"][0]
+        trace = self.module_scan["trace"].replace(package["purl"].encode(), purl.encode())
+        module, version = purl.removeprefix("pkg:golang/").split("@")
+        package.update(name=module, version=version, purl=purl)
+        (run / f"{name}.json").write_bytes(canonical(report))
+        (run / f"{name}.log").write_bytes(trace)
         (run / f"{name}.cid").write_text("c" * 64, encoding="ascii")
         self.assertEqual(mounts[1][1:], ("/output", True))
-        (mounts[1][0] / "report.json").write_bytes(canonical({"purl": purl}))
+        (mounts[1][0] / "report.json").write_bytes(canonical(cdx))
         return 0, run / f"{name}.json"
 
-    def assess(self, module, version, report, cdx, trace, code, expected_database, timestamp=None):
-        self.assertEqual(report["purl"], f"pkg:golang/{module}@{version}")
-        self.assertEqual(cdx["purl"], report["purl"])
-        return {
-            "purl": report["purl"],
-            "status": "pass",
-            "findings": [],
-            "matches": 0,
-            "unique_vulnerabilities": 0,
-            "severity_counts": {s: 0 for s in scans.SEVERITIES},
-            "database": expected_database,
-            "scanner_exit_code": code,
-            "package_identity_bound": True,
-            "matching_completed": True,
-        }
+    def batch(self, **kwargs):
+        return scans.run_batch(self.root, self.cache, self.db, self.db_files, **kwargs)
 
-    def batch(self):
-        return scans.run_batch(self.root, self.cache, self.db, self.db_files)
+    def test_fake_scan_and_cross_registry_replay(self):
+        kube = self.batch()
+        cilium = self.batch(registry=self.cilium)
+        self.assertEqual(cilium.directory, self.root / "cilium-operator-modules")
+        self.assertEqual(kube.directory, self.root / "kubernetes-modules")
+        self.assertEqual(audit.scanner.call_count, len(self.coords) + 1)
+        self.assertEqual(audit.scanner.call_args.args[3][0], CILIUM_PURL)
+        results = scans.read_batch(cilium, self.db, registry=self.cilium)
+        self.assertEqual([r["purl"] for r in results], [CILIUM_PURL])
+        for batch, registry in ((kube, self.cilium), (cilium, scans.aliases)):
+            with self.subTest(registry=registry), self.assertRaises(Rejected):
+                scans.read_batch(batch, self.db, registry=registry)
+        with (
+            patch.object(scans.aliases, "proof_digest", self.cilium.proof_digest),
+            patch.object(scans.aliases, "coordinates", self.cilium.coordinates),
+            self.assertRaisesRegex(Rejected, "batch_binding"),
+        ):
+            scans.read_batch(cilium, self.db)
+
+    def test_cilium_fake_scanner_reporting_a_different_release_is_rejected(self):
+        def wrong_release(run, name, image, arguments, mounts):
+            self.assertEqual(arguments[0], CILIUM_PURL)
+            wrong = CILIUM_PURL.replace("v0.3.29", "v0.3.28")
+            return self.scanner(run, name, image, [wrong, *arguments[1:]], mounts)
+
+        with patch.object(audit, "scanner", wrong_release), self.assertRaises(Rejected):
+            self.batch(registry=self.cilium)
+
+    def test_custom_registry_cannot_select_other_profile_coordinate_or_scanner_input(self):
+        for field, value in (
+            ("PROFILE", "../kubernetes-modules"),
+            ("PROFILE", "kubernetes-supplemental"),
+            ("REFERENCE", None),
+            ("REFERENCE", "local/cilium:tag"),
+            ("coordinates", lambda: ()),
+            ("coordinates", lambda: (CILIUM_COORD,) * 2),
+            ("coordinates", lambda: (("github.com/google/gops", "v0.3.28"),)),
+            ("validate_coordinate", lambda m, v: "dir:/cache"),
+        ):
+            with (
+                self.subTest(field=field, value=value),
+                patch.object(self.cilium, field, value),
+                self.assertRaises(Rejected),
+            ):
+                self.batch(registry=self.cilium)
+        audit.scanner.assert_not_called()
 
     def test_fixed_complete_batch_and_replay(self):
         batch = self.batch()
@@ -221,16 +278,106 @@ class SupplementalScanContracts(unittest.TestCase):
             self.addCleanup(p.stop)
         self.created = self.batch()
 
-    def joined(self):
+    def joined(self, **kwargs):
         return scans.join(
             self.component,
             self.sbom,
             self.report,
-            0,
+            self.original_code,
             self.created,
             self.target["reference"],
             self.db,
+            **kwargs,
         )
+
+    def cilium_join_fixture(self):
+        sbom, report, match, config, _ = image_fixture()
+        sbom["distro"] = {}
+        report.update(
+            distro=None, matches=[match], descriptor=self.module_scan["report"]["descriptor"]
+        )
+        self.sbom = self.root / "sbom.json"
+        self.report = self.root / "report.json"
+        self.sbom.write_bytes(canonical(sbom))
+        self.report.write_bytes(canonical(report))
+        self.observation = scans.observe_packages(sbom, config)
+        self.original_code = 2
+        self.component = {
+            **scans.assess(sbom, report, config, set(), self.original_code, diagnostic_only=True),
+            "image_config_id": config,
+            "package_observation": self.observation,
+            "sbom_digest": digest(canonical(sbom)),
+            "report_digest": digest(canonical(report)),
+            "observed_reference": self.cilium.REFERENCE,
+            "reason": CILIUM_REASON,
+        }
+        self.target = {"config_id": config, "reference": self.cilium.REFERENCE}
+        self.created = self.batch(registry=self.cilium)
+
+    def test_cilium_join_binds_evidence_to_profile_and_target(self):
+        self.cilium_join_fixture()
+        result = self.joined(registry=self.cilium)
+        self.assertEqual(result["coverage_profile"], self.cilium.PROFILE)
+        self.assertNotIn("kubernetes_supplemental", result)
+        self.assertNotIn("reason", result)
+        evidence = result["cilium_operator_supplemental"]
+        self.assertEqual(set(evidence), {"mapping", "original_result", "scans"})
+        self.assertIsNone(evidence["original_result"]["distro"])
+        self.assertEqual([r["purl"] for r in evidence["scans"]], [CILIUM_PURL])
+        self.assertEqual(result["findings"], self.component["findings"])
+        self.assertEqual(result["status"], "fail")
+        self.assertTrue(scans.coverage_valid(result, self.target, registry=self.cilium))
+        self.assertFalse(scans.coverage_valid(result, self.target))
+        for key, value in (
+            ("reference", self.target["config_id"]),
+            ("reference", self.cilium.REFERENCE.replace("quay.io", "other.example")),
+            ("config_id", "sha256:" + "0" * 64),
+            ("containerd_reference", "local/cilium:tag"),
+        ):
+            target = {**self.target, key: value}
+            with self.subTest(target=target):
+                self.assertFalse(scans.coverage_valid(result, target, registry=self.cilium))
+        for key, value in (
+            ("observed_reference", "local/cilium:tag"),
+            ("image_config_id", "sha256:" + "0" * 64),
+            ("coverage_profile", "kubernetes-supplemental"),
+            ("local_alias", "local/cilium:tag"),
+            ("containerd_export", {}),
+        ):
+            with self.subTest(key=key):
+                changed = {**result, key: value}
+                self.assertFalse(scans.coverage_valid(changed, self.target, registry=self.cilium))
+        cilium = self.created
+        self.created = self.batch()
+        with self.assertRaises(Rejected):
+            self.joined(registry=self.cilium)
+        self.created = cilium
+        with (
+            patch.dict(self.component, reason="image_audit_kubernetes_module_versions_unresolved"),
+            self.assertRaisesRegex(Rejected, "batch_binding"),
+        ):
+            self.joined()
+
+    def test_cilium_join_rejects_wrong_reason_alias_and_empty_mapping(self):
+        self.cilium_join_fixture()
+        for key, value in (
+            ("reason", "image_audit_kubernetes_module_versions_unresolved"),
+            ("reason", "image_audit_snapshot_changed"),
+            ("observed_reference", self.target["config_id"]),
+            ("local_alias", "local/cilium:tag"),
+            ("containerd_export", {}),
+        ):
+            with self.subTest(key=key), patch.dict(self.component, {key: value}):
+                with self.assertRaises(Rejected):
+                    self.joined(registry=self.cilium)
+        with patch.dict(self.target, reference="local/cilium:tag"), self.assertRaises(Rejected):
+            self.joined(registry=self.cilium)
+        with patch.object(self.cilium, "resolve", wraps=self.cilium.resolve) as resolve:
+            mapping = self.cilium.resolve(self.observation, self.cilium.REFERENCE)
+            for key, value in (("coordinates", []), ("proof_digest", "a" * 64)):
+                resolve.return_value = {**mapping, key: value}
+                with self.subTest(key=key), self.assertRaises(Rejected):
+                    self.joined(registry=self.cilium)
 
     def test_join_retains_original_findings_and_coverage(self):
         self.join_fixture("High")

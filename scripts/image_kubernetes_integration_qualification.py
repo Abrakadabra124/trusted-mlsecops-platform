@@ -41,6 +41,11 @@ class KubernetesAuditIntegration(unittest.TestCase):
                     row["reference"] = known["config_id"]
                 if fault == "upstream-local":
                     row["reference"] = known["reference"]
+        if fault in ("operator-join", "operator-io"):
+            observed[5].update(
+                reference=audit.image_cilium_operator_inventory.REFERENCE,
+                config_id=audit.image_cilium_operator_inventory.CONFIG,
+            )
         runtime = {"targets": observed, "source_revision": "r", "source_fingerprint": "f"}
         by_ref = {row["reference"]: row["config_id"] for row in observed}
         names = {row["name"]: row for row in observed}
@@ -108,7 +113,8 @@ class KubernetesAuditIntegration(unittest.TestCase):
                 "manifest_digest": manifest,
             }
 
-        def read_batch(batch, expected, timestamp=None):
+        def read_batch(batch, expected, timestamp=None, *, registry=audit.image_kubernetes_aliases):
+            self.assertIs(registry, audit.image_kubernetes_aliases)
             calls.append("join")
             self.assertIs(batch, sentinel.batch)
             self.assertEqual(expected, db)
@@ -209,6 +215,17 @@ class KubernetesAuditIntegration(unittest.TestCase):
             stack.enter_context(
                 patch.object(audit.image_kubernetes_scans, "read_batch", read_batch)
             )
+            if fault in ("operator-join", "operator-io"):
+
+                def supplement(component, target, *args):
+                    calls.append("operator")
+                    self.assertTrue(component["scan_executed"])
+                    self.assertEqual(component["observed_reference"], target["reference"])
+                    if fault == "operator-io":
+                        raise OSError("private-evidence-path")
+                    return {**component, "cilium_operator_supplemental": {"controlled": True}}
+
+                stack.enter_context(patch.object(audit, "supplement_operator", supplement))
             result = audit.audit(root, runtime_state=root / ".runtime")
             persisted = read_json(root / audit.REPORT)
         self.assertEqual(calls.count("db-update"), 1)
@@ -229,6 +246,26 @@ class KubernetesAuditIntegration(unittest.TestCase):
         self.assertLess(calls.index("runtime-013-scan"), calls.index("batch"))
         self.assertEqual(report["runtime_scope"]["covered_images"], 4)
         self.assertNotIn("kubernetes_supplemental_error", report)
+
+    def test_operator_supplement_keeps_the_original_findings_and_isolates_io_failure(self):
+        for fault in ("operator-join", "operator-io"):
+            with self.subTest(fault=fault):
+                report, calls = self.audit(fault)
+                component = next(
+                    row for row in report["components"] if row["name"] == "runtime-005"
+                )
+                self.assertEqual(calls.count("operator"), 1)
+                self.assertEqual(component["severity_counts"]["High"], 1)
+                self.assertEqual(component["status"], "fail")
+                if fault == "operator-io":
+                    self.assertFalse(component["sbom_validated"])
+                    self.assertEqual(
+                        component["reason"], report["cilium_operator_supplemental_error"]
+                    )
+                    self.assertIsNone(report["vulnerability_count"])
+                else:
+                    self.assertIn("cilium_operator_supplemental", component)
+                self.assertNotIn(b"private-evidence-path", canonical(report))
 
     def test_late_replay_failure_retains_verified_findings_without_group_credit(self):
         for fault in ("replay", "read-error"):

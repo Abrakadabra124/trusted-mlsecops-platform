@@ -26,6 +26,7 @@ from mlsecops.kube_worker import image_document
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import (
     image_candidates,
+    image_cilium_operator_inventory,
     image_etcd_candidate,
     image_kubernetes_aliases,
     image_kubernetes_export,
@@ -255,6 +256,26 @@ def snapshot(cache):
     if not paths or len(paths) > 20 or any(path.is_symlink() for path in cache.rglob("*")):
         raise Rejected("image_audit_database_snapshot_invalid")
     return {path.relative_to(cache).as_posix(): file_hash(path) for path in paths}
+
+
+def supplement_operator(component, target, sbom, scan, code, run, cache, db, db_files):
+    registry = image_cilium_operator_inventory
+    if (
+        target.get("reference") != registry.REFERENCE
+        or target.get("config_id") != registry.CONFIG
+        or component.get("observed_reference") != registry.REFERENCE
+        or component.get("image_config_id") != registry.CONFIG
+        or "containerd_reference" in target
+        or not registry.resolve(component["package_observation"], target["reference"])
+    ):
+        raise Rejected("image_audit_cilium_operator_binding")
+    batch = image_kubernetes_scans.run_batch(run, cache, db, db_files, registry=registry)
+    joined = image_kubernetes_scans.join(
+        component, sbom, scan, code, batch, target["reference"], db, registry=registry
+    )
+    if not image_kubernetes_scans.coverage_valid(joined, target, registry=registry):
+        raise Rejected("image_audit_cilium_operator_reconciliation")
+    return joined
 
 
 def audit(root, include_candidates=False, runtime_state=None, include_node_candidate=False):
@@ -665,6 +686,11 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         if target["config_id"] in image_kubernetes_inventory.INVENTORIES
     }
     originals = {}
+    operators = {
+        target["name"]: target
+        for target in (observed or {}).get("targets", [])
+        if target["config_id"] == image_cilium_operator_inventory.CONFIG
+    }
     for component in report["components"]:
         name = component["name"]
         if name not in sboms:
@@ -710,6 +736,28 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 )
                 if component["status"] == "pass":
                     component["status"] = "inconclusive"
+            if name in operators:
+                try:
+                    joined = supplement_operator(
+                        component,
+                        operators[name],
+                        path,
+                        scan_path,
+                        exit_code,
+                        run,
+                        cache,
+                        control_database,
+                        db_files,
+                    )
+                except (Rejected, OSError):
+                    report["cilium_operator_supplemental_error"] = (
+                        "image_audit_cilium_operator_join_incomplete"
+                    )
+                    component["reason"] = report["cilium_operator_supplemental_error"]
+                    component["sbom_validated"] = False
+                else:
+                    component.clear()
+                    component.update(joined)
         except Rejected as error:
             component["reason"] = str(error)
         write_json(safe_child(root, REPORT), report)
@@ -792,9 +840,9 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     report["status"] = (
         "fail" if "fail" in statuses else "inconclusive" if "inconclusive" in statuses else "pass"
     )
-    if "kubernetes_supplemental_error" not in report and all(
-        component["scan_executed"] for component in report["components"]
-    ):
+    if not {"kubernetes_supplemental_error", "cilium_operator_supplemental_error"}.intersection(
+        report
+    ) and all(component["scan_executed"] for component in report["components"]):
         report["vulnerability_count"] = len(
             {
                 finding["id"]
