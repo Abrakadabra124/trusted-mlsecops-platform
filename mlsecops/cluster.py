@@ -20,8 +20,8 @@ from mlsecops.inventory import command
 NAME = "trusted-mlsecops"
 CONTEXT = f"kind-{NAME}"
 NODE = f"{NAME}-control-plane"
-CHART_VERSION = "1.20.4"
-CHART_SHA256 = "505abff8385811df1a949776fc42e9f10697989a332acc86d6e8933efcb855ed"
+CHART_VERSION = "1.20.5"
+CHART_SHA256 = "0c7592eb75179ecf46dd3ec22145916f0164c4401214ea15afb5b230b1d11a21"
 NAMESPACES = {
     "ml-train": "trainer",
     "ml-eval": "evaluator",
