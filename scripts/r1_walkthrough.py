@@ -38,16 +38,25 @@ def destination(root, state):
     return state
 
 
+def verify_refusal(proposal):
+    if (
+        not isinstance(proposal, dict)
+        or proposal.get("status") != "pass"
+        or proposal.get("release_ready") is not False
+        or proposal.get("scope") != "release-proposal-and-authorization-denial-not-full-M10"
+        or not isinstance(proposal.get("cases"), list)
+        or "actual-promotion-admission-without-assurance-denied" not in proposal["cases"]
+    ):
+        raise Rejected("walkthrough_release_refusal_unconfirmed")
+
+
 def verify_subject(demo, proposal, serving):
     required = {
         "actual-candidate-revocation-http-503",
         "actual-candidate-revocation-readiness-503",
     }
     if (
-        proposal.get("status") != "pass"
-        or proposal.get("release_ready") is not False
-        or "actual-promotion-admission-without-assurance-denied" not in proposal.get("cases", [])
-        or serving.get("status") != "pass"
+        serving.get("status") != "pass"
         or serving.get("release_ready") is not False
         or serving.get("scope") != "actual-candidate-serving-qualification-not-release-approval"
         or serving.get("candidate_reference") != demo["candidate"]["candidate_reference"]
@@ -213,14 +222,22 @@ def run(root, state):
         prepared = stage("preparation", prepare)
         image = prepared["image_id"]
         demo = stage("data-training-evaluation", lambda: storage_pipeline.demo(root, source, image))
-        proposal = stage("release-decision", lambda: release_native.qualify(root, source, image))
-        report.update(release_decision="refused", refusal_reason="release_assurance_required")
-        write_json(state / "report.json", report)
-        write_json(source / "evidence/release-native.json", proposal)
-        inference = stage(
-            "inference-observation", lambda: serving_output_native.run(root, source, image, 15446)
-        )
-        verify_subject(demo, proposal, inference)
+
+        def decide():
+            result = release_native.qualify(root, source, image)
+            verify_refusal(result)
+            write_json(source / "evidence/release-native.json", result)
+            report.update(release_decision="refused", refusal_reason="release_assurance_required")
+            return result
+
+        proposal = stage("release-decision", decide)
+
+        def observe():
+            result = serving_output_native.run(root, source, image, 15446)
+            verify_subject(demo, proposal, result)
+            return result
+
+        inference = stage("inference-observation", observe)
         report.update(
             candidate_reference=demo["candidate"]["candidate_reference"],
             evaluation_reference=demo["evaluation_reference"],
