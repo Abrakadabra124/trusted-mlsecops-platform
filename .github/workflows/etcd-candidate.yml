@@ -1,0 +1,265 @@
+name: Qualify the etcd 3.6.17 x/crypto candidate
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-etcd-crypto-candidate]
+    paths:
+      - images/candidates/etcd/Dockerfile
+      - .github/workflows/etcd-candidate.yml
+permissions: {}
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      DOCKER_BUILDKIT: "1"
+      BASELINE: registry.k8s.io/etcd@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b
+      READER: docker.io/library/golang@sha256:79ecd0a7157c7a4cf3b281ced8465350591bf54fedab540e75374a003e1fde7e
+      # Same scanner images as scripts/image_audit.py.
+      SYFT: anchore/syft:v1.54.1@sha256:3eb5379ba7b409c3f4069b686110527af0c47df993fa5c10d13e7cf34f49b1aa
+      GRYPE: anchore/grype:v0.120.1@sha256:7bb1480f73d9a23b8e6137669c9b780389492778dc2da5c818d0add7e828ed45
+    steps:
+      - name: Build twice and compare files extracted from both final images
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/etcd-qualification"
+          mkdir -m 700 "$work"
+          cd "$work"
+          mkdir context first second
+          export GIT_TERMINAL_PROMPT=0
+          git init -q source
+          git -C source -c protocol.version=2 fetch -q --no-tags --depth=1 \
+            "https://github.com/$GITHUB_REPOSITORY.git" "$GITHUB_SHA"
+          git -C source -c core.autocrlf=false checkout -q --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = "$GITHUB_SHA"
+          state=$(git -C source status --porcelain)
+          test -z "$state"
+          recipe=images/candidates/etcd/Dockerfile
+          git -C source cat-file blob "$GITHUB_SHA:$recipe" > context/Dockerfile
+          cmp "source/$recipe" context/Dockerfile
+          echo '5036ccb5ca4ef3db34ce0a505b09602b047449ade7babcd1f77f98aea96b6171  context/Dockerfile' | sha256sum -c -
+          docker pull --platform linux/amd64 "$READER"
+          container=
+          cleanup() { if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi; }
+          trap cleanup EXIT
+          for build in first second; do
+            docker build --no-cache --platform linux/amd64 --iidfile "$build/id" \
+              -t "local/etcd-qualification:$build" context
+            id=$(cat "$build/id")
+            test "$(docker image inspect -f '{{.Os}}/{{.Architecture}}' "$id")" = linux/amd64
+            test "$(docker image inspect -f '{{index .Config.Labels "org.trusted-mlsecops-platform.etcd.patch"}}' "$id")" = x-crypto-v0.59.0-r1
+            container=$(docker create --network none "$id")
+            for name in etcd etcdctl etcdutl; do
+              docker cp "$container:/usr/local/bin/$name" "$build/$name"
+            done
+            docker rm "$container" >/dev/null
+            remaining=$(docker container ls --all --no-trunc --quiet --filter "id=$container")
+            test -z "$remaining"
+            container=
+            docker run --rm --network none --read-only -v "$PWD/$build:/elf:ro" \
+              --entrypoint /usr/local/go/bin/go "$READER" version -m \
+              /elf/etcd /elf/etcdctl /elf/etcdutl | tee "$build/buildinfo"
+            (cd "$build" && sha256sum etcd etcdctl etcdutl) | tee "$build/sha256"
+          done
+          diff -u first/sha256 second/sha256
+          diff -u first/buildinfo second/buildinfo
+          # Canonical dep and replacement rows include module version and Go h1.
+          # Expected hashes use the upstream ELF inventories plus the x/crypto, sys and text updates.
+          for name in etcd etcdctl etcdutl; do
+            awk -v header="/elf/$name:" '/^\/elf\// {selected=($1==header)} selected' \
+              first/buildinfo > "first/$name.info"
+            grep -Fx "/elf/$name: go1.26.11" "first/$name.info"
+            module="$name"
+            if [[ "$name" = etcd ]]; then module=server; fi
+            grep -Fx $'\tpath\tgo.etcd.io/etcd/'"$module/v3" "first/$name.info"
+            awk -v main="go.etcd.io/etcd/$module/v3" \
+              '$1=="mod" && $2==main && $3=="v3.6.17+dirty" {ok=1} END {exit !ok}' "first/$name.info"
+            grep -Fx $'\tbuild\tvcs.revision=0689586e360e2c6b46f95ad5634c25d5fa1683db' "first/$name.info"
+            grep -Fx $'\tbuild\tvcs.modified=true' "first/$name.info"
+            awk '$1=="dep" || $1=="=>" {print $1, $2, $3, $4}' "first/$name.info" > "first/$name.graph"
+            case "$name" in
+              etcd|etcdutl)
+                grep -Fx 'dep golang.org/x/crypto v0.59.0 h1:xS2jhqYbzNrpvkWP2YTDf4TJwBy3ykR03i8vFDxEc7c=' "first/$name.graph" ;;
+              etcdctl)
+                if grep -Fq 'dep golang.org/x/crypto ' "first/$name.graph"; then exit 1; fi ;;
+            esac
+          done
+          sha256sum -c <<'LOCK'
+          bc8b2f9d68efa35a9c5c48cb46e1f454988f2b94cf85fe5ec96ea9a7abb59327  first/etcd.graph
+          21ba09501b771b6843f65c8a146b7a74f919318e482584a48a30e84f0c4aff91  first/etcdctl.graph
+          50541f960943d7f5f00c9a5f2fb69b28920eeae9a5ac9608b9aface9775494f7  first/etcdutl.graph
+          LOCK
+
+      - name: Scan both Docker archives and the three extracted candidate executables
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/etcd-qualification"
+          mkdir db scans
+          docker pull --platform linux/amd64 "$BASELINE"
+          docker pull --platform linux/amd64 "$SYFT"
+          docker pull --platform linux/amd64 "$GRYPE"
+          baseline_id=$(docker image inspect -f '{{.Id}}' "$BASELINE")
+          test "$baseline_id" = sha256:be2dd319600bac16f542b8e46e1b78511c35a31e46829ee9acc82a83c94aa377
+          echo "$baseline_id" > scans/baseline.id
+          cp first/id scans/candidate.id
+          docker save -o scans/baseline.tar "$baseline_id"
+          docker save -o scans/candidate.tar "$(cat first/id)"
+          sha256sum scans/*.tar
+          common=(--rm --read-only --user "$(id -u):$(id -g)" --cap-drop ALL
+                  --security-opt no-new-privileges --tmpfs /tmp:rw,mode=1777 -e HOME=/tmp)
+          db_env=(-e GRYPE_DB_CACHE_DIR=/db -e GRYPE_DB_VALIDATE_AGE=true
+                  -e GRYPE_DB_MAX_ALLOWED_BUILT_AGE=120h -e GRYPE_DB_VALIDATE_BY_HASH_ON_START=true
+                  -e GRYPE_CHECK_FOR_APP_UPDATE=false -e GRYPE_EXTERNAL_SOURCES_ENABLE=false)
+          docker run "${common[@]}" "${db_env[@]}" -v "$PWD/db:/db" "$GRYPE" db update
+          db_hashes() { (cd db && find . -type f -print0 | sort -z | xargs -0 -r sha256sum); }
+          db_hashes > db.before
+          test -s db.before
+          sha256sum db.before
+          for item in baseline candidate etcd etcdctl etcdutl; do
+            case "$item" in
+              baseline|candidate) source="docker-archive:/input/scans/$item.tar" ;;
+              *) source="file:/input/first/$item" ;;
+            esac
+            docker run "${common[@]}" --network none -e SYFT_CHECK_FOR_APP_UPDATE=false \
+              -v "$PWD:/input:ro" "$SYFT" "$source" -o syft-json > "scans/$item.sbom.json"
+            docker run "${common[@]}" "${db_env[@]}" --network none -e GRYPE_DB_AUTO_UPDATE=false \
+              -v "$PWD/db:/db:ro" -v "$PWD/scans:/input:ro" "$GRYPE" \
+              "sbom:/input/$item.sbom.json" -o json > "scans/$item.grype.json"
+            sha256sum "scans/$item.sbom.json" "scans/$item.grype.json"
+            # Preserve every original match and ignored match, including all severities, in job output.
+            jq -c --arg item "$item" '
+              {input:$item, database:.descriptor.db.status, alertsByPackage, matches:(.matches|length)},
+              (.matches[] | {input:$item, match:.}),
+              (.ignoredMatches[]? | {input:$item, ignoredMatch:.})' "scans/$item.grype.json"
+          done
+          db_hashes > db.after
+          cmp db.before db.after
+
+      - name: Check native versions and run a disposable single-member server
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/etcd-qualification"
+          id=$(cat first/id)
+          opts=(--network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 65532:65532)
+          run_bin() {
+            local name="$1"
+            shift
+            docker run --rm "${opts[@]}" --entrypoint "/usr/local/bin/$name" "$id" "$@"
+          }
+          run_bin etcd --version | tee server.version
+          grep -Fx 'etcd Version: 3.6.17' server.version
+          grep -Fx 'Git SHA: 0689586e360e2c6b46f95ad5634c25d5fa1683db' server.version
+          for name in etcdctl etcdutl; do
+            run_bin "$name" version | tee "$name.version"
+            grep -Fx "$name version: 3.6.17" "$name.version"
+          done
+          endpoint=http://127.0.0.1:2379
+          peer=http://127.0.0.1:2380
+          cid=$(docker run -d "${opts[@]}" --tmpfs /data:rw,uid=65532,gid=65532,mode=0700,size=128m \
+            --entrypoint /usr/local/bin/etcd "$id" --name candidate --data-dir /data/member-data \
+            --listen-client-urls "$endpoint" --advertise-client-urls "$endpoint" \
+            --listen-peer-urls "$peer" --initial-advertise-peer-urls "$peer" --initial-cluster "candidate=$peer")
+          trap 'docker rm -f "$cid" >/dev/null' EXIT
+          ctl() { docker exec "$cid" /usr/local/bin/etcdctl --endpoints="$endpoint" --command-timeout=2s "$@"; }
+          for attempt in {1..20}; do
+            if ctl endpoint health; then break; fi
+            sleep 1
+          done
+          ctl endpoint health
+          ctl -w json endpoint status | tee status.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          [endpoint] = json.loads(Path("status.json").read_bytes())
+          status = endpoint["Status"]
+          leader, member = status["leader"], status["header"]["member_id"]
+          if not (endpoint["Endpoint"] == "http://127.0.0.1:2379" and status["version"] == "3.6.17"
+                  and type(leader) is int and type(member) is int and 0 < leader == member < 2**64
+                  and not status.get("errors")):
+              raise SystemExit("single-member endpoint status mismatch")
+          PY
+          ctl put qualification/key retained
+          test "$(ctl get qualification/key --print-value-only)" = retained
+          ctl snapshot save /data/snapshot.db
+          docker exec "$cid" /usr/local/bin/etcdutl snapshot status /data/snapshot.db -w json | tee snapshot.json
+          jq -e '.revision>=2 and .totalKey>0' snapshot.json
+          docker rm -f "$cid" >/dev/null
+          trap - EXIT
+          remaining=$(docker container ls --all --no-trunc --quiet --filter "id=$cid")
+          test -z "$remaining"
+
+      - name: Apply the candidate gates to the unmodified reports
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/etcd-qualification/scans"
+          python3 - <<'PY'
+          import json
+          from datetime import UTC, datetime, timedelta
+          from pathlib import Path
+
+          def load(name):
+              return json.loads(Path(name).read_bytes())
+
+          def check(ok, message):
+              if not ok:
+                  raise SystemExit(message)
+
+          def paths(packages, module, version):
+              rows = [p for p in packages if p["type"] == "go-module" and p["name"] == module]
+              check(all(p["version"] == version for p in rows), f"unexpected {module} version")
+              return {loc["path"] for p in rows for loc in p["locations"]}
+
+          names = {"etcd", "etcdctl", "etcdutl"}
+          linked = {"etcd", "etcdutl"}
+          expected_paths = {"/usr/local/bin/" + name for name in linked}
+          advisory = "GO-2026-5932"
+          database = None
+          for item in ("baseline", "candidate", "etcd", "etcdctl", "etcdutl"):
+              sbom = load(f"{item}.sbom.json")
+              report = load(f"{item}.grype.json")
+              packages = sbom["artifacts"]
+              check(packages and sbom["descriptor"]["version"] == "1.54.1", f"{item}: Syft inventory")
+              check(report["descriptor"]["version"] == "0.120.1", f"{item}: Grype version")
+              db = report["descriptor"]["db"]["status"]
+              age = datetime.now(UTC) - datetime.fromisoformat(db["built"].replace("Z", "+00:00"))
+              check(db["valid"] is True and not db.get("error") and timedelta() <= age <= timedelta(hours=120),
+                    f"{item}: unusable DB")
+              fingerprint = (db["schemaVersion"], db["built"])
+              if database is None:
+                  database = fingerprint
+              check(database == fingerprint, f"{item}: DB changed")
+              check(not report.get("ignoredMatches") and not report.get("alertsByPackage"), f"{item}: incomplete scan")
+              by_id = {p["id"]: p for p in packages}
+              target_paths = set()
+              for match in report["matches"]:
+                  art = match["artifact"]
+                  package = by_id[art["id"]]
+                  check(all(art[k] == package[k] for k in ("type", "name", "version")), f"{item}: SBOM mismatch")
+                  vuln = match["vulnerability"]
+                  ids = {vuln["id"], *(v["id"] for v in match.get("relatedVulnerabilities", []))}
+                  if advisory in ids:
+                      check(item == "baseline" and art["name"] == "golang.org/x/crypto", f"{item}: {advisory}")
+                      target_paths.update(loc["path"] for loc in package["locations"])
+                  if item != "baseline":
+                      check(vuln["severity"] in {"Negligible", "Low", "Medium"}, f"{item}: {vuln['id']} {vuln['severity']}")
+              version = "v0.58.0" if item == "baseline" else "v0.59.0"
+              crypto = paths(packages, "golang.org/x/crypto", version)
+              net = paths(packages, "golang.org/x/net", "v0.62.0")
+              check(not any(p["name"].startswith("golang.org/x/crypto/openpgp") for p in packages),
+                    f"{item}: separate OpenPGP module")
+              if item in {"baseline", "candidate"}:
+                  image_id = Path(f"{item}.id").read_text().strip()
+                  check(sbom["source"]["metadata"]["imageID"] == report["source"]["target"]["imageID"] == image_id,
+                        f"{item}: scanned image differs")
+                  check(crypto == expected_paths and net == {"/usr/local/bin/" + n for n in names}, f"{item}: ELF coverage")
+                  if item == "baseline":
+                      check(target_paths == expected_paths, "baseline did not reproduce both original findings")
+              else:
+                  check(sbom["source"]["type"] == "file" and net and bool(crypto) == (item in linked),
+                        f"{item}: extracted ELF coverage")
+          print("Candidate qualified on the disposable host. The deployed baseline has its own audit.")
+          PY
