@@ -1,18 +1,29 @@
 import contextlib
 import copy
 import io
+import re
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops import qualification
-from mlsecops.contracts import Rejected, canonical, read_json, write_json
+from mlsecops.contracts import Rejected, canonical, digest, read_json, write_json
 from scripts import image_candidates
 
 
 def qualify():
     cases = []
+    # Storage candidate only: PostgreSQL 18.7-r0 and ICU 79.1-r2, before native qualification.
+    # Wolfi x86_64 APKINDEX.tar.gz SHA-256 b4427db0e47b2b4047532ca4aed7cef9d1c878b8a6edecb000125fed7c452762
+    storage_inventory = "1304cdca7e66e507628480ee9dad5bcdc3e29d161f94714c047ec761b35ba651"
+    recipe = image_candidates.SPECS["storage"]["recipe"]
+    source = (Path(__file__).resolve().parents[1] / recipe).read_text(encoding="utf-8")
+    pins = re.findall(r"^\s+'([a-zA-Z0-9+_.-]+)=([^']+)' \\\s*$", source, re.MULTILINE)
+    packages = [{"name": name, "version": version} for name, version in sorted(pins)]
+    if digest(canonical(packages)) != storage_inventory:
+        raise Rejected("candidate_recipe_differs_from_qualified_apk_inventory")
+    cases.append({"id": f"qualified-apk-inventory:{recipe}", "status": "pass"})
     with tempfile.TemporaryDirectory(prefix="candidate-contract-") as temporary:
         root = Path(temporary).resolve()
         output = root / ".runtime/evidence/image-candidate-worker.json"

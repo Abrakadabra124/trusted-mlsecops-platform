@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops import storage_bootstrap, storage_restore
-from mlsecops.contracts import Rejected, canonical, write_json
+from mlsecops.contracts import Rejected, canonical, digest, write_json
 
 
 def qualify():
@@ -88,6 +88,34 @@ def qualify():
             ):
                 raise Rejected("storage_image_spec_binding_invalid")
             cases.append({"id": "image-bound-config-identical-tls", "status": "pass"})
+            for role, marker, override, expected, wrong_version in (
+                ("source", baseline, None, "180006:on", "180007:on"),
+                ("target", candidate, image_id, "180007:on", "180006:on"),
+            ):
+                write_json(state / "storage.json", marker)
+
+                def verify():
+                    storage_bootstrap.verify_configuration(
+                        state, marker["name"], experimental_image_id=override
+                    )
+
+                with patch.object(
+                    storage_bootstrap,
+                    "docker",
+                    side_effect=lambda args: SimpleNamespace(
+                        stdout=digest(files[args[-1].rsplit("/", 1)[1]]).encode()
+                    ),
+                ):
+                    with patch.object(storage_bootstrap, "admin", side_effect=[expected, "0"]):
+                        verify()
+                    cases.append({"id": f"{role}:exact-version-and-checksums", "status": "pass"})
+                    for invalid in (wrong_version, expected.replace(":on", ":off")):
+                        with patch.object(storage_bootstrap, "admin", side_effect=[invalid]):
+                            rejected(
+                                f"{role}:invalid-server:{invalid}",
+                                verify,
+                                "storage_server_version_or_checksums_invalid",
+                            )
             write_json(state / "storage.json", candidate)
             with patch.object(storage_bootstrap, "inspect") as inspect:
                 rejected(
