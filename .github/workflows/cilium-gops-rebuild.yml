@@ -1,0 +1,42 @@
+name: Reproduce the gops binary shipped in Cilium Operator 1.20.5
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-cilium-1205]
+    paths: [.github/workflows/cilium-gops-rebuild.yml]
+permissions: {}
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    container:
+      image: docker.io/library/golang@sha256:f6946db66567acc1497655237e58f06ec3a57478a5e0d67fca29d2ffcf2ea136
+    steps:
+      - name: Compare a build from the upstream commit with the shipped linux/amd64 file
+        shell: bash
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+          GOTOOLCHAIN: local
+          GOPATH: /go
+          GOPROXY: https://proxy.golang.org
+          GOSUMDB: sum.golang.org
+        run: |
+          set -euo pipefail
+          umask 077
+          export PATH="/usr/local/go/bin:$PATH"
+          test "$(go env GOVERSION)" = go1.26.11
+          archive="$(mktemp)"
+          curl --fail --silent --show-error --location --retry 2 \
+            https://codeload.github.com/google/gops/tar.gz/a2d8f7790eac63a6668583a060cb45903410a91b -o "$archive"
+          echo "c7079b73186eff12c8aca2ca8d408817e650bc17b6bdbdd2c46c102f6e85d23a  $archive" | sha256sum --check
+          mkdir -p /go/src/github.com/google /out/usr/bin
+          mkdir /go/src/github.com/google/gops
+          cd /go/src/github.com/google/gops
+          tar xzf "$archive" --strip-components=1
+          go mod download
+          go mod verify
+          go build -mod=readonly -ldflags "-s -w" -o /out/usr/bin/gops github.com/google/gops
+          sha256sum /out/usr/bin/gops
+          echo "80cf2af7f90f1b5f6b515021fea1188a109200febae33b8ebe4b006347a95e3a  /out/usr/bin/gops" | sha256sum --check
