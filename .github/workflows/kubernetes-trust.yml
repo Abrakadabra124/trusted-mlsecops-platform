@@ -41,6 +41,35 @@ jobs:
       - name: Bootstrap owned cluster
         id: bootstrap
         run: uv run --locked python -m mlsecops.cluster bootstrap
+      - name: Verify the running etcd image and endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          node=trusted-mlsecops-control-plane
+          manifest=sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b
+          config=sha256:be2dd319600bac16f542b8e46e1b78511c35a31e46829ee9acc82a83c94aa377
+          kube=(kubectl --kubeconfig .runtime/kubeconfig --context kind-trusted-mlsecops -n kube-system)
+          uv run --locked python -m mlsecops.cluster status >/dev/null
+          pod="$("${kube[@]}" get pod "etcd-$node" -o json)"
+          image_id="$(jq -er --arg image "registry.k8s.io/etcd:3.6.17-0@$manifest" --arg node "$node" '
+            select(.spec.nodeName == $node and .status.phase == "Running")
+            | select([.spec.containers[] | select(.name == "etcd") | .image] == [$image])
+            | [.status.containerStatuses[] | select(.name == "etcd" and .ready and .state.running) | .imageID]
+            | select(length == 1) | first | select(length > 0)' <<<"$pod")"
+          docker exec "$node" crictl inspecti "$image_id" | jq -e \
+            --arg config "$config" --arg ref "registry.k8s.io/etcd@$manifest" \
+            '.status.id == $config and (.status.repoDigests | index($ref) != null)' >/dev/null
+          "${kube[@]}" exec "etcd-$node" -c etcd -- etcdctl \
+            --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+            --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+            --key=/etc/kubernetes/pki/etcd/healthcheck-client.key endpoint status -w json \
+            | python3 -c 'import json, sys
+          [endpoint] = json.load(sys.stdin)
+          status = endpoint["Status"]
+          leader = status["leader"]
+          sys.exit(0 if status["version"] == "3.6.17" and type(leader) is int and leader > 0
+              and leader == status["header"]["member_id"] and not status.get("errors") else 1)'
+          echo "etcd=3.6.17 image=$manifest config=$config single_member_leader=verified"
       - name: Bootstrap model storage prerequisite
         run: uv run --locked python -m mlsecops.kube_storage
       - name: Separate authority TLS, SQL, network, revocation and recovery
