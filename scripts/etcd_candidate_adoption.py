@@ -11,6 +11,7 @@ from subprocess import TimeoutExpired
 from mlsecops import cluster
 from mlsecops.contracts import Rejected, decode, digest
 from mlsecops.inventory import command
+from mlsecops.kube_worker import image_config, image_manifest
 from mlsecops.storage_bootstrap import docker
 from scripts.ci_campaign_producer import run_owner
 from scripts.ci_consumer_recovery import Recovery
@@ -38,7 +39,47 @@ def node_json(*args):
     return decode(docker(["exec", cluster.NODE, "crictl", *args], timeout=10).stdout)
 
 
-def endpoint_status(image, config, candidate):
+def loaded_candidate_manifest(tag, config):
+    listing = docker(
+        ["exec", cluster.NODE, "ctr", "-n", "k8s.io", "images", "ls", f'name=="{tag}"']
+    ).stdout.decode()
+    targets = []
+    for line in listing.splitlines():
+        fields = line.split()
+        if len(fields) >= 3 and fields[0] == tag:
+            targets.append(fields[2])
+    require(len(targets) == 1, "candidate_image_target_missing_or_ambiguous")
+    manifest, document = image_manifest(targets[0])
+    require(document.get("config", {}).get("digest") == config, "kind_loaded_config_mismatch")
+    require(image_config(config) == config, "invalid_loaded_candidate_config")
+    return manifest
+
+
+def verify_candidate_ref(live, tag, manifest, config):
+    ref = live["imageRef"]
+    image_id = live.get("imageId")
+    if image_id:
+        require(image_id == config, "etcd_running_config_mismatch")
+    if ref == tag:
+        # A mutable CRI display name needs the image ID recorded for this running container.
+        require(image_id == config, "candidate_tag_without_matching_container_image_id")
+        return
+    match = re.fullmatch(r"(?:[a-zA-Z0-9./:_-]+@)?(sha256:[0-9a-f]{64})", ref)
+    if re.fullmatch(r"[0-9a-f]{64}", ref):
+        identifier = "sha256:" + ref
+    else:
+        require(match, "invalid_candidate_runtime_ref")
+        identifier = match[1]
+    # Some CRI refs identify the config directly. Its bytes were verified before the swap.
+    if identifier != config:
+        running_manifest, document = image_manifest(identifier)
+        require(
+            running_manifest == manifest and document.get("config", {}).get("digest") == config,
+            "etcd_running_manifest_mismatch",
+        )
+
+
+def endpoint_status(image, config, candidate_manifest):
     pod = decode(
         cluster.kubectl(
             STATE,
@@ -52,7 +93,7 @@ def endpoint_status(image, config, candidate):
         pod["spec"]["nodeName"] == cluster.NODE
         and spec["name"] == status["name"] == "etcd"
         and spec["image"] == image
-        and (not candidate or spec["imagePullPolicy"] == "Never")
+        and (candidate_manifest is None or spec["imagePullPolicy"] == "Never")
         and status.get("ready")
         and "running" in status["state"],
         "etcd_pod_not_ready",
@@ -62,8 +103,11 @@ def endpoint_status(image, config, candidate):
     require(
         live["id"] == cid and live["state"] == "CONTAINER_RUNNING", "etcd_container_not_running"
     )
-    observed = node_json("inspecti", live["imageRef"])["status"]["id"]
-    require(observed == config, "etcd_running_config_mismatch")
+    if candidate_manifest is None:
+        observed = node_json("inspecti", live["imageRef"])["status"]["id"]
+        require(observed == config, "etcd_running_config_mismatch")
+    else:
+        verify_candidate_ref(live, image, candidate_manifest, config)
     [row] = node_json(
         "exec",
         cid,
@@ -89,16 +133,19 @@ def endpoint_status(image, config, candidate):
         and 0 < leader == member < 2**64,
         "etcd_endpoint_status_mismatch",
     )
-    return cid, (status["header"]["cluster_id"], member)
+    return cid, (status["header"]["cluster_id"], member), live["imageRef"]
 
 
-def wait_etcd(phase, image, config):
+def wait_etcd(phase, image, config, candidate_manifest=None):
     deadline = time.monotonic() + 150
     while True:
         try:
-            cid, identity = endpoint_status(image, config, phase == "candidate")
+            cid, identity, ref = endpoint_status(image, config, candidate_manifest)
+            evidence = (
+                f" imageRef={ref} manifest={candidate_manifest}" if candidate_manifest else ""
+            )
             print(
-                f"{phase}: version=3.6.17 config={config} container={cid} leader={identity[1]}",
+                f"{phase}: version=3.6.17 config={config} container={cid} leader={identity[1]}{evidence}",
                 flush=True,
             )
             return identity
@@ -155,7 +202,7 @@ def exercise():
         ["kind", "load", "docker-image", "--name", cluster.NAME, "--nodes", cluster.NODE, tag],
         timeout=180,
     )
-    require(node_json("inspecti", tag)["status"]["id"] == candidate, "kind_loaded_config_mismatch")
+    manifest = loaded_candidate_manifest(tag, candidate)
 
     original = docker(["exec", cluster.NODE, "cat", MANIFEST]).stdout
     backup = STATE / "etcd-adoption-original.yaml"
@@ -183,7 +230,9 @@ def exercise():
     after = None
     try:
         install_manifest(patched)
-        require(wait_etcd("candidate", tag, candidate) == identity, "candidate_member_changed")
+        require(
+            wait_etcd("candidate", tag, candidate, manifest) == identity, "candidate_member_changed"
+        )
         configmap("baseline", before)
         after = configmap("candidate")
         configmap("candidate", after)
