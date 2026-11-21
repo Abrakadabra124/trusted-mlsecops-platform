@@ -129,3 +129,9 @@ Candidate `691cd0227aef71338b89d99c2d22059aa89fbe28411d0afad85d423510b4f736`, ev
 - `cleanup=ownership-or-stop-unconfirmed` либо `no-storage-receipt` после ошибки bootstrap: оператор сначала проверяет workspace/labels/marker/container ID. Отсутствующий receipt не доказывает отсутствие частично созданных ресурсов. Никаких broad Docker cleanup commands; disposable hosted runner уничтожается GitHub по завершении job.
 
 При неуспехе workflow сохраняет fail. Восстановление БД не снимает отзыв и не выдаёт approval. Полные image/controller coverage, robustness/assurance, production release-reader, M13-M19/M22/M23 и clean-checkout R1 acceptance остаются отдельными обязательными блокерами, не future improvements.
+
+## Проверка журнала при отказе выпуска
+
+В `report.json` поле `stages` содержит успешно проверенные этапы. Если в отчёте проверки допуска отсутствует подтверждение отказа, выполнение останавливается на `release-decision`. Решение остаётся `not-evaluated`, процесс инференса не запускается. Проверить исходный отчёт допуска и его привязку к текущему запуску.
+
+Если проверка отказа прошла, а идентификаторы модели, кандидата, оценки или предложения в отчёте инференса расходятся, ожидаются `release_decision=refused` и `failed_stage=inference-observation`. Успешные этапы заканчиваются на `release-decision`. Сверить идентификаторы всех трёх первичных отчётов и повторить проход в новом каталоге состояния после исправления источника расхождения.

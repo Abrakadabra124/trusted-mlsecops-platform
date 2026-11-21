@@ -1,4 +1,3 @@
-import copy
 import os
 import tempfile
 import unittest
@@ -36,6 +35,7 @@ class WalkthroughContracts(unittest.TestCase):
         demo = {"candidate": {"candidate_reference": "candidate"}, "evaluation_reference": "eval"}
         proposal = {
             "status": "pass",
+            "scope": "release-proposal-and-authorization-denial-not-full-M10",
             "release_ready": False,
             "subject_sha256": "subject",
             "model_sha256": "model",
@@ -56,6 +56,9 @@ class WalkthroughContracts(unittest.TestCase):
                 "actual-candidate-revocation-readiness-503",
             ],
         }
+        r1_walkthrough.verify_refusal(proposal)
+        with self.assertRaises(Rejected):
+            r1_walkthrough.verify_refusal(None)
         r1_walkthrough.verify_subject(demo, proposal, serving)
         for field, value in (
             ("candidate_reference", "other"),
@@ -70,10 +73,15 @@ class WalkthroughContracts(unittest.TestCase):
         ):
             with self.subTest(field=field), self.assertRaises(Rejected):
                 r1_walkthrough.verify_subject(demo, proposal, {**serving, field: value})
-        invalid = copy.deepcopy(proposal)
-        invalid["cases"] = []
-        with self.assertRaises(Rejected):
-            r1_walkthrough.verify_subject(demo, invalid, serving)
+        for field, value in (
+            ("status", "inconclusive"),
+            ("release_ready", True),
+            ("scope", "fixture"),
+            ("cases", []),
+            ("cases", "actual-promotion-admission-without-assurance-denied"),
+        ):
+            with self.subTest(field=field), self.assertRaises(Rejected):
+                r1_walkthrough.verify_refusal({**proposal, field: value})
 
     def test_cleanup_checks_ownership_and_actual_stopped_state(self):
         marker = {"container_id": "owned"}
@@ -183,7 +191,16 @@ class WalkthroughContracts(unittest.TestCase):
                 "candidate": {"candidate_reference": "candidate"},
                 "evaluation_reference": "eval",
             }
-            proposal = {"model_sha256": "model", "subject_sha256": "subject"}
+            proposal = {
+                "model_sha256": "model",
+                "subject_sha256": "subject",
+                "status": "pass",
+                "scope": "release-proposal-and-authorization-denial-not-full-M10",
+                "release_ready": False,
+                "cases": ["actual-promotion-admission-without-assurance-denied"],
+            }
+            if failure == "missing-denial":
+                proposal["cases"] = []
             operations = (
                 (r1_walkthrough.platform, "system", {"return_value": "Linux"}),
                 (r1_walkthrough.inventory, "command", {"return_value": ""}),
@@ -217,6 +234,8 @@ class WalkthroughContracts(unittest.TestCase):
                     {"identity": "second"},
                 ]
             report = r1_walkthrough.run(root, state)
+            if failure == "missing-denial":
+                mocks[(r1_walkthrough.serving_output_native.__name__, "run")].assert_not_called()
             self.assertFalse(report["release_ready"])
             self.assertEqual(report["r1_status"], "incomplete")
             self.assertEqual(len(report["required_gates"]), 23)
@@ -251,6 +270,20 @@ class WalkthroughContracts(unittest.TestCase):
         self.assertEqual(report["release_decision"], "refused")
         self.assertEqual(report["refusal_reason"], "release_assurance_required")
         self.assertNotIn("recovery", report)
+
+    def test_missing_denial_stops_before_recording_refusal_or_starting_inference(self):
+        report = self.exercise_run("missing-denial")
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["failed_stage"], "release-decision")
+        self.assertEqual(report["release_decision"], "not-evaluated")
+        self.assertNotIn("refusal_reason", report)
+        self.assertNotIn("release-decision", [stage["id"] for stage in report["stages"]])
+
+    def test_subject_mismatch_cannot_record_a_passed_inference_stage(self):
+        report = self.exercise_run("verify_subject")
+        self.assertEqual(report["failed_stage"], "inference-observation")
+        self.assertEqual(report["release_decision"], "refused")
+        self.assertNotIn("inference-observation", [stage["id"] for stage in report["stages"]])
 
     def test_cli_returns_nonzero_for_preflight_or_incomplete_execution(self):
         for result, expected in (({"status": "pass"}, 0), ({"status": "fail"}, 1)):
