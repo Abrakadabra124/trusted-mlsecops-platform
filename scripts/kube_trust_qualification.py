@@ -279,7 +279,7 @@ class KubernetesTrustContracts(unittest.TestCase):
         baseline = self.live_fixture()
         with (
             patch.object(kube_storage, "get", side_effect=copy.deepcopy(baseline)),
-            patch.object(kube_trust, "admin", side_effect=["180006:on", "0", "f"]),
+            patch.object(kube_trust, "admin", side_effect=["180007:on", "0", "f"]),
         ):
             self.assertEqual(
                 kube_trust.live(self.state, {"volume_uid": "pv"}),
@@ -320,8 +320,8 @@ class KubernetesTrustContracts(unittest.TestCase):
                 kube_trust.live(self.state, {"volume_uid": "pv"})
         for responses, code in (
             (["170000:off"], "trust_server_version"),
-            (["180006:on", "1"], "trust_hba_invalid"),
-            (["180006:on", "0", "t"], "trust_reader_has_model_storage_access"),
+            (["180007:on", "1"], "trust_hba_invalid"),
+            (["180007:on", "0", "t"], "trust_reader_has_model_storage_access"),
         ):
             with (
                 patch.object(kube_storage, "get", side_effect=copy.deepcopy(baseline)),

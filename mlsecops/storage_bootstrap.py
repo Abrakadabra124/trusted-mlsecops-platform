@@ -26,8 +26,9 @@ from mlsecops.storage_schema import DATABASE, SCHEMA_VERSION, migration_sql, rol
 
 IMAGE = (
     "ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres"
-    "@sha256:29978b0f63ffba097a2444f2b8c0e41b2069371b346c48a9ddd1ed456b39ef49"
+    "@sha256:812316838ba6ffc54e65f5f764fc2c7946110267f02c9b8c1eeeceadf89ad094"
 )
+SERVER_VERSION_CHECKSUMS = "180007:on"
 WORKSPACE_LABEL = "org.trusted-mlsecops.workspace"
 CONFIG_LABEL = "org.trusted-mlsecops.storage-config"
 MOUNT = "/var/lib/postgresql"
@@ -321,8 +322,7 @@ def verify_configuration(state, name, *, experimental_image_id=None):
         name,
         "SELECT current_setting('server_version_num') || ':' || current_setting('data_checksums');",
     )
-    expected = "180006:on" if experimental_image_id is None else "180007:on"
-    if observed != expected:
+    if observed != SERVER_VERSION_CHECKSUMS:
         raise Rejected("storage_server_version_or_checksums_invalid")
     if admin(name, "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL;") != "0":
         raise Rejected("storage_hba_invalid")
