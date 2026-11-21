@@ -1,0 +1,35 @@
+name: Compare two pinned CoreDNS images on one Grype database
+on:
+  push:
+    branches: [qualify/r1-coredns-1150]
+    paths:
+      - .github/workflows/coredns-pair.yml
+      - scripts/image_coredns_pair.py
+      - scripts/image_coredns_pair_qualification.py
+permissions: {}
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Read the exact public source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          git init -q .
+          git fetch -q --no-tags --depth=1 "https://github.com/$GITHUB_REPOSITORY.git" "$GITHUB_SHA"
+          git -c core.autocrlf=false checkout -q --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Check the scoped comparison contract
+        run: |
+          uv sync --locked --no-dev --no-build
+          uv run --locked --no-dev python -m unittest scripts.image_coredns_pair_qualification
+      - name: Scan both original images and evaluate the two Critical advisory IDs
+        run: uv run --locked --no-dev python -m scripts.image_coredns_pair
