@@ -13,7 +13,7 @@ nodes:
         kind: ClusterConfiguration
         etcd:
           local:
-            imageTag: "3.6.16-0@sha256:00edecc7baeaf69c61708ed713d55a8c928d539f200298d8d67cbfed59db9c7e"
+            imageTag: "3.6.17-0@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
         dns:
           imageTag: "v1.14.7@sha256:2329f5f0e7e79fbe56dcdf11ecc4337ee2476bb251095bc275fe9461cb88a55b"
       - |
