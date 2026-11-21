@@ -1,5 +1,16 @@
 # Сквозной запуск: настоящий candidate и отказ выпуска
 
+## Воспроизведение проверенной ревизии main
+
+На чистой ревизии `main` [05defe9](https://github.com/Abrakadabra124/trusted-mlsecops-platform/commit/05defe9f5041dd3dc03e7d0601b1e16a668ba5b0) [запуск 44911548838](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44911548838/attempts/1) прошёл все пять этапов. Выпуск модели отклонён с причиной `release_assurance_required`. По той же модели выполнены 85 проверок диагностического инференса и наблюдения. После восстановления базы в новый том все 1000 эталонных прогнозов совпали, максимальная ошибка 0.0. От начала восстановления до повторной проверки прошло 3,197 с. В отчёте `r1_status=incomplete` и `release_ready=false`.
+
+```shell
+gh run rerun 44911548838 --repo Abrakadabra124/trusted-mlsecops-platform
+gh run watch 44911548838 --repo Abrakadabra124/trusted-mlsecops-platform --exit-status
+```
+
+Откройте последний шаг с итоговым JSON в новой попытке. Сверьте ревизию, пять завершённых этапов, решение о выпуске, идентификаторы модели при прогнозе и восстановлении и результат очистки.
+
 Scope: R1-B01, интеграция существующих компонентов. Это сквозной **refusal path** с подтверждёнными native проходами и сохранённой историей failures, не завершение R1 и не замена M01-M23. Разрешённый production release остаётся заблокированным до полной assurance/approval; нельзя подменить её controlled fixtures.
 
 ## Что выполняет одна команда
