@@ -2,12 +2,14 @@ name: Qualify the etcd 3.6.17 x/crypto candidate
 on:
   workflow_dispatch:
   push:
-    branches: [qualify/r1-etcd-crypto-candidate]
+    branches: [qualify/r1-etcd-crypto-candidate, qualify/r1-etcd-delivery]
     paths:
-      - images/candidates/etcd/Dockerfile
       - .github/workflows/etcd-candidate.yml
+      - images/candidates/etcd/Dockerfile
       - scripts/etcd_candidate_adoption.py
       - scripts/etcd_candidate_adoption_qualification.py
+      - scripts/etcd_candidate_delivery.py
+      - scripts/etcd_candidate_delivery_qualification.py
 permissions: {}
 
 jobs:
@@ -26,6 +28,7 @@ jobs:
       GRYPE: anchore/grype:v0.120.1@sha256:7bb1480f73d9a23b8e6137669c9b780389492778dc2da5c818d0add7e828ed45
     steps:
       - name: Build twice and compare files extracted from both final images
+        id: build
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/etcd-qualification"
@@ -43,7 +46,9 @@ jobs:
           recipe=images/candidates/etcd/Dockerfile
           git -C source cat-file blob "$GITHUB_SHA:$recipe" > context/Dockerfile
           cmp "source/$recipe" context/Dockerfile
-          echo '5036ccb5ca4ef3db34ce0a505b09602b047449ade7babcd1f77f98aea96b6171  context/Dockerfile' | sha256sum -c -
+          echo '2c2ef58b4f8eeb484d24c0bb1d55b91d9d26fd2e49a1185153bbe8511a2f5f2d  context/Dockerfile' | sha256sum -c -
+          pin=$(sha256sum context/Dockerfile)
+          printf 'recipe_sha256=%s\n' "${pin%% *}" >> "$GITHUB_OUTPUT"
           docker pull --platform linux/amd64 "$READER"
           container=
           cleanup() {
@@ -103,6 +108,7 @@ jobs:
           LOCK
 
       - name: Scan both Docker archives and the three extracted candidate executables
+        id: scan
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/etcd-qualification"
@@ -116,7 +122,11 @@ jobs:
           cp first/id scans/candidate.id
           docker save -o scans/baseline.tar "$baseline_id"
           docker save -o scans/candidate.tar "$(cat first/id)"
-          sha256sum scans/*.tar
+          docker image inspect "$(cat first/id)" > scans/candidate.inspect.json
+          sha256sum scans/baseline.tar
+          pin=$(sha256sum scans/candidate.tar)
+          printf '%s\n' "$pin"
+          printf 'archive_sha256=%s\n' "${pin%% *}" >> "$GITHUB_OUTPUT"
           common=(--rm --read-only --user "$(id -u):$(id -g)" --cap-drop ALL
                   --security-opt no-new-privileges --tmpfs /tmp:rw,mode=1777 -e HOME=/tmp)
           db_env=(-e GRYPE_DB_CACHE_DIR=/db -e GRYPE_DB_VALIDATE_AGE=true
@@ -293,7 +303,7 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$REPOSITORY_VISIBILITY" = public
           uv sync --locked --no-dev --no-build
-          .venv/bin/python -m unittest scripts.etcd_candidate_adoption_qualification
+          .venv/bin/python -m unittest scripts.etcd_candidate_adoption_qualification scripts.etcd_candidate_delivery_qualification
           .venv/bin/python -m mlsecops bootstrap
           .venv/bin/python scripts/install_ci_tools.py
           echo "$PWD/.runtime/bin" >> "$GITHUB_PATH"
@@ -303,7 +313,34 @@ jobs:
         working-directory: ${{ runner.temp }}/etcd-qualification/source
         run: .venv/bin/python -m scripts.etcd_candidate_adoption run
       - name: Remove and verify the disposable kind cluster and node
+        id: cleanup
         if: always() && steps.adoption.outcome != 'skipped' && steps.adoption.outcome != ''
         timeout-minutes: 3
         working-directory: ${{ runner.temp }}/etcd-qualification/source
         run: .venv/bin/python -m scripts.etcd_candidate_adoption cleanup
+
+      - name: Bind the original scanned archive to the verified running config
+        id: delivery
+        if: >-
+          success() && github.repository == 'Abrakadabra124/trusted-mlsecops-platform' &&
+          github.ref == 'refs/heads/qualify/r1-etcd-delivery' &&
+          steps.adoption.outcome == 'success' && steps.cleanup.outcome == 'success'
+        working-directory: ${{ runner.temp }}/etcd-qualification/source
+        env:
+          ETCD_RECIPE_SHA256: ${{ steps.build.outputs.recipe_sha256 }}
+          ETCD_ARCHIVE_SHA256: ${{ steps.scan.outputs.archive_sha256 }}
+          ETCD_LIVE_CONFIG: ${{ steps.adoption.outputs.config_id }}
+        run: .venv/bin/python -m scripts.etcd_candidate_delivery
+
+      - name: Upload the qualified archive and its receipt
+        if: success() && steps.delivery.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: etcd-qualified-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/etcd-qualification/scans/candidate.tar
+            ${{ runner.temp }}/etcd-qualification/scans/receipt.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false

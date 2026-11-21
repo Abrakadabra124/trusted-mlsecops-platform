@@ -86,16 +86,44 @@ for dir in server etcdctl etcdutl; do
     (cd "$dir" && go build -mod=readonly -buildvcs=true -trimpath -installsuffix=cgo \
         -ldflags='-X=go.etcd.io/etcd/api/v3/version.GitSHA=0689586e360e2c6b46f95ad5634c25d5fa1683db' \
         -o "/out/$name" .)
+    (cd "$dir" && go list -deps -f '{{.Dir}}' .) >>/tmp/linked-dirs
 done
 sha256sum --check --status /tmp/manifests.sha256
+# Preserve notices from the directories containing linked Go packages and their parents.
+sort -u /tmp/linked-dirs >/tmp/package-dirs
+while IFS= read -r dir; do
+    case "$dir" in
+        /src/*) root=/src; prefix=etcd ;;
+        /usr/local/go/src/*) root=/usr/local/go; prefix=go ;;
+        /go/pkg/mod/*) root=/go/pkg/mod; prefix=modules ;;
+        *) echo "unexpected Go package directory: $dir" >&2; exit 1 ;;
+    esac
+    while [ "$dir" != "$root" ]; do
+        printf '%s\t%s/%s\n' "$dir" "$prefix" "${dir#"$root"/}" >>/tmp/notice-dirs
+        dir=$(dirname "$dir")
+    done
+done </tmp/package-dirs
+sort -u /tmp/notice-dirs >/tmp/unique-notice-dirs
+while IFS="$(printf '\t')" read -r dir relative; do
+    for notice in "$dir"/LICENSE* "$dir"/LICENCE* "$dir"/COPYING* "$dir"/NOTICE* "$dir"/PATENTS; do
+        if [ -f "$notice" ]; then
+            install -D -m 0644 "$notice" "/notices/$relative/$(basename "$notice")"
+        fi
+    done
+done </tmp/unique-notice-dirs
+test -s /notices/modules/golang.org/x/crypto@v0.59.0/LICENSE
 SH
 
 FROM gcr.io/distroless/static-debian13@sha256:d03c145fad326bff275ec4106475ed8310426caf709decd9f8cbc494af59bc18
 LABEL org.opencontainers.image.version="3.6.17" \
-      org.opencontainers.image.revision="0689586e360e2c6b46f95ad5634c25d5fa1683db" \
-      org.opencontainers.image.source="https://github.com/etcd-io/etcd" \
+      org.trusted-mlsecops-platform.etcd.upstream-revision="0689586e360e2c6b46f95ad5634c25d5fa1683db" \
+      org.opencontainers.image.source="https://github.com/Abrakadabra124/trusted-mlsecops-platform" \
+      org.opencontainers.image.url="https://github.com/etcd-io/etcd/releases/tag/v3.6.17" \
       org.trusted-mlsecops-platform.etcd.patch="x-crypto-v0.59.0-r1"
 COPY --from=build /out/ /usr/local/bin/
+COPY --from=build /notices/ /usr/share/licenses/
+COPY --from=build /src/LICENSE /usr/share/licenses/etcd/LICENSE
+COPY --from=build /usr/local/go/LICENSE /usr/share/licenses/go/LICENSE
 WORKDIR /var/etcd/
 WORKDIR /var/lib/etcd/
 EXPOSE 2379 2380

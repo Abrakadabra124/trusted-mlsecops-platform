@@ -247,6 +247,7 @@ def exercise():
         if after is not None:
             configmap("candidate", after)
         print(f"Restored original manifest sha256={digest(original)}", flush=True)
+    return candidate
 
 
 def main(action):
@@ -273,7 +274,10 @@ def main(action):
     cluster.validate_cluster(STATE)
     [node] = command(["kind", "get", "nodes", "--name", cluster.NAME]).splitlines()
     require(node == cluster.NODE, "expected_one_control_plane")
-    exercise()
+    config = exercise()
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with Path(output).open("a", encoding="utf-8") as stream:
+            print(f"config_id={config}", file=stream)
 
 
 if __name__ == "__main__":
