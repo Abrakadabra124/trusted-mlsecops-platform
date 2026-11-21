@@ -14,12 +14,16 @@
 
 SHA-256 модели при прогнозе и после восстановления совпал: `fa71479b9a98fa26644fbfdb692ef4dd64b291964c2d1fdaa2140e41a96ead46`. В поле `cleanup` у обеих БД записано `stopped-volumes-retained` на одноразовом runner. Итог системы `r1_status=incomplete`, `release_ready=false`. Этот сценарий проверяет корректный отказ на одном кандидате. Для M18 обязательны отдельные доказательства всех 22 дочерних проверок этого кандидата.
 
-Для воспроизведения именно этого кода оператор с доступом к Actions может повторить сохранённый запуск. GitHub создаст новую попытку на исходном SHA. Базы сведений об уязвимостях и доступность внешних пакетов могут измениться. Сверьте исходный SHA и откройте последний шаг с итоговым JSON. В нём сравните идентификаторы модели внутри одной попытки, пять этапов, решение о выпуске и результаты восстановления.
+После переключения PostgreSQL на опубликованный digest [запуск 44910634155](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44910634155/attempts/1) повторил все пять этапов на чистой ревизии `73480d11917a48a12af8876e6d4098af2db0815b`. Новый кандидат `ee7e3e53ea68630c28db0c06b4b8c206269586c447c3f036da61eb31b5d68f15` прошёл тот же путь отказа, 85 проверок и восстановление в новый том. SHA-256 ONNX-модели совпал в двух запусках. В новом запуске 1000 прогнозов совпали с максимальной ошибкой 0.0, время восстановления до повторной проверки составило 4,567 с. Отдельные квитанции каждой попытки относятся к её кандидату.
+
+На чистой ревизии `main` [05defe9](https://github.com/Abrakadabra124/trusted-mlsecops-platform/commit/05defe9f5041dd3dc03e7d0601b1e16a668ba5b0) [запуск 44911548838](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44911548838/attempts/1) прошёл все пять этапов. Выпуск модели отклонён с причиной `release_assurance_required`. По той же модели выполнены 85 проверок диагностического инференса и наблюдения. После восстановления базы в новый том все 1000 эталонных прогнозов совпали, максимальная ошибка 0.0. От начала восстановления до повторной проверки прошло 3,197 с. В отчёте `r1_status=incomplete` и `release_ready=false`.
+
+Для воспроизведения ревизии main с PostgreSQL 18.7 оператор с доступом к Actions может повторить запуск из main. GitHub создаст новую попытку на исходном SHA. Базы сведений об уязвимостях и доступность внешних пакетов могут измениться. Сверьте исходный SHA и откройте последний шаг с итоговым JSON. В нём сравните идентификаторы модели внутри одной попытки, пять этапов, решение о выпуске и результаты восстановления.
 
 ```shell
-gh run rerun 44908730475 --repo Abrakadabra124/trusted-mlsecops-platform
-gh run watch 44908730475 --repo Abrakadabra124/trusted-mlsecops-platform --exit-status
-gh run view 44908730475 --repo Abrakadabra124/trusted-mlsecops-platform --json headSha,attempt,status,conclusion,url
+gh run rerun 44911548838 --repo Abrakadabra124/trusted-mlsecops-platform
+gh run watch 44911548838 --repo Abrakadabra124/trusted-mlsecops-platform --exit-status
+gh run view 44911548838 --repo Abrakadabra124/trusted-mlsecops-platform --json headSha,attempt,status,conclusion,url
 ```
 
 Scope: R1-B01, интеграция существующих компонентов. Это сквозной **refusal path** с подтверждёнными native проходами и сохранённой историей failures, не завершение R1 и не замена M01-M23. Разрешённый production release остаётся заблокированным до полной assurance/approval; нельзя подменить её controlled fixtures.
