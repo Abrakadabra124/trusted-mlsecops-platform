@@ -7,7 +7,9 @@
 Primary, Security components, M13 privacy (514 критериев) и M14 load (153 критерия).
 [Milestone prerelease и очищенный verification asset](https://github.com/Abrakadabra124/trusted-mlsecops-platform/releases/tag/m11-trust-lifecycle-2026-11-12).
 
-Текущий этап - T20/M17, восстановление из резервной копии. Для T19/M16 проверены 800 HTTP-запросов, отзыв кандидата и восстановление контрольного подписанного выпуска за 8,092 с. [Результаты](docs/evidence/m16-canary-2cecbb1.md) и [ранбук](docs/operations/canary-rollout.md).
+21 ноября на `435bf43` выполнен [сквозной запуск на одном кандидате](docs/operations/r1-walkthrough.md). Платформа отклонила выпуск без подтверждения безопасности, прошла 85 проверок диагностического inference и после восстановления воспроизвела 1000 прогнозов с нулевой ошибкой. Для итоговой приёмки M18 остаются открытые проверки, включая независимый M22. [Текущий статус](STATUS.md).
+
+Ранее для T19/M16 проверены 800 HTTP-запросов, отзыв кандидата и восстановление контрольного подписанного выпуска за 8,092 с. [Результаты](docs/evidence/m16-canary-2cecbb1.md) и [ранбук](docs/operations/canary-rollout.md).
 M11 milestone подтверждает работу механизма доверия. Полный R1 ещё не принят:
 actual production promotion сохраняет отказ без обязательного assurance,
 независимый M22 и остальные открытые gates остаются обязательными.
