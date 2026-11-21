@@ -1,5 +1,19 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Переход PostgreSQL 18.6 на 18.7 для новых экземпляров
+
+Сравнение в [рабочей ветке](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44908733387/attempts/1) и [на базе main](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44909280914/attempts/1) показало 38 High у исходного хранилища и 0 Critical, High и Unknown у кандидата. В обоих запусках 435 проверок восстановления прошли и все 1000 эталонных прогнозов совпали. Изменились шесть APK семейства PostgreSQL и два пакета ICU, всего в образе 60 пакетов. [Версия PostgreSQL](https://www.postgresql.org/docs/18/release-18-7.html), [закреплённый рецепт Wolfi](https://github.com/wolfi-dev/os/blob/b286a29311dda92ad20559a390f9166d53eead88/postgresql-18.yaml).
+
+Из [коммита публикации](https://github.com/Abrakadabra124/trusted-mlsecops-platform/commit/8106d7a8cdeac72e723e5830fe585c9d184b9924) штатное задание [44909881813](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44909881813/attempts/1) заново проверило сборку и восстановление и опубликовало образ. При анонимном чтении из реестра совпали SHA-256 байтов manifest и config. Config подтверждает `linux/amd64`, `999:999`, команду `postgres`, `PG_VERSION=18.7`, ревизию и рецепт.
+
+- Образ для загрузки по digest: `ghcr.io/abrakadabra124/trusted-mlsecops-platform-postgres@sha256:812316838ba6ffc54e65f5f764fc2c7946110267f02c9b8c1eeeceadf89ad094`.
+- Config ID: `sha256:ca9b762fe51266ba97e2c8844dc39a1cdb99c3928e2af5626e4117780e358c69`.
+- SHA-256 Dockerfile: `15d90bd5c78f68948cf0bb2e2861619128b0c68047e4356721abb4384b783bc2`.
+
+Для нового экземпляра проверять `server_version_num=180007` и `data_checksums=on` в обеих базах Kubernetes и в отдельном экземпляре Docker. Сначала сверить реестр и SQL, затем выполнить восстановление и получить контрольные прогнозы. При несовпадении версии, контрольных сумм или данных остановить переключение. Исходный том сохранить.
+
+Старые состояния и подписанные копии привязаны к digest версии 18.6. Для их проверки использовать прежнюю ревизию и соответствующую ей политику. Переход между версиями измерен логическим восстановлением в новый том. Открывать том 18.7 старым сервером или редактировать манифест резервной копии недопустимо.
+
 ## Сборка останавливается до обучения или сканирования
 
 В [сквозном запуске 44908166197](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44908166197) на `d564325` установка из `uv.lock` прошла. Затем `pip-audit --strict` нашёл CVE-2026-126360 в `opentelemetry-api 1.45.1` и указал исправление 1.45.2. Обучение и восстановление в этой попытке не выполнялись.

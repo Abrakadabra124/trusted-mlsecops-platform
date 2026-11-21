@@ -27,7 +27,13 @@ from mlsecops.kube_storage_resources import (
 )
 from mlsecops.private_cli import Arguments
 from mlsecops.signing import encode64
-from mlsecops.storage_bootstrap import IMAGE, configuration, export_clients, migrate
+from mlsecops.storage_bootstrap import (
+    IMAGE,
+    SERVER_VERSION_CHECKSUMS,
+    configuration,
+    export_clients,
+    migrate,
+)
 from mlsecops.storage_schema import DATABASE
 from mlsecops.storage_snapshot import binary_command
 from mlsecops.trust_targets import Target, select
@@ -253,7 +259,7 @@ def live(state, marker, *, target=Target.PRIMARY):
             "SELECT current_setting('server_version_num') || ':' || current_setting('data_checksums');",
             target=target,
         )
-        != "180006:on"
+        != SERVER_VERSION_CHECKSUMS
     ):
         raise Rejected("trust_server_version_or_checksums")
     if (

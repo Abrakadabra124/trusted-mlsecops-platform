@@ -88,9 +88,9 @@ def qualify():
             ):
                 raise Rejected("storage_image_spec_binding_invalid")
             cases.append({"id": "image-bound-config-identical-tls", "status": "pass"})
-            for role, marker, override, expected, wrong_version in (
-                ("source", baseline, None, "180006:on", "180007:on"),
-                ("target", candidate, image_id, "180007:on", "180006:on"),
+            for role, marker, override in (
+                ("source", baseline, None),
+                ("target", candidate, image_id),
             ):
                 write_json(state / "storage.json", marker)
 
@@ -106,10 +106,10 @@ def qualify():
                         stdout=digest(files[args[-1].rsplit("/", 1)[1]]).encode()
                     ),
                 ):
-                    with patch.object(storage_bootstrap, "admin", side_effect=[expected, "0"]):
+                    with patch.object(storage_bootstrap, "admin", side_effect=["180007:on", "0"]):
                         verify()
                     cases.append({"id": f"{role}:exact-version-and-checksums", "status": "pass"})
-                    for invalid in (wrong_version, expected.replace(":on", ":off")):
+                    for invalid in ("180006:on", "180007:off"):
                         with patch.object(storage_bootstrap, "admin", side_effect=[invalid]):
                             rejected(
                                 f"{role}:invalid-server:{invalid}",
