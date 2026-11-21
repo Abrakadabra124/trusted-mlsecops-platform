@@ -321,7 +321,8 @@ def verify_configuration(state, name, *, experimental_image_id=None):
         name,
         "SELECT current_setting('server_version_num') || ':' || current_setting('data_checksums');",
     )
-    if observed != "180006:on":
+    expected = "180006:on" if experimental_image_id is None else "180007:on"
+    if observed != expected:
         raise Rejected("storage_server_version_or_checksums_invalid")
     if admin(name, "SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL;") != "0":
         raise Rejected("storage_hba_invalid")

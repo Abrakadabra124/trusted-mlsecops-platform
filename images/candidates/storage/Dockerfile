@@ -7,12 +7,12 @@ RUN apk add --no-cache \
         'ca-certificates-bundle=20260909-r3' \
         'coreutils=9.12-r4' \
         'cyrus-sasl-heimdal-libs=2.1.28-r58' \
-        'ecpg-18=18.6-r5' \
+        'ecpg-18=18.7-r0' \
         'gdbm=1.26-r7' \
         'glibc-2.44=2.44-r17' \
         'glibc-2.44-locale-posix=2.44-r17' \
         'heimdal-libs=7.8.0-r54' \
-        'icu78-data-full=78.3-r4' \
+        'icu79-data-full=79.1-r2' \
         'keyutils-libs=1.6.3-r41' \
         'krb5-conf=1.0-r10' \
         'krb5-libs=1.22.2-r5' \
@@ -29,11 +29,11 @@ RUN apk add --no-cache \
         'libedit=3.1-r20' \
         'libffi=3.8.0-r2' \
         'libgcc=16.2.0-r1' \
-        'libicu78=78.3-r4' \
+        'libicu79=79.1-r2' \
         'libldap-2.6=2.6.14-r0' \
         'liblz4-1=1.10.0-r11' \
         'libpcre2-8-0=10.49-r1' \
-        'libpq-18=18.6-r5' \
+        'libpq-18=18.7-r0' \
         'libselinux=3.11-r2' \
         'libsepol=3.11-r3' \
         'libssl3=3.6.5-r5' \
@@ -49,10 +49,10 @@ RUN apk add --no-cache \
         'openssl-4.0-libcrypto=4.0.3-r8' \
         'openssl-4.0-libssl=4.0.3-r8' \
         'openssl-provider-legacy-allowed=4.0.3-r1' \
-        'postgresql-18=18.6-r5' \
-        'postgresql-18-base=18.6-r5' \
-        'postgresql-18-client=18.6-r5' \
-        'postgresql-18-client-base=18.6-r5' \
+        'postgresql-18=18.7-r0' \
+        'postgresql-18-base=18.7-r0' \
+        'postgresql-18-client=18.7-r0' \
+        'postgresql-18-client-base=18.7-r0' \
         'readline=8.3-r3' \
         'sqlite-libs=3.54.1-r0' \
         'tzdata=2026e-r0' \
@@ -67,12 +67,12 @@ RUN apk add --no-cache \
     && (timeout 1 bash -c 'sleep 5'; test "$?" -eq 124) \
     && addgroup -g 999 postgres \
     && adduser -D -H -u 999 -G postgres postgres \
-    && test "$(postgres --version)" = 'postgres (PostgreSQL) 18.6' \
-    && test "$(psql --version)" = 'psql (PostgreSQL) 18.6'
+    && test "$(postgres --version)" = 'postgres (PostgreSQL) 18.7' \
+    && test "$(psql --version)" = 'psql (PostgreSQL) 18.7'
 ENV PATH="/usr/libexec/postgresql18:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     LANG=C.UTF-8 \
     PG_MAJOR=18 \
-    PG_VERSION=18.6 \
+    PG_VERSION=18.7 \
     PGDATA=/var/lib/postgresql/18/docker
 USER 999:999
 ENTRYPOINT ["postgres"]

@@ -21,7 +21,9 @@ def qualify():
     # Catch partial adoption: updating the deployed storage digest alone left
     # worker and both candidate recipes vulnerable in run 43560835791.
     python_inventory = "e376b3427a09b38181b8563265ef63f19f69727c21253b916ab2d2cbaf8d50be"
-    storage_inventory = "e0fc5e474da30afc05da3c0979b395031f60e7b07481a48888f20d1dbecd37a6"
+    # Storage candidate only: PostgreSQL 18.7-r0 and ICU 79.1-r2, before native qualification.
+    # Wolfi x86_64 APKINDEX.tar.gz SHA-256 b4427db0e47b2b4047532ca4aed7cef9d1c878b8a6edecb000125fed7c452762
+    storage_inventory = "1304cdca7e66e507628480ee9dad5bcdc3e29d161f94714c047ec761b35ba651"
     repository = Path(__file__).resolve().parents[1]
     for recipe, expected in (
         ("Dockerfile", python_inventory),
