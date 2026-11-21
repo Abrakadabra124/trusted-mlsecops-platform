@@ -25,8 +25,17 @@ class OperatorSupplement(unittest.TestCase):
         self.target = {"reference": registry.REFERENCE, "config_id": registry.CONFIG}
 
     def supplement(self):
-        return audit.supplement_operator(
-            self.component, self.target, "sbom", "scan", 2, "run", "cache", "db", "db-files"
+        return audit.supplement_system_image(
+            self.component,
+            self.target,
+            "sbom",
+            "scan",
+            2,
+            "run",
+            "cache",
+            "db",
+            "db-files",
+            registry=registry,
         )
 
     def test_inventory_and_target_checked_before_launch(self):

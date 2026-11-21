@@ -13,7 +13,12 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import image_config
 from mlsecops.storage_bootstrap import WORKSPACE_LABEL
 from mlsecops.storage_pki import workspace_id
-from scripts import image_cilium_operator_inventory, image_kubernetes_scans, tracking_service
+from scripts import (
+    image_cilium_operator_inventory,
+    image_etcd_inventory,
+    image_kubernetes_scans,
+    tracking_service,
+)
 from scripts.image_audit_contract import (
     COREDNS_CONFIG,
     LOCAL_PATH_CONFIG,
@@ -248,6 +253,7 @@ def _collect(root, state):
 
 def coverage(snapshot, components):
     targets = snapshot["targets"]
+    registries = {r.PROFILE: r for r in (image_cilium_operator_inventory, image_etcd_inventory)}
     covered = 0
     for target in targets:
         matches = [item for item in components if item["name"] == target["name"]]
@@ -275,9 +281,9 @@ def coverage(snapshot, components):
                     and image_kubernetes_scans.coverage_valid(item, target)
                 )
                 or (
-                    item.get("coverage_profile") == image_cilium_operator_inventory.PROFILE
+                    item.get("coverage_profile") in registries
                     and image_kubernetes_scans.coverage_valid(
-                        item, target, registry=image_cilium_operator_inventory
+                        item, target, registry=registries[item["coverage_profile"]]
                     )
                 )
             )

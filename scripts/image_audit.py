@@ -28,6 +28,7 @@ from scripts import (
     image_candidates,
     image_cilium_operator_inventory,
     image_etcd_candidate,
+    image_etcd_inventory,
     image_kubernetes_aliases,
     image_kubernetes_export,
     image_kubernetes_inventory,
@@ -258,8 +259,9 @@ def snapshot(cache):
     return {path.relative_to(cache).as_posix(): file_hash(path) for path in paths}
 
 
-def supplement_operator(component, target, sbom, scan, code, run, cache, db, db_files):
-    registry = image_cilium_operator_inventory
+def supplement_system_image(
+    component, target, sbom, scan, code, run, cache, db, db_files, *, registry
+):
     if (
         target.get("reference") != registry.REFERENCE
         or target.get("config_id") != registry.CONFIG
@@ -268,13 +270,13 @@ def supplement_operator(component, target, sbom, scan, code, run, cache, db, db_
         or "containerd_reference" in target
         or not registry.resolve(component["package_observation"], target["reference"])
     ):
-        raise Rejected("image_audit_cilium_operator_binding")
+        raise Rejected("image_audit_system_image_binding")
     batch = image_kubernetes_scans.run_batch(run, cache, db, db_files, registry=registry)
     joined = image_kubernetes_scans.join(
         component, sbom, scan, code, batch, target["reference"], db, registry=registry
     )
     if not image_kubernetes_scans.coverage_valid(joined, target, registry=registry):
-        raise Rejected("image_audit_cilium_operator_reconciliation")
+        raise Rejected("image_audit_system_image_reconciliation")
     return joined
 
 
@@ -686,10 +688,11 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         if target["config_id"] in image_kubernetes_inventory.INVENTORIES
     }
     originals = {}
-    operators = {
-        target["name"]: target
+    registries = {r.CONFIG: r for r in (image_cilium_operator_inventory, image_etcd_inventory)}
+    supplements = {
+        target["name"]: (target, registries[target["config_id"]])
         for target in (observed or {}).get("targets", [])
-        if target["config_id"] == image_cilium_operator_inventory.CONFIG
+        if target["config_id"] in registries
     }
     for component in report["components"]:
         name = component["name"]
@@ -736,11 +739,12 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 )
                 if component["status"] == "pass":
                     component["status"] = "inconclusive"
-            if name in operators:
+            if name in supplements:
+                target, registry = supplements[name]
                 try:
-                    joined = supplement_operator(
+                    joined = supplement_system_image(
                         component,
-                        operators[name],
+                        target,
                         path,
                         scan_path,
                         exit_code,
@@ -748,12 +752,16 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                         cache,
                         control_database,
                         db_files,
+                        registry=registry,
                     )
                 except (Rejected, OSError):
-                    report["cilium_operator_supplemental_error"] = (
-                        "image_audit_cilium_operator_join_incomplete"
+                    key = registry.PROFILE.replace("-", "_") + "_error"
+                    reason = (
+                        "image_audit_etcd_join_incomplete"
+                        if registry is image_etcd_inventory
+                        else "image_audit_cilium_operator_join_incomplete"
                     )
-                    component["reason"] = report["cilium_operator_supplemental_error"]
+                    report[key] = component["reason"] = reason
                     component["sbom_validated"] = False
                 else:
                     component.clear()
@@ -840,9 +848,13 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     report["status"] = (
         "fail" if "fail" in statuses else "inconclusive" if "inconclusive" in statuses else "pass"
     )
-    if not {"kubernetes_supplemental_error", "cilium_operator_supplemental_error"}.intersection(
-        report
-    ) and all(component["scan_executed"] for component in report["components"]):
+    if not {
+        "kubernetes_supplemental_error",
+        "cilium_operator_supplemental_error",
+        "etcd_supplemental_error",
+    }.intersection(report) and all(
+        component["scan_executed"] for component in report["components"]
+    ):
         report["vulnerability_count"] = len(
             {
                 finding["id"]

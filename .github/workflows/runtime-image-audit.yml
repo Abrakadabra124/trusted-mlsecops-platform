@@ -28,6 +28,10 @@ jobs:
           uv run --locked ruff format --check scripts/image*.py
           uv run --locked python scripts/check_docs.py
           uv run --locked python -m unittest scripts.image_package_observation_qualification scripts.image_go_control_qualification scripts.image_diagnostic_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-image-etcd --source=scripts.image_etcd_inventory -m unittest scripts.image_etcd_inventory_qualification
+          uv run --locked coverage report --data-file=.coverage-image-etcd --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-image-etcd -o .coverage-image-etcd.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-image-etcd.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked python -m unittest scripts.image_cilium_operator_qualification scripts.image_cilium_join_qualification
           uv run --locked coverage run --branch --source=scripts.image_scope -m unittest scripts.image_scope_qualification
           uv run --locked coverage report --fail-under=95

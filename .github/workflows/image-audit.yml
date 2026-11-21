@@ -33,6 +33,10 @@ jobs:
           uv run --locked python -c "import json; t=json.load(open('.coverage-image-scope.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --source=scripts.image_archive,scripts.image_audit_contract,scripts.image_audit,scripts.image_candidates,scripts.image_comparison -m scripts.image_suite_qualification
           uv run --locked coverage run --append --source=scripts.image_audit_contract -m unittest scripts.image_package_observation_qualification scripts.image_go_control_qualification scripts.image_diagnostic_qualification
+          uv run --locked coverage run --branch --data-file=.coverage-image-etcd --source=scripts.image_etcd_inventory -m unittest scripts.image_etcd_inventory_qualification
+          uv run --locked coverage report --data-file=.coverage-image-etcd --fail-under=95
+          uv run --locked coverage json --data-file=.coverage-image-etcd -o .coverage-image-etcd.json
+          uv run --locked python -c "import json; t=json.load(open('.coverage-image-etcd.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
           uv run --locked coverage run --append --source=scripts.image_audit,scripts.image_kubernetes_export -m unittest scripts.image_kubernetes_integration_qualification scripts.image_kubernetes_export_qualification scripts.image_cilium_join_qualification scripts.image_cilium_operator_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage.json

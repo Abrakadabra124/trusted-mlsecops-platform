@@ -1,5 +1,13 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## etcd 3.6.17 и локальные замены модулей Go
+
+Если Syft показывает `UNKNOWN` у внутренних зависимостей etcd, сначала сверить digest запущенного образа Linux AMD64 и его конфигурации. Для образа `3.6.17-0` они начинаются с `3ced7fbd` и `be2dd319`. Полные значения и проверяемые материалы записаны в [реестре etcd](../../scripts/image_etcd_inventory.py). [Проверка работающего endpoint](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44957210068).
+
+1. Сохранить исходные отчёты Syft и Grype в каталоге запуска. Сверить исходный config, дистрибутив и все 154 строки описи, включая пути и число вхождений. Из 148 записей Go в трёх бинарных файлах 13 ссылаются на локальные замены модулей. Остальные шесть записей принадлежат пакетам Debian. [Фикстура полной описи](../../scripts/image_etcd_inventory_fixture.py).
+2. Для каждой замены сверить путь бинарного файла, SHA-256 релизного файла и ревизию исходников. Для пяти различных модулей запустить дополнительные проверки версии `v3.6.17` в той же базе Grype. Сохранить их отчёты и проверить принадлежность каждого отчёта нужному пакету. [Материалы upstream](https://github.com/etcd-io/etcd/tree/0689586e360e2c6b46f95ad5634c25d5fa1683db), [проверка привязки и объединение](../../scripts/image_kubernetes_scans.py).
+3. Запускать `runtime-image-audit.yml` на проверяемом коммите в одноразовом hosted CI. При несовпадении описи или отсутствии одной из пяти квитанций оставить проверку открытой и сохранить причину отказа. При успешном объединении сверить исходные находки с `etcd_supplemental.original_result`. Записи `Unknown` для advisory по `golang.org/x/crypto` остаются в отчёте независимо от версий внутренних модулей. При отсутствии High и Critical такие записи сохраняют статус `inconclusive`. [Исходный полный аудит](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44954907094), [workflow](../../.github/workflows/runtime-image-audit.yml).
+
 ## Cilium Operator сообщает UNKNOWN для главного модуля gops
 
 В образе оператора 1.20.5 для Linux AMD64 есть два файла, использующих `github.com/google/gops`. В `/usr/bin/cilium-operator-generic` метаданные компилятора указывают зависимость `v0.3.28`. В отдельном `/usr/bin/gops` основной модуль записан как `(devel)`. Для второго файла рецепт Cilium указывает `v0.3.29`. [Рецепт Cilium](https://github.com/cilium/cilium/blob/150121410c147fad575ac5dcbce6de923be69042/images/runtime/build-gops.sh), [стадии сборки образа](https://github.com/cilium/cilium/blob/150121410c147fad575ac5dcbce6de923be69042/images/operator/Dockerfile).

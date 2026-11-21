@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import image_audit as audit
+from scripts import image_etcd_inventory as etcd
+from scripts import image_etcd_inventory_fixture as etcd_fixture
 from scripts import image_kubernetes_scans as scans
 from scripts.image_audit_qualification import fixtures as image_fixture
 from scripts.image_go_supplemental_qualification import fixture as module_fixture
@@ -107,6 +109,58 @@ class SupplementalScanContracts(unittest.TestCase):
             self.assertRaisesRegex(Rejected, "batch_binding"),
         ):
             scans.read_batch(cilium, self.db)
+
+    def test_etcd_requires_all_five_versioned_modules_and_its_own_receipts(self):
+        batch = self.batch(registry=etcd)
+        self.assertEqual(batch.directory.name, "etcd-modules")
+        results = scans.read_batch(batch, self.db, registry=etcd)
+        self.assertEqual(len(results), 5)
+        self.assertEqual([(r["module"], r["version"]) for r in results], list(etcd.coordinates()))
+        with self.assertRaises(Rejected):
+            scans.read_batch(batch, self.db, registry=self.cilium)
+        with self.assertRaises(Rejected):
+            scans.read_batch(replace(batch, receipts=batch.receipts[:-1]), self.db, registry=etcd)
+
+    def test_etcd_join_preserves_both_unknown_findings_and_refuses_another_target(self):
+        sbom = etcd_fixture.sbom()
+        _, report, _, _, _ = image_fixture()
+        report["descriptor"] = self.module_scan["report"]["descriptor"]
+        report["source"]["target"]["imageID"] = etcd.CONFIG
+        report["distro"]["version"] = "13"
+        for package in sbom["artifacts"]:
+            if package["name"] == "golang.org/x/crypto":
+                report["matches"].append(
+                    {
+                        "artifact": {k: package[k] for k in ("id", "type", "name", "version")},
+                        "vulnerability": {"id": "GO-2026-5932", "severity": "Unknown"},
+                    }
+                )
+        self.assertEqual(len(report["matches"]), 2)
+        self.sbom = self.root / "sbom.json"
+        self.report = self.root / "report.json"
+        self.sbom.write_bytes(canonical(sbom))
+        self.report.write_bytes(canonical(report))
+        self.component = {
+            **scans.assess(sbom, report, etcd.CONFIG, set(), 0, diagnostic_only=True),
+            "image_config_id": etcd.CONFIG,
+            "package_observation": scans.observe_packages(sbom, etcd.CONFIG),
+            "sbom_digest": digest(canonical(sbom)),
+            "report_digest": digest(canonical(report)),
+            "observed_reference": etcd.REFERENCE,
+            "reason": CILIUM_REASON,
+        }
+        self.target = {"config_id": etcd.CONFIG, "reference": etcd.REFERENCE}
+        self.created = self.batch(registry=etcd)
+        result = self.joined(registry=etcd)
+        self.assertEqual(result["status"], "inconclusive")
+        self.assertEqual(result["findings"], self.component["findings"])
+        self.assertEqual(result["severity_counts"]["Unknown"], 2)
+        self.assertEqual(result["unique_vulnerabilities"], 1)
+        self.assertTrue(scans.coverage_valid(result, self.target, registry=etcd))
+        changed = {**self.target, "reference": self.cilium.REFERENCE}
+        self.assertFalse(scans.coverage_valid(result, changed, registry=etcd))
+        result["findings"].clear()
+        self.assertFalse(scans.coverage_valid(result, self.target, registry=etcd))
 
     def test_cilium_fake_scanner_reporting_a_different_release_is_rejected(self):
         def wrong_release(run, name, image, arguments, mounts):

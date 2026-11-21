@@ -4,9 +4,9 @@ Receipts refer to private artifacts in an exclusively created directory. Public
 projections are integrity checks under the existing trusted-host model, not signed
 attestations. A version mapping alone never authorizes application coverage.
 
-The keyword-only registry defaults to image_kubernetes_aliases. The other trusted
-module declares PROFILE="cilium-operator-supplemental" and its pinned REFERENCE.
-Both expose coordinates() (an ordered tuple of pairs), validate_coordinate(module,
+The keyword-only registry defaults to image_kubernetes_aliases. The Cilium and
+etcd registries bind a pinned REFERENCE to the complete observed inventory.
+These registries expose coordinates() (an ordered tuple of pairs), validate_coordinate(module,
 version) (canonical PURL), proof_digest() and resolve(observation, reference).
 Resolution returns None or a mapping with image_config_id, coordinates and proof_digest.
 """
@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, safe_child
+from scripts import image_etcd_inventory, image_kubernetes_export
 from scripts import image_go_supplemental_contract as single
 from scripts import image_kubernetes_aliases as aliases
-from scripts import image_kubernetes_export
 from scripts.image_audit_contract import SEVERITIES, assess, observe_packages
 
 LIMIT = 64 * 1024**2
@@ -48,11 +48,19 @@ _CILIUM = _Profile(
     "cilium_operator_supplemental",
     "image_audit_runtime_application_coverage_unapproved",
 )
+_ETCD = _Profile(
+    "etcd-supplemental",
+    "etcd-modules",
+    "etcd_supplemental",
+    "image_audit_runtime_application_coverage_unapproved",
+)
 
 
 def _profile(registry):
     if registry is aliases:
         return _KUBERNETES
+    if registry is image_etcd_inventory:
+        return _ETCD
     reference = getattr(registry, "REFERENCE", None)
     if (
         getattr(registry, "PROFILE", None) == _CILIUM.name
@@ -65,7 +73,7 @@ def _profile(registry):
 
 def _coordinates(registry):
     coordinates = registry.coordinates()
-    if registry is not aliases and coordinates != _GOPS:
+    if _profile(registry) is _CILIUM and coordinates != _GOPS:
         raise Rejected("cilium_operator_scan_coordinates_invalid")
     return coordinates
 
@@ -73,7 +81,7 @@ def _coordinates(registry):
 def _purl(registry, module, version):
     purl = registry.validate_coordinate(module, version)
     if registry is not aliases and purl != f"pkg:golang/{module}@{version}":
-        raise Rejected("cilium_operator_scan_purl_invalid")
+        raise Rejected(f"{_profile(registry).evidence}_scan_purl_invalid")
     return purl
 
 
@@ -86,7 +94,7 @@ def _resolve(registry, observation, component, reference):
         or "local_alias" in component
         or "containerd_export" in component
     ):
-        raise Rejected("cilium_operator_scan_reference_mismatch")
+        raise Rejected(f"{_profile(registry).evidence}_scan_reference_mismatch")
     mapping = registry.resolve(observation, reference)
     if mapping is not None and (
         not isinstance(mapping, dict)
@@ -95,7 +103,7 @@ def _resolve(registry, observation, component, reference):
         or mapping.get("coordinates") != [list(pair) for pair in _coordinates(registry)]
         or mapping.get("proof_digest") != registry.proof_digest()
     ):
-        raise Rejected("cilium_operator_scan_mapping_mismatch")
+        raise Rejected(f"{_profile(registry).evidence}_scan_mapping_mismatch")
     return mapping
 
 
