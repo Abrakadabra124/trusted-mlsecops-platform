@@ -6,6 +6,7 @@ on:
     paths:
       - images/candidates/etcd/Dockerfile
       - .github/workflows/etcd-candidate.yml
+      - scripts/etcd_candidate_adoption.py
 permissions: {}
 
 jobs:
@@ -44,22 +45,28 @@ jobs:
           echo '5036ccb5ca4ef3db34ce0a505b09602b047449ade7babcd1f77f98aea96b6171  context/Dockerfile' | sha256sum -c -
           docker pull --platform linux/amd64 "$READER"
           container=
-          cleanup() { if [[ -n "$container" ]]; then docker rm -f "$container" >/dev/null; fi; }
+          cleanup() {
+            if [[ -n "$container" ]]; then
+              docker rm -f "$container" >/dev/null || return 1
+              local remaining
+              remaining=$(docker container ls --all --no-trunc --quiet --filter "id=$container") || return 1
+              test -z "$remaining" || return 1
+              container=
+            fi
+          }
           trap cleanup EXIT
           for build in first second; do
-            docker build --no-cache --platform linux/amd64 --iidfile "$build/id" \
+            docker build --no-cache --platform linux/amd64 \
               -t "local/etcd-qualification:$build" context
-            id=$(cat "$build/id")
+            id=$(docker image inspect -f '{{.Id}}' "local/etcd-qualification:$build")
+            echo "$id" > "$build/id"
             test "$(docker image inspect -f '{{.Os}}/{{.Architecture}}' "$id")" = linux/amd64
             test "$(docker image inspect -f '{{index .Config.Labels "org.trusted-mlsecops-platform.etcd.patch"}}' "$id")" = x-crypto-v0.59.0-r1
             container=$(docker create --network none "$id")
             for name in etcd etcdctl etcdutl; do
               docker cp "$container:/usr/local/bin/$name" "$build/$name"
             done
-            docker rm "$container" >/dev/null
-            remaining=$(docker container ls --all --no-trunc --quiet --filter "id=$container")
-            test -z "$remaining"
-            container=
+            cleanup
             docker run --rm --network none --read-only -v "$PWD/$build:/elf:ro" \
               --entrypoint /usr/local/go/bin/go "$READER" version -m \
               /elf/etcd /elf/etcdctl /elf/etcdutl | tee "$build/buildinfo"
@@ -163,7 +170,14 @@ jobs:
             --entrypoint /usr/local/bin/etcd "$id" --name candidate --data-dir /data/member-data \
             --listen-client-urls "$endpoint" --advertise-client-urls "$endpoint" \
             --listen-peer-urls "$peer" --initial-advertise-peer-urls "$peer" --initial-cluster "candidate=$peer")
-          trap 'docker rm -f "$cid" >/dev/null' EXIT
+          cleanup() {
+            docker rm -f "$cid" >/dev/null || return 1
+            local remaining
+            remaining=$(docker container ls --all --no-trunc --quiet --filter "id=$cid") || return 1
+            test -z "$remaining" || return 1
+            echo "Temporary etcd container removed: $cid"
+          }
+          trap cleanup EXIT
           ctl() { docker exec "$cid" /usr/local/bin/etcdctl --endpoints="$endpoint" --command-timeout=2s "$@"; }
           for attempt in {1..20}; do
             if ctl endpoint health; then break; fi
@@ -187,10 +201,8 @@ jobs:
           ctl snapshot save /data/snapshot.db
           docker exec "$cid" /usr/local/bin/etcdutl snapshot status /data/snapshot.db -w json | tee snapshot.json
           jq -e '.revision>=2 and .totalKey>0' snapshot.json
-          docker rm -f "$cid" >/dev/null
+          cleanup
           trap - EXIT
-          remaining=$(docker container ls --all --no-trunc --quiet --filter "id=$cid")
-          test -z "$remaining"
 
       - name: Apply the candidate gates to the unmodified reports
         run: |
@@ -263,3 +275,33 @@ jobs:
                         f"{item}: extracted ELF coverage")
           print("Candidate qualified on the disposable host. The deployed baseline has its own audit.")
           PY
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          working-directory: ${{ runner.temp }}/etcd-qualification/source
+          enable-cache: false
+          github-token: ""
+      - name: Prepare project workspace and pinned kind tools
+        working-directory: ${{ runner.temp }}/etcd-qualification/source
+        env:
+          REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$REPOSITORY_VISIBILITY" = public
+          uv sync --locked --no-dev --no-build
+          .venv/bin/python -m mlsecops bootstrap
+          .venv/bin/python scripts/install_ci_tools.py
+          echo "$PWD/.runtime/bin" >> "$GITHUB_PATH"
+      - name: Replace and roll back the etcd static Pod on the owned kind node
+        id: adoption
+        timeout-minutes: 22
+        working-directory: ${{ runner.temp }}/etcd-qualification/source
+        run: .venv/bin/python -m scripts.etcd_candidate_adoption run
+      - name: Remove and verify the disposable kind cluster and node
+        if: always() && steps.adoption.outcome != 'skipped' && steps.adoption.outcome != ''
+        timeout-minutes: 3
+        working-directory: ${{ runner.temp }}/etcd-qualification/source
+        run: .venv/bin/python -m scripts.etcd_candidate_adoption cleanup
