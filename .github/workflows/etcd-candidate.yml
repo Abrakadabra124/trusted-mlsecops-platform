@@ -7,6 +7,7 @@ on:
       - images/candidates/etcd/Dockerfile
       - .github/workflows/etcd-candidate.yml
       - scripts/etcd_candidate_adoption.py
+      - scripts/etcd_candidate_adoption_qualification.py
 permissions: {}
 
 jobs:
@@ -292,6 +293,7 @@ jobs:
           test "$RUNNER_ENVIRONMENT" = github-hosted
           test "$REPOSITORY_VISIBILITY" = public
           uv sync --locked --no-dev --no-build
+          .venv/bin/python -m unittest scripts.etcd_candidate_adoption_qualification
           .venv/bin/python -m mlsecops bootstrap
           .venv/bin/python scripts/install_ci_tools.py
           echo "$PWD/.runtime/bin" >> "$GITHUB_PATH"
