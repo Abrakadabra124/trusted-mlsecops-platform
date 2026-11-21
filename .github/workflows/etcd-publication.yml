@@ -1,0 +1,35 @@
+name: Publish qualified etcd platform component
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful qualification push run ID (attempt 1)
+        required: true
+        type: string
+
+permissions: {}
+concurrency:
+  group: etcd-platform-component-ghcr-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check trusted publisher contracts
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m unittest scripts.etcd_publication_qualification
+      - name: Verify producer, publish one version and read it back
+        env:
+          QUALIFIED_RUN_ID: ${{ inputs.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -B -m scripts.etcd_publication
