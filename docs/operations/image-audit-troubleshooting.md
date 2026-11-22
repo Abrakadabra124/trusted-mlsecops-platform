@@ -1,5 +1,19 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Как воспроизвести проверки основной ветки от 22 ноября
+
+В попытке 1 трёх запусков GitHub использовал чистый checkout `71071bf8355cd759523ce56ae32a14c0b5d23ff8`. С командной строки с авторизованным GitHub CLI можно повторить каждый сценарий на этом же коммите. Оператору нужен доступ к Actions репозитория. Кластер и базы запускаются на одноразовых Linux AMD64 runners GitHub.
+
+```shell
+gh run rerun 45024842295 --repo Abrakadabra124/trusted-mlsecops-platform
+gh run rerun 45024844986 --repo Abrakadabra124/trusted-mlsecops-platform
+gh run rerun 45024847265 --repo Abrakadabra124/trusted-mlsecops-platform
+```
+
+1. В [проверке кластера](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45024842295/attempts/1) откройте шаг `Verify the running etcd image and endpoint`. Сверьте digest запущенного манифеста и config ID с [закреплённой конфигурацией](../../infra/kind.yaml) и наблюдениями ранбука. Проверьте версию 3.6.17, результат `single_member_leader=verified` и удаление узла в конце запуска.
+2. В [полном аудите](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45024844986/attempts/1) сопоставьте исходный JSON с копией шага публикации. Найдите etcd по `observed_reference`, сверьте 154 строки и семь сканов. Сверьте число покрытых образов, находки Critical и High, статус выпуска и маркер `runtime_audit_cluster_absent=pass` после удаления узла. При повторе запишите SHA-256 базы Grype. Обновление базы может изменить число находок.
+3. В [сквозном сценарии](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45024847265/attempts/1) сверяйте кандидата и SHA-256 модели между прогнозами и восстановлением внутри одной попытки. Первая попытка вернула `release_assurance_required`, 85 проверок в режиме квалификации и 1000 совпавших эталонных прогнозов после восстановления. В отчёте исходная база остановлена, том восстановления новый, повторное восстановление сохранило идентичность контейнера. Для промышленного выпуска требуются все доказательства M18 и независимое заключение M22.
+
 ## Публикация проверенного образа etcd
 
 Оператор запускает публикацию системного компонента из `main`, когда сборка на закреплённом коммите завершилась со статусом `success`. В журнале сборки должны пройти переключение etcd, откат, удаление одноразового кластера и загрузка архива. Артефакт `etcd-qualified-<run_id>-1` хранится сутки. [Код проверки происхождения](../../scripts/etcd_publication.py), [workflow публикации](../../.github/workflows/etcd-publication.yml).
