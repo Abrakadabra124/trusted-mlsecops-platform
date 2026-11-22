@@ -1,0 +1,38 @@
+name: Build and audit the local-path provisioner candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: local-path-rebuild-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Verify the source and scanner contracts
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          uv sync --locked --no-build --python 3.12.15
+          uv run --locked ruff check scripts/image_local_path*.py
+          uv run --locked ruff format --check scripts/image_local_path*.py
+          uv run --locked python -B -W error -m unittest scripts.image_local_path_pair_qualification scripts.image_local_path_rebuild_qualification
+      - name: Build the candidate for linux/amd64
+        run: |
+          docker buildx build --load --provenance=false --platform linux/amd64 --progress plain \
+            --metadata-file "$RUNNER_TEMP/local-path.json" --tag "local-path-r1:$GITHUB_SHA" images/candidates/local-path
+      - name: Measure the built image and stock image on one database
+        run: |
+          image_id=$(jq -er '.["containerimage.config.digest"]' "$RUNNER_TEMP/local-path.json")
+          test "$(docker image inspect --format '{{.Id}}' "local-path-r1:$GITHUB_SHA")" = "$image_id"
+          [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+          uv run --locked python -m scripts.image_local_path_rebuild --image-id "$image_id"
