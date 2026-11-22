@@ -280,6 +280,33 @@ def supplement_system_image(
     return joined
 
 
+def supplement_native_agent(component, target, run, cache, db, db_files):
+    from scripts import image_bpftool_scan
+
+    registry = image_cilium_agent_inventory
+    if not image_kubernetes_scans.join_valid(component, target, registry=registry):
+        raise Rejected("bpftool_original_agent_unverified")
+    evidence = component["cilium_agent_go_supplemental"]
+    receipt = image_bpftool_scan.collect(run / "bpftool-noble", cache, db_files, db)
+    if receipt["db_sha256"] != db_files["6/vulnerability.db"]:
+        raise Rejected("bpftool_database_digest_mismatch")
+    native = image_bpftool_scan.verified_findings(receipt, evidence["mapping"], db)
+    totals = image_kubernetes_scans.joined_result(
+        evidence["original_result"],
+        [*evidence["scans"], {"findings": native}],
+        diagnostic_only=True,
+    )
+    updated = {
+        **component,
+        **totals,
+        "vulnerability_count": totals["unique_vulnerabilities"],
+        "cilium_agent_go_supplemental": {**evidence, "bpftool_ubuntu_materials": receipt},
+    }
+    if not image_kubernetes_scans.join_valid(updated, target, registry=registry):
+        raise Rejected("bpftool_final_aggregate_mismatch")
+    component.update(updated)
+
+
 def audit(root, include_candidates=False, runtime_state=None, include_node_candidate=False):
     if include_node_candidate and (include_candidates or runtime_state is not None):
         raise Rejected("image_audit_candidate_scope_conflict")
@@ -827,6 +854,15 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 if component["status"] == "pass":
                     component["status"] = "inconclusive"
         write_json(safe_child(root, REPORT), report)
+    for name, (target, registry) in supplements.items():
+        if registry is image_cilium_agent_inventory:
+            try:
+                component = next(c for c in report["components"] if c["name"] == name)
+                supplement_native_agent(component, target, run, cache, control_database, db_files)
+            except Rejected as error:
+                report["bpftool_ubuntu_error"] = str(error)
+            except (OSError, subprocess.SubprocessError, StopIteration):
+                report["bpftool_ubuntu_error"] = "bpftool_material_unavailable"
     if (
         snapshot(cache) != db_files
         or source_fingerprint(root) != fingerprint
@@ -834,6 +870,8 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     ):
         raise Rejected("image_audit_materials_changed")
     statuses = {component["status"] for component in report["components"]}
+    if "bpftool_ubuntu_error" in report:
+        statuses.add("inconclusive")
     if node_build is not None and image_node_candidate.validate(root) != node_build:
         raise Rejected("image_audit_node_candidate_changed")
     if observed is not None:
@@ -849,6 +887,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     )
     supplemental_errors = {r.PROFILE.replace("-", "_") + "_error" for r in registries.values()}
     supplemental_errors.add("kubernetes_supplemental_error")
+    supplemental_errors.add("bpftool_ubuntu_error")
     if not supplemental_errors.intersection(report) and all(
         component["scan_executed"] for component in report["components"]
     ):
