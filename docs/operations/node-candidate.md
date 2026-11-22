@@ -1,5 +1,13 @@
 # Изолированный Kubernetes node candidate
 
+## OpenSSL в штатном node 1.36.4
+
+В полном аудите 45030124975 штатный linux/amd64 config `sha256:0fa975026f71246c4e4744409d43e2e5884bb6e960851b438e50f455808c16f4` содержит Debian 13.6. Grype сообщает CVE-2026-63073 и CVE-2026-75803 для каждого из трёх пакетов `openssl`, `libssl3t64` и `openssl-provider-legacy`. Установлена `3.5.6-1~deb13u2`, первая исправленная версия в отчёте `3.5.7-1~deb13u2`. В подписанном индексе trixie от 21 ноября проверены три amd64 архива `3.5.9-1~deb13u1`. [Исходный job](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45030124975/job/137231665394), [Debian DSA-6465-1](https://security-tracker.debian.org/tracker/DSA-6465-1), [закреплённый InRelease](https://snapshot.debian.org/archive/debian/20261122T000000Z/dists/trixie/InRelease).
+
+Для отдельного hosted измерения владелец проверяет commit и отправляет его в точную ветку `qualify/r1-kind-1364-openssl`. Job с правом `contents: read` повторяет проверку подписей, индекса и архивов, устанавливает только эти три пакета без сети и читает SHA-256 семи ELF. Затем он сравнивает OCI runtime config, исходные слои, состав дополнительного слоя, все 878 строк Syft с путями и результаты Grype на одном снимке БД. В логе искать записи `source` и `candidate`, шесть исходных совпадений и остаток по двум CVE. При расхождении входов или описи измерение отклоняется. Даже при устранении шести совпадений статус `fail` или `inconclusive` у кандидата завершает job с ошибкой. Весь образ кандидата живёт на одноразовом runner. [Workflow](../../.github/workflows/kind-node-openssl.yml), [пины и сравнение](../../scripts/image_node_openssl.py), [рецепт](../../images/candidates/node-openssl/Dockerfile).
+
+## Историческая проверка Kubernetes 1.36.6
+
 Неделя 1 «Контекст и foundation», T02 «Foundation P0 и совместимые зависимости». Ответственный: platform operator. Область: разрешённый disposable GitHub-hosted CI. Локальные Docker/WSL/Kubernetes/SQL не запускаются. Build/audit candidate не является adoption или закрытием CP2/R1.
 
 ## Симптом и причина

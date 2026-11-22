@@ -1,0 +1,27 @@
+name: Stock kind node OpenSSL qualification
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-kind-1364-openssl]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/qualify/r1-kind-1364-openssl'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Check locked contracts
+        run: |
+          uv sync --locked
+          uv run --locked python -m unittest scripts.image_node_openssl_qualification
+      - name: Compare stock and offline-updated node against one Grype database
+        run: uv run --locked python -m scripts.image_node_openssl
