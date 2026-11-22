@@ -63,7 +63,7 @@ def _rows(counts):
     ]
 
 
-def _summary(spec, observation, result):
+def _summary(spec, observation, result, inventory_verified):
     if result["image_id"] != spec[1] or observation["image_id"] != spec[1]:
         raise Rejected("local_path_scan_identity_mismatch")
     rows = observation["packages"]
@@ -77,7 +77,7 @@ def _summary(spec, observation, result):
         "reference": spec[0],
         "config": spec[1],
         "distro": observation["distro"],
-        "inventory_verified": inventory_matches(spec, observation),
+        "inventory_verified": inventory_verified,
         "package_count": len(rows),
         "package_types": dict(Counter(row["type"] for row in rows)),
         "packages_sha256": digest(canonical(sorted(rows, key=canonical))),
@@ -98,11 +98,17 @@ def _summary(spec, observation, result):
 
 
 def compare(before, source, after, candidate, db_files):
+    return compare_measured(
+        before, source, after, candidate, db_files, PROPOSAL, inventory_matches(PROPOSAL, after)
+    )
+
+
+def compare_measured(before, source, after, candidate, db_files, proposal_spec, inventory_verified):
     db_sha = db_files.get("6/vulnerability.db", "")
     if not re.fullmatch("[0-9a-f]{64}", db_sha) or source["database"] != candidate["database"]:
         raise Rejected("local_path_scan_database_mismatch")
-    stock, left = _summary(STOCK, before, source)
-    proposal, right = _summary(PROPOSAL, after, candidate)
+    stock, left = _summary(STOCK, before, source, inventory_matches(STOCK, before))
+    proposal, right = _summary(proposal_spec, after, candidate, inventory_verified)
     original = [f for f in source["findings"] if f["id"] == ADVISORY and f["package"] == APP]
     remaining = sum(n for (i, _, _), n in right.items() if i == ADVISORY)
     control = (
@@ -150,11 +156,14 @@ def compare(before, source, after, candidate, db_files):
     }
 
 
-def qualify(run):
-    for reference, config in (STOCK, PROPOSAL):
-        command(["docker", "pull", "--platform", "linux/amd64", reference], timeout=360)
-        if command(["docker", "image", "inspect", "--format", "{{.Id}}", reference]) != config:
-            raise Rejected("local_path_pulled_config_mismatch")
+def pull_verified(spec):
+    reference, config = spec
+    command(["docker", "pull", "--platform", "linux/amd64", reference], timeout=360)
+    if command(["docker", "image", "inspect", "--format", "{{.Id}}", reference]) != config:
+        raise Rejected("local_path_pulled_config_mismatch")
+
+
+def scanner_database(run):
     for image in (audit.SYFT_IMAGE, audit.GRYPE_IMAGE):
         command(["docker", "pull", "--platform", "linux/amd64", image], timeout=360)
 
@@ -170,7 +179,13 @@ def qualify(run):
     )
     if code:
         raise Rejected("local_path_db_update_failed")
-    db = audit.snapshot(cache)
+    return cache, audit.snapshot(cache)
+
+
+def qualify(run):
+    for spec in (STOCK, PROPOSAL):
+        pull_verified(spec)
+    cache, db = scanner_database(run)
     # measure verifies the exported config, both scanner reports, the SBOM hash
     # and the read-only cache snapshot after each scan.
     _, before, source = measure(run, cache, db, "source", STOCK[1])
