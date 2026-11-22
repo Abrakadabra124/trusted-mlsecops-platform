@@ -1,0 +1,31 @@
+name: Qualify kubectl in the stock kind node
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-kind-kubectl-scope]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Check the inventory and scanner contracts
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          uv sync --locked --no-build
+          uv run --locked ruff check scripts/image_node_kubectl_*.py
+          uv run --locked ruff format --check scripts/image_node_kubectl_*.py
+          uv run --locked python -B -W error -m unittest scripts.image_node_kubectl_qualification scripts.image_go_supplemental_qualification scripts.image_go_control_qualification
+      - name: Read the stopped node filesystem and measure only kubectl
+        run: uv run --locked python -B -m scripts.image_node_kubectl_inventory
