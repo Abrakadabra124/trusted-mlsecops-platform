@@ -40,7 +40,9 @@ def target_removed(old_findings, new_findings):
     )
 
 
-def scan_image(run, cache, label, reference, config):
+def scan_image(
+    run, cache, label, reference, config, *, inventory_matches=coredns_inventory_matches
+):
     details = audit.inspect_image(reference)
     if details["Id"] != config:
         raise Rejected("coredns_pair_config_mismatch")
@@ -60,7 +62,7 @@ def scan_image(run, cache, label, reference, config):
     sbom_bytes = bounded_read(sbom_path, audit.LIMIT)
     sbom = decode(sbom_bytes, audit.LIMIT)
     observation = observe_packages(sbom, config)
-    if not coredns_inventory_matches(observation, reference):
+    if not inventory_matches(observation, reference):
         raise Rejected("coredns_pair_inventory_mismatch")
     code, report_path = audit.scanner(
         run,

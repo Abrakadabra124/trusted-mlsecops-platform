@@ -1,0 +1,85 @@
+name: Qualify the CoreDNS 1.15.0 dependency rebuild
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-coredns-dependency-candidate]
+    paths:
+      - .github/workflows/coredns-dependency-candidate.yml
+      - images/candidates/coredns/Dockerfile
+      - scripts/image_coredns_dependency.py
+      - scripts/image_coredns_dependency_qualification.py
+      - scripts/image_coredns_pair.py
+permissions: {}
+
+jobs:
+  qualify:
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/qualify/r1-coredns-dependency-candidate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Read exact public source and check the recipe pin
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          git init -q .
+          git fetch -q --no-tags --depth=1 "https://github.com/$GITHUB_REPOSITORY.git" "$GITHUB_SHA"
+          git -c core.autocrlf=false checkout -q --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          work="$RUNNER_TEMP/coredns-dependency"
+          mkdir -m 700 -p "$work/context"
+          git cat-file blob "$GITHUB_SHA:images/candidates/coredns/Dockerfile" > "$work/context/Dockerfile"
+          cd "$work/context"
+          echo '1d7bde1eaa8639468a9e6ed2d7a71033e6536e7f0b1ae2915b58770ddeb61b3a  Dockerfile' | sha256sum -c -
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Test the inventory, capability and finding gates
+        run: |
+          set -euo pipefail
+          uv sync --locked --no-dev --no-build
+          uv run --locked --no-dev python -m unittest scripts.image_coredns_pair_qualification scripts.image_coredns_dependency_qualification
+      - name: Build twice offline and export the agreed executable hash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/coredns-dependency"
+          docker buildx build --platform linux/amd64 --progress plain --target evidence \
+            --output type=local,dest=receipt context
+          docker buildx build --platform linux/amd64 --progress plain \
+            --load --tag local/coredns-dependency:qualification context
+          docker image inspect -f '{{.Id}}' local/coredns-dependency:qualification > candidate.id
+      - name: Compare the original findings and inspect the archived executables
+        run: uv run --locked --no-dev python -m scripts.image_coredns_dependency
+      - name: Query the candidate on UDP port 53 in its own network namespace
+        if: success()
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/coredns-dependency"
+          command -v dig
+          printf '%s\n' '.:53 {' '  hosts {' '    192.0.2.53 qualified.test' '  }' '}' > Corefile
+          chmod 644 Corefile
+          id=$(docker run -d --pull never --read-only --network none --user 65532:65532 \
+            --cap-drop ALL --cap-add NET_BIND_SERVICE --sysctl net.ipv4.ip_unprivileged_port_start=1024 \
+            --mount "type=bind,src=$PWD/Corefile,dst=/Corefile,readonly" "$(cat candidate.id)" -conf /Corefile)
+          [[ "$id" =~ ^[0-9a-f]{64}$ ]]
+          cleanup() {
+            local status=$? remaining
+            trap - EXIT
+            docker rm -f "$id" >/dev/null || exit 1
+            remaining=$(docker ps -aq --no-trunc --filter "id=$id") || exit 1
+            [[ -z "$remaining" ]] || exit 1
+            exit "$status"
+          }
+          trap cleanup EXIT
+          pid=$(docker inspect -f '{{.State.Pid}}' "$id")
+          test "$pid" -gt 1
+          for attempt in {1..10}; do
+            answer=$(sudo nsenter -t "$pid" -n dig +short +time=1 +tries=1 @127.0.0.1 qualified.test. A) || answer=
+            if [[ "$answer" = 192.0.2.53 ]]; then echo "$answer"; exit 0; fi
+            sleep 1
+          done
+          exit 1
