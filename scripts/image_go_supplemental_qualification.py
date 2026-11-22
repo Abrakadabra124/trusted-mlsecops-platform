@@ -152,6 +152,22 @@ class SupplementalContracts(unittest.TestCase):
         inputs["trace"] = inputs["trace"].replace(PURL.encode(), foreign.encode())
         self.rejected(inputs)
 
+    def test_wrapper_pseudo_version_is_bound_to_one_module_and_revision(self):
+        wrapper = "github.com/kubernetes-sigs/iptables-wrappers"
+        pinned = "v0.0.0-20260420133543-bfef9e5087a1"
+        for module, version in ((wrapper, pinned), (MODULE, pinned), (wrapper, pinned[:-1] + "2")):
+            with self.subTest(module=module, version=version):
+                inputs = fixture()
+                purl = f"pkg:golang/{module}@{version}"
+                inputs.update(module=module, version=version)
+                inputs["report"]["source"]["target"] = purl
+                inputs["cdx"]["components"][0].update(name=module, version=version, purl=purl)
+                inputs["trace"] = inputs["trace"].replace(PURL.encode(), purl.encode())
+                if (module, version) == (wrapper, pinned):
+                    self.assertEqual(contract.assess(**inputs)["purl"], purl)
+                else:
+                    self.rejected(inputs)
+
     def test_rejects_source_cdx_or_component_binding_changes(self):
         for mutate in (
             lambda x: x["report"]["source"].update(type="image"),

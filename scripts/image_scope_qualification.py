@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical
+from scripts import image_cilium_agent_inventory as agent
 from scripts import image_scope
 
 
@@ -353,6 +354,26 @@ class RuntimeImageScopeContracts(unittest.TestCase):
         )
         with self.assertRaisesRegex(Rejected, "ambiguous_target"):
             self.collect()
+
+    def test_agent_config_cannot_be_reclassified_as_covered(self):
+        target = {"name": "runtime-agent", "config_id": agent.CONFIG, "reference": agent.CONFIG}
+        for profile in ("worker", "storage", "tracking", "cilium-agent-go-supplemental"):
+            component = {
+                "name": target["name"],
+                "coverage_profile": profile,
+                "status": "pass",
+                "image_config_id": agent.CONFIG,
+                "runtime_image_id": agent.CONFIG,
+                "scan_executed": True,
+                "sbom_validated": True,
+                "diagnostic_only": False,
+                "catalogued_packages": 947,
+            }
+            with self.subTest(profile=profile):
+                self.assertEqual(
+                    image_scope.coverage({"targets": [target]}, [component]),
+                    {"status": "inconclusive", "expected_images": 1, "covered_images": 0},
+                )
 
     def test_coverage_requires_every_actual_digest_and_complete_scan(self):
         snapshot = self.collect()

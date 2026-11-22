@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import image_audit as audit
+from scripts import image_cilium_agent_inventory as agent
 from scripts import image_etcd_inventory as etcd
 from scripts import image_etcd_inventory_fixture as etcd_fixture
 from scripts import image_kubernetes_scans as scans
@@ -77,21 +78,106 @@ class SupplementalScanContracts(unittest.TestCase):
         self.assertTrue(all(path.is_absolute() for path, _, _ in mounts))
         self.assertEqual(mounts[0], (self.cache, "/cache", False))
         purl = arguments[0]
-        report = self.module_scan["report"] | {"source": {"type": "purl", "target": purl}}
+        report = copy.deepcopy(self.module_scan["report"])
+        report["source"] = {"type": "purl", "target": purl}
         cdx = copy.deepcopy(self.module_scan["cdx"])
         package = cdx["components"][0]
         trace = self.module_scan["trace"].replace(package["purl"].encode(), purl.encode())
         module, version = purl.removeprefix("pkg:golang/").split("@")
         package.update(name=module, version=version, purl=purl)
+        for match in report["matches"]:
+            match["artifact"].update(name=module, version=version, purl=purl)
         (run / f"{name}.json").write_bytes(canonical(report))
         (run / f"{name}.log").write_bytes(trace)
         (run / f"{name}.cid").write_text("c" * 64, encoding="ascii")
         self.assertEqual(mounts[1][1:], ("/output", True))
         (mounts[1][0] / "report.json").write_bytes(canonical(cdx))
-        return 0, run / f"{name}.json"
+        return self.module_scan["returncode"], run / f"{name}.json"
 
     def batch(self, **kwargs):
         return scans.run_batch(self.root, self.cache, self.db, self.db_files, **kwargs)
+
+    def agent_supplement(self, severities=()):
+        from scripts.image_cilium_agent_fixture import observation
+
+        self.module_scan = module_fixture(severities, timestamp=self.module_scan["timestamp"])
+        observed = observation()
+        sbom, report, match, _, _ = image_fixture()
+        sbom["source"]["metadata"]["imageID"] = agent.CONFIG
+        sbom["distro"] = observed["distro"]
+        sbom["artifacts"] = [
+            {**row, "id": str(i), "locations": [{"path": p} for p in row["paths"]]}
+            for i, row in enumerate(observed["packages"])
+        ]
+        report["source"]["target"]["imageID"] = agent.CONFIG
+        report["descriptor"] = self.module_scan["report"]["descriptor"]
+        report["distro"] = {"name": "ubuntu", "version": "26.04"}
+        match["artifact"] = {k: sbom["artifacts"][0][k] for k in ("id", "name", "type", "version")}
+        match["vulnerability"]["severity"] = "Low"
+        report["matches"] = [match, match]
+        self.sbom, self.report = self.root / "sbom.json", self.root / "report.json"
+        self.sbom.write_bytes(canonical(sbom))
+        self.report.write_bytes(canonical(report))
+        self.target = {"reference": agent.REFERENCE, "config_id": agent.CONFIG}
+        self.component = {
+            **scans.assess(sbom, report, agent.CONFIG, set(), 0, diagnostic_only=True),
+            "image_config_id": agent.CONFIG,
+            "observed_reference": agent.REFERENCE,
+            "reason": "image_audit_cilium_agent_application_provenance_incomplete",
+            "package_observation": scans.observe_packages(sbom, agent.CONFIG),
+            "sbom_digest": digest(canonical(sbom)),
+            "report_digest": digest(canonical(report)),
+        }
+        return audit.supplement_system_image(
+            self.component,
+            self.target,
+            self.sbom,
+            self.report,
+            0,
+            self.root,
+            self.cache,
+            self.db,
+            self.db_files,
+            registry=agent,
+        )
+
+    def test_agent_adds_severe_go_findings_without_native_coverage(self):
+        joined = self.agent_supplement(("High", "Critical"))
+        self.assertEqual(joined["status"], "fail")
+        self.assertTrue(joined["diagnostic_only"])
+        self.assertFalse(joined["sbom_validated"])
+        self.assertEqual(joined["reason"], self.component["reason"])
+        evidence = joined["cilium_agent_go_supplemental"]
+        self.assertEqual(evidence["original_result"]["findings"], self.component["findings"])
+        self.assertEqual(
+            [r["module"] for r in evidence["scans"]], [m for m, _ in agent.coordinates()]
+        )
+        self.assertEqual(
+            joined["findings"],
+            self.component["findings"]
+            + [finding for row in evidence["scans"] for finding in row["findings"]],
+        )
+        self.assertEqual(joined["severity_counts"]["Low"], 2)
+        self.assertEqual(joined["severity_counts"]["High"], 3)
+        self.assertEqual(joined["severity_counts"]["Critical"], 3)
+        self.assertFalse(scans.coverage_valid(joined, self.target, registry=agent))
+        evidence["scans"][1]["database"] = {"built": "different"}
+        self.assertFalse(scans.join_valid(joined, self.target, registry=agent))
+
+    def test_clean_agent_go_scans_remain_inconclusive(self):
+        joined = self.agent_supplement()
+        self.assertEqual(joined["status"], "inconclusive")
+        self.assertEqual(joined["findings"], self.component["findings"])
+        self.assertTrue(scans.join_valid(joined, self.target, registry=agent))
+        for field, value in (
+            ("status", "pass"),
+            ("diagnostic_only", False),
+            ("sbom_validated", True),
+        ):
+            with self.subTest(field=field):
+                self.assertFalse(
+                    scans.join_valid(joined | {field: value}, self.target, registry=agent)
+                )
 
     def test_fake_scan_and_cross_registry_replay(self):
         kube = self.batch()

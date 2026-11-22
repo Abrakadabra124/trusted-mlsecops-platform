@@ -16,7 +16,7 @@ class OperatorSupplement(unittest.TestCase):
         scans = audit.image_kubernetes_scans
         self.batch = stack.enter_context(patch.object(scans, "run_batch"))
         self.join = stack.enter_context(patch.object(scans, "join"))
-        self.valid = stack.enter_context(patch.object(scans, "coverage_valid", return_value=True))
+        self.valid = stack.enter_context(patch.object(scans, "join_valid", return_value=True))
         self.component = {
             "observed_reference": registry.REFERENCE,
             "image_config_id": registry.CONFIG,

@@ -19,6 +19,7 @@ from pathlib import Path
 
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, safe_child
 from scripts import (
+    image_cilium_agent_inventory,
     image_cilium_operator_inventory,
     image_etcd_inventory,
     image_kubernetes_export,
@@ -32,6 +33,7 @@ LIMIT = 64 * 1024**2
 SUFFIXES = (".json", ".cdx.json", ".log", ".cid")
 _GOPS = (("github.com/google/gops", "v0.3.29"),)
 SYSTEM_REGISTRIES = (
+    image_cilium_agent_inventory,
     image_cilium_operator_inventory,
     image_etcd_inventory,
     image_patched_etcd_inventory,
@@ -58,6 +60,12 @@ _CILIUM = _Profile(
     "cilium_operator_supplemental",
     "image_audit_runtime_application_coverage_unapproved",
 )
+_AGENT = _Profile(
+    "cilium-agent-go-supplemental",
+    "cilium-agent-go-modules",
+    "cilium_agent_go_supplemental",
+    "image_audit_cilium_agent_application_provenance_incomplete",
+)
 _ETCD = _Profile(
     "etcd-supplemental",
     "etcd-modules",
@@ -75,6 +83,8 @@ _PATCHED_ETCD = _Profile(
 def _profile(registry):
     if registry is aliases:
         return _KUBERNETES
+    if registry is image_cilium_agent_inventory:
+        return _AGENT
     if registry is image_etcd_inventory:
         return _ETCD
     if registry is image_patched_etcd_inventory:
@@ -274,7 +284,7 @@ def read_batch(batch, expected_database, timestamp=None, *, registry=aliases):
     return results
 
 
-def joined_result(original, supplemental):
+def joined_result(original, supplemental, *, diagnostic_only=False):
     """Keep every occurrence, including original raw UNKNOWN-version findings."""
     findings = copy.deepcopy(original["findings"])
     for result in supplemental:
@@ -284,7 +294,7 @@ def joined_result(original, supplemental):
         "status": "fail"
         if counts["Critical"] or counts["High"]
         else "inconclusive"
-        if counts["Unknown"]
+        if counts["Unknown"] or diagnostic_only
         else "pass",
         "findings": findings,
         "severity_counts": counts,
@@ -351,12 +361,13 @@ def join(
     if {(r["module"], r["version"]) for r in supplemental} != required:
         raise Rejected("kubernetes_scan_join_incomplete")
     result = copy.deepcopy(component)
-    result.update(joined_result(original, supplemental))
+    partial = profile is _AGENT
+    result.update(joined_result(original, supplemental, diagnostic_only=partial))
     result.update(
         coverage_profile=profile.name,
-        sbom_validated=True,
+        sbom_validated=not partial,
         scan_executed=True,
-        diagnostic_only=False,
+        diagnostic_only=partial,
         vulnerability_count=result["unique_vulnerabilities"],
     )
     result[profile.evidence] = {
@@ -364,7 +375,10 @@ def join(
         "original_result": original,
         "scans": supplemental,
     }
-    result.pop("reason", None)
+    if partial:
+        result["reason"] = profile.reason
+    else:
+        result.pop("reason", None)
     if "containerd_export" in component:
         result[profile.evidence]["containerd_export_sha256"] = image_kubernetes_export.evidence_pin(
             component
@@ -372,12 +386,20 @@ def join(
     return result
 
 
-def coverage_valid(component, target, *, registry=aliases):
-    """Reconcile complete public joins; profile names/booleans are insufficient."""
+def join_valid(component, target, *, registry=aliases):
+    """Reconcile the public result against the original and all required module scans."""
     try:
-        if "reason" in component:
-            return False
         profile = _profile(registry)
+        partial = profile is _AGENT
+        if partial:
+            if (
+                component.get("reason") != profile.reason
+                or component.get("diagnostic_only") is not True
+                or component.get("sbom_validated") is not False
+            ):
+                return False
+        elif "reason" in component:
+            return False
         evidence = component[profile.evidence]
         if profile is _KUBERNETES:
             pin = (
@@ -425,7 +447,13 @@ def coverage_valid(component, target, *, registry=aliases):
                 )
             ):
                 return False
-        expected = joined_result(original, scans)
+        expected = joined_result(original, scans, diagnostic_only=partial)
         return all(component.get(key) == value for key, value in expected.items())
     except (Rejected, KeyError, TypeError, ValueError, AttributeError):
         return False
+
+
+def coverage_valid(component, target, *, registry=aliases):
+    return registry is not image_cilium_agent_inventory and join_valid(
+        component, target, registry=registry
+    )

@@ -141,14 +141,21 @@ def _completed(trace, purl, count, blocked):
 def assess(module, version, report, cdx, trace, returncode, expected_database, timestamp=None):
     """Assess one invocation; reject malformed/ambiguous evidence with a fixed label.
 
-    Only canonical vMAJOR.MINOR.PATCH releases are supported, not pseudo versions,
-    prereleases or build suffixes. timestamp=None uses actual UTC; injection is
+    Accept canonical vMAJOR.MINOR.PATCH releases and the pinned Cilium wrapper
+    pseudo-version. timestamp=None uses actual UTC; injection is
     for controlled tests. Original findings and independent Go controls remain
     mandatory at the caller; this result cannot replace either.
     """
     try:
         _need(_MODULE.fullmatch(_text(module, 512)) is not None)
-        _need(_RELEASE.fullmatch(_text(version, 64)) is not None)
+        _need(
+            _RELEASE.fullmatch(_text(version, 64)) is not None
+            or (module, version)
+            == (
+                "github.com/kubernetes-sigs/iptables-wrappers",
+                "v0.0.0-20260420133543-bfef9e5087a1",
+            )
+        )
         purl = f"pkg:golang/{module}@{version}"
         _document(report, 16 * 1024**2)
         _document(cdx, 1024**2)

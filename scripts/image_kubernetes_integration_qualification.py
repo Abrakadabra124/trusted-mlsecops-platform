@@ -10,6 +10,7 @@ from unittest.mock import patch, sentinel
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, read_json
 from scripts import image_audit as audit
 from scripts import (
+    image_cilium_agent_inventory,
     image_cilium_operator_inventory,
     image_etcd_inventory,
     image_patched_etcd_inventory,
@@ -47,6 +48,8 @@ class KubernetesAuditIntegration(unittest.TestCase):
                 if fault == "upstream-local":
                     row["reference"] = known["reference"]
         supplement_registry = {
+            "agent-join": image_cilium_agent_inventory,
+            "agent-io": image_cilium_agent_inventory,
             "operator-join": image_cilium_operator_inventory,
             "operator-io": image_cilium_operator_inventory,
             "etcd-join": image_etcd_inventory,
@@ -262,6 +265,8 @@ class KubernetesAuditIntegration(unittest.TestCase):
 
     def test_system_supplement_keeps_the_original_findings_and_isolates_io_failure(self):
         for fault in (
+            "agent-join",
+            "agent-io",
             "operator-join",
             "operator-io",
             "etcd-join",
@@ -278,6 +283,7 @@ class KubernetesAuditIntegration(unittest.TestCase):
                 self.assertEqual(component["severity_counts"]["High"], 1)
                 self.assertEqual(component["status"], "fail")
                 key = {
+                    "agent": "cilium_agent_go_supplemental",
                     "etcd": "etcd_supplemental",
                     "operator": "cilium_operator_supplemental",
                     "patched": "etcd_patched_supplemental",

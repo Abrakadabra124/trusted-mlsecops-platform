@@ -274,7 +274,7 @@ def supplement_system_image(
     joined = image_kubernetes_scans.join(
         component, sbom, scan, code, batch, target["reference"], db, registry=registry
     )
-    if not image_kubernetes_scans.coverage_valid(joined, target, registry=registry):
+    if not image_kubernetes_scans.join_valid(joined, target, registry=registry):
         raise Rejected("image_audit_system_image_reconciliation")
     return joined
 

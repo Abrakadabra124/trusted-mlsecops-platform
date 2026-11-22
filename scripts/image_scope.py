@@ -13,6 +13,7 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import image_config
 from mlsecops.storage_bootstrap import WORKSPACE_LABEL
 from mlsecops.storage_pki import workspace_id
+from scripts import image_cilium_agent_inventory as cilium_agent
 from scripts import (
     image_kubernetes_scans,
     tracking_service,
@@ -257,6 +258,12 @@ def coverage(snapshot, components):
         if len(matches) != 1:
             continue
         item = matches[0]
+        # The agent's Go scans do not cover its native binaries, regardless of the reported role.
+        if (
+            cilium_agent.CONFIG in (target["config_id"], item.get("image_config_id"))
+            or target.get("reference") == cilium_agent.REFERENCE
+        ):
+            continue
         if (
             item.get("scan_executed") is True
             and item.get("sbom_validated") is True
