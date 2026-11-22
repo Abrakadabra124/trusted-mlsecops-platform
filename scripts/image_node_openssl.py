@@ -1,15 +1,19 @@
 """One hosted, diagnostic Debian update on the stock Kubernetes 1.36.4 node."""
 
+import gzip
+import hashlib
 import io
 import json
 import lzma
 import os
 import re
+import stat
 import subprocess
 import tarfile
 import tempfile
 import urllib.request
 from collections import Counter
+from contextlib import contextmanager, nullcontext
 from email.parser import Parser
 from pathlib import Path, PurePosixPath
 
@@ -192,8 +196,73 @@ def check_license(tar, member):
         raise Rejected("node_license_content_mismatch")
 
 
+def directory_record(member):
+    # Tar's path/owner serialization is already decoded by TarInfo. Retain all
+    # other non-time PAX fields, including xattrs, ACLs and filesystem flags.
+    times = {
+        k: v
+        for k, v in member.pax_headers.items()
+        if k in {"mtime", "atime", "ctime", "LIBARCHIVE.creationtime"}
+    }
+    times.setdefault("mtime", str(member.mtime))
+    extra = {
+        k: v
+        for k, v in member.pax_headers.items()
+        if k not in times and k not in {"path", "uid", "gid", "uname", "gname", "size"}
+    }
+    xattrs = {
+        k: v for k, v in extra.items() if k.startswith(("SCHILY.xattr.", "LIBARCHIVE.xattr."))
+    }
+    return {
+        "type": "directory",
+        "mode": format(stat.S_IMODE(member.mode), "04o"),
+        "uid": member.uid,
+        "gid": member.gid,
+        "xattrs_count": len(xattrs),
+        "xattrs_sha256": digest(canonical(xattrs)),
+        "pax_sha256": digest(canonical(extra)),
+    }, times
+
+
+def apply_base_layer(state, layer):
+    """Apply removals to the lower view before adding entries from this layer."""
+    entries, hidden, opaque = {}, set(), set()
+    with tarfile.open(fileobj=layer, mode="r|*", bufsize=1024**2) as tar:
+        for member in tar:
+            path = PurePosixPath(member.name)
+            if path.name == ".wh..wh..opq":
+                opaque.add(path.parent)
+            elif path.name.startswith(".wh."):
+                hidden.add(path.with_name(path.name[4:]))
+            else:
+                if member.isdir():
+                    record = directory_record(member)
+                else:
+                    hidden.add(path)
+                    record = ({"type": member.type.decode("ascii")}, {})
+                entries[str(path)] = record
+    if state and (hidden or opaque):
+        ancestors = hidden | opaque
+        for name in list(state):
+            path = PurePosixPath(name)
+            if path in hidden or any(parent in ancestors for parent in path.parents):
+                del state[name]
+    state.update(entries)
+
+
+@contextmanager
+def verified_layer(archive, name, diff_id):
+    with archive.extractfile(name) as blob:
+        compressed = blob.peek(2)[:2] == b"\x1f\x8b"
+        with gzip.GzipFile(fileobj=blob) if compressed else nullcontext(blob) as stream:
+            if "sha256:" + hashlib.file_digest(stream, "sha256").hexdigest() != diff_id:
+                raise Rejected("node_layer_diff_id_mismatch")
+            stream.seek(0)
+            yield stream
+
+
 def package_files(context):
-    directories = {"var/lib/dpkg/updates"}
+    directories = {}
     allowed = {
         "var/log/dpkg.log",
         "var/lib/dpkg/status",
@@ -218,28 +287,103 @@ def package_files(context):
                 if location == LICENSE_PATHS[name]:
                     check_license(tar, member)
                     licenses += 1
-                paths = directories if member.isdir() else allowed
-                paths.add(location)
+                if member.isdir():
+                    attributes, _ = directory_record(member)
+                    if directories.setdefault(location, attributes) != attributes:
+                        raise Rejected("node_signed_directory_metadata_ambiguous")
+                else:
+                    allowed.add(location)
             if licenses != 1:
                 raise Rejected("node_deb_license_set_mismatch")
         for suffix in ("list", "md5sums", "conffiles", "postinst", "shlibs", "symbols", "triggers"):
             allowed.update(f"var/lib/dpkg/info/{name}{arch}.{suffix}" for arch in ("", ":amd64"))
-    directories.update(str(p) for name in allowed for p in PurePosixPath(name).parents)
     return allowed, directories
 
 
-def check_overlay(layer, allowed, directories):
-    licenses = []
+def check_overlay(layer, allowed, directories, base):
+    licenses, seen = [], set()
+    errors, samples, reemitted = 0, [], []
+
+    def issue(path, kind, reason, **facts):
+        nonlocal errors
+        errors += 1
+        if len(samples) < 24:
+            samples.append({"path": path[:192], "type": kind, "reason": reason, **facts})
+
     with tarfile.open(fileobj=layer, mode="r|*") as tar:
         for member in tar:
             path = str(PurePosixPath(member.name))
-            if path not in (directories if member.isdir() else allowed):
-                raise Rejected(f"node_unexpected_layer_path: {path}")
+            previous, old_times = base.get(path, (None, {}))
+            kind = "directory" if member.isdir() else member.type.decode("ascii")
+            if path in seen:
+                issue(path, kind, "duplicate")
+            seen.add(path)
+            if PurePosixPath(path).name.startswith(".wh."):
+                issue(path, kind, "whiteout")
+            elif member.isdir():
+                current, new_times = directory_record(member)
+                required = previous if previous is not None else directories.get(path)
+                if current != required:
+                    issue(
+                        path,
+                        kind,
+                        "directory_metadata",
+                        before=previous,
+                        after=current,
+                        signed=directories.get(path),
+                    )
+                elif path not in directories and len(reemitted) < 24:
+                    reemitted.append(
+                        {
+                            "path": path[:192],
+                            **current,
+                            "before_times": old_times,
+                            "after_times": new_times,
+                        }
+                    )
+            elif path not in allowed or (previous and previous["type"] == "directory"):
+                issue(path, kind, "unexpected_file_or_directory_replacement")
             if path in LICENSE_PATHS.values():
-                check_license(tar, member)
-                licenses.append(path)
+                try:
+                    check_license(tar, member)
+                except Rejected as error:
+                    issue(path, kind, str(error))
+                else:
+                    licenses.append(path)
     if sorted(licenses) != sorted(LICENSE_PATHS.values()):
-        raise Rejected("node_overlay_license_set_mismatch")
+        issue("copyright", "set", "node_overlay_license_set_mismatch")
+    print(
+        json.dumps(
+            {
+                "overlay_errors": errors,
+                "sample": samples,
+                "repeated_directories": reemitted,
+                "license_readback": [
+                    {"path": p, "type": "regular", "size": COPYRIGHT[0], "sha256": COPYRIGHT[1]}
+                    for p in sorted(set(licenses))
+                ],
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    if errors:
+        raise Rejected("node_overlay_mismatch")
+
+
+def verify_archive_overlay(path, config, context):
+    ids = config["rootfs"]["diff_ids"]
+    with tarfile.open(path, "r:") as archive:
+        (entry,) = json.load(archive.extractfile("manifest.json"))
+        layers = entry["Layers"]
+        if ids[:-1] != list(LAYERS) or len(layers) != len(ids):
+            raise Rejected("node_layer_set_mismatch")
+        base = {}
+        for name, diff_id in zip(layers[:-1], LAYERS, strict=True):
+            with verified_layer(archive, name, diff_id) as layer:
+                apply_base_layer(base, layer)
+        with verified_layer(archive, layers[-1], ids[-1]) as layer:
+            check_overlay(layer, *package_files(context), base)
 
 
 def measure(run, cache, db_files, name, image):
@@ -252,8 +396,6 @@ def measure(run, cache, db_files, name, image):
     with tarfile.open(archive, "r:") as tar:
         (entry,) = json.load(tar.extractfile("manifest.json"))
         content = tar.extractfile(entry["Config"]).read(1024**2 + 1)
-        if name == "candidate":
-            check_overlay(tar.extractfile(entry["Layers"][-1]), *package_files(run / "debs"))
     if "sha256:" + digest(content) != config_id:
         raise Rejected("node_archive_config_mismatch")
     code, path = audit.scanner(
@@ -265,7 +407,8 @@ def measure(run, cache, db_files, name, image):
     )
     if code:
         raise Rejected("node_sbom_failed")
-    archive.unlink()
+    if name == "source":
+        archive.unlink()
     sbom_bytes = bounded_read(path, audit.LIMIT)
     sbom = decode(sbom_bytes, audit.LIMIT)
     observation = audit.observe_packages(sbom, config_id)
@@ -384,6 +527,7 @@ def qualify(run):
             flush=True,
         )
     check_oci(base, new)
+    verify_archive_overlay(run / "candidate.tar", new, context)
     check_inventory(source_obs, cand_obs, candidate["image_id"])
     check_findings(source["findings"], candidate["findings"])
     print(

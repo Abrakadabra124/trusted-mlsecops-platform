@@ -1,7 +1,11 @@
+import contextlib
 import copy
+import gzip
 import io
 import tarfile
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, digest
@@ -94,12 +98,76 @@ class OpenSSLQualification(unittest.TestCase):
             with tarfile.open(fileobj=stream, mode="w:gz") as layer:
                 layer.addfile(tarfile.TarInfo(path))
             stream.seek(0)
-            with patch.object(subject, "LICENSE_PATHS", {}):
+            with (
+                patch.object(subject, "LICENSE_PATHS", {}),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
                 if path == "usr/bin/openssl":
-                    subject.check_overlay(stream, {path}, {"usr"})
+                    subject.check_overlay(stream, {path}, {}, {})
                 else:
                     with self.assertRaises(Rejected):
-                        subject.check_overlay(stream, {"usr/bin/openssl"}, {"usr"})
+                        subject.check_overlay(stream, {"usr/bin/openssl"}, {}, {})
+
+    def test_existing_directory_requires_bound_metadata(self):
+        def layer(*members):
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w") as tar:
+                for member in members:
+                    tar.addfile(member)
+            stream.seek(0)
+            return stream
+
+        original = tarfile.TarInfo("tmp")
+        original.type, original.mode, original.mtime = tarfile.DIRTYPE, 0o1777, 1
+        original.pax_headers = {"SCHILY.xattr.user.test": "private-value"}
+        base = {}
+        subject.apply_base_layer(base, layer(original))
+        changed = copy.deepcopy(original)
+        changed.mtime = 2
+        with (
+            patch.object(subject, "LICENSE_PATHS", {}),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            subject.check_overlay(layer(changed), set(), {}, base)
+            self.assertIn('"tmp"', output.getvalue())
+            self.assertNotIn("private-value", output.getvalue())
+            for field, value in (
+                ("mode", 0o777),
+                ("uid", 1),
+                ("gid", 1),
+                ("type", tarfile.SYMTYPE),
+                ("pax_headers", {}),
+                ("name", "renamed"),
+            ):
+                item = copy.deepcopy(changed)
+                setattr(item, field, value)
+                with self.subTest(field=field), self.assertRaises(Rejected):
+                    subject.check_overlay(layer(item), set(), {}, base)
+            with self.assertRaises(Rejected):
+                subject.check_overlay(layer(changed), set(), {}, {})
+            signed = {"tmp": subject.directory_record(changed)[0]}
+            subject.check_overlay(layer(changed), set(), signed, {})
+            old_mode = copy.deepcopy(changed)
+            old_mode.mode = 0o700
+            previous = {"tmp": subject.directory_record(old_mode)}
+            with self.assertRaises(Rejected):
+                subject.check_overlay(layer(changed), set(), signed, previous)
+            with self.assertRaises(Rejected):
+                subject.check_overlay(
+                    layer(changed, tarfile.TarInfo("tmp/new"), tarfile.TarInfo("tmp/other")),
+                    set(),
+                    {},
+                    base,
+                )
+            self.assertIn("tmp/new", output.getvalue())
+            self.assertIn("tmp/other", output.getvalue())
+            for marker in (".wh.tmp", ".wh..wh..opq"):
+                removed = base.copy()
+                subject.apply_base_layer(removed, layer(tarfile.TarInfo(marker)))
+                with self.assertRaises(Rejected):
+                    subject.check_overlay(layer(changed), set(), {}, removed)
+            subject.apply_base_layer(base, layer(changed, tarfile.TarInfo(".wh.tmp")))
+            self.assertIn("tmp", base)
 
     def test_license_members_match_type_content_and_multiplicity(self):
         def check(entries):
@@ -111,8 +179,11 @@ class OpenSSLQualification(unittest.TestCase):
                     member.size = len(data)
                     tar.addfile(member, io.BytesIO(data))
             stream.seek(0)
-            with patch.object(subject, "COPYRIGHT", (3, digest(b"abc"))):
-                subject.check_overlay(stream, set(subject.LICENSE_PATHS.values()), set())
+            with (
+                patch.object(subject, "COPYRIGHT", (3, digest(b"abc"))),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                subject.check_overlay(stream, set(subject.LICENSE_PATHS.values()), {}, {})
 
         valid = [(name, tarfile.REGTYPE, b"abc") for name in subject.DEB]
         check(valid)
@@ -125,6 +196,54 @@ class OpenSSLQualification(unittest.TestCase):
         ):
             with self.assertRaises(Rejected):
                 check(entries)
+
+    def test_docker_archive_replays_pinned_plain_and_gzip_layers(self):
+        def tar_bytes(entries):
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w") as tar:
+                for entry, data in entries:
+                    entry.size = len(data)
+                    tar.addfile(entry, io.BytesIO(data))
+            return stream.getvalue()
+
+        directory = tarfile.TarInfo("tmp")
+        directory.type, directory.mode = tarfile.DIRTYPE, 0o1777
+        first = tar_bytes([(directory, b"")])
+        directory.uid = 17
+        second = tar_bytes([(directory, b"")])
+        directory.mtime += 1
+        top = tar_bytes([(directory, b"")])
+        base_ids = ["sha256:" + digest(data) for data in (first, second)]
+        config = {"rootfs": {"diff_ids": base_ids + ["sha256:" + digest(top)]}}
+        manifest = canonical([{"Layers": ["base0", "base1", "top"]}])
+
+        def archive(a, b, c):
+            return tar_bytes(
+                [
+                    (tarfile.TarInfo(k), v)
+                    for k, v in [
+                        ("manifest.json", manifest),
+                        ("base0", a),
+                        ("base1", b),
+                        ("top", c),
+                    ]
+                ]
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as directory_name,
+            patch.object(subject, "LAYERS", base_ids),
+            patch.object(subject, "LICENSE_PATHS", {}),
+            patch.object(subject, "package_files", return_value=(set(), {})),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            path = Path(directory_name) / "candidate.tar"
+            path.write_bytes(archive(first, gzip.compress(second), gzip.compress(top)))
+            subject.verify_archive_overlay(path, config, path.parent)
+            for data in (archive(second, second, top), archive(first, second, first)):
+                path.write_bytes(data)
+                with self.assertRaisesRegex(Rejected, "diff_id"):
+                    subject.verify_archive_overlay(path, config, path.parent)
 
     def test_other_rows_diff_counts_duplicates_and_bounds_samples(self):
         rows = subject.other_rows(self.source)
