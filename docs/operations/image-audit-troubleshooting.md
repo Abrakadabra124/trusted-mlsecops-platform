@@ -1,5 +1,17 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Три воспроизводимых запуска на основном коммите 8077024
+
+В первой попытке всех трёх запусков проверялся коммит `8077024c4df6d4b28022636074dc5fa8df9ff070`. Для повтора на этом же источнике оператор может использовать GitHub CLI. Каждый запуск работает на отдельном одноразовом раннере.
+
+```shell
+gh run rerun 45051712147 --repo Abrakadabra124/trusted-mlsecops-platform
+gh run rerun 45051712150 --repo Abrakadabra124/trusted-mlsecops-platform
+gh run rerun 45051712514 --repo Abrakadabra124/trusted-mlsecops-platform
+```
+
+Проверьте `headSha`, номер попытки и итог каждого задания. В [проверке кластера](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45051712147/attempts/1) сверьте digest etcd, выбранного лидера, ответ DNS и повторную сверку Pod контроллера томов. В [полном аудите](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45051712150/attempts/1) сравните первичный JSON с опубликованной копией и проверьте `runtime_audit_cluster_absent=pass` после удаления узла. В [сквозном сценарии](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45051712514/attempts/1) проверьте одну ссылку кандидата до и после восстановления, причину решения о выпуске и число совпавших контрольных строк. Для сравнения результатов аудита между датами сверяйте SHA-256 файла `6/vulnerability.db`.
+
 ## Штатный запуск опубликованного контроллера томов
 
 При обычном запуске `python -m mlsecops.cluster bootstrap` переключает штатный контроллер kind на образ из реестра проекта. Ожидаемые manifest digest и config ID зафиксированы в [local_path_pin.py](../../mlsecops/local_path_pin.py). Для воспроизведения в чистом checkout выполните `gh workflow run kubernetes-trust.yml --ref main`. В шаге `Verify the public volume provisioner and repeat reconciliation` сверьте поля `registry_reference` и `config_id` с файлом на проверяемом коммите. При повторном применении должны сохраниться UID Deployment и Pod, а поле `changed` должно стать `false`. Эта же сборка проверяет работающий etcd и адрес, возвращаемый DNS.
