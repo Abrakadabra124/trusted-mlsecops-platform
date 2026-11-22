@@ -29,6 +29,7 @@ class OpenSSLQualification(unittest.TestCase):
         self.candidate["image_id"] = self.candidate_id
         for row in self.candidate["packages"][:3]:
             row["version"] = subject.NEW
+            row["paths"].insert(0, f"/usr/share/doc/{row['name']}/copyright")
         self.rows = [
             {
                 "package": name,
@@ -49,9 +50,21 @@ class OpenSSLQualification(unittest.TestCase):
         with patch.object(subject, "OBSERVATION", checksum):
             subject.check_inventory(self.source, self.candidate, self.candidate_id)
 
-    def test_only_three_versions_move(self):
+    def test_only_three_versions_and_license_paths_move(self):
         self.candidate["packages"].reverse()
         self.inventory()
+
+    def test_exact_license_and_dpkg_paths_required(self):
+        for paths in (
+            ["/var/lib/dpkg/status"],
+            ["/usr/share/doc/openssl/copyright", "/var/lib/dpkg/status"],
+            ["/usr/share/doc/libssl3t64/copyright"],
+            ["/additional", "/usr/share/doc/libssl3t64/copyright", "/var/lib/dpkg/status"],
+            ["/usr/share/doc/libssl3t64/copyright"] * 2 + ["/var/lib/dpkg/status"],
+        ):
+            with self.subTest(paths=paths), self.assertRaises(Rejected):
+                self.candidate["packages"][0]["paths"] = paths
+                self.inventory()
 
     def test_inventory_drift_is_rejected(self):
         for change in ("path", "missing", "extra", "old", "config", "source"):
@@ -81,11 +94,48 @@ class OpenSSLQualification(unittest.TestCase):
             with tarfile.open(fileobj=stream, mode="w:gz") as layer:
                 layer.addfile(tarfile.TarInfo(path))
             stream.seek(0)
-            if path == "usr/bin/openssl":
-                subject.check_overlay(stream, {path}, {"usr"})
-            else:
-                with self.assertRaises(Rejected):
-                    subject.check_overlay(stream, {"usr/bin/openssl"}, {"usr"})
+            with patch.object(subject, "LICENSE_PATHS", {}):
+                if path == "usr/bin/openssl":
+                    subject.check_overlay(stream, {path}, {"usr"})
+                else:
+                    with self.assertRaises(Rejected):
+                        subject.check_overlay(stream, {"usr/bin/openssl"}, {"usr"})
+
+    def test_license_members_match_type_content_and_multiplicity(self):
+        def check(entries):
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w:gz") as tar:
+                for name, kind, data in entries:
+                    member = tarfile.TarInfo(subject.LICENSE_PATHS[name])
+                    member.type = kind
+                    member.size = len(data)
+                    tar.addfile(member, io.BytesIO(data))
+            stream.seek(0)
+            with patch.object(subject, "COPYRIGHT", (3, digest(b"abc"))):
+                subject.check_overlay(stream, set(subject.LICENSE_PATHS.values()), set())
+
+        valid = [(name, tarfile.REGTYPE, b"abc") for name in subject.DEB]
+        check(valid)
+        for entries in (
+            valid[:-1],
+            valid + valid[:1],
+            [("libssl3t64", tarfile.REGTYPE, b"abd"), *valid[1:]],
+            [("libssl3t64", tarfile.SYMTYPE, b""), *valid[1:]],
+            [("libssl3t64", tarfile.LNKTYPE, b""), *valid[1:]],
+        ):
+            with self.assertRaises(Rejected):
+                check(entries)
+
+    def test_other_rows_diff_counts_duplicates_and_bounds_samples(self):
+        rows = subject.other_rows(self.source)
+        self.assertEqual(len(rows), 875)
+        self.assertEqual(subject.bounded_delta(rows, rows[2:])["sample"][0]["count"], 2)
+        diff = subject.bounded_delta([canonical(i) for i in range(12)], [])
+        self.assertEqual((diff["count"], len(diff["sample"])), (12, 8))
+        long_row = canonical("x" * 2000)
+        self.assertEqual(
+            subject.bounded_delta([long_row], [])["sample"][0]["row"], {"sha256": digest(long_row)}
+        )
 
     def test_wrong_debian_bytes_or_index_binding(self):
         with patch("urllib.request.urlopen", return_value=io.BytesIO(b"wrong")):

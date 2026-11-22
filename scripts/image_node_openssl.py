@@ -9,6 +9,7 @@ import subprocess
 import tarfile
 import tempfile
 import urllib.request
+from collections import Counter
 from email.parser import Parser
 from pathlib import Path, PurePosixPath
 
@@ -44,6 +45,8 @@ KEYS = {
     "archive-key-13": (11861, "6f1d277429dd7ffedcc6f8688a7ad9a458859b1139ffa026d1eeaadcbffb0da7"),
     "release-13": (1384, "4d097bb93f83d731f475c5b92a0c2fcf108cfce1d4932792fca72d00b48d198b"),
 }
+COPYRIGHT = (2543, "6a7da622fe0637a334d2a8fc470852d2ffb77d9a2b2f930f854e32a41ad6ef35")
+LICENSE_PATHS = {name: f"usr/share/doc/{name}/copyright" for name in DEB}
 RECIPE = Path(__file__).resolve().parents[1] / "images/candidates/node-openssl/Dockerfile"
 LOCAL = "trusted-mlsecops:node-1364-openssl-candidate"
 
@@ -108,21 +111,45 @@ def check_inventory(source, candidate, candidate_id):
         or not exact_observation_matches(source, 878, OBSERVATION)
     ):
         raise Rejected("node_source_inventory_mismatch")
-    rows, changed = [], []
-    for package in candidate["packages"]:
+    expected_rows = []
+    for package in source["packages"]:
         if package["type"] == "deb" and package["name"] in DEB:
-            if package["version"] != NEW:
-                raise Rejected("node_package_version_mismatch")
-            changed.append(package["name"])
-            package = {**package, "version": OLD}
-        rows.append(package)
-    restored = {**candidate, "image_id": CONFIG, "packages": rows}
-    if sorted(changed) != sorted(DEB) or not exact_observation_matches(restored, 878, OBSERVATION):
+            # Each signed deb installs its own copyright file, absent from the stock observation.
+            license_path = "/" + LICENSE_PATHS[package["name"]]
+            package = {
+                **package,
+                "version": NEW,
+                "paths": sorted([*package["paths"], license_path]),
+            }
+        expected_rows.append(package)
+    expected = {
+        **source,
+        "image_id": candidate_id,
+        "packages": sorted(expected_rows, key=canonical),
+    }
+    if not exact_observation_matches(candidate, 878, digest(canonical(expected))):
         raise Rejected("node_package_delta_mismatch")
 
 
 def target_rows(findings):
     return [f for f in findings if f["package"] in DEB and f["id"] in CVES]
+
+
+def other_rows(observation):
+    return sorted(
+        canonical(r)
+        for r in observation["packages"]
+        if not (r["type"] == "deb" and r["name"] in DEB)
+    )
+
+
+def bounded_delta(left, right):
+    difference = Counter(left) - Counter(right)
+    sample = [
+        {"count": count, "row": decode(row) if len(row) <= 1024 else {"sha256": digest(row)}}
+        for row, count in sorted(difference.items())[:8]
+    ]
+    return {"count": difference.total(), "sample": sample}
 
 
 def check_findings(source, candidate):
@@ -157,6 +184,14 @@ def check_oci(base, candidate):
         raise Rejected("node_runtime_config_or_layers_changed")
 
 
+def check_license(tar, member):
+    size, checksum = COPYRIGHT
+    if member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE) or member.size != size:
+        raise Rejected("node_license_type_or_size_mismatch")
+    if digest(tar.extractfile(member).read(size + 1)) != checksum:
+        raise Rejected("node_license_content_mismatch")
+
+
 def package_files(context):
     directories = {"var/lib/dpkg/updates"}
     allowed = {
@@ -173,11 +208,20 @@ def package_files(context):
     }
     for name in DEB:
         path = context / f"{name}_{NEW}_amd64.deb"
+        if (path.stat().st_size, audit.file_hash(path)) != DEB[name]:
+            raise Rejected("debian_material_mismatch")
         payload = subprocess.check_output(["dpkg-deb", "--fsys-tarfile", path], timeout=30)
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as tar:
+            licenses = 0
             for member in tar:
+                location = str(PurePosixPath(member.name))
+                if location == LICENSE_PATHS[name]:
+                    check_license(tar, member)
+                    licenses += 1
                 paths = directories if member.isdir() else allowed
-                paths.add(str(PurePosixPath(member.name)))
+                paths.add(location)
+            if licenses != 1:
+                raise Rejected("node_deb_license_set_mismatch")
         for suffix in ("list", "md5sums", "conffiles", "postinst", "shlibs", "symbols", "triggers"):
             allowed.update(f"var/lib/dpkg/info/{name}{arch}.{suffix}" for arch in ("", ":amd64"))
     directories.update(str(p) for name in allowed for p in PurePosixPath(name).parents)
@@ -185,11 +229,17 @@ def package_files(context):
 
 
 def check_overlay(layer, allowed, directories):
+    licenses = []
     with tarfile.open(fileobj=layer, mode="r|*") as tar:
         for member in tar:
             path = str(PurePosixPath(member.name))
             if path not in (directories if member.isdir() else allowed):
                 raise Rejected(f"node_unexpected_layer_path: {path}")
+            if path in LICENSE_PATHS.values():
+                check_license(tar, member)
+                licenses.append(path)
+    if sorted(licenses) != sorted(LICENSE_PATHS.values()):
+        raise Rejected("node_overlay_license_set_mismatch")
 
 
 def measure(run, cache, db_files, name, image):
@@ -285,10 +335,13 @@ def qualify(run):
         ("source", base, source, source_obs),
         ("candidate", new, candidate, cand_obs),
     ):
+        others = other_rows(obs)
         print(
             json.dumps(
                 {
                     "role": label,
+                    "other_rows": len(others),
+                    "other_rows_sha256": digest(b"[" + b",".join(others) + b"]"),
                     **{
                         k: result[k]
                         for k in (
@@ -318,6 +371,18 @@ def qualify(run):
     )
     if source["database"] != candidate["database"]:
         raise Rejected("node_db_descriptor_changed")
+    before, after = other_rows(source_obs), other_rows(cand_obs)
+    if before != after:
+        print(
+            json.dumps(
+                {
+                    "other_rows_removed": bounded_delta(before, after),
+                    "other_rows_added": bounded_delta(after, before),
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
     check_oci(base, new)
     check_inventory(source_obs, cand_obs, candidate["image_id"])
     check_findings(source["findings"], candidate["findings"])
