@@ -55,3 +55,20 @@ Baseline config `sha256:0fa975026f71246c4e4744409d43e2e5884bb6e960851b438e50f455
 Syft наблюдает `k8s.io/kubernetes v1.36.6` в `/usr/bin/kubeadm`, `/usr/bin/kubectl`, `/usr/bin/kubelet`. Go 1.26.5 этих binaries сменился на 1.26.10, но старые runtime binaries всё ещё содержат Go 1.26.7. Matches являются package/advisory совпадениями, не уникальными CVE. Версии x/net, x/crypto и gRPC в [upstream go.mod 1.36.6](https://github.com/kubernetes/kubernetes/blob/v1.36.6/go.mod) остались прежними; patch Kubernetes не устраняет весь dependency scope.
 
 **Решение: candidate не принят и не опубликован как новый runtime artifact.** Измеренное уменьшение findings не разрешает adoption. Нужны remediation base/runtime и зависимостей, разбор Unknown, application profiles и функциональная проверка перед сменой pins. CI build container завершён штатным kind builder; cluster/SQL здесь не запускались. Артефакт жил на disposable runner, durable registry image этим run не создан.
+
+## Проверка обновления OpenSSL от 22 ноября 2026 года
+
+Сравнили штатный образ узла kind для Kubernetes 1.36.4 с кандидатом на том же базовом образе. Изменились три пакета Debian: `openssl`, `libssl3t64` и `openssl-provider-legacy`, с `3.5.6-1~deb13u2` до `3.5.9-1~deb13u1`. Сканер Grype обработал оба образа с одной базой уязвимостей, SHA-256 файла базы `fd8b429aa7ff8fa4d7fc0adc64e4fddd54790e336ed52126c79fb63902967ad9`. В каждой описи 878 пакетных записей. У остальных 875 записей совпал хеш с учётом путей и кратности. [Исходный код проверки](https://github.com/Abrakadabra124/trusted-mlsecops-platform/tree/f0bcccff79fec2f3b361776f2f10ff7bc8ea2bf0), [первичный журнал](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45034371986/job/137244721689).
+
+| Совпадения пакетных записей с бюллетенями | Штатный узел | Кандидат |
+| --- | ---: | ---: |
+| Critical | 72 | 66 |
+| High | 491 | 458 |
+| Unknown | 31 | 31 |
+| Два целевых бюллетеня OpenSSL на трёх пакетах (входят в Critical) | 6 | 0 |
+
+Верхний слой содержит по одному маркеру `.wh..wh..opq` в каталогах `/usr/share/doc/libssl3t64`, `/usr/share/doc/openssl` и `/usr/share/doc/openssl-provider-legacy`. Такой маркер скрывает унаследованные элементы каталога. Проверка подтвердила точные байты всех трёх новых файлов `copyright` и атрибуты десяти повторно записанных каталогов, включая режим `1777` у `/tmp`. Список скрытых элементов в протоколе отсутствует. Проверка слоя завершилась с `node_overlay_mismatch`, последующие шаги приёмки в этом задании были пропущены.
+
+**Решение.** Кандидат отклонён. Его config digest `sha256:9171cd285423b4ec6ee761eccca0de8797cf5ccf0ced4ba3edadf78b158bdfda` относится к одноразовой сборке. Публикация и замена штатного узла не выполнялись. Для следующего кандидата требуется сверить итоговый состав затронутых каталогов базового и собранного образов с файлами пакетов и повторить аудит оставшихся блокирующих находок. Успешная сверка каталогов закрыла бы только проверку слоя.
+
+Для воспроизведения квалификации в одноразовом GitHub Actions runner выполните `gh run rerun 45034371986 --repo Abrakadabra124/trusted-mlsecops-platform`. При повторе сохраните версию и SHA-256 базы сканера. Первое измерение закреплено в [попытке 1](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45034371986/attempts/1). Для сравнения доступен [полный аудит штатного кластера](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45030124975/attempts/1).
