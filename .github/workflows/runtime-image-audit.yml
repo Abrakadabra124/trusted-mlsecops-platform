@@ -1,7 +1,7 @@
 name: Observed runtime image audit
 on:
   push:
-    branches: [codex/cp2-runtime-image-audit, qualify/r1-bpftool-noble]
+    branches: [codex/cp2-runtime-image-audit]
   workflow_dispatch:
 permissions:
   contents: read

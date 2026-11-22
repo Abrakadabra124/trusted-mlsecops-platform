@@ -55,7 +55,9 @@ class NobleScanTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["source_package"], "glibc")
         self.assertEqual(findings[0]["installed"], "2.39-0ubuntu8.3")
-        scan.control(findings, [])
+        proof = scan.control(findings, [])
+        self.assertEqual(proof["observed_matches"], 1)
+        self.assertEqual(proof["fixed_matches"], 0)
 
     def test_changed_evidence_rejected(self):
         for change in (

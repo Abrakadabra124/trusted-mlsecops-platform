@@ -88,19 +88,28 @@ def assess(sbom, report, exit_code, expected, expected_database):
         if type(exit_code) is not int or exit_code != (2 if blocked else 0):
             raise Rejected("bpftool_noble_exit_mismatch")
         return sorted(findings, key=canonical)
-    except (KeyError, TypeError, ValueError, AttributeError) as error:
+    except (KeyError, TypeError, AttributeError) as error:
         raise Rejected("bpftool_noble_report_malformed") from error
 
 
 def control(actual, reference):
     observed = [f for f in actual if f["id"] == ADVISORY and f["package"] == "libc6-dev"]
+    fixed_matches = sum(f["id"] == ADVISORY for f in reference)
     if (
         len(observed) != 1
         or observed[0]["installed"] != "2.39-0ubuntu8.3"
         or observed[0]["fix"] != {"state": "fixed", "versions": [FIXED]}
-        or any(f["id"] == ADVISORY for f in reference)
+        or fixed_matches
     ):
         raise Rejected("bpftool_noble_version_control_failed")
+    return {
+        "advisory": ADVISORY,
+        "package": "libc6-dev",
+        "observed_version": observed[0]["installed"],
+        "observed_matches": len(observed),
+        "fixed_version": FIXED,
+        "fixed_matches": fixed_matches,
+    }
 
 
 def verified_findings(receipt, mapping, db):
@@ -119,7 +128,6 @@ def verified_findings(receipt, mapping, db):
         or receipt["database"] != db
         or not re.fullmatch(r"[0-9a-f]{64}", receipt["db_sha256"])
         or receipt["packages"] != {k: list(v) for k, v in materials.PACKAGES.items()}
-        or receipt["control_advisory"] != ADVISORY
     ):
         raise Rejected("bpftool_static_subject_mismatch")
     for key in ("materials", "fixed_metadata_control"):
@@ -149,7 +157,8 @@ def verified_findings(receipt, mapping, db):
         2 if any(row["severity"] in ("Critical", "High") for row in findings) else 0
     ):
         raise Rejected("bpftool_static_exit_mismatch")
-    control(findings, [])
+    if canonical(receipt["version_control"]) != canonical(control(findings, [])):
+        raise Rejected("bpftool_control_readback_mismatch")
     return findings
 
 
@@ -176,29 +185,15 @@ def scan(run, label, root, cache, expected, expected_database):
     report_raw = bounded_read(path, audit.LIMIT)
     report = decode(report_raw, audit.LIMIT)
     packages = decode(raw, audit.LIMIT)
-    # A small diagnostic remains available even when a new scanner format is rejected.
+    # Digests identify the retained inputs even if the format or comparison is rejected.
     print(
         json.dumps(
             {
                 "scope": "bpftool-scanner-input",
                 "role": label,
                 "exit": code,
-                "sbom_type": packages.get("source", {}).get("type"),
-                "grype_source": report.get("source"),
-                "grype_distro": report.get("distro"),
-                "packages": [
-                    [
-                        p["name"],
-                        p["version"],
-                        p["metadata"].get("source"),
-                        p["metadata"].get("sourceVersion"),
-                        p["locations"][0].get("path") if p["locations"] else None,
-                    ]
-                    for p in packages["artifacts"][:5]
-                ],
-                "namespaces": sorted(
-                    {m["vulnerability"]["namespace"] for m in report.get("matches", [])}
-                )[:5],
+                "sbom_sha256": digest(raw),
+                "grype_sha256": digest(report_raw),
             },
             sort_keys=True,
         ),
@@ -244,7 +239,7 @@ def collect(run, cache, db_files, expected_database):
     reference, checked = scan(
         run, "reference", ref, cache, {"libc6-dev": ("glibc", FIXED)}, expected_database
     )
-    control(actual, reference)
+    version_control = control(actual, reference)
     if audit.snapshot(cache) != db_files:
         raise Rejected("bpftool_db_changed")
     return {
@@ -255,7 +250,7 @@ def collect(run, cache, db_files, expected_database):
         "db_sha256": db_files["6/vulnerability.db"],
         "materials": measured,
         "fixed_metadata_control": checked,
-        "control_advisory": ADVISORY,
+        "version_control": version_control,
         "packages": {k: list(v) for k, v in materials.PACKAGES.items()},
         "findings": actual,
     }

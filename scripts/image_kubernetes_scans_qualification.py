@@ -163,7 +163,7 @@ class SupplementalScanContracts(unittest.TestCase):
             "release_ready": False,
             "packages": {k: list(v) for k, v in materials.PACKAGES.items()},
             "database": self.db,
-            "control_advisory": native.ADVISORY,
+            "version_control": native.control([control], []),
             "db_sha256": "a" * 64,
             "findings": [control],
             "materials": {
