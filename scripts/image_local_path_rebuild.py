@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import re
+import subprocess
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 from mlsecops.contracts import Rejected, bounded_read, canonical, digest
 from mlsecops.inventory import command
 from scripts import image_local_path_pair as pair
+from scripts import local_path_candidate_delivery as delivery
 from scripts.image_kubernetes_scans import confirm_absent
 from scripts.image_node_openssl import measure
 
@@ -20,7 +22,7 @@ BINARY = "/usr/local/bin/local-path-provisioner"
 REVISION = "49b2be8e26d6d34c9afaa21fa33108d2e82f8955"
 COMPILER = "go1.27.4"
 BINARY_SIZE = 52_174_972
-BINARY_SHA256 = "e424baa965649565de70a5e4549fa88a1fa4242c39dfda32aaadd557c2e41612"
+BINARY_SHA256 = delivery.BINARY_SHA256
 TRIPLES_SHA256 = "bfe00eb88bef4c5fdefc3527b4620060a78d1ea81b9b0ca52e90d4e7d8a09bec"
 PATCHED_MODULES = {
     "github.com/klauspost/compress": "v1.20.2",
@@ -227,7 +229,7 @@ def blocking_delta(source, candidate):
     }
 
 
-def qualify(run, image_id):
+def qualify(run, image_id, *, retain_archive=False):
     if not IMAGE_ID.fullmatch(image_id) or image_id == pair.STOCK[1]:
         raise Rejected("local_path_candidate_id_invalid")
     if command(["docker", "image", "inspect", "--format", "{{.Id}}", image_id]) != image_id:
@@ -236,6 +238,8 @@ def qualify(run, image_id):
     cache, db = pair.scanner_database(run)
     base, before, source = measure(run, cache, db, "source", pair.STOCK[1])
     config, after, candidate = measure(run, cache, db, "candidate", image_id)
+    # measure mounted this private export read-only into Syft and verified its SBOM.
+    measured_sha = delivery.archive_hash(run / "candidate.tar") if retain_archive else None
     evidence = {}
     try:
         base_layers, layers = base["rootfs"]["diff_ids"], config["rootfs"]["diff_ids"]
@@ -275,18 +279,29 @@ def qualify(run, image_id):
         report["status"] = "inconclusive"
     if candidate["severity_counts"]["Critical"] or candidate["severity_counts"]["High"]:
         report["status"] = "fail"
-    return {
+    report = {
         **report,
         "scope": SCOPE,
         "diagnostic_only": True,
         **evidence,
         **blocking_delta(source, candidate),
     }
+    if retain_archive and report["status"] == "diagnostic-clear":
+        stock_dir = run / "stock-readback"
+        stock_dir.mkdir(mode=0o700)
+        _, report["stock_binary_sha256"] = binary_readback(stock_dir, pair.STOCK[1])
+        delivery.retain(run, report, measured_sha)
+    return report
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--image-id", required=True)
+    parser.add_argument(
+        "--retain-archive",
+        action="store_true",
+        help="Retain the measured archive for this hosted job's live qualification",
+    )
     args = parser.parse_args(argv)
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
@@ -296,9 +311,10 @@ def main(argv=None):
     ):
         raise SystemExit("GitHub-hosted Linux x86_64 runner required")
     try:
-        with tempfile.TemporaryDirectory(prefix="local-path-rebuild-") as tmp:
-            report = qualify(Path(tmp), args.image_id)
-    except (Rejected, OSError, KeyError, ValueError) as error:
+        root = delivery.runner_temp() if args.retain_archive else None
+        with tempfile.TemporaryDirectory(prefix="local-path-rebuild-", dir=root) as tmp:
+            report = qualify(Path(tmp), args.image_id, retain_archive=args.retain_archive)
+    except (Rejected, OSError, KeyError, ValueError, subprocess.SubprocessError) as error:
         report = {
             "scope": SCOPE,
             "status": "inconclusive",

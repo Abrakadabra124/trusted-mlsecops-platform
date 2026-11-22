@@ -1,0 +1,54 @@
+name: Publish qualified local-path provisioner platform component
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful local-path provisioner kind qualification push run ID (attempt 1)
+        required: true
+        type: string
+
+permissions: {}
+concurrency:
+  group: local-path-platform-component-ghcr-publication
+  cancel-in-progress: false
+
+jobs:
+  authority:
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.repository_id == '1407811916' && github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check the publisher contracts and the reviewed producer pins
+        env:
+          QUALIFIED_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m unittest scripts.etcd_publication_qualification scripts.coredns_publication_qualification scripts.local_path_publication_qualification
+          python3 -B -m scripts.local_path_publication --preflight
+
+  publish:
+    needs: authority
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Publish the verified archive and require anonymous digest readback
+        env:
+          QUALIFIED_RUN_ID: ${{ inputs.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -B -m scripts.local_path_publication

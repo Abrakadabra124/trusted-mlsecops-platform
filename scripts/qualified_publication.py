@@ -210,6 +210,28 @@ class QualifiedPublisher(ABC):
                 left -= len(data)
             self.require(not source.read(1), "oversized_file")
 
+    def validate_receipt(self, raw, run_id, size):
+        receipt = decode(raw, 8192)
+        expected = {
+            "schema_version": 1,
+            "repository": REPOSITORY,
+            "source_revision": self.EXPECTED_SOURCE,
+            "run_id": run_id,
+            "run_attempt": 1,
+            "archive_size": size,
+            "recipe_sha256": self.RECIPE,
+        }
+        self.require(
+            type(receipt) is dict
+            and receipt.keys() == expected.keys() | {"config_id", "archive_sha256"}
+            and all(type(receipt[k]) is type(v) and receipt[k] == v for k, v in expected.items())
+            and is_digest(receipt["config_id"])
+            and type(receipt["archive_sha256"]) is str
+            and re.fullmatch("[0-9a-f]{64}", receipt["archive_sha256"]),
+            "receipt_invalid",
+        )
+        return receipt
+
     def unpack(self, path, artifact, run_id, target):
         self.require(
             path.stat().st_size == artifact["size_in_bytes"]
@@ -231,27 +253,7 @@ class QualifiedPublisher(ABC):
             self.require(
                 0 < size <= LIMIT and 0 < z.getinfo("receipt.json").file_size <= 8192, "member_size"
             )
-            receipt = decode(z.read("receipt.json"), 8192)
-            expected = {
-                "schema_version": 1,
-                "repository": REPOSITORY,
-                "source_revision": self.EXPECTED_SOURCE,
-                "run_id": run_id,
-                "run_attempt": 1,
-                "archive_size": size,
-                "recipe_sha256": self.RECIPE,
-            }
-            self.require(
-                type(receipt) is dict
-                and receipt.keys() == expected.keys() | {"config_id", "archive_sha256"}
-                and all(
-                    type(receipt[k]) is type(v) and receipt[k] == v for k, v in expected.items()
-                )
-                and is_digest(receipt["config_id"])
-                and type(receipt["archive_sha256"]) is str
-                and re.fullmatch("[0-9a-f]{64}", receipt["archive_sha256"]),
-                "receipt_invalid",
-            )
+            receipt = self.validate_receipt(z.read("receipt.json"), run_id, size)
             with z.open("candidate.tar") as source:
                 self.copy_exact(source, target, size)
         self.require(file_sha(target) == receipt["archive_sha256"], "archive_digest_mismatch")
