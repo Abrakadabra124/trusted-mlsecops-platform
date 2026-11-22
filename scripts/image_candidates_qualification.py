@@ -14,16 +14,37 @@ from scripts import image_candidates
 
 def qualify():
     cases = []
+    # Historical APK inventories from the strict machine audit, not a fresh scan:
+    # https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/43559420357
+    # Source: 26e84ae571a9010504f25558ecab00518171211f; canonical report SHA-256:
+    # b85b99bf9d852fde4f932ccb459d1480a908cbb79f3435de24195e089fada4f5
+    # Catch partial adoption: updating the deployed storage digest alone left
+    # worker and both candidate recipes vulnerable in run 43560835791.
+    python_inventory = "e376b3427a09b38181b8563265ef63f19f69727c21253b916ab2d2cbaf8d50be"
     # Storage candidate only: PostgreSQL 18.7-r0 and ICU 79.1-r2, before native qualification.
     # Wolfi x86_64 APKINDEX.tar.gz SHA-256 b4427db0e47b2b4047532ca4aed7cef9d1c878b8a6edecb000125fed7c452762
     storage_inventory = "1304cdca7e66e507628480ee9dad5bcdc3e29d161f94714c047ec761b35ba651"
-    recipe = image_candidates.SPECS["storage"]["recipe"]
-    source = (Path(__file__).resolve().parents[1] / recipe).read_text(encoding="utf-8")
-    pins = re.findall(r"^\s+'([a-zA-Z0-9+_.-]+)=([^']+)' \\\s*$", source, re.MULTILINE)
-    packages = [{"name": name, "version": version} for name, version in sorted(pins)]
-    if digest(canonical(packages)) != storage_inventory:
-        raise Rejected("candidate_recipe_differs_from_qualified_apk_inventory")
-    cases.append({"id": f"qualified-apk-inventory:{recipe}", "status": "pass"})
+    repository = Path(__file__).resolve().parents[1]
+    for recipe, expected in (
+        ("Dockerfile", python_inventory),
+        ("images/candidates/worker/Dockerfile", python_inventory),
+        ("images/tracking/Dockerfile", python_inventory),
+        ("images/candidates/storage/Dockerfile", storage_inventory),
+    ):
+        packages = sorted(
+            (
+                {"name": name, "version": version}
+                for name, version in re.findall(
+                    r"^\s+'([a-zA-Z0-9+_.-]+)=([^']+)' \\\s*$",
+                    (repository / recipe).read_text(encoding="utf-8"),
+                    re.MULTILINE,
+                )
+            ),
+            key=lambda package: package["name"],
+        )
+        if digest(canonical(packages)) != expected:
+            raise Rejected("candidate_recipe_differs_from_qualified_apk_inventory")
+        cases.append({"id": f"qualified-apk-inventory:{recipe}", "status": "pass"})
     with tempfile.TemporaryDirectory(prefix="candidate-contract-") as temporary:
         root = Path(temporary).resolve()
         output = root / ".runtime/evidence/image-candidate-worker.json"

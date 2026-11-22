@@ -207,6 +207,7 @@ def main():
             not in {
                 DECISION_FILE,
                 "policies/local-cpu.json",
+                "scripts/image_kubernetes_aliases_registry.json",
                 "images/tracking/Dockerfile.dockerignore",
                 "images/tracking/requirements.in",
             }

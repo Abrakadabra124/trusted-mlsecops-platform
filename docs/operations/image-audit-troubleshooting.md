@@ -33,6 +33,10 @@
 
 ## CP2: состав системного приложения
 
+В полном аудите сначала сверить `runtime_scope` и исходный результат в `original_result`. Для опубликованного etcd ожидаются 154 строки описи и семь Go-координат. Для Cilium Agent ожидаются 947 строк и три координаты. Во всех дополнительных сканах проверяются привязки к исходному образу, отчёту и той же базе Grype. Если привязка нарушена, покрытие остаётся открытым, исходные находки сохраняются. [Workflow полного аудита](../../.github/workflows/runtime-image-audit.yml), [проверка объединённого результата](../../scripts/image_kubernetes_scans.py).
+
+В отчёте исходной ветки засчитано 12 из 14 работающих образов. У Cilium Agent подтверждены только Go-модули. Вне их охвата остаются `cilium-envoy`, `cilium-envoy-starter`, `clang`, `llc` и `bpftool`. Хеши файлов и манифесты поставщиков доступны в `application_inventory.uncovered_native_applications`. Узел kind также остаётся вне полного покрытия. Общий результат отчёта был `fail`. [Исходный запуск 45022150263](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45022150263).
+
 ### Go detection controls
 
 Для system target без утверждённого application profile сначала проверить `package_binding_validated`, `diagnostic_only`, `scan_executed` и `reason`. После исправления раннего отказа из-за libc6/unknown distro scanner получает все непустые bound inventories; результат остаётся диагностическим. `sbom_validated=false` и coverage profile `unapproved-system` запрещают включение в approved coverage. Нет High/Critical - inconclusive, есть High/Critical - fail. Чужой config/distro, изменённый SBOM/DB, незнакомый package ID в finding, ignored matches или alerts не допускаются даже для diagnostic path. При отказе binding расследовать причину; не вырезать проблемный package или findings из отчёта.

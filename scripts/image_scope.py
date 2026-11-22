@@ -13,7 +13,16 @@ from mlsecops.inventory import command, source_fingerprint
 from mlsecops.kube_worker import image_config
 from mlsecops.storage_bootstrap import WORKSPACE_LABEL
 from mlsecops.storage_pki import workspace_id
-from scripts import tracking_service
+from scripts import image_cilium_agent_inventory as cilium_agent
+from scripts import (
+    image_kubernetes_scans,
+    tracking_service,
+)
+from scripts.image_audit_contract import (
+    LOCAL_PATH_CONFIG,
+    coredns_inventory_matches,
+    local_path_inventory_matches,
+)
 
 
 def image_digest(value):
@@ -242,17 +251,52 @@ def _collect(root, state):
 
 def coverage(snapshot, components):
     targets = snapshot["targets"]
+    registries = {r.PROFILE: r for r in image_kubernetes_scans.SYSTEM_REGISTRIES}
     covered = 0
     for target in targets:
         matches = [item for item in components if item["name"] == target["name"]]
         if len(matches) != 1:
             continue
         item = matches[0]
+        # The agent's Go scans do not cover its native binaries, regardless of the reported role.
+        if (
+            cilium_agent.CONFIG in (target["config_id"], item.get("image_config_id"))
+            or target.get("reference") == cilium_agent.REFERENCE
+        ):
+            continue
         if (
             item.get("scan_executed") is True
             and item.get("sbom_validated") is True
             and item.get("status") in {"pass", "fail"}
-            and item.get("coverage_profile") in {"worker", "storage", "tracking"}
+            and (
+                item.get("coverage_profile") in {"worker", "storage", "tracking"}
+                or (
+                    item.get("coverage_profile") == "coredns"
+                    and item.get("observed_reference") == target.get("reference")
+                    and item.get("runtime_image_id") == target["config_id"]
+                    and coredns_inventory_matches(
+                        item.get("package_observation"), target.get("reference")
+                    )
+                    and item["package_observation"]["image_id"] == target["config_id"]
+                    and item.get("catalogued_packages")
+                    == item["package_observation"]["package_count"]
+                )
+                or (
+                    item.get("coverage_profile") == "local-path-provisioner"
+                    and target["config_id"] == LOCAL_PATH_CONFIG
+                    and local_path_inventory_matches(item.get("package_observation") or {})
+                )
+                or (
+                    item.get("coverage_profile") == "kubernetes-supplemental"
+                    and image_kubernetes_scans.coverage_valid(item, target)
+                )
+                or (
+                    item.get("coverage_profile") in registries
+                    and image_kubernetes_scans.coverage_valid(
+                        item, target, registry=registries[item["coverage_profile"]]
+                    )
+                )
+            )
             and type(item.get("catalogued_packages")) is int
             and item["catalogued_packages"] > 0
             and (
