@@ -246,6 +246,181 @@ class ServingPrimaryTests(unittest.TestCase):
     def replay(self, pin):
         return collector.replay(self.root, self.state, pin, **self.pins)
 
+    def draft_inputs(self):
+        final_path = self.state / collector.final.INDEX
+        original = bounded_read(final_path)
+        self.addCleanup(lambda: self.assertEqual(bounded_read(final_path), original))
+        # Keep the other 19 inventories from the final-evidence fixture. This trio has new reports.
+        name = "evidence/M18-plan.json"
+        plan = decode(collector.final.pinned(self.state / name, self.fixture.fx.index["plan"]))
+        for gate, pin in self.reports.items():
+            report = decode(collector.final.pinned(self.state / f"evidence/{gate}.json", pin))
+            plan["cases"][gate] = digest(canonical(sorted(case["id"] for case in report["cases"])))
+            plan["artifacts"][gate] = digest(canonical(sorted(report["artifact_hashes"])))
+        for field in ("cases", "artifacts"):
+            self.assertEqual(set(plan[field]), set(collector.final.CHILDREN))
+        return self.capture(), dict(
+            self.pins,
+            plan_pin=self.file(name, plan),
+            proposal_reference=self.values["M13"]["proposal_reference"],
+        )
+
+    def test_draft_rejects_foreign_proposal_and_freeze(self):
+        receipt, args = self.draft_inputs()
+        other_freeze = dict(self.index, source_fingerprint=digest(b"other source"))
+        for change in (
+            {"proposal_reference": digest(b"other proposal")},
+            {"freeze_pin": collector.put(self.state, canonical(other_freeze) + b"\n")},
+        ):
+            with self.subTest(field=next(iter(change))), self.assertRaises(Rejected):
+                collector.assemble_draft(self.root, self.state, receipt, **(args | change))
+
+    def test_draft_requires_original_plan_bytes_and_matching_source(self):
+        receipt, args = self.draft_inputs()
+        name = "evidence/M18-plan.json"
+        path = self.state / name
+        raw = bounded_read(path)
+        plan = decode(raw)
+        path.write_bytes(raw + b" ")
+        with self.assertRaises(Rejected):
+            collector.assemble_draft(self.root, self.state, receipt, **args)
+        for field, value in (
+            ("source_revision", "e" * 40),
+            ("source_fingerprint", digest(b"another source")),
+            ("schema_version", 2),
+        ):
+            changed = self.file(name, {**plan, field: value})
+            with self.subTest(field=field), self.assertRaises(Rejected):
+                collector.assemble_draft(
+                    self.root, self.state, receipt, **(args | {"plan_pin": changed})
+                )
+
+    def test_draft_rejects_repinned_plan_with_wrong_serving_inventory(self):
+        receipt, args = self.draft_inputs()
+        name = "evidence/M18-plan.json"
+        plan = decode(bounded_read(self.state / name))
+        for field, gate in (("cases", "M13"), ("artifacts", "M15")):
+            changed = copy.deepcopy(plan)
+            changed[field][gate] = digest(canonical(["unexpected-entry"]))
+            pin = self.file(name, changed)
+            self.assertNotEqual(pin, args["plan_pin"])
+            with self.subTest(field=field, gate=gate), self.assertRaises(Rejected):
+                collector.assemble_draft(
+                    self.root, self.state, receipt, **(args | {"plan_pin": pin})
+                )
+
+    def test_draft_is_inconclusive_private_and_byte_reproducible(self):
+        receipt, args = self.draft_inputs()
+        result = collector.assemble_draft(self.root, self.state, receipt, **args)
+        # Only this small receipt can leave the private store. The index blob holds the references.
+        self.assertEqual(set(result), {"status", "release_ready", "index_sha256"})
+        self.assertEqual(result["status"], "inconclusive")
+        self.assertIs(result["release_ready"], False)
+        pin = result["index_sha256"]
+        raw = collector.final.blob(self.state, pin)
+        draft = decode(raw)
+        self.assertEqual(pin, digest(raw))
+        for field in (
+            "source_revision",
+            "source_fingerprint",
+            "image_id",
+            "policy_reference",
+            "freeze",
+        ):
+            self.assertEqual(draft[field], self.index[field], field)
+        self.assertEqual(draft["schema_version"], 1)
+        self.assertIsInstance(draft["scope"], str)
+        self.assertTrue(draft["scope"])
+        self.assertEqual(draft["status"], "inconclusive")
+        self.assertIs(draft["release_ready"], False)
+        self.assertIs(draft.get("production_authorized", False), False)
+        self.assertEqual(draft["proposal_reference"], args["proposal_reference"])
+        self.assertEqual(draft["plan"], args["plan_pin"])
+        self.assertEqual(draft["reports"], self.reports)
+        self.assertEqual(
+            draft["retained"],
+            {
+                "M13": self.admissions["M13"],
+                "M15": digest(bounded_read(self.state / "evidence/monitoring-gate-private.json")),
+            },
+        )
+        repeated = collector.assemble_draft(self.root, self.state, receipt, **args)
+        self.assertEqual(repeated["index_sha256"], pin)
+        self.assertEqual(collector.final.blob(self.state, repeated["index_sha256"]), raw)
+
+    def test_draft_merges_m02_without_overwriting_base(self):
+        receipt, args = self.draft_inputs()
+        first = collector.assemble_draft(self.root, self.state, receipt, **args)
+        serving = decode(collector.final.blob(self.state, first["index_sha256"]))
+        m02 = collector.put(self.state, bounded_read(self.state / "evidence/M02.json"))
+        base = dict(serving, reports={"M02": m02}, retained={})
+        base_bytes = canonical(base) + b"\n"
+        base_pin = collector.put(self.state, base_bytes)
+        result = collector.assemble_draft(self.root, self.state, receipt, base_pin=base_pin, **args)
+        self.assertNotEqual(result["index_sha256"], base_pin)
+        merged = decode(collector.final.blob(self.state, result["index_sha256"]))
+        self.assertEqual(merged["reports"], {"M02": m02, **self.reports})
+        self.assertEqual(merged["retained"], serving["retained"])
+        self.assertEqual(collector.final.blob(self.state, base_pin), base_bytes)
+        object_path = self.state / "evidence/M18-objects" / m02
+        object_path.write_bytes(b"damaged preexisting M02")
+        with self.assertRaises(Rejected):
+            collector.assemble_draft(self.root, self.state, receipt, base_pin=base_pin, **args)
+        self.assertEqual(collector.final.blob(self.state, base_pin), base_bytes)
+
+    def test_draft_rejects_digest_conflicts_without_overwriting_base(self):
+        receipt, args = self.draft_inputs()
+        first = collector.assemble_draft(self.root, self.state, receipt, **args)
+        draft = decode(collector.final.blob(self.state, first["index_sha256"]))
+        for field, change in (
+            ("reports", {"M13": self.reports["M14"]}),
+            ("retained", {"M15": draft["retained"]["M13"]}),
+        ):
+            base = {**draft, field: draft[field] | change}
+            raw = canonical(base) + b"\n"
+            pin = collector.put(self.state, raw)
+            with self.subTest(field=field), self.assertRaises(Rejected):
+                collector.assemble_draft(self.root, self.state, receipt, base_pin=pin, **args)
+            self.assertEqual(collector.final.blob(self.state, pin), raw)
+        # A valid plan with a new external pin cannot be merged into a draft of the old plan.
+        name = "evidence/M18-plan.json"
+        path = self.state / name
+        path.write_bytes(bounded_read(path) + b" ")
+        changed = dict(args, plan_pin=digest(bounded_read(path)))
+        with self.assertRaises(Rejected):
+            collector.assemble_draft(
+                self.root, self.state, receipt, base_pin=first["index_sha256"], **changed
+            )
+
+    def test_draft_rejects_corrupt_blobs_without_repairing_them(self):
+        receipt, args = self.draft_inputs()
+        first = collector.assemble_draft(self.root, self.state, receipt, **args)
+        for pin in (receipt, self.packets["M15"]["packet.json"], first["index_sha256"]):
+            path = self.state / "evidence/M18-objects" / pin
+            original = bounded_read(path)
+            path.write_bytes(b"corrupt")
+            try:
+                with self.subTest(pin=pin), self.assertRaises(Rejected):
+                    collector.assemble_draft(self.root, self.state, receipt, **args)
+                self.assertEqual(bounded_read(path), b"corrupt")
+            finally:
+                path.write_bytes(original)
+
+    def test_draft_base_cannot_authorize_release_or_switch_proposal(self):
+        receipt, args = self.draft_inputs()
+        first = collector.assemble_draft(self.root, self.state, receipt, **args)
+        draft = decode(collector.final.blob(self.state, first["index_sha256"]))
+        for change in (
+            {"status": "pass"},
+            {"release_ready": True},
+            {"proposal_reference": digest(b"another candidate proposal")},
+        ):
+            raw = canonical(draft | change) + b"\n"
+            base_pin = collector.put(self.state, raw)
+            with self.subTest(field=next(iter(change))), self.assertRaises(Rejected):
+                collector.assemble_draft(self.root, self.state, receipt, base_pin=base_pin, **args)
+            self.assertEqual(collector.final.blob(self.state, base_pin), raw)
+
     def test_missing_and_corrupt_originals_never_produce_a_receipt(self):
         for name in (
             "evidence/M13.json",

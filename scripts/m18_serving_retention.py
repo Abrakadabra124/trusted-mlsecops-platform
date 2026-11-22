@@ -300,9 +300,82 @@ def replay(root, state, receipt_pin, *, freeze_pin, reports, admissions):
     return verify(root, state, record)
 
 
+def assemble_draft(
+    root,
+    state,
+    receipt_pin,
+    *,
+    freeze_pin,
+    reports,
+    admissions,
+    proposal_reference,
+    plan_pin,
+    base_pin=None,
+):
+    """Return an immutable, private index draft after replaying the original trio."""
+    verified = replay(
+        root, state, receipt_pin, freeze_pin=freeze_pin, reports=reports, admissions=admissions
+    )
+    final.same(verified["proposal_reference"], object_id(proposal_reference), "draft-proposal")
+    frozen = decode(final.blob(state, freeze_pin))
+    # Early performance freezes predate the explicit version field.
+    final.same(frozen.get("schema_version", 1), 1, "draft-freeze-version")
+    header = dict(
+        schema_version=1, **{k: frozen[k] for k in (*delivery.SOURCE, "freeze", "policy_reference")}
+    )
+    plan = decode(final.pinned(safe_child(state, "evidence/M18-plan.json"), plan_pin))
+    final.need(isinstance(plan, dict), "draft-plan-shape")
+    final.subset(
+        plan,
+        {k: header[k] for k in ("schema_version", "source_revision", "source_fingerprint")},
+        "draft-plan-source",
+    )
+    # Use the same case and artifact inventories consumed by the final M18 verifier.
+    for field in ("cases", "artifacts"):
+        require_fields(plan.get(field), final.CHILDREN)
+        for pin in plan[field].values():
+            object_id(pin)
+    for gate, pin in verified["reports"].items():
+        report = decode(final.blob(state, pin))
+        case_ids = sorted(row["id"] for row in report["cases"])
+        final.same(digest(canonical(case_ids)), plan["cases"][gate], "draft-case-inventory")
+        final.same(
+            digest(canonical(sorted(report["artifact_hashes"]))),
+            plan["artifacts"][gate],
+            "draft-artifact-inventory",
+        )
+    identity = dict(
+        **header,
+        scope="M18-private-index-draft",
+        status="inconclusive",
+        release_ready=False,
+        proposal_reference=proposal_reference,
+        freeze_sha256=freeze_pin,
+        plan=plan_pin,
+    )
+    draft = dict(**identity, reports={}, retained={})
+    if base_pin is not None:
+        draft = decode(final.blob(state, base_pin, final.LIMIT))
+        require_fields(draft, (*identity, "reports", "retained"))
+        final.subset(draft, identity, "draft-owner")
+    for name, allowed in (("reports", final.CHILDREN), ("retained", ("M13", "M15"))):
+        entries = draft[name]
+        final.need(isinstance(entries, dict) and entries.keys() <= set(allowed), "draft-table")
+        for gate, pin in entries.items():
+            if gate not in verified[name]:
+                final.blob(state, pin)  # Preserve only other gates with intact private preimages.
+        for gate, pin in verified[name].items():
+            final.same(entries.get(gate, pin), pin, "draft-conflicting-pin")
+            entries[gate] = pin
+    # A content-addressed write leaves the pinned parent and authoritative INDEX intact.
+    raw = canonical(draft) + b"\n"
+    final.need(len(raw) <= final.LIMIT, "draft-size")
+    return dict(status="inconclusive", release_ready=False, index_sha256=put(state, raw))
+
+
 def main(arguments=None):
     args = sys.argv[1:] if arguments is None else arguments
-    final.need(args in (["capture"], ["replay"]), "serving-collector-arguments")
+    final.need(args in (["capture"], ["replay"], ["assemble-draft"]), "serving-collector-arguments")
     root = Path(__file__).resolve().parents[1]
     state = root / ".runtime"
     pins = dict(
@@ -310,10 +383,25 @@ def main(arguments=None):
         reports={g: os.environ[g + "_REPORT"] for g in GATES},
         admissions={g: os.environ[g + "_ADMISSION"] for g in GATES},
     )
-    if args == ["capture"]:
-        pin = capture(root, state, **pins)
-        print("::add-mask::" + pin)
-        with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+    if args in (["capture"], ["assemble-draft"]):
+        output_path = Path(os.environ["GITHUB_OUTPUT"])
+        if args == ["capture"]:
+            pin = capture(root, state, **pins)
+        else:
+            draft = assemble_draft(
+                root,
+                state,
+                os.environ["M18_SERVING_PRIMARY_SHA256"],
+                **pins,
+                proposal_reference=os.environ["M18_PROPOSAL_REFERENCE"],
+                plan_pin=os.environ["M18_PLAN_SHA256"],
+                base_pin=os.environ.get("M18_DRAFT_BASE_SHA256"),
+            )
+            pin = draft["index_sha256"]
+            print('{"status":"inconclusive","release_ready":false}')
+        if args == ["capture"] or os.environ.get("GITHUB_ACTIONS") == "true":
+            print("::add-mask::" + pin)
+        with output_path.open("a", encoding="utf-8") as output:
             print("sha256=" + pin, file=output)
     else:
         result = replay(root, state, os.environ["M18_SERVING_PRIMARY_SHA256"], **pins)
