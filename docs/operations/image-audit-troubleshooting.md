@@ -1,5 +1,13 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Штатный запуск опубликованного контроллера томов
+
+При обычном запуске `python -m mlsecops.cluster bootstrap` переключает штатный контроллер kind на образ из реестра проекта. Ожидаемые manifest digest и config ID зафиксированы в [local_path_pin.py](../../mlsecops/local_path_pin.py). Для воспроизведения в чистом checkout выполните `gh workflow run kubernetes-trust.yml --ref main`. В шаге `Verify the public volume provisioner and repeat reconciliation` сверьте поля `registry_reference` и `config_id` с файлом на проверяемом коммите. При повторном применении должны сохраниться UID Deployment и Pod, а поле `changed` должно стать `false`. Эта же сборка проверяет работающий etcd и адрес, возвращаемый DNS.
+
+При отказе `local_path_bootstrap_baseline_unrecognized` проверьте образ и владельца существующего Deployment. При `local_path_published_cri_mismatch` сопоставьте manifest digest и config ID из containerd с опубликованной квитанцией. Если переключение прервалось, bootstrap сверяет UID и спецификацию перед возвратом штатного образа. При `local_path_restore_ownership_changed` сохраните журнал и снимок объекта в приватной области проекта для разбора владельцем. Последний шаг журнала должен подтвердить удаление принадлежащего запуску кластера.
+
+Для полного аудита запустите `gh workflow run runtime-image-audit.yml --ref main`. Сохраните SHA источника, версию базы сканера, профиль `local-path-provisioner-published`, число пакетов, результаты остальных компонентов и итоговое решение. Профиль требует совпадения реестра, digest, config и всех 59 записей. Изменение любой записи требует новой квалификации образа. Архив, прошедший проверку тома, и его независимое чтение из публичного GHCR доступны в [журнале публикации](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45049960229).
+
 ## Проверка тома и восстановление контроллера
 
 Для проверки выполните `gh workflow run local-path-rebuild.yml --ref main`. После успешного сканирования workflow разворачивает отдельный kind-кластер. Проверьте поля отчёта шага `Provision a test volume, remount, delete and restore the stock controller`. Один и тот же `candidate_config_id` должен присутствовать в сканировании и в работающем Pod контроллера. Поля `pvc_bound` и `remount_verified` подтверждают выдачу тома и чтение записанных данных вторым Pod. У испытательного класса политика `Delete`; для постоянного проектного хранилища действует `Retain`.

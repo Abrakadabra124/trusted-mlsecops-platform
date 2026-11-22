@@ -27,7 +27,7 @@ jobs:
           uv run --locked ruff check mlsecops scripts
           uv run --locked ruff format --check mlsecops scripts
           uv run --locked python scripts/check_docs.py
-          uv run --locked python -m unittest scripts.trust_authority_qualification scripts.promotion_controller_qualification scripts.kube_trust_probe_qualification scripts.kube_trust_native_qualification scripts.kube_coredns_probe_qualification scripts.image_package_observation_qualification
+          uv run --locked python -m unittest scripts.trust_authority_qualification scripts.promotion_controller_qualification scripts.kube_trust_probe_qualification scripts.kube_trust_native_qualification scripts.kube_coredns_probe_qualification scripts.local_path_rollout_qualification scripts.image_package_observation_qualification
           uv run --locked coverage run --branch --data-file=.coverage-kube-trust --source=mlsecops.kube_trust -m unittest scripts.kube_trust_qualification
           uv run --locked coverage report --data-file=.coverage-kube-trust --fail-under=95
           uv run --locked coverage json --data-file=.coverage-kube-trust -o .coverage-kube-trust.json
@@ -72,6 +72,24 @@ jobs:
           sys.exit(0 if status["version"] == "3.6.17" and type(leader) is int and leader > 0
               and leader == status["header"]["member_id"] and not status.get("errors") else 1)'
           echo "etcd=3.6.17 image=$manifest config=$config single_member_leader=verified"
+      - name: Verify the public volume provisioner and repeat reconciliation
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import validate_cluster
+          from mlsecops.contracts import canonical
+          from mlsecops.local_path_rollout import ensure
+
+          state = Path(".runtime")
+          first = validate_cluster(state)["local_path_provisioner"]
+          repeat = ensure(state)
+          if first["status"] != "ready" or first["changed"] is not True or repeat["changed"] is not False:
+              raise SystemExit("local_path_reconciliation_not_idempotent")
+          for key in ("deployment_uid", "pod_uid", "config_id", "registry_reference"):
+              if first[key] != repeat[key]:
+                  raise SystemExit("local_path_identity_changed")
+          print(canonical(repeat).decode())
+          PY
       - name: Verify the CoreDNS rollout, running image and kube-dns answer
         run: uv run --locked python -m scripts.kube_coredns_probe
       - name: Bootstrap model storage prerequisite

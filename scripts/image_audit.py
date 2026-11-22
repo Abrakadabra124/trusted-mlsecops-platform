@@ -40,6 +40,7 @@ from scripts.image_audit_contract import (
     GO_CONTROL_ADVISORIES,
     GO_CONTROLS,
     PUBLISHED_COREDNS_PROFILE,
+    PUBLISHED_LOCAL_PATH_PROFILE,
     assess,
     coredns_coverage_profile,
     database,
@@ -48,6 +49,8 @@ from scripts.image_audit_contract import (
     inventory,
     local_path_inventory_matches,
     observe_packages,
+    published_local_path_matches,
+    published_local_path_target,
     wolfi_detection_control,
 )
 from scripts.image_audit_publication import render
@@ -426,6 +429,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         },
     }
     required["debian", PUBLISHED_COREDNS_PROFILE] = required["debian", "coredns"]
+    required["debian", PUBLISHED_LOCAL_PATH_PROFILE] = required["debian", "local-path-provisioner"]
     targets = [
         ("worker", "worker", "trusted-mlsecops:dev", "wolfi"),
         ("storage", "storage", STORAGE_IMAGE, "wolfi"),
@@ -562,7 +566,13 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 if version_diagnostic is not None:
                     component["application_inventory"] = version_diagnostic
                 dns_profile = coredns_coverage_profile(component["package_observation"], reference)
-                if observed is not None and dns_profile:
+                if observed is not None and published_local_path_target(reference, config_id):
+                    component["coverage_profile"] = (
+                        PUBLISHED_LOCAL_PATH_PROFILE
+                        if published_local_path_matches(component["package_observation"], reference)
+                        else "unapproved-system"
+                    )
+                elif observed is not None and dns_profile:
                     component["coverage_profile"] = dns_profile
                 elif observed is not None and local_path_inventory_matches(
                     component["package_observation"]

@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from mlsecops import local_path_pin
 from mlsecops.contracts import Rejected, canonical, read_json, write_json
 from scripts import (
     image_audit,
@@ -14,6 +15,7 @@ from scripts import (
     image_scope,
     tracking_spike,
 )
+from scripts.image_audit_local_path_qualification import TEST_REFERENCE, rebuilt_sbom
 from scripts.image_audit_qualification import fixtures
 from scripts.image_package_observation_qualification import coredns_rebuild_sbom
 
@@ -21,6 +23,11 @@ from scripts.image_package_observation_qualification import coredns_rebuild_sbom
 def qualify():
     cases = []
     scenarios = {
+        "runtime-local-path-clean": "pass",
+        "runtime-local-path-high": "fail",
+        "runtime-local-path-unknown": "inconclusive",
+        "runtime-local-path-db-changed": "inconclusive",
+        "runtime-local-path-foreign-reference": "inconclusive",
         "runtime-coredns-published-unknown": "inconclusive",
         "runtime-etcd-candidate-clean": "fail",
         "runtime-etcd-candidate-high": "fail",
@@ -130,6 +137,14 @@ def qualify():
                 runtime_snapshot["targets"][0].update(
                     reference=dns_pin.reference, config_id=dns_pin.config
                 )
+            local_path_case = name.startswith("runtime-local-path-")
+            if local_path_case:
+                runtime_snapshot["targets"][0].update(
+                    reference=runtime_reference
+                    if name.endswith("foreign-reference")
+                    else TEST_REFERENCE,
+                    config_id=local_path_pin.PUBLISHED_CONFIG,
+                )
             etcd_case = name.startswith("runtime-etcd-candidate-")
             etcd_reference = "registry.k8s.io/etcd@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
             etcd_config = "sha256:be2dd319600bac16f542b8e46e1b78511c35a31e46829ee9acc82a83c94aa377"
@@ -170,6 +185,8 @@ def qualify():
                 details = copy.deepcopy(inspected)
                 if dns_pin and reference == dns_pin.reference:
                     details["Id"] = dns_pin.config
+                if local_path_case and reference == runtime_snapshot["targets"][0]["reference"]:
+                    details["Id"] = local_path_pin.PUBLISHED_CONFIG
                 if etcd_case:
                     for target in runtime_snapshot["targets"]:
                         if reference == target["reference"]:
@@ -507,10 +524,31 @@ def qualify():
                     finding["artifact"] = {k: package[k] for k in ("id", "name", "version", "type")}
                     finding["vulnerability"]["severity"] = "Unknown"
                     document["matches"] = [finding]
+                if local_path_case and stage == "runtime-000-sbom":
+                    document = rebuilt_sbom()
+                if local_path_case and stage == "runtime-000-scan":
+                    document["source"]["target"]["imageID"] = local_path_pin.PUBLISHED_CONFIG
+                    document["distro"] = {"name": "debian", "version": "13"}
+                    if name.endswith(("high", "unknown")):
+                        package = read_json(run / "runtime-000-sbom.json")["artifacts"][0]
+                        finding = copy.deepcopy(match)
+                        finding["artifact"] = {
+                            k: package[k] for k in ("id", "name", "version", "type")
+                        }
+                        finding["vulnerability"]["severity"] = (
+                            "High" if name.endswith("high") else "Unknown"
+                        )
+                        document["matches"] = [finding]
+                        returncode = 2 if name.endswith("high") else 0
+                    if name.endswith("db-changed"):
+                        document["descriptor"]["db"]["status"]["built"] = (
+                            datetime.now(UTC) - timedelta(minutes=1)
+                        ).isoformat()
                 write_json(path, document)
                 return returncode, path
 
             with (
+                patch.object(local_path_pin, "PUBLISHED_REFERENCE", TEST_REFERENCE),
                 patch.object(
                     image_node_candidate,
                     "validate",
@@ -584,6 +622,32 @@ def qualify():
                         **({"include_node_candidate": True} if name.startswith("node-") else {}),
                     )
                     outcome = result["status"]
+                    if local_path_case:
+                        component = next(
+                            c for c in result["components"] if c["name"] == "runtime-000"
+                        )
+                        scanned = not name.endswith("db-changed")
+                        profile = (
+                            "unapproved-system"
+                            if name.endswith("foreign-reference")
+                            else image_audit_contract.PUBLISHED_LOCAL_PATH_PROFILE
+                        )
+                        if (
+                            component["coverage_profile"] != profile
+                            or component["scan_executed"] != scanned
+                            or component["catalogued_packages"] != 59
+                            or result["runtime_scope"]["covered_images"]
+                            != int(name.endswith(("clean", "high")))
+                            or component["vulnerability_count"]
+                            != (int(name.endswith(("high", "unknown"))) if scanned else None)
+                            or (
+                                not scanned
+                                and component["reason"] != "image_audit_snapshot_changed"
+                            )
+                        ):
+                            raise AssertionError(
+                                "published local-path coverage or scan count mismatch"
+                            )
                     if dns_pin:
                         component = next(
                             c for c in result["components"] if c["name"] == "runtime-000"
