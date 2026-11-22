@@ -11,18 +11,29 @@ from scripts.image_audit_contract import (
     COREDNS_MANIFEST,
     COREDNS_REFERENCE,
     COREDNS_SPEC_IMAGE,
+    runtime_coredns,
 )
+
+# The hosted rollback qualification imports the upstream identities from this module.
+__all__ = [
+    "COREDNS_CONFIG",
+    "COREDNS_MANIFEST",
+    "COREDNS_REFERENCE",
+    "COREDNS_SPEC_IMAGE",
+    "verify",
+]
 
 _DNS_NAME = "kubernetes.default.svc.cluster.local."
 
 
-def _pinned_container(spec):
+def _pinned_container(spec, pin):
     return [c.get("image") for c in spec["containers"] if c["name"] == "coredns"] == [
-        COREDNS_SPEC_IMAGE
+        pin.spec_image
     ]
 
 
 def verify(state=Path(".runtime")):
+    pin = runtime_coredns()
     validate_cluster(state)
 
     def get(resource, *args, namespace="kube-system"):
@@ -44,12 +55,14 @@ def verify(state=Path(".runtime")):
     ]
     if (
         type(replicas) is not int
-        or replicas < 1
+        or replicas != 2
         or len(pods) != replicas
-        or not _pinned_container(deployment["template"]["spec"])
+        or not _pinned_container(deployment["template"]["spec"], pin)
     ):
         raise Rejected("coredns_rollout_mismatch")
+    verified = {}
     for pod in pods:
+        name = pod["metadata"].get("name")
         spec, status = pod["spec"], pod["status"]
         running = [
             s
@@ -59,29 +72,33 @@ def verify(state=Path(".runtime")):
             and isinstance(s["state"].get("running"), dict)
         ]
         if (
-            spec.get("nodeName") != NODE
+            not isinstance(name, str)
+            or not name
+            or name in verified
+            or spec.get("nodeName") != NODE
             or status["phase"] != "Running"
-            or not _pinned_container(spec)
+            or not _pinned_container(spec, pin)
             or len(running) != 1
         ):
             raise Rejected("coredns_pod_mismatch")
         image_id = running[0]["imageID"].removeprefix("docker-pullable://")
         if image_id not in (
-            COREDNS_MANIFEST,
-            COREDNS_CONFIG,
-            COREDNS_REFERENCE,
-            COREDNS_SPEC_IMAGE,
+            pin.manifest,
+            pin.config,
+            pin.reference,
+            pin.spec_image,
         ):
             raise Rejected("coredns_image_id_mismatch")
         cri = decode(command(["docker", "exec", NODE, "crictl", "inspecti", image_id]).encode())[
             "status"
         ]
         if (
-            cri["id"] != COREDNS_CONFIG
+            cri["id"] != pin.config
             or not isinstance(cri["repoDigests"], list)
-            or COREDNS_REFERENCE not in cri["repoDigests"]
+            or pin.reference not in cri["repoDigests"]
         ):
             raise Rejected("coredns_runtime_identity_mismatch")
+        verified[name] = f"pod={name} imageID={image_id} manifest={pin.manifest} config={cri['id']}"
 
     dns = get("service/kube-dns")["spec"]
     if dns["selector"] != {"k8s-app": "kube-dns"}:
@@ -113,7 +130,8 @@ def verify(state=Path(".runtime")):
     )
     if answer != str(expected):
         raise Rejected("coredns_service_answer_mismatch")
-    return f"coredns={COREDNS_SPEC_IMAGE} config={COREDNS_CONFIG} ready={replicas} dns={server} {_DNS_NAME} A {expected}"
+    summary = f"coredns={pin.spec_image} config={pin.config} ready={replicas} dns={server} {_DNS_NAME} A {expected}"
+    return "\n".join([*verified.values(), summary])
 
 
 if __name__ == "__main__":
