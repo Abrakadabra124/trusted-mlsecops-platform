@@ -447,6 +447,15 @@ def join_valid(component, target, *, registry=aliases):
                 )
             ):
                 return False
+        if "bpftool_ubuntu_materials" in evidence:
+            from scripts.image_bpftool_scan import verified_findings
+
+            if not partial:
+                return False
+            native = verified_findings(
+                evidence["bpftool_ubuntu_materials"], mapping, original["database"]
+            )
+            scans = [*scans, {"findings": native}]
         expected = joined_result(original, scans, diagnostic_only=partial)
         return all(component.get(key) == value for key, value in expected.items())
     except (Rejected, KeyError, TypeError, ValueError, AttributeError):
