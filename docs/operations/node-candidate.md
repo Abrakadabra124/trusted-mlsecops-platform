@@ -1,5 +1,9 @@
 # Изолированный Kubernetes node candidate
 
+## Сверка kubectl в полном аудите узла
+
+Запустите `gh workflow run runtime-image-audit.yml --ref main`. Для повтора на коммите с первым измерением выполните `gh run rerun 45055336132 --repo Abrakadabra124/trusted-mlsecops-platform`. В компоненте с ролью `kind-node` откройте `kubectl_attribution`. Сверьте путь ELF, SHA-256 описи 82 записей, config узла и хеш базы. Поле `supplemental_complete` должно быть `true`, `scans` должно содержать девять разных PURL. Свежий девятый скан указан в `fresh_purl`. При наличии `kubectl_attribution_error` сохраните причину и проверьте первичную опись, соответствие образа и завершение восьми предыдущих сканов. Сверяйте неизменность всех прежних находок узла и `runtime_audit_cluster_absent=pass` после очистки. [Проверенный запуск](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45055336132/attempts/1).
+
 ## Проверка kubectl в системном образе узла
 
 Для повтора измерения на `8486b03c95a55eb349f52dc426854c7f4030e283` выполните `gh run rerun 45053630761 --repo Abrakadabra124/trusted-mlsecops-platform`. Для текущей версии основной ветки используйте `gh workflow run kind-kubectl-inventory.yml --ref main`. На одноразовом раннере задание проверяет OCI index, manifest linux/amd64, config и слои штатного узла kind. Оно читает `/usr/bin/kubectl` из созданного контейнера до его запуска, удаляет контейнер и проверяет отсутствие по ID.

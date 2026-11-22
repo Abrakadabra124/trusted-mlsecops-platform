@@ -187,14 +187,21 @@ def artifacts(directory, index):
 
 
 def run_batch(run, cache, expected_database, db_files, *, registry=aliases):
-    from scripts import image_audit as audit
-
     profile = _profile(registry)
     coordinates = _coordinates(registry)
     # Validate the entire allowlist before the first scanner process starts.
     purls = tuple(_purl(registry, *pair) for pair in coordinates)
     proof = registry.proof_digest()
     directory = safe_child(run, profile.directory)
+    receipts = _scan_coordinates(directory, cache, expected_database, db_files, coordinates, purls)
+    if registry.proof_digest() != proof or registry.coordinates() != coordinates:
+        raise Rejected("kubernetes_scan_registry_changed")
+    return Batch(directory, proof, copy.deepcopy(expected_database), receipts)
+
+
+def _scan_coordinates(directory, cache, expected_database, db_files, coordinates, purls):
+    from scripts import image_audit as audit
+
     directory.mkdir(mode=0o700)
     cache = safe_child(cache, ".")
     if audit.snapshot(cache) != db_files:
@@ -243,9 +250,7 @@ def run_batch(run, cache, expected_database, db_files, *, registry=aliases):
         if audit.snapshot(cache) != db_files:
             raise Rejected("kubernetes_scan_database_changed")
         receipts.append(Receipt(module, version, code, hashes))
-    if registry.proof_digest() != proof or registry.coordinates() != coordinates:
-        raise Rejected("kubernetes_scan_registry_changed")
-    return Batch(directory, proof, copy.deepcopy(expected_database), tuple(receipts))
+    return tuple(receipts)
 
 
 def read_batch(batch, expected_database, timestamp=None, *, registry=aliases):
@@ -257,9 +262,13 @@ def read_batch(batch, expected_database, timestamp=None, *, registry=aliases):
         raise Rejected("kubernetes_scan_batch_binding")
     if tuple((r.module, r.version) for r in batch.receipts) != _coordinates(registry):
         raise Rejected("kubernetes_scan_batch_incomplete")
+    return _read_receipts(batch.directory, batch.receipts, expected_database, timestamp)
+
+
+def _read_receipts(directory, receipts, expected_database, timestamp=None):
     results = []
-    for index, receipt in enumerate(batch.receipts):
-        contents, hashes = artifacts(batch.directory, index)
+    for index, receipt in enumerate(receipts):
+        contents, hashes = artifacts(directory, index)
         if hashes != receipt.hashes:
             raise Rejected("kubernetes_scan_artifact_changed")
         result = single.assess(
@@ -282,6 +291,24 @@ def read_batch(batch, expected_database, timestamp=None, *, registry=aliases):
             }
         )
     return results
+
+
+def scan_kubectl_cli_runtime(run, cache, expected_database, db_files):
+    from scripts import image_node_kubectl_inventory as kubectl
+
+    module, version = "k8s.io/cli-runtime", "v0.36.4"
+    kubectl.need(module in kubectl.coordinates(), "staging_source")
+    directory = safe_child(run, "kubectl-cli-runtime")
+    receipts = _scan_coordinates(
+        directory,
+        cache,
+        expected_database,
+        db_files,
+        ((module, version),),
+        (f"pkg:golang/{module}@{version}",),
+    )
+    (result,) = _read_receipts(directory, receipts, expected_database)
+    return result
 
 
 def joined_result(original, supplemental, *, diagnostic_only=False):
