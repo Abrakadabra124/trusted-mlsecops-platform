@@ -302,6 +302,9 @@ def package_files(context):
 
 def check_overlay(layer, allowed, directories, base):
     licenses, seen = [], set()
+    doc_files = {str(PurePosixPath(name).parent): name for name in LICENSE_PATHS.values()}
+    opaque_docs, verified_dirs = set(), set()
+    opacity_readback = []
     errors, samples, reemitted = 0, [], []
 
     def issue(path, kind, reason, **facts):
@@ -312,13 +315,27 @@ def check_overlay(layer, allowed, directories, base):
 
     with tarfile.open(fileobj=layer, mode="r|*") as tar:
         for member in tar:
-            path = str(PurePosixPath(member.name))
+            location = PurePosixPath(member.name)
+            path = str(location)
             previous, old_times = base.get(path, (None, {}))
             kind = "directory" if member.isdir() else member.type.decode("ascii")
+            if location.is_absolute() or ".." in location.parts:
+                issue(path, kind, "non_relative_path")
+                continue
             if path in seen:
                 issue(path, kind, "duplicate")
             seen.add(path)
-            if PurePosixPath(path).name.startswith(".wh."):
+            if location.name == ".wh..wh..opq" and str(location.parent) in doc_files:
+                if (
+                    member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE)
+                    or member.size != 0
+                    or member.linkname
+                    or (member.uid, member.gid) != (0, 0)
+                    or set(member.pax_headers) - {"path", "mtime", "atime", "ctime"}
+                ):
+                    issue(path, kind, "invalid_opacity_marker")
+                opaque_docs.add(str(location.parent))
+            elif location.name.startswith(".wh."):
                 issue(path, kind, "whiteout")
             elif member.isdir():
                 current, new_times = directory_record(member)
@@ -341,6 +358,8 @@ def check_overlay(layer, allowed, directories, base):
                             "after_times": new_times,
                         }
                     )
+                if current == required:
+                    verified_dirs.add(path)
             elif path not in allowed or (previous and previous["type"] == "directory"):
                 issue(path, kind, "unexpected_file_or_directory_replacement")
             if path in LICENSE_PATHS.values():
@@ -350,6 +369,30 @@ def check_overlay(layer, allowed, directories, base):
                     issue(path, kind, str(error))
                 else:
                     licenses.append(path)
+    for parent in sorted(opaque_docs):
+        prefix = parent + "/"
+        inherited = sorted(name for name in base if name.startswith(prefix))
+        final_entries = {name for name in seen if name.startswith(prefix)}
+        license_path = doc_files[parent]
+        chain = (PurePosixPath(parent), *PurePosixPath(parent).parents)
+        if (
+            inherited
+            or any(
+                (str(p) in base and base[str(p)][0]["type"] != "directory")
+                or (str(p) in seen and str(p) not in verified_dirs)
+                for p in chain
+            )
+            or parent not in directories
+            or parent not in verified_dirs
+            or (parent in base and base[parent][0] != directories[parent])
+            or final_entries != {license_path, prefix + ".wh..wh..opq"}
+            or license_path not in licenses
+        ):
+            issue(parent, "directory", "unproven_opacity", inherited_entries=len(inherited))
+        else:
+            opacity_readback.append(
+                {"directory": parent, "inherited_entries": 0, "final_file": license_path}
+            )
     if sorted(licenses) != sorted(LICENSE_PATHS.values()):
         issue("copyright", "set", "node_overlay_license_set_mismatch")
     print(
@@ -358,6 +401,7 @@ def check_overlay(layer, allowed, directories, base):
                 "overlay_errors": errors,
                 "sample": samples,
                 "repeated_directories": reemitted,
+                "opacity_readback": opacity_readback,
                 "license_readback": [
                     {"path": p, "type": "regular", "size": COPYRIGHT[0], "sha256": COPYRIGHT[1]}
                     for p in sorted(set(licenses))

@@ -108,6 +108,60 @@ class OpenSSLQualification(unittest.TestCase):
                     with self.assertRaises(Rejected):
                         subject.check_overlay(stream, {"usr/bin/openssl"}, {}, {})
 
+    def test_document_opacity_requires_empty_lower_view_and_exact_signed_contents(self):
+        parent = "usr/share/doc/openssl"
+        directory = tarfile.TarInfo(parent)
+        directory.type = tarfile.DIRTYPE
+        marker = tarfile.TarInfo(parent + "/.wh..wh..opq")
+        license_file = tarfile.TarInfo(parent + "/copyright")
+        license_file.size = 3
+        signed = {parent: subject.directory_record(directory)[0]}
+
+        def check(entries, inherited):
+            stream = io.BytesIO()
+            with tarfile.open(fileobj=stream, mode="w") as tar:
+                for member, data in entries:
+                    tar.addfile(member, io.BytesIO(data))
+            stream.seek(0)
+            with (
+                patch.object(subject, "LICENSE_PATHS", {"openssl": license_file.name}),
+                patch.object(subject, "COPYRIGHT", (3, digest(b"abc"))),
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                subject.check_overlay(stream, {license_file.name}, signed, inherited)
+            return output.getvalue()
+
+        valid = [(marker, b""), (directory, b""), (license_file, b"abc")]
+        for inherited in ({}, {parent: (signed[parent], {})}):
+            self.assertIn('"inherited_entries": 0', check(valid, inherited))
+        nonempty = {parent + "/old/nested": ({"type": "0"}, {})}
+        bad_marker = copy.deepcopy(marker)
+        bad_marker.type = tarfile.SYMTYPE
+        bad_marker.linkname = "copyright"
+        payload_marker = copy.deepcopy(marker)
+        payload_marker.size = 1
+        xattr_marker = copy.deepcopy(marker)
+        xattr_marker.pax_headers = {"SCHILY.xattr.user.extra": "value"}
+        wrong_owner = copy.deepcopy(marker)
+        wrong_owner.uid = 1000
+        for entries, inherited in (
+            (valid, nonempty),
+            (valid, {parent: ({"type": "2"}, {})}),
+            (valid, {"usr/share/doc": ({"type": "2"}, {})}),
+            (valid[::2], {}),
+            (valid[:-1], {}),
+            ([(bad_marker, b""), *valid[1:]], {}),
+            ([(payload_marker, b"x"), *valid[1:]], {}),
+            ([(xattr_marker, b""), *valid[1:]], {}),
+            ([(wrong_owner, b""), *valid[1:]], {}),
+            ([(tarfile.TarInfo(parent + "/.wh.copyright"), b""), *valid[1:]], {}),
+            (valid + [(marker, b"")], {}),
+            (valid + [(tarfile.TarInfo(parent + "/extra"), b"")], {}),
+        ):
+            with self.subTest(members=len(entries), inherited=list(inherited)):
+                with self.assertRaisesRegex(Rejected, "node_overlay_mismatch"):
+                    check(entries, inherited)
+
     def test_existing_directory_requires_bound_metadata(self):
         def layer(*members):
             stream = io.BytesIO()
