@@ -97,9 +97,12 @@ BUILD
 
 # Walk the directories of compiled packages up to their module roots. Keep
 # original notice paths and contents, including package-specific licenses.
+COPY licenses.lock /tmp/expected-licenses.sha256
 RUN --network=none <<'LICENSES'
 #!/bin/bash
 set -euo pipefail
+expected=/tmp/expected-licenses.sha256
+echo "87aef4cec3568c3bbb8cd3a84ce7a00d8a3c68beec887625e5e0ea90512f5abe  $expected" | sha256sum -c -
 export GOPROXY=off
 goroot="$(go env GOROOT)"
 go list -deps -f '{{.Dir}}|{{with .Module}}{{.Dir}}{{end}}' . >/tmp/package-dirs
@@ -118,7 +121,8 @@ while IFS='|' read -r dir root; do
 done </tmp/package-dirs | sort -u >/tmp/notice-dirs
 shopt -s nullglob nocaseglob
 while IFS='|' read -r dir relative; do
-    for f in "$dir"/{license*,licence*,copying*,copyright*,notice*,patents,patents.*}; do
+    # nocaseglob needs a pattern even for the extensionless PATENTS name.
+    for f in "$dir"/{license*,licence*,copying*,copyright*,notice*,patent[s],patents.*}; do
         [[ ! -L "$f" ]] || exit 1
         name="$(basename "$f")"
         dest="/notices/$relative/$name"
@@ -133,8 +137,14 @@ while IFS='|' read -r dir relative; do
 done </tmp/notice-dirs
 cd /notices
 test -z "$(find . ! -type f ! -type d -print -quit)"
-find . -type f -print0 | sort -z | xargs -0 sha256sum >/evidence/licenses.sha256
-echo '87aef4cec3568c3bbb8cd3a84ce7a00d8a3c68beec887625e5e0ea90512f5abe  /evidence/licenses.sha256' | sha256sum -c -
+actual=/evidence/licenses.sha256
+find . -type f -print0 | sort -z | xargs -0 sha256sum >"$actual"
+if ! diff -u --label expected --label collected "$expected" "$actual" >/tmp/licenses.diff; then
+    wc -l "$expected" "$actual" >&2
+    sha256sum "$expected" "$actual" >&2
+    sed -n '1,60p' /tmp/licenses.diff | cut -c1-240 >&2
+    exit 1
+fi
 find . -type f -exec chmod 0644 {} +
 find . -type d -exec chmod 0755 {} +
 find . /out -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
