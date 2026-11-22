@@ -1,5 +1,13 @@
 # Статус и границы доказательств
 
+## 22 ноября 2026 года, опубликованный etcd в новом кластере
+
+В чистом checkout `6abe6c7` штатный bootstrap поднял etcd 3.6.17 с опубликованным исправлением. Готовый Pod и containerd подтвердили digest из GHCR. Полный аудит засчитал 12 из 14 работающих образов. Для etcd подтверждены 154 записи и семь дополнительных сканов, остались три совпадения Medium по одному advisory, Critical, High и Unknown равны нулю. По всей платформе обнаружено 389 уникальных advisory, 24 с оценкой Critical и 141 с оценкой High. Общий результат `fail`. Для Cilium agent и узла kind ещё требуется покрытие приложений. [Чистый кластер](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45018971375), [полный аудит](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45018971253).
+
+В сквозном запуске того же коммита выпуск одного ML-кандидата отклонён по `release_assurance_required`. В режиме квалификации прошли 85 проверок. После восстановления совпали 1000 из 1000 прогнозов с максимальной ошибкой 0, сверка завершилась через 4,973 с. Для R1 по-прежнему нужны приёмка M18 на одном кандидате и заключение независимого проверяющего M22. [Сквозной запуск](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45019022723).
+
+Три файла интеграции подготовлены поверх `main` в `25ca9a1`. В новом одноразовом кластере прошли проверка digest, TLS endpoint, DNS, служба доверия и удаление узла. Для воспроизведения полного аудита этой итерации выполните `gh workflow run runtime-image-audit.yml --ref qualify/r1-adopt-patched-etcd` и сверьте `headSha` с `6abe6c767e0ade512d2cb4d7fcc6dde7d7026103`. [Проверка дерева для main](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45019607888), [код аудита на проверенном коммите](https://github.com/Abrakadabra124/trusted-mlsecops-platform/tree/6abe6c767e0ade512d2cb4d7fcc6dde7d7026103).
+
 ## Итог проверок 22 ноября 2026 года
 
 Парное сканирование CoreDNS на одном проверенном файле базы подтвердило снижение Critical с 3 до 0 и High с 24 до 2. В рабочей ветке исправленный etcd прошёл замену образа и откат в одноразовом Kubernetes-кластере. У обеих контрольных записей сохранились UID и содержимое. Для новых кластеров в `main` закреплены CoreDNS 1.15.0 и официальный etcd 3.6.17. [Парное сканирование](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44960164029), [замена etcd и откат](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44960577583).

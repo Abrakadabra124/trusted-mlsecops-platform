@@ -13,7 +13,8 @@ nodes:
         kind: ClusterConfiguration
         etcd:
           local:
-            imageTag: "3.6.17-0@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
+            imageRepository: "ghcr.io/abrakadabra124/trusted-mlsecops-platform"
+            imageTag: "3.6.17-xcrypto-v0.59.0-r1-13ef78c65cf212706b1bbb4495a33ef6437d1fc2@sha256:1d1803f6520e4a8f35a3ee71972cd3d38b205eeb041d9340f500877ce3a06ebe"
         dns:
           imageTag: "v1.15.0@sha256:3429e3bbffb1e839470c4a3541d4d78aca84a1394c75a539d0200c58c63196ac"
       - |
