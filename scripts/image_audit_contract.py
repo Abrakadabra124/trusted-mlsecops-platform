@@ -2,7 +2,7 @@ import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from mlsecops.contracts import Rejected
+from mlsecops.contracts import Rejected, canonical, digest
 
 SYFT_VERSION = "1.54.1"
 GRYPE_VERSION = "0.120.1"
@@ -19,6 +19,77 @@ COREDNS_CONFIG = "sha256:881cbdacb8c168aaba50f10b1458f36d1b976c5a856e72d3589bc9c
 COREDNS_REPOSITORY = "registry.k8s.io/coredns/coredns"
 COREDNS_REFERENCE = f"{COREDNS_REPOSITORY}@{COREDNS_MANIFEST}"
 COREDNS_SPEC_IMAGE = f"{COREDNS_REPOSITORY}:v1.15.0@{COREDNS_MANIFEST}"
+# config -> (platform reference, row count, SHA-256 of canonical full observation
+# with packages sorted by canonical JSON). v1.14.7 is from native run 44954907094.
+# v1.15.0 is independently projected from verified ELF and dpkg bytes (fixture).
+_COREDNS_INVENTORIES = {
+    COREDNS_CONFIG: (
+        COREDNS_REFERENCE,
+        202,
+        "0eec5fe63064753a5e3d8bcd63f79fff02dfc18e4bb2a542bc449b694ee3f5b5",
+    ),
+    "sha256:97efff2babf85310d6f87bd969ac64d7006bbbadb147c90579d68d57634750f4": (
+        COREDNS_REPOSITORY
+        + "@sha256:2329f5f0e7e79fbe56dcdf11ecc4337ee2476bb251095bc275fe9461cb88a55b",
+        198,
+        "1c8a9c4801aa11930f1ac71a7cee398956f5a4ebc4d1e47f0e78a53789dbd013",
+    ),
+}
+LOCAL_PATH_CONFIG = "sha256:c82008e2cd0186ef96bfd05d6b49d3286768fae5bd7a961f70bd485a3785c006"
+# Independent binary build info + dpkg rows, with registry layers/config verified.
+# Provenance and all 61 rows: image_system_inventory_fixture.py.
+LOCAL_PATH_PACKAGES_SHA256 = "552dfdc00d5981e6bc68ddae319e8d9c4df0aef7d0cf969cc40701f1d369ee91"
+
+
+def local_path_inventory_matches(observation):
+    """Recognize exact application coverage, never override vulnerability findings."""
+    try:
+        if observation.get("image_id") != LOCAL_PATH_CONFIG or observation.get("distro") != {
+            "id": "debian",
+            "versionID": "13.6",
+        }:
+            return False
+        rows = []
+        for package in observation["packages"]:
+            if package["type"] == "go-module":
+                if package["foundBy"] != "go-module-binary-cataloger" or package["paths"] != [
+                    "/usr/local/bin/local-path-provisioner"
+                ]:
+                    return False
+            elif (
+                package["type"] != "deb"
+                or package["foundBy"] != "dpkg-db-cataloger"
+                or f"/var/lib/dpkg/status.d/{package['name']}" not in package["paths"]
+            ):
+                return False
+            rows.append([package["type"], package["name"], package["version"]])
+        return digest(canonical(sorted(rows))) == LOCAL_PATH_PACKAGES_SHA256
+    except (KeyError, TypeError, AttributeError):
+        return False
+
+
+def coredns_inventory_matches(observation, reference):
+    """Bind the manifest and config to every normalized field, path and duplicate."""
+    if type(observation) is not dict or type(observation.get("image_id")) is not str:
+        return False
+    spec = _COREDNS_INVENTORIES.get(observation["image_id"])
+    if spec is None or reference != spec[0]:
+        return False
+    return exact_observation_matches(observation, spec[1], spec[2])
+
+
+def exact_observation_matches(observation, count, checksum):
+    """Match the entire normalized observation, disregarding only package order."""
+    packages = observation.get("packages")
+    if type(packages) is not list or len(packages) != count:
+        return False
+    if any(type(p) is not dict or type(p.get("paths")) is not list for p in packages):
+        return False
+    try:
+        ordered = {**observation, "packages": sorted(packages, key=canonical)}
+        return digest(canonical(ordered)) == checksum
+    except (Rejected, RecursionError):
+        return False
 
 
 def observe_packages(sbom, image_id):

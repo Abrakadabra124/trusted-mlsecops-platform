@@ -130,7 +130,8 @@ def image_document(identifier):
     return decode(result.stdout, 1024 * 1024)
 
 
-def image_config(identifier):
+def image_manifest(identifier):
+    """Resolve the actual linux/amd64 descriptor from the node's digest-checked content."""
     document = image_document(identifier)
     for depth in range(4):
         if "manifests" not in document:
@@ -156,6 +157,11 @@ def image_config(identifier):
         document = image_document(identifier)
     if "manifests" in document:
         raise Rejected("image_index_depth_exceeded")
+    return identifier, document
+
+
+def image_config(identifier):
+    identifier, document = image_manifest(identifier)
     if "rootfs" in document:
         config_id, config = identifier, document
     elif isinstance(document.get("config"), dict) and isinstance(
