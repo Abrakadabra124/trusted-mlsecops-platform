@@ -14,6 +14,14 @@ etcd хранит состояние Kubernetes. При изменении ве�
 
 Для etcd 3.6.17 на коммите `af2f362` проверены оба digest, ответ endpoint, равенство идентификаторов участника и лидера, а также последующие проверки Kubernetes trust. Результат относится к развёртыванию с пустым хранилищем. [Протокол GitHub Actions](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44957210068).
 
+Исправленный etcd 3.6.17 с `golang.org/x/crypto v0.59.0` собран из проектного рецепта на ревизии `13ef78c65cf212706b1bbb4495a33ef6437d1fc2`. В запуске `44962254649` проверены сканирование архива, запуск того же config ID в kind, сохранность двух ConfigMap после отката и удаление узла. Для воспроизведения сборки используйте рецепт и workflow из этой ревизии. [Рецепт](https://github.com/Abrakadabra124/trusted-mlsecops-platform/blob/13ef78c65cf212706b1bbb4495a33ef6437d1fc2/images/candidates/etcd/Dockerfile), [workflow квалификации](https://github.com/Abrakadabra124/trusted-mlsecops-platform/blob/13ef78c65cf212706b1bbb4495a33ef6437d1fc2/.github/workflows/etcd-candidate.yml), [лог квалификации](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44962254649).
+
+Штатный publisher из `main` на `677d13e` опубликовал этот архив в GHCR и подтвердил анонимное чтение образа. Для повторной проверки используйте существующий `ghcr.io/abrakadabra124/trusted-mlsecops-platform/etcd@sha256:1d1803f6520e4a8f35a3ee71972cd3d38b205eeb041d9340f500877ce3a06ebe`. Ожидаемый config ID равен `sha256:b58a5d62eedb953d96c32200fcfafd40928b7514b40a32667c1f2fc4d8265976`. [Публикация и чтение из GHCR](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44962900166), [процедура публикации](operations/image-audit-troubleshooting.md#публикация-проверенного-образа-etcd).
+
+После включения pin в `main` запустите `gh workflow run kubernetes-trust.yml --ref main`. Сверьте `headSha` запуска с проверяемой ревизией, затем в шаге проверки etcd сопоставьте manifest и config с публикацией, проверьте версию `3.6.17`, отметку `single_member_leader=verified` и успешное удаление кластера.
+
+В ветке `qualify/r1-adopt-patched-etcd` на коммите `6abe6c767e0ade512d2cb4d7fcc6dde7d7026103` проверка подтвердила у работающего etcd опубликованные manifest и config ID, версию `3.6.17` и совпадение лидера с единственным участником. Затем workflow удалил кластер и узел `trusted-mlsecops-control-plane`. [Лог bootstrap, проверки etcd и очистки](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45018971375/job/137197429305).
+
 - [M14: фиксированный нагрузочный профиль](operations/load-profile.md). Client/golden contracts,
   учёт ошибок и таймаутов, диагностика 429 и неполного окна. Native интеграция и M14 открыты.
 - [M13 accepted synthetic profile](evidence/m13-privacy-acceptance-2026-11-06.md),
