@@ -1,0 +1,26 @@
+name: Stock kind node runc patch comparison
+on:
+  push:
+    branches: [qualify/r1-kind-1364-runc]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/qualify/r1-kind-1364-runc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.23"
+          python-version: "3.12.15"
+          enable-cache: false
+      - name: Locked inventory and file checks
+        run: |
+          uv sync --locked
+          uv run --locked python -m unittest scripts.image_node_runc_qualification scripts.image_node_openssl_qualification
+      - name: Verify publisher, compare both images and enforce the existing policy
+        run: uv run --locked python -m scripts.image_node_runc
