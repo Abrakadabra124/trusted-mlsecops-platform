@@ -165,6 +165,7 @@ def live_approval(root, config):
         and live.get("scope") == "disposable-local-path-pvc"
         and live.get("status") == "pass"
         and live.get("release_ready") is False
+        and "reason" in live
         and live["reason"] is None
         and live.get("candidate_config_id") == config
         and live.get("baseline_config_id") == live.get("restored_stock_config_id") == STOCK[1]
@@ -203,11 +204,17 @@ def prepare():
     }
     require(
         type(record) is dict
-        and record.keys() == expected.keys() | {"config_id", "archive_size", "archive_sha256", "static_report_sha256"}
+        and record.keys()
+        == expected.keys() | {"config_id", "archive_size", "archive_sha256", "static_report_sha256"}
         and all(type(record[k]) is type(v) and record[k] == v for k, v in expected.items())
-        and is_digest(record["config_id"]) and record["config_id"] != STOCK[1]
-        and type(record["archive_size"]) is int and 0 < record["archive_size"] <= LIMIT
-        and all(is_digest("sha256:" + record[k]) for k in ("archive_sha256","static_report_sha256")),
+        and is_digest(record["config_id"])
+        and record["config_id"] != STOCK[1]
+        and type(record["archive_size"]) is int
+        and 0 < record["archive_size"] <= LIMIT
+        and all(
+            type(record[k]) is str and re.fullmatch("[a-f0-9]{64}", record[k])
+            for k in ("archive_sha256", "static_report_sha256")
+        ),
         "measurement_run",
     )
     approval = live_approval(root, record["config_id"])

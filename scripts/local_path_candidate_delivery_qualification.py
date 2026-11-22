@@ -5,11 +5,42 @@ import os
 import tarfile
 import tempfile
 import unittest
+from contextlib import chdir, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, decode, digest
 from scripts import local_path_candidate_delivery as delivery
+
+
+class RecipeTests(unittest.TestCase):
+    def test_clean_checkout_revision_and_committed_recipe_bytes(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        recipe = root / delivery.RECIPE
+        recipe.parent.mkdir(parents=True)
+        recipe.write_bytes(b"FROM scratch\n")
+        self.enterContext(chdir(root))
+        self.enterContext(patch.dict(os.environ, GITHUB_WORKSPACE=str(root)))
+        sha = "e" * 40
+        for head, status, blob in (
+            (sha, "", b"FROM scratch\n"),
+            ("d" * 40, "", b"FROM scratch\n"),
+            (sha, "?? stray", b"FROM scratch\n"),
+            (sha, "", b"FROM scratch\r\n"),
+        ):
+            with (
+                self.subTest(head=head, status=status, blob=blob),
+                patch.object(delivery, "command", side_effect=[str(root), head, status]),
+                patch.object(delivery.subprocess, "check_output", return_value=blob) as cat,
+            ):
+                if head == sha and not status and blob == recipe.read_bytes():
+                    self.assertEqual(delivery.checked_recipe(sha), digest(blob))
+                    cat.assert_called_once_with(
+                        ["git", "cat-file", "blob", sha + ":" + delivery.RECIPE], timeout=15
+                    )
+                else:
+                    with self.assertRaises(Rejected):
+                        delivery.checked_recipe(sha)
 
 
 class DeliveryTests(unittest.TestCase):
@@ -184,7 +215,15 @@ class DeliveryTests(unittest.TestCase):
         path.write_bytes(self.raw + b"trailing")
         with self.assertRaises(Rejected):
             delivery.prepare()
+        path.write_bytes(self.raw[:-1] + b"X")
+        with self.assertRaisesRegex(Rejected, "archive_digest"):
+            delivery.prepare()
         path.write_bytes(self.raw)
+        alias = self.root / "alias"
+        alias.hardlink_to(path)
+        with self.assertRaisesRegex(Rejected, "archive_file"):
+            delivery.prepare()
+        alias.unlink()
         with (
             patch.object(delivery.audit, "identity", return_value=delivery.STOCK[1]),
             self.assertRaises(Rejected),
@@ -200,9 +239,28 @@ class DeliveryTests(unittest.TestCase):
             delivery.prepare()
         self.assertEqual(list((self.root / "local-path-qualified").iterdir()), [])
 
+    def test_refuses_unknown_measurement_fields_and_non_json_live_output(self):
+        self.stage()
+        live_path = self.root / "local-path-pvc.json"
+        for raw in (b'{"status":"pass","status":"pass"}', b"X" * 8193):
+            live_path.write_bytes(raw)
+            with (
+                patch.dict(os.environ, LIVE_REPORT_SHA256=digest(raw)),
+                self.assertRaises(Rejected),
+            ):
+                delivery.prepare()
+        self.write_live(self.live)
+        path = self.root / "local-path-measured" / "measurement.json"
+        raw = canonical({**decode(path.read_bytes()), "unexpected": "private"}) + b"\n"
+        path.write_bytes(raw)
+        with patch.dict(os.environ, MEASUREMENT_SHA256=digest(raw)), self.assertRaises(Rejected):
+            delivery.prepare()
+        self.assertFalse((self.root / "local-path-qualified").exists())
+
     def test_only_exact_original_archive_and_bounded_receipt(self):
         self.stage()
-        delivery.prepare()
+        with redirect_stdout(io.StringIO()):
+            delivery.prepare()
         target = self.root / "local-path-qualified"
         self.assertEqual(
             sorted(p.name for p in target.iterdir()), ["candidate.tar", "receipt.json"]
