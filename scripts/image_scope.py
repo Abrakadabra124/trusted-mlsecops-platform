@@ -20,7 +20,8 @@ from scripts import (
 )
 from scripts.image_audit_contract import (
     LOCAL_PATH_CONFIG,
-    coredns_inventory_matches,
+    PUBLISHED_COREDNS_PROFILE,
+    coredns_coverage_profile,
     local_path_inventory_matches,
 )
 
@@ -271,10 +272,11 @@ def coverage(snapshot, components):
             and (
                 item.get("coverage_profile") in {"worker", "storage", "tracking"}
                 or (
-                    item.get("coverage_profile") == "coredns"
+                    item.get("coverage_profile") in {"coredns", PUBLISHED_COREDNS_PROFILE}
                     and item.get("observed_reference") == target.get("reference")
                     and item.get("runtime_image_id") == target["config_id"]
-                    and coredns_inventory_matches(
+                    and item["coverage_profile"]
+                    == coredns_coverage_profile(
                         item.get("package_observation"), target.get("reference")
                     )
                     and item["package_observation"]["image_id"] == target["config_id"]

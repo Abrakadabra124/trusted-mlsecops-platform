@@ -34,9 +34,24 @@ def local_path_observation():
     }
 
 
-def coredns_observation():
+# Version delta measured by the two-image qualification at a008a2e, run 45024790177.
+_REBUILD_VERSIONS = {
+    "github.com/coredns/coredns": "v1.15.0+dirty",
+    "github.com/klauspost/compress": "v1.20.2",
+    "golang.org/x/crypto": "v0.59.0",
+    "golang.org/x/mod": "v0.42.0",
+    "golang.org/x/net": "v0.62.0",
+    "golang.org/x/sync": "v0.25.0",
+    "golang.org/x/sys": "v0.50.0",
+    "golang.org/x/term": "v0.48.0",
+    "golang.org/x/text": "v0.44.0",
+    "stdlib": "go1.27.4",
+}
+
+
+def coredns_sbom(image_id=contract.COREDNS_CONFIG, versions=None):
     sbom, _, _, _, _ = fixtures()
-    sbom["source"]["metadata"]["imageID"] = contract.COREDNS_CONFIG
+    sbom["source"]["metadata"]["imageID"] = image_id
     sbom["distro"] = {"id": "debian", "versionID": "12.15"}
     artifacts = []
     for kind, records in (
@@ -45,6 +60,8 @@ def coredns_observation():
     ):
         for line in records.splitlines():
             name, version = line.split()
+            if versions and kind == "go-module":
+                version = versions.get(name, version)
             status = f"/var/lib/dpkg/status.d/{name}"
             paths = (
                 [status, status + ".md5sums", f"/usr/share/doc/{name}/copyright"]
@@ -64,7 +81,15 @@ def coredns_observation():
                 }
             )
     sbom["artifacts"] = artifacts
-    return observe_packages(sbom, contract.COREDNS_CONFIG)
+    return sbom
+
+
+def coredns_rebuild_sbom(image_id):
+    return coredns_sbom(image_id, _REBUILD_VERSIONS)
+
+
+def coredns_observation():
+    return observe_packages(coredns_sbom(), contract.COREDNS_CONFIG)
 
 
 class PackageObservationTests(unittest.TestCase):
@@ -270,6 +295,79 @@ class PackageObservationTests(unittest.TestCase):
         observed["packages"].reverse()
         self.assertTrue(contract.coredns_inventory_matches(observed, ref))
 
+    def test_published_coredns_requires_registry_identity_and_all_202_rows(self):
+        pin = contract.PUBLISHED_COREDNS
+        obs = observe_packages(coredns_rebuild_sbom(pin.config), pin.config)
+        with patch.object(contract, "PUBLISHED_COREDNS", None):
+            self.assertIsNone(contract.coredns_coverage_profile(obs, pin.reference))
+        profile = contract.coredns_coverage_profile
+        self.assertEqual(profile(obs, pin.reference), contract.PUBLISHED_COREDNS_PROFILE)
+        self.assertEqual(profile(coredns_observation(), contract.COREDNS_REFERENCE), "coredns")
+        for ref in (
+            pin.reference.replace("ghcr.io", "mirror"),
+            pin.reference.replace("/coredns@", "/other@"),
+            pin.reference.replace(pin.manifest, contract.COREDNS_MANIFEST),
+            contract.COREDNS_REFERENCE,
+            pin.spec_image,
+            pin.config,
+        ):
+            with self.subTest(ref=ref):
+                self.assertIsNone(profile(obs, ref))
+        for change in (
+            lambda o: o.update(image_id=contract.COREDNS_CONFIG),
+            # The earlier unpublished build in 45024790177 had identical normalized rows.
+            lambda o: o.update(
+                image_id="sha256:a8426fd4b9b65a0aa360d299954cac8a044d0ea5138970c84f4c2e757cbce3b5"
+            ),
+            lambda o: o["distro"].update(versionID="13"),
+            lambda o: o["packages"].pop(),
+            lambda o: o["packages"].__setitem__(1, o["packages"][0]),
+            lambda o: o["packages"][0].update(paths=["/foreign"]),
+            lambda o: o["packages"][0].update(foundBy="other"),
+            lambda o: next(p for p in o["packages"] if p["type"] == "deb").update(version="0"),
+            lambda o: o.update(status="pass"),
+        ):
+            modified = copy.deepcopy(obs)
+            change(modified)
+            with self.subTest(change=change):
+                self.assertIsNone(profile(modified, pin.reference))
+
+    def test_published_coredns_preserves_findings_and_standard_severity_policy(self):
+        pin = contract.PUBLISHED_COREDNS
+        sbom = coredns_rebuild_sbom(pin.config)
+        _, report, match, _, timestamp = fixtures()
+        report["source"]["target"]["imageID"] = pin.config
+        match["artifact"] = {k: sbom["artifacts"][0][k] for k in ("id", "name", "version", "type")}
+        for severities, expected, code in (
+            (("Critical",), "fail", 2),
+            (("High",), "fail", 2),
+            (("Unknown",), "inconclusive", 0),
+            (("Medium", "Unknown"), "inconclusive", 0),
+            (("Unknown", "High"), "fail", 2),
+            (("Unknown", "Critical"), "fail", 2),
+            (("Medium",), "pass", 0),
+        ):
+            with self.subTest(severities=severities):
+                report["matches"] = [
+                    {**match, "vulnerability": {"id": f"test-{s}", "severity": s}}
+                    for s in severities
+                ]
+                result = contract.assess(
+                    sbom,
+                    report,
+                    pin.config,
+                    {"stdlib", "base-files", "github.com/coredns/coredns"},
+                    code,
+                    timestamp,
+                )
+                self.assertEqual(result["status"], expected)
+                for severity in severities:
+                    self.assertEqual(result["severity_counts"][severity], 1)
+                self.assertCountEqual(
+                    [(f["id"], f["severity"]) for f in result["findings"]],
+                    [(f"test-{s}", s) for s in severities],
+                )
+
     def test_coredns_coverage_binds_target_component_and_observation(self):
         obs = coredns_observation()
         ref, config = contract.COREDNS_REFERENCE, contract.COREDNS_CONFIG
@@ -303,6 +401,20 @@ class PackageObservationTests(unittest.TestCase):
                 self.assertEqual(covered({**item, field: value}, target), 0)
         self.assertEqual(covered(item, {**target, "reference": "other"}), 0)
         self.assertEqual(covered(item, {**target, "config_id": "other"}), 0)
+        pin = contract.PUBLISHED_COREDNS
+        obs = observe_packages(coredns_rebuild_sbom(pin.config), pin.config)
+        target.update(config_id=pin.config, reference=pin.reference)
+        item.update(
+            observed_reference=pin.reference,
+            runtime_image_id=pin.config,
+            image_config_id=pin.config,
+            package_observation=obs,
+        )
+        self.assertEqual(covered(item, target), 0)
+        item["coverage_profile"] = contract.PUBLISHED_COREDNS_PROFILE
+        self.assertEqual(covered(item, target), 1)
+        self.assertEqual(covered(item, {**target, "reference": ref}), 0)
+        self.assertEqual(covered({**item, "image_config_id": config}, target), 0)
 
     def test_bound_projection_retains_unknown_distro_without_granting_coverage(self):
         sbom, _, _, image, _ = fixtures()
