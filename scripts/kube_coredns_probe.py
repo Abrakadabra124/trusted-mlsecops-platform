@@ -1,5 +1,7 @@
 """Verify the rolled-out CoreDNS and query kube-dns from the kind node network."""
 
+import subprocess
+import time
 from ipaddress import IPv4Address
 from pathlib import Path
 
@@ -30,6 +32,42 @@ def _pinned_container(spec, pin):
     return [c.get("image") for c in spec["containers"] if c["name"] == "coredns"] == [
         pin.spec_image
     ]
+
+
+def _query_service(pid, server, expected):
+    # Enter only the verified node's network namespace. dig runs from the runner.
+    args = [
+        "sudo",
+        "-n",
+        "nsenter",
+        "--target",
+        pid,
+        "--net",
+        "--",
+        "dig",
+        "-r",
+        f"@{server}",
+        _DNS_NAME,
+        "A",
+        "+short",
+        "+time=3",
+        "+tries=1",
+    ]
+    for attempt in range(1, 11):
+        try:
+            result = subprocess.run(args, capture_output=True, text=True, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise Rejected("coredns_dns_tool_unavailable") from error
+        if result.returncode == 0:
+            if result.stdout.strip() != str(expected):
+                raise Rejected("coredns_service_answer_mismatch")
+            return attempt
+        # BIND dig exits with 9 when the server sent no reply.
+        if result.returncode != 9:
+            raise Rejected(f"coredns_dns_tool_exit_{result.returncode}")
+        if attempt < 10:
+            time.sleep(1)
+    raise Rejected("coredns_dns_no_reply_after_10_attempts")
 
 
 def verify(state=Path(".runtime")):
@@ -108,29 +146,8 @@ def verify(state=Path(".runtime")):
     pid = command(["docker", "inspect", "--format", "{{.State.Pid}}", NODE])
     if not pid.isdecimal() or int(pid) <= 1:
         raise Rejected("coredns_node_pid_invalid")
-    # Only enter the network namespace. dig comes from the runner's filesystem.
-    answer = command(
-        [
-            "sudo",
-            "-n",
-            "nsenter",
-            "--target",
-            pid,
-            "--net",
-            "--",
-            "dig",
-            "-r",
-            f"@{server}",
-            _DNS_NAME,
-            "A",
-            "+short",
-            "+time=3",
-            "+tries=3",
-        ]
-    )
-    if answer != str(expected):
-        raise Rejected("coredns_service_answer_mismatch")
-    summary = f"coredns={pin.spec_image} config={pin.config} ready={replicas} dns={server} {_DNS_NAME} A {expected}"
+    attempts = _query_service(pid, server, expected)
+    summary = f"coredns={pin.spec_image} config={pin.config} ready={replicas} dns_attempts={attempts} dns={server} {_DNS_NAME} A {expected}"
     return "\n".join([*verified.values(), summary])
 
 
