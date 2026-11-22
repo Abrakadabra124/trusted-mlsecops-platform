@@ -68,14 +68,33 @@ class Lifespan:
     def __init__(self, app):
         self.app = app
         self.cause = "unknown"
+        self.shutdown_complete = False
 
     async def __call__(self, scope, receive, send):
-        try:
+        if scope["type"] != "lifespan":
             await self.app(scope, receive, send)
+            return
+        requested = acknowledged = False
+
+        async def observe_receive():
+            nonlocal requested
+            message = await receive()
+            if message["type"] == "lifespan.shutdown":
+                requested = True
+            return message
+
+        async def observe_send(message):
+            nonlocal acknowledged
+            await send(message)
+            if requested and message["type"] == "lifespan.shutdown.complete":
+                acknowledged = True
+
+        try:
+            await self.app(scope, observe_receive, observe_send)
         except Exception as error:
-            if scope["type"] == "lifespan":
-                self.cause = failure_code(error)
+            self.cause = failure_code(error)
             raise
+        self.shutdown_complete = acknowledged
 
 
 def audit_status(journal):

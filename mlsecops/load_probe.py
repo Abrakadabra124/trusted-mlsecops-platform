@@ -91,7 +91,7 @@ def listen(app):
         if started and thread.is_alive():
             raise Rejected("load_server_shutdown")
         lifespan = getattr(server, "lifespan", None)
-        if any(
+        if (started and server.started and not observed.shutdown_complete) or any(
             getattr(lifespan, flag, False) is True for flag in ("error_occurred", "shutdown_failed")
         ):
             raise Rejected(
