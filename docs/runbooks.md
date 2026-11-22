@@ -22,6 +22,8 @@ etcd хранит состояние Kubernetes. При изменении ве�
 
 В ветке `qualify/r1-adopt-patched-etcd` на коммите `6abe6c767e0ade512d2cb4d7fcc6dde7d7026103` проверка подтвердила у работающего etcd опубликованные manifest и config ID, версию `3.6.17` и совпадение лидера с единственным участником. Затем workflow удалил кластер и узел `trusted-mlsecops-control-plane`. [Лог bootstrap, проверки etcd и очистки](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45018971375/job/137197429305).
 
+На `main` (`72556fc`) новый одноразовый кластер поднялся с опубликованным образом. Для работающего etcd журнал подтвердил оба digest, версию `3.6.17` и `single_member_leader=verified`. Шаг очистки завершился успешно и зафиксировал удаление узла `trusted-mlsecops-control-plane`. [Проверка etcd и очистка на main](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45020130052/job/137200953349).
+
 - [M14: фиксированный нагрузочный профиль](operations/load-profile.md). Client/golden contracts,
   учёт ошибок и таймаутов, диагностика 429 и неполного окна. Native интеграция и M14 открыты.
 - [M13 accepted synthetic profile](evidence/m13-privacy-acceptance-2026-11-06.md),

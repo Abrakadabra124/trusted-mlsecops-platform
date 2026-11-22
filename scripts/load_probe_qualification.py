@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
+from uvicorn.lifespan.on import LifespanOn
+
 from mlsecops import load_probe as probe
 from mlsecops.contracts import Rejected, canonical, decode, digest, write_json
 from mlsecops.load_golden import Golden
@@ -18,6 +20,53 @@ from scripts.load_measurement_qualification import rows
 
 
 class ProbeContracts(unittest.TestCase):
+    def test_listener_requires_completed_lifespan_after_startup(self):
+        for outcome in ("complete", "missing", "premature", "late_error", "failed"):
+
+            async def application(scope, receive, send):
+                self.assertEqual((await receive())["type"], "lifespan.startup")
+                await send({"type": "lifespan.startup.complete"})
+                if outcome == "premature":
+                    await send({"type": "lifespan.shutdown.complete"})
+                    return
+                self.assertEqual((await receive())["type"], "lifespan.shutdown")
+                if outcome in ("complete", "late_error"):
+                    await send({"type": "lifespan.shutdown.complete"})
+                if outcome == "late_error":
+                    raise Rejected("audit_failed")
+                if outcome == "failed":
+                    await send({"type": "lifespan.shutdown.failed", "message": "PRIVATE"})
+
+            app = probe.serving_lifecycle.Middleware(application)
+            with (
+                self.subTest(outcome=outcome),
+                asyncio.Runner() as runner,
+                patch.object(probe, "socket") as sockets,
+                patch.object(probe, "threading") as threads,
+            ):
+                sockets.socket.return_value.getsockname.return_value = ("127.0.0.1", 1234)
+                thread = threads.Thread.return_value
+                thread.is_alive.return_value = False
+
+                def start():
+                    server = threads.Thread.call_args.kwargs["target"].__self__
+                    server.lifespan = LifespanOn(server.config)
+                    runner.run(server.lifespan.startup())
+                    server.started = not server.lifespan.should_exit
+                    thread.join.side_effect = lambda timeout: runner.run(server.lifespan.shutdown())
+
+                thread.start.side_effect = start
+                code = "audit_failed" if outcome == "late_error" else "load_server_lifespan"
+                check = (
+                    nullcontext()
+                    if outcome == "complete"
+                    else self.assertRaisesRegex(Rejected, f"^{code}$")
+                )
+                with check, probe.listen(app) as port:
+                    self.assertEqual(port, 1234)
+                thread.join.assert_called_once_with(timeout=60)
+                sockets.socket.return_value.close.assert_called_once()
+
     def test_actual_http_privacy_wrapper_retains_finite_owned_shutdown_failure(self):
         engine = Mock()
         engine.close.side_effect = Rejected("serving_cleanup_unconfirmed")
