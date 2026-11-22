@@ -1,5 +1,11 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Проверка тома и восстановление контроллера
+
+Для проверки выполните `gh workflow run local-path-rebuild.yml --ref main`. После успешного сканирования workflow разворачивает отдельный kind-кластер. Проверьте поля отчёта шага `Provision a test volume, remount, delete and restore the stock controller`. Один и тот же `candidate_config_id` должен присутствовать в сканировании и в работающем Pod контроллера. Поля `pvc_bound` и `remount_verified` подтверждают выдачу тома и чтение записанных данных вторым Pod. У испытательного класса политика `Delete`; для постоянного проектного хранилища действует `Retain`.
+
+При отказе сохраните поле `reason` и сведения о том, какие проверки завершились. Сверьте привязку `claimRef.uid`, состояние PVC и PV и адрес каталога тома, записанный provisioner. Проверьте поля `pvc_deleted`, `pv_deleted`, `backing_directory_absent`, `restored_stock_config_id` и `cleanup_verified`. После удаления кластера должно появиться `disposable_pvc_cluster_absent=pass`. Для выпуска системного образа workflow использует архив прошедшего сканирования только при успешных проверках тома, отката и очистки. [Журнал испытания](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45048228181), [квалификация](../../.github/workflows/local-path-rebuild.yml).
+
 ## Пересборка provisioner и проверка библиотек
 
 Запустите `gh workflow run local-path-rebuild.yml --ref main` в репозитории проекта. Сборка берёт Rancher v0.0.37 с коммита `49b2be8e26d6d34c9afaa21fa33108d2e82f8955`, использует Go 1.27.4 и обновляет `x/net` до v0.62.0, `x/text` до v0.43.0 и `klauspost/compress` до v1.20.2. После проверки зависимостей два запуска компилятора с пустыми кэшами собирают бинарник без доступа к сети. Финальный образ наследует штатную базу kind и путь исполняемого файла. [Рецепт](../../images/candidates/local-path/Dockerfile), [ручной запуск](../../.github/workflows/local-path-rebuild.yml).
