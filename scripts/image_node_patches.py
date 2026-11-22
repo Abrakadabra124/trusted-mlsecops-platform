@@ -72,12 +72,23 @@ def qualify(run):
     db = audit.snapshot(cache)
     base, before, stock = node.measure(run, cache, db, "source", node.CONFIG)
     step, middle, ssl = node.measure(run, cache, db, "openssl", node.LOCAL)
+    final, after, both = node.measure(run, cache, db, "candidate", runc.LOCAL)
+    print(
+        json.dumps(
+            {
+                "scope": "scanner-measurements-before-composition-checks",
+                "release_ready": False,
+                "severities": {s["image_id"]: s["severity_counts"] for s in (stock, ssl, both)},
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
     node.check_oci(base, step)
     node.verify_archive_overlay(run / "openssl.tar", step, context)
     node.check_inventory(before, middle, ssl["image_id"])
     node.check_findings(stock["findings"], ssl["findings"])
     (run / "openssl.tar").unlink()
-    final, after, both = node.measure(run, cache, db, "candidate", runc.LOCAL)
     intermediate_layers = step["rootfs"]["diff_ids"]
     node.check_oci(step, final, base_layers=intermediate_layers)
     runc.check_archive(run / "candidate.tar", final, base_layers=intermediate_layers)

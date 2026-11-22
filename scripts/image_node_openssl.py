@@ -373,6 +373,8 @@ def check_overlay(layer, allowed, directories, base):
         prefix = parent + "/"
         inherited = sorted(name for name in base if name.startswith(prefix))
         final_entries = {name for name in seen if name.startswith(prefix)}
+        # dpkg can retain an empty documentation subdirectory from the signed payload.
+        signed_dirs = final_entries & verified_dirs & directories.keys()
         license_path = doc_files[parent]
         chain = (PurePosixPath(parent), *PurePosixPath(parent).parents)
         if (
@@ -385,13 +387,26 @@ def check_overlay(layer, allowed, directories, base):
             or parent not in directories
             or parent not in verified_dirs
             or (parent in base and base[parent][0] != directories[parent])
-            or final_entries != {license_path, prefix + ".wh..wh..opq"}
+            or final_entries - signed_dirs != {license_path, prefix + ".wh..wh..opq"}
             or license_path not in licenses
         ):
-            issue(parent, "directory", "unproven_opacity", inherited_entries=len(inherited))
+            issue(
+                parent,
+                "directory",
+                "unproven_opacity",
+                inherited_entries=len(inherited),
+                upper_entries=sorted(final_entries)[:16],
+                checked_parent=parent in verified_dirs,
+                checked_license=license_path in licenses,
+            )
         else:
             opacity_readback.append(
-                {"directory": parent, "inherited_entries": 0, "final_file": license_path}
+                {
+                    "directory": parent,
+                    "inherited_entries": 0,
+                    "final_file": license_path,
+                    "signed_subdirectories": sorted(signed_dirs),
+                }
             )
     if sorted(licenses) != sorted(LICENSE_PATHS.values()):
         issue("copyright", "set", "node_overlay_license_set_mismatch")

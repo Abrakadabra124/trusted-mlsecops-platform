@@ -116,6 +116,9 @@ class OpenSSLQualification(unittest.TestCase):
         license_file = tarfile.TarInfo(parent + "/copyright")
         license_file.size = 3
         signed = {parent: subject.directory_record(directory)[0]}
+        howto = copy.deepcopy(directory)
+        howto.name = parent + "/HOWTO"
+        signed[howto.name] = subject.directory_record(howto)[0]
 
         def check(entries, inherited):
             stream = io.BytesIO()
@@ -134,6 +137,7 @@ class OpenSSLQualification(unittest.TestCase):
         valid = [(marker, b""), (directory, b""), (license_file, b"abc")]
         for inherited in ({}, {parent: (signed[parent], {})}):
             self.assertIn('"inherited_entries": 0', check(valid, inherited))
+        self.assertIn(howto.name, check(valid + [(howto, b"")], {}))
         nonempty = {parent + "/old/nested": ({"type": "0"}, {})}
         bad_marker = copy.deepcopy(marker)
         bad_marker.type = tarfile.SYMTYPE
@@ -145,6 +149,7 @@ class OpenSSLQualification(unittest.TestCase):
         wrong_owner = copy.deepcopy(marker)
         wrong_owner.uid = 1000
         for entries, inherited in (
+            (valid + [(howto, b""), (tarfile.TarInfo(howto.name + "/extra"), b"")], {}),
             (valid, nonempty),
             (valid, {parent: ({"type": "2"}, {})}),
             (valid, {"usr/share/doc": ({"type": "2"}, {})}),
