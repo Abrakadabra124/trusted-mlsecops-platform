@@ -65,6 +65,17 @@ gh run rerun 45024847265 --repo Abrakadabra124/trusted-mlsecops-platform
 
 Для проверки статически включённого OpenSSL найдите в этом же журнале установку `libssl-dev:amd64 3.0.13-0ubuntu3.16` и три объекта из `libcrypto.a` в выводе линкера на этапе сборки bpftool. Пакет из Ubuntu Snapshot имеет SHA-256 `2b4734df0475e305ac03abb0a2cc5659651ed37ef02d967a1c4033a154cf714b`, содержащийся в нём `/usr/lib/x86_64-linux-gnu/libcrypto.a` имеет SHA-256 `9dffa9e77b1cb29b890e473cf9ee379818cb57a576c7ef476356cd4d5a433bcd`. При сопоставлении с бюллетенями следует использовать исходный пакет Ubuntu Noble `openssl` с полной дистрибутивной ревизией. Статически включённая библиотека может отсутствовать в списке установленных пакетов конечного контейнера. Охват агента остаётся неполным до проверки состава и результатов сканирования. [Пакет Ubuntu](https://snapshot.ubuntu.com/ubuntu/20261102T154000Z/pool/main/o/openssl/libssl-dev_3.0.13-0ubuntu3.16_amd64.deb), [рецепт поставщика](https://github.com/cilium/image-tools/blob/0b329bb72b2a1c05b2bb9b81dcf8da34d6a3c3ba/images/bpftool/Dockerfile).
 
+В том же исполняемом файле подтверждены фрагменты кода ещё четырёх библиотек. Ниже указаны версии исходных пакетов Ubuntu и размер непрерывного совпадения в секции кода конечного ELF. [Проверяемые смещения, хеши функций, архивов, пакетов и OCI-слоя](../evidence/cilium-bpftool-2026-11-22.md).
+
+| Исходный пакет и версия | Функция | Совпавшие байты |
+| --- | --- | ---: |
+| glibc `2.39-0ubuntu8.3` | `__strcmp_avx2` | 1365 |
+| elfutils `0.190-1.1build4` | `Elf32_cvt_Half` | 580 |
+| zlib `1:1.3.dfsg-3.1ubuntu2.1` | `adler32_z` | 1716 |
+| libzstd `1.5.5+dfsg2-2build1.1` | `ZSTD_compressBlock_fast` | 15001 |
+
+Для воспроизведения выберите в базе dpkg сборочного образа уникальную установленную запись по **имени и архитектуре**. В этом образе есть записи нескольких архитектур. Для всех четырёх библиотек `amd64` совпала в dpkg, индексе Ubuntu и управляющем файле пакета. Заголовки объектов архивов и конечного ELF дали `e_machine=62` (x86-64). Проверьте подписи `InRelease` для `noble` и `noble-updates`, SHA-256 индексов и пакетов, затем хеш указанного диапазона байтов в каждом объекте и в `bpftool`. В журнале Cilium есть отдельное свидетельство линковки OpenSSL. Открыты сопоставление компонентов с бюллетенями на общей базе сканера и проверка полноты линковки. [Отпечаток архивного ключа Ubuntu](https://documentation.ubuntu.com/security/software-integrity/image-verification/), [квитанция](../evidence/cilium-bpftool-2026-11-22.md).
+
 ### Go detection controls
 
 Для system target без утверждённого application profile сначала проверить `package_binding_validated`, `diagnostic_only`, `scan_executed` и `reason`. После исправления раннего отказа из-за libc6/unknown distro scanner получает все непустые bound inventories; результат остаётся диагностическим. `sbom_validated=false` и coverage profile `unapproved-system` запрещают включение в approved coverage. Нет High/Critical - inconclusive, есть High/Critical - fail. Чужой config/distro, изменённый SBOM/DB, незнакомый package ID в finding, ignored matches или alerts не допускаются даже для diagnostic path. При отказе binding расследовать причину; не вырезать проблемный package или findings из отчёта.
