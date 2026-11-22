@@ -46,6 +46,18 @@
 
 ## Cilium Agent 1.20.5 и версии основных модулей Go
 
+### Результат полного аудита Cilium
+
+На чистом коммите `4fd80f09d7906adbac2f545c2ed8eb04c4799983` аудит сверил 947 записей агента, включая 823 Go-модуля и 124 пакета Debian. Четыре исполняемых файла соответствуют трём дополнительным координатам. На общей базе Grype каждый из трёх сканов дал ноль совпадений. Сохранились все 215 исходных находок, из них 206 Medium, 7 Low и 2 Negligible. Причина `image_audit_cilium_agent_application_provenance_incomplete` остаётся в результате компонента. [Первичный отчёт и очистка](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45022150263/attempts/1).
+
+Чтобы повторить аудит на том же коммите, выполните следующую команду на машине с авторизованным GitHub CLI. Работа с кластером выполняется на одноразовом GitHub-hosted runner.
+
+```shell
+gh run rerun 45022150263 --repo Abrakadabra124/trusted-mlsecops-platform
+```
+
+В новой попытке найдите компонент по `observed_reference` и его раздел `cilium_agent_go_supplemental`. Сверьте версии всех трёх модулей, исходный список находок и итоговое покрытие. В первой попытке SHA-256 файла базы был `08b302c006875468fc087630ba33be9d814a2585047ddc874c8cd7a8bfab0d1b`. При обновлении базы результаты сканирования могут измениться. Первичный и опубликованный JSON первой попытки совпали после канонизации, SHA-256 `f0cb7116008c85d54aeef737713bfda2bad32325676bbbbe3ec80f81cc930d13`. Вывод `runtime_audit_cluster_absent=pass` подтвердил удаление стенда после общего отказа.
+
 ### Проверка встроенного Envoy
 
 Два исполняемых файла взяты из Linux AMD64 манифеста `quay.io/cilium/cilium-envoy@sha256:32d2f9dd9981d92b11c8a37abac32f1c9397b3601af17b45b9403ad2bccc7dab`. У файлов в исходном и конечном образах совпали SHA-256. Для `/usr/bin/cilium-envoy` это `2d738902309dc2dd28753ee28a2c80d9dbdb99e2448ad0407bbdcff77cf885f2`, для `/usr/bin/cilium-envoy-starter` это `ebf97e60a561d2355c2b6c60e58711d9d879941ad934bdcd11c3a1a59c1f2244`. [Рецепт образа агента](https://github.com/cilium/cilium/blob/150121410c147fad575ac5dcbce6de923be69042/images/cilium/Dockerfile).
