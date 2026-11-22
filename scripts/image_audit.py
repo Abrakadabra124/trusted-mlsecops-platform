@@ -805,6 +805,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         except Rejected as error:
             component["reason"] = str(error)
         write_json(safe_child(root, REPORT), report)
+    batch = None
     if kubernetes:
         try:
             configs = {row["config_id"] for row in kubernetes.values()}
@@ -873,6 +874,12 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 report["bpftool_ubuntu_error"] = str(error)
             except (OSError, subprocess.SubprocessError, StopIteration):
                 report["bpftool_ubuntu_error"] = "bpftool_material_unavailable"
+    if observed is not None:
+        from scripts import image_observed_kubectl
+
+        image_observed_kubectl.attach(
+            report, observed, run, cache, control_database, db_files, batch
+        )
     if (
         snapshot(cache) != db_files
         or source_fingerprint(root) != fingerprint
@@ -880,7 +887,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     ):
         raise Rejected("image_audit_materials_changed")
     statuses = {component["status"] for component in report["components"]}
-    if "bpftool_ubuntu_error" in report:
+    if "bpftool_ubuntu_error" in report or "kubectl_attribution_error" in report:
         statuses.add("inconclusive")
     if node_build is not None and image_node_candidate.validate(root) != node_build:
         raise Rejected("image_audit_node_candidate_changed")
