@@ -3,7 +3,7 @@ import re
 import runpy
 import unittest
 from pathlib import Path
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, TimeoutExpired
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical
@@ -41,6 +41,8 @@ class CoreDNSProbeTests(unittest.TestCase):
         self.pid = "1234"
         self.answer = "10.79.0.1"
         self.cli = self.enterContext(patch.object(probe, "command", side_effect=self.command))
+        self.dig = self.enterContext(patch.object(probe.subprocess, "run", side_effect=self.query))
+        self.sleep = self.enterContext(patch.object(probe.time, "sleep"))
         self.enterContext(patch.object(probe, "validate_cluster"))
         self.kube = self.enterContext(patch.object(probe, "kubectl", side_effect=self.kubectl))
 
@@ -61,13 +63,18 @@ class CoreDNSProbeTests(unittest.TestCase):
             return canonical(self.cri).decode()
         if args[:2] == ["docker", "inspect"]:
             return self.pid
+        self.fail(f"unexpected command: {args!r}")
+
+    def query(self, args, **kwargs):
+        self.assertEqual(kwargs["timeout"], 5)
+        self.assertIn("+tries=1", args)
         self.assertEqual(
             args[:8], ["sudo", "-n", "nsenter", "--target", "1234", "--net", "--", "dig"]
         )
         self.assertIn("@10.79.0.10", args)
         self.assertIn("kubernetes.default.svc.cluster.local.", args)
         self.assertIn("A", args)
-        return self.answer
+        return CompletedProcess(args, 0, stdout=self.answer, stderr="")
 
     def test_workflow_module_entry_point(self):
         with (
@@ -85,7 +92,7 @@ class CoreDNSProbeTests(unittest.TestCase):
         self.assertEqual(
             self.kube.call_args_list[0].args[1][:3], ["rollout", "status", "deployment/coredns"]
         )
-        self.assertEqual(self.cli.call_args_list[-1].args[0][0], "sudo")
+        self.assertEqual(self.dig.call_args_list[-1].args[0][0], "sudo")
 
     def test_bootstrap_dns_patch_matches_runtime_pin(self):
         # Authenticated and anonymous readback in publisher run 45029534828.
@@ -211,6 +218,33 @@ class CoreDNSProbeTests(unittest.TestCase):
         for self.pid in ("", "0", "1"):
             with self.subTest(pid=self.pid), self.assertRaisesRegex(Rejected, "node_pid"):
                 probe.verify()
+
+    def test_only_no_reply_is_retried_and_the_final_answer_is_verified(self):
+        no_reply = CompletedProcess([], 9, stdout="timeout")
+        self.dig.side_effect = [no_reply, CompletedProcess([], 0, stdout=self.answer)]
+        self.assertIn("dns_attempts=2", probe.verify())
+        self.sleep.assert_called_once_with(1)
+        self.dig.side_effect = [no_reply, CompletedProcess([], 0, stdout="10.79.0.2")]
+        with self.assertRaisesRegex(Rejected, "answer_mismatch"):
+            probe.verify()
+
+    def test_persistent_no_reply_and_command_failures_are_distinct(self):
+        self.dig.side_effect = None
+        self.dig.return_value = CompletedProcess([], 9, stdout="")
+        with self.assertRaisesRegex(Rejected, "no_reply_after_10_attempts"):
+            probe.verify()
+        self.assertEqual(self.dig.call_count, 10)
+        self.assertEqual(self.sleep.call_count, 9)
+        for failure, reason in (
+            (CompletedProcess([], 127, stdout=""), "tool_exit_127"),
+            (TimeoutExpired("dig", 5), "tool_unavailable"),
+            (FileNotFoundError(), "tool_unavailable"),
+        ):
+            self.dig.reset_mock()
+            self.dig.side_effect = [failure]
+            with self.subTest(failure=failure), self.assertRaisesRegex(Rejected, reason):
+                probe.verify()
+            self.dig.assert_called_once()
 
     def test_dns_requires_exact_api_service_address(self):
         for self.answer in ("", "10.79.0.2", "10.79.0.1\n10.79.0.2"):
