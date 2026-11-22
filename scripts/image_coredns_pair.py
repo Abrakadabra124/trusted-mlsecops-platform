@@ -41,15 +41,27 @@ def target_removed(old_findings, new_findings):
 
 
 def scan_image(
-    run, cache, label, reference, config, *, inventory_matches=coredns_inventory_matches
+    run,
+    cache,
+    label,
+    reference,
+    config,
+    *,
+    inventory_matches=coredns_inventory_matches,
+    archive_tag=None,
 ):
     details = audit.inspect_image(reference)
     if details["Id"] != config:
         raise Rejected("coredns_pair_config_mismatch")
     archive = run / f"{label}.tar"
-    audit.command(["docker", "image", "save", "--output", str(archive), config], timeout=300)
+    if archive_tag:
+        audit.command(["docker", "tag", config, archive_tag])
+    audit.command(
+        ["docker", "image", "save", "--output", str(archive), archive_tag or config], timeout=300
+    )
     if audit.identity(archive, details) != config:
         raise Rejected("coredns_pair_archive_mismatch")
+    archive_sha = audit.file_hash(archive) if archive_tag else None
     code, sbom_path = audit.scanner(
         run,
         label + "-sbom",
@@ -76,8 +88,11 @@ def scan_image(
         raise Rejected("coredns_pair_sbom_changed")
     raw = bounded_read(report_path, audit.LIMIT)
     result = assess(sbom, decode(raw, audit.LIMIT), config, _REQUIRED, code)
+    if archive_tag and audit.file_hash(archive) != archive_sha:
+        raise Rejected("coredns_archive_changed_during_scan")
     return {
         **result,
+        **({"archive_sha256": archive_sha} if archive_tag else {}),
         "reference": reference,
         "sbom_sha256": sbom_hash,
         "report_sha256": digest(raw),

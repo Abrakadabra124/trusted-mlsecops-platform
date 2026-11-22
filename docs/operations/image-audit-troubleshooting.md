@@ -28,6 +28,14 @@
 
 В старом образе воспроизвелись три совпадения по двум advisory, `GO-2026-6604` и `GO-2026-6612`. Новый бинарник собран Go 1.27.3 с `golang.org/x/net v0.60.0`. Оставшиеся High в новом образе относятся к `golang.org/x/net` и `github.com/klauspost/compress`. Чтобы повторить измерение, перезапустить парный workflow на проверенном коммите, сверить два config ID, хеши базы, исходные результаты и поле `target_criticals_removed`. Даже при успешном подтверждении устранения этих Critical результат скана нового образа остаётся `fail`. [Проверка DNS в работающем кластере](../runbooks.md), [полный аудит](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44959047516).
 
+### Переключение на пересобранный CoreDNS в одноразовом kind
+
+Запустите workflow на ветке `qualify/r1-coredns-kind-candidate`. На новом hosted runner он собирает кандидат и сканирует его вместе с закреплённым upstream. SHA-256 исходного `candidate.tar` фиксируется перед Syft. В kind загружается тот же архив. Предыдущий [парный прогон 45024790177](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45024790177) подтвердил сборку, скан и запрос на UDP-порту 53. [Workflow](../../.github/workflows/coredns-dependency-candidate.yml).
+
+В журнале фаз `baseline`, `candidate` и `rollback` сверьте два разных Pod UID и container ID, config ID, хеш исполняемого файла и ответ `kubernetes.default.svc.cluster.local.` с адресом API Service. У кандидата обе реплики должны использовать локальный образ с `imagePullPolicy: Never`. При ошибке сценарий пытается вернуть исходный шаблон Deployment. Проверьте результат отката и отдельный шаг удаления кластера, его узла и томов. [Проверка реплик и откат](../../scripts/coredns_candidate_adoption.py).
+
+При успешной первой попытке артефакт `coredns-qualified-<run_id>-1` доступен один день. Он содержит `candidate.tar` и `receipt.json`. Получателю следует сверить SHA-256 обоих файлов с журналом producer, а размер, config ID, ревизию и SHA-256 рецепта с квитанцией. Для повторной выдачи нужен новый запуск с новым run ID. [Проверка перед выдачей](../../scripts/coredns_candidate_delivery.py).
+
 ## Проверка замены etcd в одноразовом кластере
 
 Проверку выполняет `etcd-candidate.yml` на GitHub-hosted runner. Workflow дважды собирает кандидат, сверяет SHA-256 трёх бинарных файлов и сканирует исходный и обновлённый образы на одной базе. Затем кластер стартует со штатным etcd. Проверка записывает контрольный ConfigMap и сохраняет его UID. [Workflow](../../.github/workflows/etcd-candidate.yml), [сценарий переключения](../../scripts/etcd_candidate_adoption.py).

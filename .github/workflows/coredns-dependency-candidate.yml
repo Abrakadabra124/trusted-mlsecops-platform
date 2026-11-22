@@ -1,21 +1,30 @@
-name: Qualify the CoreDNS 1.15.0 dependency rebuild
+name: Qualify the CoreDNS rebuild in disposable kind
 on:
   workflow_dispatch:
   push:
-    branches: [qualify/r1-coredns-dependency-candidate]
+    branches: [qualify/r1-coredns-kind-candidate]
     paths:
       - .github/workflows/coredns-dependency-candidate.yml
       - images/candidates/coredns/Dockerfile
       - scripts/image_coredns_dependency.py
       - scripts/image_coredns_dependency_qualification.py
       - scripts/image_coredns_pair.py
+      - scripts/kube_coredns_probe.py
+      - scripts/kube_coredns_probe_qualification.py
+      - scripts/image_coredns_pair_qualification.py
+      - scripts/coredns_candidate_adoption.py
+      - scripts/coredns_candidate_adoption_qualification.py
+      - scripts/coredns_candidate_delivery.py
+      - scripts/coredns_candidate_delivery_qualification.py
 permissions: {}
 
 jobs:
   qualify:
-    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/qualify/r1-coredns-dependency-candidate'
+    if: github.repository == 'Abrakadabra124/trusted-mlsecops-platform' && github.ref == 'refs/heads/qualify/r1-coredns-kind-candidate' && github.event.repository.visibility == 'public'
     runs-on: ubuntu-24.04
     timeout-minutes: 65
+    env:
+      QUALIFIED_RECIPE_SHA256: 1d7bde1eaa8639468a9e6ed2d7a71033e6536e7f0b1ae2915b58770ddeb61b3a
     defaults:
       run:
         shell: bash
@@ -32,17 +41,20 @@ jobs:
           mkdir -m 700 -p "$work/context"
           git cat-file blob "$GITHUB_SHA:images/candidates/coredns/Dockerfile" > "$work/context/Dockerfile"
           cd "$work/context"
-          echo '1d7bde1eaa8639468a9e6ed2d7a71033e6536e7f0b1ae2915b58770ddeb61b3a  Dockerfile' | sha256sum -c -
+          printf '%s  Dockerfile\n' "$QUALIFIED_RECIPE_SHA256" | sha256sum -c -
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: "0.12.23"
           python-version: "3.12.15"
           enable-cache: false
+          github-token: ""
       - name: Test the inventory, capability and finding gates
         run: |
           set -euo pipefail
           uv sync --locked --no-dev --no-build
-          uv run --locked --no-dev python -m unittest scripts.image_coredns_pair_qualification scripts.image_coredns_dependency_qualification
+          uv run --locked --no-dev python -m unittest scripts.image_coredns_pair_qualification \
+            scripts.image_coredns_dependency_qualification scripts.kube_coredns_probe_qualification \
+            scripts.coredns_candidate_adoption_qualification scripts.coredns_candidate_delivery_qualification
       - name: Build twice offline and export the agreed executable hash
         run: |
           set -euo pipefail
@@ -53,6 +65,7 @@ jobs:
             --load --tag local/coredns-dependency:qualification context
           docker image inspect -f '{{.Id}}' local/coredns-dependency:qualification > candidate.id
       - name: Compare the original findings and inspect the archived executables
+        id: paired
         run: uv run --locked --no-dev python -m scripts.image_coredns_dependency
       - name: Query the candidate on UDP port 53 in its own network namespace
         if: success()
@@ -83,3 +96,46 @@ jobs:
             sleep 1
           done
           exit 1
+
+      - name: Prepare the project workspace and pinned kind tools
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          .venv/bin/python -m mlsecops bootstrap
+          .venv/bin/python scripts/install_ci_tools.py
+          echo "$PWD/.runtime/bin" >> "$GITHUB_PATH"
+      - name: Verify both running CoreDNS replicas, switch and roll back
+        id: adoption
+        timeout-minutes: 22
+        env:
+          QUALIFIED_CONFIG: ${{ steps.paired.outputs.config }}
+          QUALIFIED_ELF: ${{ steps.paired.outputs.elf }}
+          QUALIFIED_ARCHIVE_SHA256: ${{ steps.paired.outputs.archive_sha256 }}
+        run: .venv/bin/python -m scripts.coredns_candidate_adoption run
+      - name: Delete the owned disposable cluster and verify absence
+        id: cleanup
+        if: always() && steps.adoption.outcome != 'skipped' && steps.adoption.outcome != ''
+        timeout-minutes: 3
+        run: .venv/bin/python -m scripts.coredns_candidate_adoption cleanup
+      - name: Bind the scanned archive to the verified running CoreDNS config
+        id: delivery
+        if: >-
+          success() && github.run_attempt == '1' && steps.paired.outcome == 'success' &&
+          steps.adoption.outcome == 'success' && steps.cleanup.outcome == 'success'
+        env:
+          QUALIFIED_ARCHIVE_SHA256: ${{ steps.paired.outputs.archive_sha256 }}
+          QUALIFIED_CONFIG: ${{ steps.paired.outputs.config }}
+          LIVE_CONFIG: ${{ steps.adoption.outputs.live_config }}
+        run: .venv/bin/python -m scripts.coredns_candidate_delivery
+      - name: Upload the scanned CoreDNS archive and its receipt
+        if: success() && steps.delivery.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: coredns-qualified-${{ github.run_id }}-1
+          path: |
+            ${{ runner.temp }}/coredns-dependency/candidate.tar
+            ${{ runner.temp }}/coredns-dependency/receipt.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: false

@@ -118,6 +118,16 @@ class CoreDNSProbeTests(unittest.TestCase):
             with self.subTest(status=status), self.assertRaises(Rejected):
                 probe.verify()
 
+    def test_candidate_requires_never_on_template_and_each_pod(self):
+        tag = "localhost/coredns-candidate:test"
+        containers = [self.spec, *(p["spec"]["containers"][0] for p in self.pods)]
+        for container in containers:
+            container.update(image=tag, imagePullPolicy="Never")
+        self.assertEqual(len(probe.ready_replicas(Path(".runtime"), tag, "Never")), 2)
+        for container in containers:
+            with patch.dict(container, imagePullPolicy="IfNotPresent"), self.assertRaises(Rejected):
+                probe.ready_replicas(Path(".runtime"), tag, "Never")
+
     def test_refuses_foreign_dns_selector_and_missing_node_namespace(self):
         self.selector = {"app": "other"}
         with self.assertRaisesRegex(Rejected, "service_selector"):

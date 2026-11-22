@@ -146,6 +146,21 @@ class PairTests(unittest.TestCase):
                 )
                 for key, suffix in (("sbom_sha256", "sbom"), ("report_sha256", "scan")):
                     self.assertEqual(result[key], pair.audit.file_hash(run / f"new-{suffix}.json"))
+                archive = run / "new.tar"
+                archive.write_bytes(b"original archive before Syft")
+                tagged = {"archive_tag": "localhost/coredns-candidate:test"}
+                bound = pair.scan_image(*args, **tagged)
+                self.assertEqual(bound["archive_sha256"], pair.audit.file_hash(archive))
+
+                def change_during_scan(*arguments):
+                    archive.write_bytes(b"changed during scanning")
+                    return scanner(*arguments)
+
+                with (
+                    patch.object(pair.audit, "scanner", side_effect=change_during_scan),
+                    self.assertRaisesRegex(Rejected, "archive_changed_during_scan"),
+                ):
+                    pair.scan_image(*args, **tagged)
                 report["source"]["target"]["imageID"] = pair.OLD_CONFIG
                 with self.assertRaises(Rejected):
                     pair.scan_image(*args)

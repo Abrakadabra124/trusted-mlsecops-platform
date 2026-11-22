@@ -39,6 +39,10 @@ BASELINE = {
 }
 
 
+def candidate_tag(config):
+    return "localhost/coredns-candidate:" + config.removeprefix("sha256:")
+
+
 def inventory_matches(observation, config):
     """Reverse just the ten independently fixed versions, then check all 202 original rows."""
     if config == COREDNS_CONFIG or observation["image_id"] != config:
@@ -160,7 +164,15 @@ def compare(run):
         ("source", COREDNS_REFERENCE, source, SOURCE_ELF, coredns_inventory_matches),
         ("candidate", config, candidate, checksum.split()[0], inventory_matches),
     ):
-        report = scan_image(run, cache, label, ref, details["Id"], inventory_matches=match)
+        report = scan_image(
+            run,
+            cache,
+            label,
+            ref,
+            details["Id"],
+            inventory_matches=match,
+            archive_tag=candidate_tag(config) if label == "candidate" else None,
+        )
         print(json.dumps({label: report}, sort_keys=True), flush=True)
         elf = archive_readback(run / f"{label}.tar", details, expected)
         if audit.snapshot(cache) != before:
@@ -177,10 +189,18 @@ def compare(run):
             ),
             flush=True,
         )
-        scans[label] = report
+        scans[label] = {**report, "elf_sha256": elf}
     if scans["source"]["database"] != scans["candidate"]["database"]:
         raise Rejected("coredns_db_descriptor_mismatch")
-    return accepted(scans["source"]["findings"], scans["candidate"])
+    passed = accepted(scans["source"]["findings"], scans["candidate"])
+    if passed and (output := os.environ.get("GITHUB_OUTPUT")):
+        candidate_scan = scans["candidate"]
+        with Path(output).open("a", encoding="ascii") as stream:
+            print(
+                f"config={config}\nelf={candidate_scan['elf_sha256']}\narchive_sha256={candidate_scan['archive_sha256']}",
+                file=stream,
+            )
+    return passed
 
 
 if __name__ == "__main__":
