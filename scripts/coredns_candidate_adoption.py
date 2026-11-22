@@ -11,7 +11,7 @@ from pathlib import Path
 from mlsecops import cluster
 from mlsecops.contracts import Rejected
 from mlsecops.inventory import command
-from mlsecops.kube_worker import image_manifest
+from mlsecops.kube_worker import ImageContentNotFound, image_config, image_document
 from scripts import kube_coredns_probe as probe
 from scripts.ci_campaign_producer import run_owner
 from scripts.ci_consumer_recovery import Recovery
@@ -49,13 +49,12 @@ def replica(pod, status, image, config, manifest, elf):
     ):
         raise Rejected("coredns_running_container_mismatch")
     if image == probe.COREDNS_SPEC_IMAGE:
-        probe.verify_upstream(status)
-    # The upstream spec is already immutable, even when CRI echoes it verbatim.
-    local_tag = image if image != probe.COREDNS_SPEC_IMAGE else None
-    verify_candidate_ref(live, local_tag, manifest, config)
-    pod_ref = status["imageID"].removeprefix("docker-pullable://")
-    if pod_ref != live["imageRef"]:
-        verify_candidate_ref({**live, "imageRef": pod_ref}, local_tag, manifest, config)
+        probe.verify_upstream(status, live)
+    else:
+        verify_candidate_ref(live, image, manifest, config)
+        pod_ref = status["imageID"].removeprefix("docker-pullable://")
+        if pod_ref != live["imageRef"]:
+            verify_candidate_ref({**live, "imageRef": pod_ref}, image, manifest, config)
     exe = f"/proc/{pid}/exe"
     if command(["docker", "exec", cluster.NODE, "sha256sum", exe]) != f"{elf}  {exe}":
         raise Rejected("coredns_running_elf_mismatch")
@@ -95,6 +94,17 @@ def verify_phase(phase, image, config, manifest, elf):
     containers = {replica(pod, status, image, config, manifest, elf) for pod, status in pods}
     if len(containers) != 2:
         raise Rejected("coredns_expected_two_containers")
+    if image == probe.COREDNS_SPEC_IMAGE:
+        try:
+            descriptor = image_document(manifest)
+        except ImageContentNotFound as missing:
+            # Both live containers already proved the pinned repoDigest and config via CRI.
+            print(f"{phase} upstream_manifest_absent={missing} verifying_config_blob", flush=True)
+        else:
+            if descriptor.get("config", {}).get("digest") != config:
+                raise Rejected("coredns_upstream_config_mismatch")
+        if image_config(config) != config:
+            raise Rejected("coredns_upstream_config_mismatch")
     wait_backends(uids)
     print(
         f"{phase} ready=2 image={image} manifest={manifest} config={config} {probe.service_answer(STATE)}",
@@ -123,10 +133,7 @@ def switch(uid, before, after):
 
 
 def exercise(tag, config, manifest, elf):
-    upstream_manifest, descriptor = image_manifest(probe.COREDNS_MANIFEST)
-    if descriptor.get("config", {}).get("digest") != probe.COREDNS_CONFIG:
-        raise Rejected("coredns_upstream_config_mismatch")
-    upstream = (probe.COREDNS_SPEC_IMAGE, probe.COREDNS_CONFIG, upstream_manifest, SOURCE_ELF)
+    upstream = (probe.COREDNS_SPEC_IMAGE, probe.COREDNS_CONFIG, probe.COREDNS_MANIFEST, SOURCE_ELF)
     verify_phase("baseline", *upstream)
     deployment = probe.get(STATE, "deployment/coredns")
     uid = deployment["metadata"]["uid"]

@@ -116,6 +116,10 @@ def wait_job(state, namespace, name, timeout, *, observe=None):
     raise Rejected("kubernetes_job_wait_deadline")
 
 
+class ImageContentNotFound(Rejected):
+    """containerd explicitly reported that the requested content digest is absent."""
+
+
 def image_document(identifier):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", identifier):
         raise Rejected("invalid_image_descriptor")
@@ -125,8 +129,18 @@ def image_document(identifier):
         timeout=30,
         check=False,
     )
-    if result.returncode or digest(result.stdout) != identifier.removeprefix("sha256:"):
-        raise Rejected("image_descriptor_digest_mismatch")
+    if result.returncode:
+        reason = f"image_descriptor_read_failed:rc={result.returncode} digest={identifier}"
+        missing = f"{identifier}: not found".encode()
+        if not result.stdout and any(
+            prefix + missing in result.stderr.lower()
+            for prefix in (b"content ", b"content digest ")
+        ):
+            raise ImageContentNotFound(reason)
+        raise Rejected(reason)
+    actual = "sha256:" + digest(result.stdout)
+    if actual != identifier:
+        raise Rejected(f"image_descriptor_digest_mismatch:expected={identifier} actual={actual}")
     return decode(result.stdout, 1024 * 1024)
 
 

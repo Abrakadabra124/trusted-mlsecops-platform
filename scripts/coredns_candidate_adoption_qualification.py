@@ -10,6 +10,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
+from mlsecops import kube_worker
 from mlsecops.contracts import Rejected, canonical, digest
 from scripts import coredns_candidate_adoption as adoption
 
@@ -50,13 +51,6 @@ class CandidateRollout(unittest.TestCase):
                 return_value=(self.manifest, {"config": {"digest": self.config}}),
             )
         )
-        self.enterContext(
-            patch.object(
-                adoption,
-                "image_manifest",
-                return_value=(self.manifest, {"config": {"digest": adoption.probe.COREDNS_CONFIG}}),
-            )
-        )
 
     def replica(self):
         return adoption.replica(
@@ -69,6 +63,104 @@ class CandidateRollout(unittest.TestCase):
             ["docker", "exec", adoption.cluster.NODE, "sha256sum", "/proc/123/exe"]
         )
         self.assertEqual(self.inspect.call_count, 2)
+
+    def test_upstream_readback_follows_two_ready_replicas_and_rejects_wrong_content(self):
+        config_bytes = canonical(
+            dict(os="linux", architecture="amd64", rootfs={"diff_ids": ["layer"]})
+        )
+        config = "sha256:" + digest(config_bytes)
+        manifest_bytes = canonical({"config": {"digest": config}})
+        manifest = "sha256:" + digest(manifest_bytes)
+        image = "registry.k8s.io/coredns/coredns:v1.15.0@" + manifest
+        reference = image.split(":v1.15.0")[0] + "@" + manifest
+        probe = adoption.probe
+        patches = dict(
+            COREDNS_CONFIG=config,
+            COREDNS_MANIFEST=manifest,
+            COREDNS_SPEC_IMAGE=image,
+            COREDNS_REFERENCE=reference,
+        )
+        self.enterContext(patch.multiple(probe, **patches))
+        pods = []
+        by_id = {}
+        for i in (1, 2):
+            pod, status, live = copy.deepcopy((self.pod, self.status, self.live))
+            uid, cid = f"pod-{i}", str(i) * 64
+            pod["metadata"]["uid"] = uid
+            status.update(imageID=reference, containerID="containerd://" + cid)
+            live["status"].update(
+                id=cid, labels={"io.kubernetes.pod.uid": uid}, imageRef=reference, imageId=config
+            )
+            pods.append((pod, status))
+            by_id[cid] = live
+        self.inspect.side_effect = lambda op, cid: by_id[cid]
+        self.enterContext(
+            patch.object(
+                probe,
+                "command",
+                return_value=json.dumps({"status": {"id": config, "repoDigests": [reference]}}),
+            )
+        )
+        self.enterContext(patch.object(probe, "ready_replicas", return_value=pods))
+        self.enterContext(patch.object(adoption, "wait_backends"))
+        dns = self.enterContext(patch.object(probe, "service_answer", return_value="ok"))
+        # The node may retain the pinned CRI association and config but lack the registry blob.
+        missing = CompletedProcess(
+            [], 1, b"", f"ctr: content digest {manifest}: not found".encode()
+        )
+        for first, expected in (
+            (CompletedProcess([], 0, manifest_bytes, b""), None),
+            (missing, None),
+            (CompletedProcess([], 1, b"", b"permission denied"), "read_failed"),
+            (CompletedProcess([], 1, b"truncated", missing.stderr), "read_failed"),
+            (CompletedProcess([], 0, b"wrong bytes", b""), "digest_mismatch"),
+        ):
+            self.inspect.reset_mock()
+            dns.reset_mock()
+
+            def read(args, **kwargs):
+                self.assertEqual(self.inspect.call_count, 4)
+                return (
+                    first if args[-1] == manifest else CompletedProcess(args, 0, config_bytes, b"")
+                )
+
+            with (
+                self.subTest(expected=expected),
+                patch.object(kube_worker.subprocess, "run", side_effect=read) as ctr,
+            ):
+                if expected:
+                    with self.assertRaisesRegex(Rejected, expected):
+                        adoption.verify_phase("baseline", image, config, manifest, self.elf)
+                    dns.assert_not_called()
+                else:
+                    adoption.verify_phase("rollback", image, config, manifest, self.elf)
+                    dns.assert_called_once()
+                    self.assertEqual(
+                        [c.args[0][-1] for c in ctr.call_args_list], [manifest, config]
+                    )
+        with (
+            patch.dict(by_id["2" * 64]["status"], imageRef=self.manifest),
+            self.assertRaises(Rejected),
+        ):
+            adoption.verify_phase("baseline", image, config, manifest, self.elf)
+        with (
+            patch.object(
+                probe,
+                "command",
+                return_value=json.dumps({"status": {"id": config, "repoDigests": []}}),
+            ),
+            self.assertRaisesRegex(Rejected, "runtime_identity"),
+        ):
+            adoption.verify_phase("baseline", image, config, manifest, self.elf)
+        with (
+            patch.object(
+                kube_worker.subprocess,
+                "run",
+                side_effect=[missing, CompletedProcess([], 0, b"wrong config", b"")],
+            ),
+            self.assertRaisesRegex(Rejected, "digest_mismatch"),
+        ):
+            adoption.verify_phase("rollback", image, config, manifest, self.elf)
 
     def test_only_original_archive_loads_and_only_verified_rollout_exports_config(self):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -231,6 +323,9 @@ class CandidateRollout(unittest.TestCase):
             ),
             patch.object(adoption.cluster, "kubectl", side_effect=apply),
             patch.object(adoption, "verify_phase", side_effect=verify) as phases,
+            patch.object(
+                adoption, "image_document", side_effect=AssertionError("premature upstream read")
+            ),
             self.assertRaisesRegex(Rejected, "controlled_candidate_failure"),
         ):
             adoption.exercise(self.tag, self.config, self.manifest, self.elf)

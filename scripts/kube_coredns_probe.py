@@ -71,10 +71,18 @@ def ready_replicas(state, image, policy=None):
     return result
 
 
-def verify_upstream(status):
+def verify_upstream(status, live=None):
     image_id = status["imageID"].removeprefix("docker-pullable://")
-    if image_id not in (COREDNS_MANIFEST, COREDNS_CONFIG, COREDNS_REFERENCE, COREDNS_SPEC_IMAGE):
+    pinned = (COREDNS_MANIFEST, COREDNS_CONFIG, COREDNS_REFERENCE, COREDNS_SPEC_IMAGE)
+    if image_id not in pinned:
         raise Rejected("coredns_image_id_mismatch")
+    if live is not None:
+        ref = live["imageRef"]
+        if ref not in pinned and ref not in (COREDNS_CONFIG[7:], COREDNS_MANIFEST[7:]):
+            raise Rejected("coredns_running_ref_mismatch")
+        if live.get("imageId") not in (None, "", COREDNS_CONFIG):
+            raise Rejected("coredns_running_config_mismatch")
+        image_id = COREDNS_CONFIG
     cri = decode(command(["docker", "exec", NODE, "crictl", "inspecti", image_id]).encode())[
         "status"
     ]
