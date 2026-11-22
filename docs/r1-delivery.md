@@ -113,6 +113,8 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 ## Обязательные блокеры R1
 
+На чистом `8077024` кластер прошёл 79 проверок доверия. Текущий CP2 блокирует выпуск по результатам полного аудита. В отчёте 398 уникальных идентификаторов, покрыты 12 из 14. В сквозном сценарии корректный отказ и восстановление 1 000 строк подтверждены на одном кандидате. Актуальные измерения и команды повтора сохранены в [статусе проекта](../STATUS.md) и [ранбуке](operations/image-audit-troubleshooting.md).
+
 | ID | Что осталось | Критерии / доказательство закрытия |
 | --- | --- | --- |
 | R1-B01 | M01 принят (10 cases); native `51d0a77` и финальный clean checkout `2f8072e` подтвердили единый same-candidate refusal/inference/recovery path. Предыдущие failures сохранены. Это qualification, не полная R1 acceptance; остальные критерии CP5 остаются | M01/T01-T02: clean environment, два bootstrap без потери данных/ключей, baseline pin, tools/images/locks и P0 inventory, incompatible/missing prerequisites rejected |
