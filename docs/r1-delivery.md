@@ -126,6 +126,8 @@ Release Risk Advisor - воспроизводимый CPU-reference продук
 
 Исторические intermittent M07 connection rejection и M14 shutdown failures `982b7ad`/`521e6af` остаются reliability debt в R1-B08: успешный retry не устанавливает причину. До финальной приёмки требуется диагностика либо явная согласованная политика надёжности, а не стирание первого отказа.
 
+По M14 отдельно зафиксированы границы атрибуции, регрессия проверки штатной остановки и недостающее native evidence. [Разбор двух отказов и контракт остановки](operations/load-profile.md#r1-b08-подтверждение-штатной-остановки-m14).
+
 CP1 gates приняты в native `ab00a4e`: M01/M04/M05/M20/M21 pass. Linux targeted tests: 31 foundation и 18 isolation, новые modules 100% statements/branches. Основной review и проверка конкретных fixes закончены. Первая матрица `61c6849`, M05 handoff defect/RED и отдельный storage refusal сохранены в [STATUS](../STATUS.md); targeted success не превращает её в полностью зелёную. [Foundation runbook](operations/artifact-intake-troubleshooting.md#r1-b01-неполная-identity-при-повторном-bootstrap), [M04/M05 runbook](kubernetes-lab.md#cp1-m04m05-и-отказ-training-при-настоящем-inference). R1-B03 закрыт; R1-B01 остаётся открыт в части общего продукта, зависящей от следующих checkpoints.
 
 ## Конечная последовательность и checkpoints
