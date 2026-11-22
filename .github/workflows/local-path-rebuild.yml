@@ -57,7 +57,12 @@ jobs:
           nodes=$(docker ps -aq --filter label=io.x-k8s.kind.cluster=trusted-mlsecops)
           test -z "$nodes"
       - name: Bootstrap the disposable cluster from the checked out configuration
-        run: uv run --locked python -m mlsecops.cluster bootstrap
+        run: |
+          uv run --locked python - <<'PY'
+          from pathlib import Path
+          from mlsecops.cluster import bootstrap
+          bootstrap(Path(".runtime"), bundled_provisioner_fixture=True)
+          PY
       - name: Provision a test volume, remount, delete and restore the stock controller
         id: live
         run: |

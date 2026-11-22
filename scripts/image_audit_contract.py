@@ -3,6 +3,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from mlsecops import local_path_pin
 from mlsecops.contracts import Rejected, canonical, digest
 
 SYFT_VERSION = "1.54.1"
@@ -104,6 +105,37 @@ LOCAL_PATH_CONFIG = "sha256:c82008e2cd0186ef96bfd05d6b49d3286768fae5bd7a961f70bd
 # Independent binary build info + dpkg rows, with registry layers/config verified.
 # Provenance and all 61 rows: image_system_inventory_fixture.py.
 LOCAL_PATH_PACKAGES_SHA256 = "552dfdc00d5981e6bc68ddae319e8d9c4df0aef7d0cf969cc40701f1d369ee91"
+PUBLISHED_LOCAL_PATH_PROFILE = "local-path-provisioner-published"
+# Run 45048228181, proposal.packages_sha256 = 89714093ff769e817e6c6d7a4c2f47a2bd335b2f8802c573adbe37f63298287b.
+# Full observe_packages envelope, including config, distro, counts and all 59 sorted rows.
+_PUBLISHED_LOCAL_PATH_INVENTORY = "99240cc10cd88abc28453670623c40c60f0abdc51433b3c2e4ecb391f49bde4d"
+
+
+def published_local_path_target(reference, config):
+    """Reserve this repository and config even when the observed binding is incorrect."""
+    return config == local_path_pin.PUBLISHED_CONFIG or (
+        isinstance(reference, str)
+        and reference.partition("@")[0].partition(":")[0] == local_path_pin.REPOSITORY
+    )
+
+
+def published_local_path_identity(reference, config):
+    return (
+        config == local_path_pin.PUBLISHED_CONFIG
+        and isinstance(reference, str)
+        and reference == local_path_pin.PUBLISHED_REFERENCE
+        and reference.startswith(local_path_pin.REPOSITORY + "@")
+        and re.fullmatch(r"sha256:(?!0{64}$)[a-f0-9]{64}", reference.partition("@")[2]) is not None
+        and reference.partition("@")[2] != config
+    )
+
+
+def published_local_path_matches(observation, reference):
+    return (
+        isinstance(observation, dict)
+        and published_local_path_identity(reference, observation.get("image_id"))
+        and exact_observation_matches(observation, 59, _PUBLISHED_LOCAL_PATH_INVENTORY)
+    )
 
 
 def local_path_inventory_matches(observation):
