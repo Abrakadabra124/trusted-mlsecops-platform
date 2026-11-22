@@ -75,14 +75,19 @@ def coredns_inventory_matches(observation, reference):
     spec = _COREDNS_INVENTORIES.get(observation["image_id"])
     if spec is None or reference != spec[0]:
         return False
+    return exact_observation_matches(observation, spec[1], spec[2])
+
+
+def exact_observation_matches(observation, count, checksum):
+    """Match the entire normalized observation, disregarding only package order."""
     packages = observation.get("packages")
-    if type(packages) is not list or len(packages) != spec[1]:
+    if type(packages) is not list or len(packages) != count:
         return False
     if any(type(p) is not dict or type(p.get("paths")) is not list for p in packages):
         return False
     try:
         ordered = {**observation, "packages": sorted(packages, key=canonical)}
-        return digest(canonical(ordered)) == spec[2]
+        return digest(canonical(ordered)) == checksum
     except (Rejected, RecursionError):
         return False
 
