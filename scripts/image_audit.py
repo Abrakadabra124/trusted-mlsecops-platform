@@ -26,9 +26,7 @@ from mlsecops.kube_worker import image_document
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import (
     image_candidates,
-    image_cilium_operator_inventory,
     image_etcd_candidate,
-    image_etcd_inventory,
     image_kubernetes_aliases,
     image_kubernetes_export,
     image_kubernetes_inventory,
@@ -688,7 +686,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
         if target["config_id"] in image_kubernetes_inventory.INVENTORIES
     }
     originals = {}
-    registries = {r.CONFIG: r for r in (image_cilium_operator_inventory, image_etcd_inventory)}
+    registries = {r.CONFIG: r for r in image_kubernetes_scans.SYSTEM_REGISTRIES}
     supplements = {
         target["name"]: (target, registries[target["config_id"]])
         for target in (observed or {}).get("targets", [])
@@ -756,11 +754,8 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                     )
                 except (Rejected, OSError):
                     key = registry.PROFILE.replace("-", "_") + "_error"
-                    reason = (
-                        "image_audit_etcd_join_incomplete"
-                        if registry is image_etcd_inventory
-                        else "image_audit_cilium_operator_join_incomplete"
-                    )
+                    name_prefix = registry.PROFILE.removesuffix("-supplemental").replace("-", "_")
+                    reason = f"image_audit_{name_prefix}_join_incomplete"
                     report[key] = component["reason"] = reason
                     component["sbom_validated"] = False
                 else:
@@ -848,11 +843,9 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
     report["status"] = (
         "fail" if "fail" in statuses else "inconclusive" if "inconclusive" in statuses else "pass"
     )
-    if not {
-        "kubernetes_supplemental_error",
-        "cilium_operator_supplemental_error",
-        "etcd_supplemental_error",
-    }.intersection(report) and all(
+    supplemental_errors = {r.PROFILE.replace("-", "_") + "_error" for r in registries.values()}
+    supplemental_errors.add("kubernetes_supplemental_error")
+    if not supplemental_errors.intersection(report) and all(
         component["scan_executed"] for component in report["components"]
     ):
         report["vulnerability_count"] = len(

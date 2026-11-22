@@ -18,7 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, safe_child
-from scripts import image_etcd_inventory, image_kubernetes_export
+from scripts import (
+    image_cilium_operator_inventory,
+    image_etcd_inventory,
+    image_kubernetes_export,
+    image_patched_etcd_inventory,
+)
 from scripts import image_go_supplemental_contract as single
 from scripts import image_kubernetes_aliases as aliases
 from scripts.image_audit_contract import SEVERITIES, assess, observe_packages
@@ -26,6 +31,11 @@ from scripts.image_audit_contract import SEVERITIES, assess, observe_packages
 LIMIT = 64 * 1024**2
 SUFFIXES = (".json", ".cdx.json", ".log", ".cid")
 _GOPS = (("github.com/google/gops", "v0.3.29"),)
+SYSTEM_REGISTRIES = (
+    image_cilium_operator_inventory,
+    image_etcd_inventory,
+    image_patched_etcd_inventory,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,12 @@ _ETCD = _Profile(
     "etcd_supplemental",
     "image_audit_runtime_application_coverage_unapproved",
 )
+_PATCHED_ETCD = _Profile(
+    "etcd-patched-supplemental",
+    "etcd-patched-modules",
+    "etcd_patched_supplemental",
+    "image_audit_runtime_application_coverage_unapproved",
+)
 
 
 def _profile(registry):
@@ -61,6 +77,8 @@ def _profile(registry):
         return _KUBERNETES
     if registry is image_etcd_inventory:
         return _ETCD
+    if registry is image_patched_etcd_inventory:
+        return _PATCHED_ETCD
     reference = getattr(registry, "REFERENCE", None)
     if (
         getattr(registry, "PROFILE", None) == _CILIUM.name

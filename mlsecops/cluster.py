@@ -251,7 +251,7 @@ def validate_cluster(state):
     return marker
 
 
-def bootstrap(state):
+def bootstrap(state, *, etcd_qualification=False):
     state = Path(state).resolve()
     workspace = read_json(state / "workspace.json")
     for tool in ("kind", "helm", "kubectl", "docker"):
@@ -282,7 +282,11 @@ def bootstrap(state):
                 "--name",
                 NAME,
                 "--config",
-                str(ROOT / "infra/kind.yaml"),
+                str(
+                    ROOT
+                    / "infra"
+                    / ("kind-etcd-3.6.17-baseline.yaml" if etcd_qualification else "kind.yaml")
+                ),
                 "--kubeconfig",
                 str(state / "kubeconfig"),
                 "--retain",

@@ -268,7 +268,7 @@ def main(action):
     witness = Recovery.begin(STATE, owner, revision)
     witness.arm_cluster()
     try:
-        cluster.bootstrap(STATE)
+        cluster.bootstrap(STATE, etcd_qualification=True)
     finally:
         witness.observe_cluster(STATE)
     cluster.validate_cluster(STATE)

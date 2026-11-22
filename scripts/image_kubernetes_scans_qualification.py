@@ -14,6 +14,8 @@ from scripts import image_audit as audit
 from scripts import image_etcd_inventory as etcd
 from scripts import image_etcd_inventory_fixture as etcd_fixture
 from scripts import image_kubernetes_scans as scans
+from scripts import image_patched_etcd_inventory as patched_etcd
+from scripts import image_patched_etcd_inventory_qualification as patched_fixture
 from scripts.image_audit_qualification import fixtures as image_fixture
 from scripts.image_go_supplemental_qualification import fixture as module_fixture
 
@@ -161,6 +163,48 @@ class SupplementalScanContracts(unittest.TestCase):
         self.assertFalse(scans.coverage_valid(result, changed, registry=etcd))
         result["findings"].clear()
         self.assertFalse(scans.coverage_valid(result, self.target, registry=etcd))
+
+    def test_patched_etcd_joins_only_its_own_receipts_and_preserves_original_finding(self):
+        config = patched_etcd.CONFIG
+        reference = patched_etcd.REFERENCE
+        sbom = patched_fixture.sbom(config)
+        report = image_fixture()[1]
+        report["descriptor"] = self.module_scan["report"]["descriptor"]
+        report["source"]["target"]["imageID"] = config
+        report["distro"]["version"] = "13"
+        package = next(p for p in sbom["artifacts"] if p["type"] == "deb")
+        report["matches"].append(
+            {
+                "artifact": {k: package[k] for k in ("id", "type", "name", "version")},
+                "vulnerability": {"id": "CVE-2026-12345", "severity": "Medium"},
+            }
+        )
+        self.sbom = self.root / "patched-sbom.json"
+        self.report = self.root / "patched-grype.json"
+        self.sbom.write_bytes(canonical(sbom))
+        self.report.write_bytes(canonical(report))
+        self.component = {
+            **scans.assess(sbom, report, config, set(), 0, diagnostic_only=True),
+            "image_config_id": config,
+            "package_observation": scans.observe_packages(sbom, config),
+            "sbom_digest": digest(canonical(sbom)),
+            "report_digest": digest(canonical(report)),
+            "observed_reference": reference,
+            "reason": CILIUM_REASON,
+        }
+        self.target = {"config_id": config, "reference": reference}
+        self.created = self.batch(registry=patched_etcd)
+        self.assertEqual(self.created.directory.name, "etcd-patched-modules")
+        with self.assertRaises(Rejected):
+            scans.read_batch(self.created, self.db, registry=etcd)
+        result = self.joined(registry=patched_etcd)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["severity_counts"]["Medium"], 1)
+        self.assertEqual(result["findings"], self.component["findings"])
+        self.assertTrue(scans.coverage_valid(result, self.target, registry=patched_etcd))
+        self.assertFalse(scans.coverage_valid(result, self.target, registry=etcd))
+        upstream = {"config_id": etcd.CONFIG, "reference": etcd.REFERENCE}
+        self.assertFalse(scans.coverage_valid(result, upstream, registry=patched_etcd))
 
     def test_cilium_fake_scanner_reporting_a_different_release_is_rejected(self):
         def wrong_release(run, name, image, arguments, mounts):

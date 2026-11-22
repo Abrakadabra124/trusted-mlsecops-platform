@@ -9,6 +9,11 @@ from unittest.mock import patch, sentinel
 
 from mlsecops.contracts import Rejected, bounded_read, canonical, decode, digest, read_json
 from scripts import image_audit as audit
+from scripts import (
+    image_cilium_operator_inventory,
+    image_etcd_inventory,
+    image_patched_etcd_inventory,
+)
 from scripts.image_audit_qualification import fixtures
 from scripts.image_kubernetes_native import targets
 
@@ -42,10 +47,12 @@ class KubernetesAuditIntegration(unittest.TestCase):
                 if fault == "upstream-local":
                     row["reference"] = known["reference"]
         supplement_registry = {
-            "operator-join": audit.image_cilium_operator_inventory,
-            "operator-io": audit.image_cilium_operator_inventory,
-            "etcd-join": audit.image_etcd_inventory,
-            "etcd-io": audit.image_etcd_inventory,
+            "operator-join": image_cilium_operator_inventory,
+            "operator-io": image_cilium_operator_inventory,
+            "etcd-join": image_etcd_inventory,
+            "etcd-io": image_etcd_inventory,
+            "patched-join": image_patched_etcd_inventory,
+            "patched-io": image_patched_etcd_inventory,
         }.get(fault)
         if supplement_registry:
             observed[5].update(
@@ -254,7 +261,14 @@ class KubernetesAuditIntegration(unittest.TestCase):
         self.assertNotIn("kubernetes_supplemental_error", report)
 
     def test_system_supplement_keeps_the_original_findings_and_isolates_io_failure(self):
-        for fault in ("operator-join", "operator-io", "etcd-join", "etcd-io"):
+        for fault in (
+            "operator-join",
+            "operator-io",
+            "etcd-join",
+            "etcd-io",
+            "patched-join",
+            "patched-io",
+        ):
             with self.subTest(fault=fault):
                 report, calls = self.audit(fault)
                 component = next(
@@ -263,11 +277,11 @@ class KubernetesAuditIntegration(unittest.TestCase):
                 self.assertEqual(calls.count("supplement"), 1)
                 self.assertEqual(component["severity_counts"]["High"], 1)
                 self.assertEqual(component["status"], "fail")
-                key = (
-                    "etcd_supplemental"
-                    if fault.startswith("etcd")
-                    else "cilium_operator_supplemental"
-                )
+                key = {
+                    "etcd": "etcd_supplemental",
+                    "operator": "cilium_operator_supplemental",
+                    "patched": "etcd_patched_supplemental",
+                }[fault.split("-")[0]]
                 if fault.endswith("-io"):
                     self.assertFalse(component["sbom_validated"])
                     self.assertEqual(component["reason"], report[key + "_error"])

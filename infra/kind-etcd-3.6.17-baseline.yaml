@@ -1,0 +1,33 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "127.0.0.1"
+  disableDefaultCNI: true
+  podSubnet: "10.78.0.0/16"
+  serviceSubnet: "10.79.0.0/16"
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        etcd:
+          local:
+            imageTag: "3.6.17-0@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
+        dns:
+          imageTag: "v1.15.0@sha256:3429e3bbffb1e839470c4a3541d4d78aca84a1394c75a539d0200c58c63196ac"
+      - |
+        kind: KubeletConfiguration
+        podPidsLimit: 64
+        containerLogMaxSize: "20Mi"
+        containerLogMaxFiles: 2
+    kubeadmConfigPatchesJSON6902:
+      - group: kubeadm.k8s.io
+        version: v1beta4
+        kind: InitConfiguration
+        patch: |
+          - op: add
+            path: /nodeRegistration/kubeletExtraArgs/-
+            value:
+              name: housekeeping-interval
+              value: "5s"
