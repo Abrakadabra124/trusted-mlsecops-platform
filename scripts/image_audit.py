@@ -39,8 +39,9 @@ from scripts.image_archive import identity
 from scripts.image_audit_contract import (
     GO_CONTROL_ADVISORIES,
     GO_CONTROLS,
+    PUBLISHED_COREDNS_PROFILE,
     assess,
-    coredns_inventory_matches,
+    coredns_coverage_profile,
     database,
     detection_control,
     go_detection_control,
@@ -397,6 +398,7 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
             "uvicorn",
         },
     }
+    required["debian", PUBLISHED_COREDNS_PROFILE] = required["debian", "coredns"]
     targets = [
         ("worker", "worker", "trusted-mlsecops:dev", "wolfi"),
         ("storage", "storage", STORAGE_IMAGE, "wolfi"),
@@ -532,10 +534,9 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 )
                 if version_diagnostic is not None:
                     component["application_inventory"] = version_diagnostic
-                if observed is not None and coredns_inventory_matches(
-                    component["package_observation"], reference
-                ):
-                    component["coverage_profile"] = "coredns"
+                dns_profile = coredns_coverage_profile(component["package_observation"], reference)
+                if observed is not None and dns_profile:
+                    component["coverage_profile"] = dns_profile
                 elif observed is not None and local_path_inventory_matches(
                     component["package_observation"]
                 ):

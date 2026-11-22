@@ -6,13 +6,22 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlsecops.contracts import Rejected, canonical, read_json, write_json
-from scripts import image_audit, image_candidates, image_node_candidate, image_scope, tracking_spike
+from scripts import (
+    image_audit,
+    image_audit_contract,
+    image_candidates,
+    image_node_candidate,
+    image_scope,
+    tracking_spike,
+)
 from scripts.image_audit_qualification import fixtures
+from scripts.image_package_observation_qualification import coredns_rebuild_sbom
 
 
 def qualify():
     cases = []
     scenarios = {
+        "runtime-coredns-published-unknown": "inconclusive",
         "runtime-etcd-candidate-clean": "fail",
         "runtime-etcd-candidate-high": "fail",
         "runtime-etcd-candidate-unknown": "fail",
@@ -112,6 +121,15 @@ def qualify():
                 "containers": [],
                 "pods": [],
             }
+            dns_pin = (
+                image_audit_contract.PUBLISHED_COREDNS
+                if name == "runtime-coredns-published-unknown"
+                else None
+            )
+            if dns_pin:
+                runtime_snapshot["targets"][0].update(
+                    reference=dns_pin.reference, config_id=dns_pin.config
+                )
             etcd_case = name.startswith("runtime-etcd-candidate-")
             etcd_reference = "registry.k8s.io/etcd@sha256:3ced7fbdc4cadcec31ab34a7513bc97be2b70db923e7154e2d88a980016b5e8b"
             etcd_config = "sha256:be2dd319600bac16f542b8e46e1b78511c35a31e46829ee9acc82a83c94aa377"
@@ -150,6 +168,8 @@ def qualify():
                 if name == "missing-image-pull" and len(calls) == 1:
                     raise Rejected("missing")
                 details = copy.deepcopy(inspected)
+                if dns_pin and reference == dns_pin.reference:
+                    details["Id"] = dns_pin.config
                 if etcd_case:
                     for target in runtime_snapshot["targets"]:
                         if reference == target["reference"]:
@@ -478,6 +498,15 @@ def qualify():
                             if document["matches"] and (not candidate or severity == "High")
                             else 0
                         )
+                if dns_pin and stage == "runtime-000-sbom":
+                    document = coredns_rebuild_sbom(dns_pin.config)
+                if dns_pin and stage == "runtime-000-scan":
+                    document["source"]["target"]["imageID"] = dns_pin.config
+                    package = read_json(run / "runtime-000-sbom.json")["artifacts"][0]
+                    finding = copy.deepcopy(match)
+                    finding["artifact"] = {k: package[k] for k in ("id", "name", "version", "type")}
+                    finding["vulnerability"]["severity"] = "Unknown"
+                    document["matches"] = [finding]
                 write_json(path, document)
                 return returncode, path
 
@@ -555,6 +584,25 @@ def qualify():
                         **({"include_node_candidate": True} if name.startswith("node-") else {}),
                     )
                     outcome = result["status"]
+                    if dns_pin:
+                        component = next(
+                            c for c in result["components"] if c["name"] == "runtime-000"
+                        )
+                        if (
+                            component["coverage_profile"]
+                            != image_audit_contract.PUBLISHED_COREDNS_PROFILE
+                            or component["catalogued_packages"] != 202
+                            or component["sbom_validated"] is not True
+                            or result["runtime_scope"]["covered_images"] != 0
+                            or result["release_ready"] is not False
+                            or component["status"] != "inconclusive"
+                            or component["severity_counts"]["Unknown"] != 1
+                            or component["findings"][0]["id"] != match["vulnerability"]["id"]
+                            or component["scanner_exit_code"] != 0
+                        ):
+                            raise AssertionError(
+                                "an Unknown finding must remain visible and block CoreDNS adoption"
+                            )
                     if etcd_case:
                         components = {item["name"]: item for item in result["components"]}
                         if (

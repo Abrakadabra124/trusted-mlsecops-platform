@@ -1,5 +1,6 @@
 import re
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from mlsecops.contracts import Rejected, canonical, digest
@@ -14,11 +15,75 @@ GO_CONTROLS = {
     "stdlib": ("stdlib", "go1.20.9"),
 }
 GO_CONTROL_ADVISORIES = {"GO-2023-2102", "CVE-2023-39325", "GHSA-4374-p667-p6c8"}
+# Keep these upstream identities fixed for paired scans and rollback.
 COREDNS_MANIFEST = "sha256:3429e3bbffb1e839470c4a3541d4d78aca84a1394c75a539d0200c58c63196ac"
 COREDNS_CONFIG = "sha256:881cbdacb8c168aaba50f10b1458f36d1b976c5a856e72d3589bc9cd262f3442"
 COREDNS_REPOSITORY = "registry.k8s.io/coredns/coredns"
-COREDNS_REFERENCE = f"{COREDNS_REPOSITORY}@{COREDNS_MANIFEST}"
-COREDNS_SPEC_IMAGE = f"{COREDNS_REPOSITORY}:v1.15.0@{COREDNS_MANIFEST}"
+PROJECT_COREDNS_PREFIX = "ghcr.io/abrakadabra124/trusted-mlsecops-platform"
+PUBLISHED_COREDNS_PROFILE = "coredns-published"
+
+
+@dataclass(frozen=True)
+class CoreDNSPin:
+    image_repository: str  # kubeadm DNS prefix, before it appends /coredns
+    tag: str
+    manifest: str
+    config: str
+
+    def __post_init__(self):
+        tag_pattern = (
+            r"1\.15\.0-deps-r1-(?!0{40}$)[0-9a-f]{40}"
+            if self.image_repository == PROJECT_COREDNS_PREFIX
+            else r"v1\.15\.0"
+        )
+        if (
+            self.image_repository not in (PROJECT_COREDNS_PREFIX, "registry.k8s.io/coredns")
+            or not isinstance(self.tag, str)
+            or not re.fullmatch(tag_pattern, self.tag)
+            or (
+                self.image_repository == PROJECT_COREDNS_PREFIX
+                and (self.config == COREDNS_CONFIG or self.manifest == COREDNS_MANIFEST)
+            )
+            or self.config == self.manifest
+            or any(
+                not isinstance(value, str)
+                or not re.fullmatch(r"sha256:(?!0{64}$)[0-9a-f]{64}", value)
+                for value in (self.manifest, self.config)
+            )
+        ):
+            raise Rejected("invalid_coredns_pin")
+
+    @property
+    def reference(self):
+        return f"{self.image_repository}/coredns@{self.manifest}"
+
+    @property
+    def spec_image(self):
+        return f"{self.image_repository}/coredns:{self.tag}@{self.manifest}"
+
+
+UPSTREAM_COREDNS = CoreDNSPin(
+    COREDNS_REPOSITORY.rsplit("/", 1)[0], "v1.15.0", COREDNS_MANIFEST, COREDNS_CONFIG
+)
+COREDNS_REFERENCE = UPSTREAM_COREDNS.reference
+COREDNS_SPEC_IMAGE = UPSTREAM_COREDNS.spec_image
+# Producer 45027909018, public linux/amd64 readback in publisher 45029534828.
+PUBLISHED_COREDNS = CoreDNSPin(
+    PROJECT_COREDNS_PREFIX,
+    "1.15.0-deps-r1-75ed1469660bb69bf0fc2157b9b3e4ed38993910",
+    "sha256:907db90829056dc7adc96851cedd0ffef7d82c916d92a935aa140c58333a7424",
+    "sha256:d2c1556be74ac5be00316f062c317b9a964cc5da83d7d1141b2ce5b9083ca7f6",
+)
+
+
+def runtime_coredns():
+    return PUBLISHED_COREDNS or UPSTREAM_COREDNS
+
+
+# Run 45024790177, 197 Go and 5 dpkg rows. Full canonical observation except
+# image_id, which is checked separately against the published registry pin.
+_COREDNS_REBUILD_INVENTORY = "59f58183e23f2f9d0dd1bf820cd7546f8191c82912faa93e23200950882fb325"
+
 # config -> (platform reference, row count, SHA-256 of canonical full observation
 # with packages sorted by canonical JSON). v1.14.7 is from native run 44954907094.
 # v1.15.0 is independently projected from verified ELF and dpkg bytes (fixture).
@@ -72,10 +137,28 @@ def coredns_inventory_matches(observation, reference):
     """Bind the manifest and config to every normalized field, path and duplicate."""
     if type(observation) is not dict or type(observation.get("image_id")) is not str:
         return False
+    published = PUBLISHED_COREDNS
+    if (
+        published is not None
+        and published.image_repository == PROJECT_COREDNS_PREFIX
+        and reference == published.reference
+        and observation["image_id"] == published.config
+    ):
+        inventory = observation.copy()
+        del inventory["image_id"]
+        return exact_observation_matches(inventory, 202, _COREDNS_REBUILD_INVENTORY)
     spec = _COREDNS_INVENTORIES.get(observation["image_id"])
     if spec is None or reference != spec[0]:
         return False
     return exact_observation_matches(observation, spec[1], spec[2])
+
+
+def coredns_coverage_profile(observation, reference):
+    if not coredns_inventory_matches(observation, reference):
+        return None
+    if reference.startswith(PROJECT_COREDNS_PREFIX + "/coredns@"):
+        return PUBLISHED_COREDNS_PROFILE
+    return "coredns"
 
 
 def exact_observation_matches(observation, count, checksum):

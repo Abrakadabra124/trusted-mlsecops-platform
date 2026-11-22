@@ -1,5 +1,11 @@
 # Статус и границы доказательств
 
+## 22 ноября 2026 года, исправленный CoreDNS в стандартном кластере
+
+В `main` принят опубликованный CoreDNS по digest `sha256:907db90829056dc7adc96851cedd0ffef7d82c916d92a935aa140c58333a7424`. На чистом `641d1c2` обе готовые реплики подтвердили опубликованный образ, а служба DNS вернула адрес API `10.79.0.1`. На том же коммите закреплённый etcd 3.6.17 подтвердил digest и лидера. Предварительно на одноразовом стенде проверен возврат обеих реплик к исходному CoreDNS. [Принято в main](https://github.com/Abrakadabra124/trusted-mlsecops-platform/pull/19), [чистый кластер](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45030122291/attempts/1), [переключение и откат](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45027909018/attempts/1).
+
+Полный аудит после замены принял точную опись из 202 записей CoreDNS. На той же базе Grype High сократились с 2 до 0, Unknown с 1 до 0, Medium с 3 до 1. По всей платформе сохранились 389 уникальных идентификаторов, включая 24 с оценкой Critical и 141 с оценкой High. Устранённые совпадения CoreDNS встречаются в других компонентах. Покрыты 12 из 14 работающих образов, общий итог `fail`, `release_ready=false`. Первичный и опубликованный отчёты совпали, SHA-256 `cda29ae7dee2cee8e0bb7fa6230a3488e829bf4ec96172f61ff04d6cf6506d68`. Стенд удалён. [Полный аудит](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/45030124975/attempts/1), [ранбук](docs/runbooks.md).
+
 В основной ветке на `71071bf` из чистых checkout повторены запуск закреплённого etcd, аудит всех работающих образов и сквозной отказ с восстановлением. Получены 12 из 14 образов с полным покрытием и 1000 из 1000 совпавших прогнозов после восстановления за 3,244 с. [Результаты на одной ревизии main](https://github.com/Abrakadabra124/trusted-mlsecops-platform/blob/bdc8785a111f814bc77d85047c24a83564b6f350/STATUS.md), [команды воспроизведения](https://github.com/Abrakadabra124/trusted-mlsecops-platform/blob/bdc8785a111f814bc77d85047c24a83564b6f350/docs/operations/image-audit-troubleshooting.md#как-воспроизвести-проверки-основной-ветки-от-22-ноября).
 
 ## 22 ноября 2026 года, полный аудит с проверенными версиями Cilium
