@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -169,7 +170,7 @@ def validate_cluster(state):
     return marker
 
 
-def bootstrap(state):
+def bootstrap(state, *, bundled_provisioner_fixture=False):
     state = Path(state).resolve()
     workspace = read_json(state / "workspace.json")
     for tool in ("kind", "helm", "kubectl", "docker"):
@@ -187,6 +188,12 @@ def bootstrap(state):
     if "v4.2.4" not in command(["helm", "version", "--short"]):
         raise Rejected("helm_version_mismatch")
     clusters = command(["kind", "get", "clusters"]).splitlines()
+    if bundled_provisioner_fixture and (
+        os.environ.get("GITHUB_ACTIONS") != "true"
+        or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
+        or NAME in clusters
+    ):
+        raise Rejected("bundled_provisioner_fixture_requires_fresh_hosted_cluster")
     if NAME in clusters:
         validate_cluster(state)
     else:
@@ -256,7 +263,16 @@ def bootstrap(state):
         "chart_sha256": CHART_SHA256,
         "observed_at": now(),
     }
+    # Persist ownership before rollout so cleanup can still verify a partially started cluster.
+    report["local_path_provisioner"] = {
+        "status": "bundled-fixture" if bundled_provisioner_fixture else "pending"
+    }
     write_json(state / "cluster.json", report)
+    if not bundled_provisioner_fixture:
+        from mlsecops.local_path_rollout import ensure
+
+        report["local_path_provisioner"] = {"status": "ready", **ensure(state)}
+        write_json(state / "cluster.json", report)
     return report
 
 

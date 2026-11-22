@@ -10,7 +10,7 @@ from mlsecops.controller_bootstrap import verify_saved
 from mlsecops.controller_worker import validate_profile
 from mlsecops.foundation import image_inventory, pod_inventory
 from mlsecops.inventory import command, source_fingerprint
-from mlsecops.kube_worker import image_config
+from mlsecops.kube_worker import image_config, image_manifest
 from mlsecops.storage_bootstrap import WORKSPACE_LABEL
 from mlsecops.storage_pki import workspace_id
 from scripts import image_cilium_agent_inventory as cilium_agent
@@ -21,8 +21,12 @@ from scripts import (
 from scripts.image_audit_contract import (
     LOCAL_PATH_CONFIG,
     PUBLISHED_COREDNS_PROFILE,
+    PUBLISHED_LOCAL_PATH_PROFILE,
     coredns_coverage_profile,
     local_path_inventory_matches,
+    published_local_path_identity,
+    published_local_path_matches,
+    published_local_path_target,
 )
 
 
@@ -180,7 +184,17 @@ def _collect(root, state):
     pods = sorted(pod_inventory(document), key=canonical)
     for pod in pods:
         config = observe("pod-image-config", image_config, pod["image_id"])
-        if config == profile["config_id"]:
+        published_local_path = published_local_path_target(pod["reference"], config)
+        if published_local_path:
+            if not published_local_path_identity(pod["reference"], config):
+                raise Rejected("image_scope_local_path_identity_mismatch")
+            manifest = pod["reference"].partition("@")[2]
+            if pod["image_id"] not in (config, manifest):
+                # An index reported by the CRI must contain the exact pinned linux/amd64 manifest.
+                resolved, _ = observe("pod-local-path-manifest", image_manifest, pod["image_id"])
+                if resolved != manifest:
+                    raise Rejected("image_scope_local_path_identity_mismatch")
+        if config == profile["config_id"] and not published_local_path:
             target(profile["image_id"], config)
             continue
         status = decode(
@@ -202,6 +216,8 @@ def _collect(root, state):
             raise Rejected("image_scope_cri_config_mismatch")
         if not isinstance(references, list) or len(references) > 16:
             raise Rejected("image_scope_cri_references_invalid")
+        if published_local_path and pod["reference"] not in references:
+            raise Rejected("image_scope_local_path_reference_missing")
         if not references:
             tags = status.get("repoTags")
             if not isinstance(tags, list) or not 1 <= len(tags) <= 16:
@@ -216,7 +232,8 @@ def _collect(root, state):
             if config in local_references and local_references[config] != alias:
                 raise Rejected("image_scope_local_reference_changed")
             continue
-        reference = min(registry_reference(value) for value in references)
+        repo_digests = [registry_reference(value) for value in references]
+        reference = pod["reference"] if published_local_path else min(repo_digests)
         if observe("pod-manifest-config", image_config, reference.split("@", 1)[1]) != config:
             raise Rejected("image_scope_cri_manifest_mismatch")
         target(reference, config)
@@ -259,6 +276,14 @@ def coverage(snapshot, components):
         if len(matches) != 1:
             continue
         item = matches[0]
+        # A claim about this repository or config must pass its own profile, even if relabelled.
+        if item.get("coverage_profile") != PUBLISHED_LOCAL_PATH_PROFILE and (
+            published_local_path_target(target.get("reference"), target["config_id"])
+            or published_local_path_target(
+                item.get("observed_reference"), item.get("image_config_id")
+            )
+        ):
+            continue
         # The agent's Go scans do not cover its native binaries, regardless of the reported role.
         if (
             cilium_agent.CONFIG in (target["config_id"], item.get("image_config_id"))
@@ -271,6 +296,27 @@ def coverage(snapshot, components):
             and item.get("status") in {"pass", "fail"}
             and (
                 item.get("coverage_profile") in {"worker", "storage", "tracking"}
+                or (
+                    item.get("coverage_profile") == PUBLISHED_LOCAL_PATH_PROFILE
+                    and item.get("role") == "system"
+                    and "reason" not in item
+                    and item.get("observed_reference") == target.get("reference")
+                    and item.get("runtime_image_id") == item.get("image_id") == target["config_id"]
+                    and item.get("package_binding_validated") is True
+                    and item.get("diagnostic_only") is False
+                    and item.get("packages") == item.get("catalogued_packages") == 59
+                    and item.get("scanner_exit_code") == (2 if item["status"] == "fail" else 0)
+                    and isinstance(item.get("database"), dict)
+                    and item["database"].keys() == {"built", "schema_version"}
+                    and all(
+                        isinstance(item.get(k), str) and re.fullmatch(r"[0-9a-f]{64}", item[k])
+                        for k in ("report_digest", "sbom_digest")
+                    )
+                    and published_local_path_matches(
+                        item.get("package_observation"), target.get("reference")
+                    )
+                    and target["config_id"] == item["package_observation"]["image_id"]
+                )
                 or (
                     item.get("coverage_profile") in {"coredns", PUBLISHED_COREDNS_PROFILE}
                     and item.get("observed_reference") == target.get("reference")

@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from mlsecops import local_path_pin
 from mlsecops.contracts import Rejected, canonical
 from scripts import image_cilium_agent_inventory as agent
 from scripts import image_scope
@@ -153,6 +154,48 @@ class RuntimeImageScopeContracts(unittest.TestCase):
         observed = self.collect()
         self.assertEqual(len(observed["targets"]), 4)
         self.assertFalse(any("inspecti" in command for command in self.commands))
+
+    def test_published_local_path_requires_consistent_pod_cri_and_content(self):
+        manifest = sha("1")
+        reference = local_path_pin.REPOSITORY + "@" + manifest
+        config = local_path_pin.PUBLISHED_CONFIG
+        self.enterContext(patch.object(local_path_pin, "PUBLISHED_REFERENCE", reference))
+        pod = self.pods["items"][0]
+        pod["spec"]["containers"][0]["image"] = reference
+        status = pod["status"]["containerStatuses"][0]
+        cri = self.cri["status"]
+        cri.update(id=config, repoDigests=["a.example/other@" + sha("a"), reference])
+        original = self.resolve_image
+        self.resolve_image = lambda ref: (
+            config if ref in (config, manifest, sha("b"), sha("c")) else original(ref)
+        )
+        self.enterContext(
+            patch.object(
+                image_scope,
+                "image_manifest",
+                side_effect=lambda ref: (manifest if ref == sha("c") else ref, {}),
+            )
+        )
+        for value in (config, manifest, sha("c")):
+            status["imageID"] = value
+            self.assertEqual(
+                [t["reference"] for t in self.collect()["targets"] if t["config_id"] == config],
+                [reference],
+            )
+        for field, value, obj in (
+            ("image", local_path_pin.REPOSITORY + ":latest", pod["spec"]["containers"][0]),
+            ("imageID", sha("b"), status),
+            ("imageID", sha("5"), status),
+            ("repoDigests", [], cri),
+            ("repoDigests", ["a.example/other@" + manifest], cri),
+            ("id", sha("5"), cri),
+        ):
+            with (
+                self.subTest(field=field, value=value),
+                patch.dict(obj, {field: value}),
+                self.assertRaises(Rejected),
+            ):
+                self.collect()
 
     def test_cri_lookup_uses_resolved_config_when_pod_reports_manifest_digest(self):
         self.pods["items"][0]["status"]["containerStatuses"][0]["imageID"] = sha("a")
