@@ -1,0 +1,77 @@
+name: Reproduce iptables-wrapper from Cilium Agent 1.20.5
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-cilium-agent-coverage]
+    paths: [.github/workflows/cilium-iptables-wrapper-rebuild.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AGENT: quay.io/cilium/cilium@sha256:a54ced05354670afb7fecd075e91130dff5cca16518da7ff3d1ef093c5c2d0ae
+      CONFIG: sha256:33f1b95a921dd4ed3acfb9a7fbaa003f51bd221295e6715c7904682d11525264
+      BUILDER: docker.io/library/golang@sha256:f6946db66567acc1497655237e58f06ec3a57478a5e0d67fca29d2ffcf2ea136
+      CILIUM_REV: 150121410c147fad575ac5dcbce6de923be69042
+      MODULE: github.com/kubernetes-sigs/iptables-wrappers
+      REVISION: bfef9e5087a198b50a4124bb9ce9d2c7c99025dd
+      VERSION: v0.0.0-20260420133543-bfef9e5087a1
+      SHIPPED_SHA: 3eb32c1812e6c31cfd92e323b7840c8f4ae3ee33f3844324b01577ddd743be72
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Verify the public source and copy the shipped file from a stopped container
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wrapper"/{src,out}
+          cd "$RUNNER_TEMP/wrapper"
+          curl -fsSL --retry 2 "https://raw.githubusercontent.com/cilium/cilium/$CILIUM_REV/images/runtime/build-iptables-wrapper.sh" -o recipe.sh
+          echo '1732a4b335ea6ebc36d048bb883874acd3311e0581694f61025b5254c0ea2daa  recipe.sh' | sha256sum -c -
+          curl -fsSL --retry 2 "https://proxy.golang.org/$MODULE/@v/$REVISION.info" |
+            jq -e --arg rev "$REVISION" --arg version "$VERSION" --arg url "https://$MODULE" \
+              '.Origin.Hash == $rev and .Origin.URL == $url and .Version == $version'
+          curl -fsSL --retry 2 "https://codeload.github.com/kubernetes-sigs/iptables-wrappers/tar.gz/$REVISION" -o source.tar.gz
+          echo 'cefaaa2325236de34f0bc55b526aa9b4f319ba90cf136001d646c7bab6d51a32  source.tar.gz' | sha256sum -c -
+          tar -xzf source.tar.gz --strip-components=1 -C src
+          docker pull --platform linux/amd64 "$AGENT"
+          test "$(docker image inspect -f '{{.Id}} {{.Os}}/{{.Architecture}}' "$AGENT")" = "$CONFIG linux/amd64"
+          cid=$(docker create --network none "$AGENT" /unused)
+          trap 'docker rm -v "$cid" >/dev/null' EXIT
+          docker cp "$cid:/usr/sbin/iptables-wrapper" shipped
+          test -f shipped
+          test ! -L shipped
+          echo "$SHIPPED_SHA  shipped" | sha256sum -c -
+
+      - name: Build the pinned module offline with the upstream compiler and linker flags
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/wrapper"
+          docker pull --platform linux/amd64 "$BUILDER"
+          docker run --rm -i --pull=never --platform linux/amd64 --network none \
+            --cap-drop ALL --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            -v "$PWD/src:/go/src/$MODULE:ro" -v "$PWD/out:/out/usr/sbin" -w "/go/src/$MODULE" \
+            -e MODULE -e GOOS=linux -e GOARCH=amd64 -e CGO_ENABLED=0 -e GOTOOLCHAIN=local \
+            -e GOPROXY=off -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod \
+            "$BUILDER" bash -eu <<'BUILD'
+          test "$(go env GOVERSION)" = go1.26.11
+          test "$(go list -m)" = "$MODULE"
+          go build -ldflags '-s -w -extldflags="-static" -buildid=""' -trimpath \
+            -o /out/usr/sbin/iptables-wrapper "$MODULE"
+          go version -m /out/usr/sbin/iptables-wrapper
+          BUILD
+
+      - name: Compare bytes and record the source identity only on match
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/wrapper"
+          sha256sum shipped out/iptables-wrapper
+          echo "$SHIPPED_SHA  shipped" | sha256sum -c -
+          cmp shipped out/iptables-wrapper
+          printf '%s\n' "linux/amd64 $AGENT ($CONFIG)" \
+            "/usr/sbin/iptables-wrapper sha256:$SHIPPED_SHA" \
+            "$MODULE@$VERSION ($REVISION), go1.26.11, byte-for-byte match" >> "$GITHUB_STEP_SUMMARY"
