@@ -12,14 +12,31 @@ class CoreDNSPublisher(QualifiedPublisher):
     BRANCH = "qualify/r1-coredns-kind-candidate"
     REQUIRE_PUBLIC = True
 
-    # Set together after review of a successful replacement producer and its archive.
-    EXPECTED_SOURCE = None
-    WORKFLOW_SHA256 = None
-    RECIPE = None
-    RUN_ID = None
-    JOB_ID = None
-    JOB_NAME = None
-    STEPS = ()
+    EXPECTED_SOURCE = "75ed1469660bb69bf0fc2157b9b3e4ed38993910"
+    WORKFLOW_SHA256 = "5a3637fcd3e64f49eb76d077d33b1a2ca57c640c0f0eea98fd79f2f3c6fdb15e"
+    RECIPE = "1d7bde1eaa8639468a9e6ed2d7a71033e6536e7f0b1ae2915b58770ddeb61b3a"
+    RUN_ID = 45027909018
+    JOB_ID = 137224861240
+    JOB_NAME = "qualify"
+    ARTIFACT_ID = 14756383824
+    ZIP_DIGEST = "sha256:7199a842682c7579a444429efd67fe9bd5fa347eec888a46c77e0727cd7dd988"
+    ZIP_SIZE = 159623877
+    STEPS = (
+        "Set up job",
+        "Read exact public source and check the recipe pin",
+        "Run astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7",
+        "Test the inventory, capability and finding gates",
+        "Build twice offline and export the agreed executable hash",
+        "Compare the original findings and inspect the archived executables",
+        "Query the candidate on UDP port 53 in its own network namespace",
+        "Prepare the project workspace and pinned kind tools",
+        "Verify both running CoreDNS replicas, switch and roll back",
+        "Delete the owned disposable cluster and verify absence",
+        "Bind the scanned archive to the verified running CoreDNS config",
+        "Upload the scanned CoreDNS archive and its receipt",
+        "Post Run astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7",
+        "Complete job",
+    )
 
     def preflight(self, env):
         run_id = self.dispatch(env, env.get("QUALIFIED_RUN_ID", ""))
@@ -51,6 +68,17 @@ class CoreDNSPublisher(QualifiedPublisher):
             and job["id"] == self.JOB_ID
             and tuple(step["name"] for step in job["steps"]) == self.STEPS
         )
+
+    def select_artifact(self, document, run_id):
+        self.require(document["total_count"] == 1, "artifact_count")
+        artifact = super().select_artifact(document, run_id)
+        self.require(
+            artifact["id"] == self.ARTIFACT_ID
+            and artifact["digest"] == self.ZIP_DIGEST
+            and artifact["size_in_bytes"] == self.ZIP_SIZE,
+            "artifact_pin_mismatch",
+        )
+        return artifact
 
     def verify_image(self, details):
         config = details["Config"]

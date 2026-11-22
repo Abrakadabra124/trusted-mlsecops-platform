@@ -49,6 +49,32 @@ FAILED_PRODUCER = {
 
 
 class CoreAuthorityTests(unittest.TestCase):
+    def test_reviewed_producer_and_artifact_pins(self):
+        pub = core.PUBLISHER
+        self.assertEqual(pub.dispatch(ENV, "45027909018"), 45027909018)
+        self.assertEqual(
+            (pub.EXPECTED_SOURCE, pub.JOB_ID, pub.JOB_NAME),
+            ("75ed1469660bb69bf0fc2157b9b3e4ed38993910", 137224861240, "qualify"),
+        )
+        self.assertEqual(
+            pub.WORKFLOW_SHA256, "5a3637fcd3e64f49eb76d077d33b1a2ca57c640c0f0eea98fd79f2f3c6fdb15e"
+        )
+        self.assertEqual(
+            pub.RECIPE, "1d7bde1eaa8639468a9e6ed2d7a71033e6536e7f0b1ae2915b58770ddeb61b3a"
+        )
+        self.assertEqual(
+            sha256(("\n".join(pub.STEPS) + "\n").encode()).hexdigest(),
+            "cce4c76885172727fbc899874521c02371326861e67e6659834c4346a6edac29",
+        )
+        self.assertEqual(
+            (pub.ARTIFACT_ID, pub.ZIP_SIZE, pub.ZIP_DIGEST),
+            (
+                14756383824,
+                159623877,
+                "sha256:7199a842682c7579a444429efd67fe9bd5fa347eec888a46c77e0727cd7dd988",
+            ),
+        )
+
     def test_terminal_failure_is_rejected_even_if_pins_match(self):
         pub = core.PUBLISHER
         for key in ("EXPECTED_SOURCE", "RUN_ID", "JOB_ID"):
@@ -169,6 +195,29 @@ class CoreDNSPublicationTests(PublicationContractCases, unittest.TestCase):
             self.enterContext(patch.object(self.pub, key, value))
         super().setUp()
         self.job["id"] = 123456
+        self.enterContext(
+            patch.multiple(
+                self.pub,
+                ARTIFACT_ID=self.art["id"],
+                ZIP_DIGEST=self.art["digest"],
+                ZIP_SIZE=self.art["size_in_bytes"],
+            )
+        )
+
+    def test_reject_replaced_or_additional_artifact(self):
+        for change in ({"id": 72}, {"size_in_bytes": 501}, {"digest": "sha256:" + "e" * 64}):
+            with (
+                self.subTest(change=change),
+                self.assertRaisesRegex(Rejected, "artifact_pin_mismatch"),
+            ):
+                self.pub.select_artifact(
+                    {"total_count": 1, "artifacts": [{**self.art, **change}]}, self.run_id
+                )
+        with self.assertRaisesRegex(Rejected, "artifact_count"):
+            self.pub.select_artifact(
+                {"total_count": 2, "artifacts": [self.art, {**self.art, "name": "other"}]},
+                self.run_id,
+            )
 
     @staticmethod
     def image_config():
