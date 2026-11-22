@@ -229,7 +229,7 @@ class RebuildTests(unittest.TestCase):
                         self.assertEqual(check["upstream"]["fixed"], "1.27.2")
                         self.assertRegex(check["upstream"]["sha256"], "^[a-f0-9]{64}$")
 
-    def run_fake(self):
+    def run_fake(self, *, retain=False):
         with (
             tempfile.TemporaryDirectory() as tmp,
             patch.object(
@@ -247,9 +247,22 @@ class RebuildTests(unittest.TestCase):
                     (self.config, self.new, self.candidate),
                 ],
             ) as scan,
-            patch.object(rebuild, "binary_readback", return_value=self.binary),
+            patch.object(
+                rebuild,
+                "binary_readback",
+                side_effect=[self.binary, (1, rebuild.delivery.STOCK_BINARY_SHA256)],
+            ) as binary,
+            patch.object(rebuild.delivery, "archive_hash", return_value="d" * 64),
+            patch.object(rebuild.delivery, "retain") as stage,
         ):
-            report = rebuild.qualify(Path(tmp), IID)
+            report = rebuild.qualify(Path(tmp), IID, retain_archive=retain)
+            if retain and report["status"] == "diagnostic-clear":
+                stage.assert_called_once_with(Path(tmp), report, "d" * 64)
+                self.assertEqual(
+                    binary.call_args.args, (Path(tmp) / "stock-readback", pair.STOCK[1])
+                )
+            else:
+                stage.assert_not_called()
             self.assertEqual(
                 [c.args[1:] for c in scan.call_args_list],
                 [
@@ -258,6 +271,14 @@ class RebuildTests(unittest.TestCase):
                 ],
             )
             return report
+
+    def test_optional_retention_requires_a_clear_pair_and_stock_binary_readback(self):
+        self.assertEqual(
+            self.run_fake(retain=True)["stock_binary_sha256"], rebuild.delivery.STOCK_BINARY_SHA256
+        )
+        for severity in ("Unknown", "High", "Critical"):
+            self.candidate = result([finding("new", "stdlib", severity)], IID)
+            self.assertNotEqual(self.run_fake(retain=True)["status"], "diagnostic-clear")
 
     def test_readback_mismatch_reports_measured_size_and_hash_and_keeps_findings(self):
         for size, sha in ((52_174_971, self.binary[1]), (52_174_972, "f" * 64)):
