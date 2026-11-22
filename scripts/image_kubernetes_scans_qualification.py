@@ -141,6 +141,72 @@ class SupplementalScanContracts(unittest.TestCase):
             registry=agent,
         )
 
+    def test_noble_receipt_adds_known_materials_to_partial_agent_only(self):
+        from scripts import image_bpftool_materials as materials
+        from scripts import image_bpftool_scan as native
+
+        component = self.agent_supplement(("High",))
+        originals = list(component["findings"])
+        control = dict(
+            package="libc6-dev",
+            installed="2.39-0ubuntu8.3",
+            type="deb",
+            source_package="glibc",
+            namespace=native.NAMESPACE,
+            id=native.ADVISORY,
+            severity="Medium",
+            fix={"state": "fixed", "versions": [native.FIXED]},
+        )
+        receipt = {
+            "scope": "static-build-inputs-ubuntu-noble",
+            "binary_sha256": materials.BINARY_SHA256,
+            "release_ready": False,
+            "packages": {k: list(v) for k, v in materials.PACKAGES.items()},
+            "database": self.db,
+            "control_advisory": native.ADVISORY,
+            "db_sha256": "a" * 64,
+            "findings": [control],
+            "materials": {
+                "exit_code": 0,
+                "sbom_sha256": "b" * 64,
+                "grype_sha256": "c" * 64,
+                "log_sha256": "d" * 64,
+            },
+            "fixed_metadata_control": {
+                "exit_code": 0,
+                "sbom_sha256": "e" * 64,
+                "grype_sha256": "f" * 64,
+                "log_sha256": "1" * 64,
+            },
+        }
+        with patch.object(native, "collect", return_value=receipt):
+            with self.assertRaisesRegex(Rejected, "database_digest"):
+                audit.supplement_native_agent(
+                    component,
+                    self.target,
+                    self.root,
+                    self.cache,
+                    self.db,
+                    {"6/vulnerability.db": "0" * 64},
+                )
+            self.assertEqual(component["findings"], originals)
+            audit.supplement_native_agent(
+                component,
+                self.target,
+                self.root,
+                self.cache,
+                self.db,
+                {"6/vulnerability.db": "a" * 64},
+            )
+        self.assertEqual(component["findings"], originals + [control])
+        self.assertEqual(
+            component["vulnerability_count"], len({f["id"] for f in component["findings"]})
+        )
+        self.assertTrue(scans.join_valid(component, self.target, registry=agent))
+        self.assertFalse(scans.coverage_valid(component, self.target, registry=agent))
+        receipt["binary_sha256"] = "0" * 64
+        self.assertFalse(scans.join_valid(component, self.target, registry=agent))
+
     def test_agent_adds_severe_go_findings_without_native_coverage(self):
         joined = self.agent_supplement(("High", "Critical"))
         self.assertEqual(joined["status"], "fail")

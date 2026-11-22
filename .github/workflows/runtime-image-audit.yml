@@ -1,7 +1,7 @@
 name: Observed runtime image audit
 on:
   push:
-    branches: [codex/cp2-runtime-image-audit]
+    branches: [codex/cp2-runtime-image-audit, qualify/r1-bpftool-noble]
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,6 +27,7 @@ jobs:
           uv run --locked ruff check scripts/image*.py
           uv run --locked ruff format --check scripts/image*.py
           uv run --locked python scripts/check_docs.py
+          uv run --locked python -m unittest scripts.image_bpftool_scan_qualification scripts.image_bpftool_materials_qualification
           uv run --locked python -m unittest scripts.image_package_observation_qualification scripts.image_go_control_qualification scripts.image_diagnostic_qualification
           uv run --locked coverage run --branch --data-file=.coverage-image-etcd --source=scripts.image_etcd_inventory -m unittest scripts.image_etcd_inventory_qualification
           uv run --locked coverage report --data-file=.coverage-image-etcd --fail-under=95
