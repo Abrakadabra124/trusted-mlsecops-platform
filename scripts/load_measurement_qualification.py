@@ -3,6 +3,8 @@
 import asyncio
 import unittest
 from contextlib import suppress
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from mlsecops import load_measurement as load
 from mlsecops.contracts import Rejected, canonical
@@ -240,17 +242,20 @@ class ClientContracts(unittest.IsolatedAsyncioTestCase):
 
     async def test_ten_clients_and_failures_accounted_once(self):
         active, peak = 0, 0
-        all_started = asyncio.Event()
+        now_ns = load.NS
+        round_ns = 250_000_000
+        clock = SimpleNamespace(monotonic_ns=lambda: now_ns, time_ns=lambda: now_ns)
+        clients = asyncio.Barrier(10)
 
         async def exchange(client):
-            nonlocal active, peak
+            nonlocal active, peak, now_ns
             active += 1
             peak = max(peak, active)
-            if active == 10:
-                all_started.set()
             try:
-                await all_started.wait()
-                await asyncio.sleep(0.01)
+                # Advance once per round, after all ten enter and before anyone returns.
+                if await clients.wait() == 0:
+                    now_ns += round_ns
+                await clients.wait()
                 if client == 0:
                     raise TimeoutError
                 if client == 1:
@@ -259,15 +264,21 @@ class ClientContracts(unittest.IsolatedAsyncioTestCase):
             finally:
                 active -= 1
 
-        observation = await load.collect(
-            exchange, lambda _: True, warmup=0.1, duration=0.4, limit=1000
-        )
+        with patch.object(load, "time", clock), patch.object(load.load_clock, "time", clock):
+            async with asyncio.timeout(5):
+                observation = await load.collect(
+                    exchange, lambda _: True, warmup=0.1, duration=0.4, limit=1000
+                )
         sample, exhausted = observation["records"], observation["exhausted"]
         self.assertEqual(peak, 10)
         self.assertEqual(active, 0)
         self.assertFalse(exhausted)
-        self.assertEqual({r["client"] for r in sample}, set(range(10)))
-        self.assertEqual({r["outcome"] for r in sample}, {"ok", "timeout", "transport"})
+        expected = [(0, 0, "timeout"), (1, 0, "transport")]
+        expected.extend((client, 200, "ok") for client in range(2, 10))
+        self.assertCountEqual(
+            [(r["start_ns"], r["client"], r["status"], r["outcome"]) for r in sample],
+            [(start, *result) for start in (0, round_ns) for result in expected],
+        )
         self.assertNotIn("private", str(sample))
 
     async def test_limit_bounds_completed_and_inflight_work(self):

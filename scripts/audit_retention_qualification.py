@@ -405,6 +405,20 @@ class NativeRetention(unittest.TestCase):
         self.assertFalse((self.root / "manifest.json").exists())
         self.assertEqual(target.read_bytes(), changed)
 
+    def test_clean_close_skips_sequence_parse_and_reopen_checks_both_segments(self):
+        spool = self.spool()
+        first, second = record(1), record(2)
+        spool.write(first)
+        self.elapsed += 10**9
+        spool.maintain()
+        spool.write(second)
+        with patch.object(audit_retention, "sequences", wraps=audit_retention.sequences) as parse:
+            spool.close(clean=True)
+            parse.assert_not_called()
+            restored = self.spool()
+            self.assertEqual(restored.sequence, 2)
+            self.assertEqual([args.args[0] for args in parse.call_args_list], [first, second])
+
     def test_reopen_denies_cross_segment_gap_and_over_budget_without_deleting_bytes(self):
         for change in ("gap", "budget", "duplicate"):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
