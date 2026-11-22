@@ -1,5 +1,22 @@
 # RB-18: отказ image audit и неполный просмотр CI
 
+## Проверка опубликованного etcd в новом кластере
+
+Этот сценарий проверяет штатный запуск с закреплённым системным образом. Он использует Linux AMD64 и одноразовые публичные runners GitHub. Рецепт и исходный архив закреплены в [квалификации сборки](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44962254649). [Публикация](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44962900166) связывает архив с digest манифеста и конфигурации.
+
+1. В [конфигурации kind](../../infra/kind.yaml) найдите `etcd.local.imageRepository` и `imageTag`. Для ревизии `6abe6c7` kubeadm собирает ссылку на `ghcr.io/abrakadabra124/trusted-mlsecops-platform/etcd` с digest `sha256:1d1803f6520e4a8f35a3ee71972cd3d38b205eeb041d9340f500877ce3a06ebe`. Config ID работающего контейнера должен быть `sha256:b58a5d62eedb953d96c32200fcfafd40928b7514b40a32667c1f2fc4d8265976`.
+2. Запустите два workflow из корня checkout командами ниже. Сохраните обе ссылки и проверьте поле `headSha` каждого запуска. Для сравнения результаты должны относиться к одному коммиту.
+
+   ```sh
+   gh workflow run kubernetes-trust.yml --ref qualify/r1-adopt-patched-etcd
+   gh workflow run runtime-image-audit.yml --ref qualify/r1-adopt-patched-etcd
+   gh run view <RUN_ID> --json headSha,status,conclusion,url
+   ```
+
+3. В шаге проверки etcd сверьте поле образа в спецификации готового Pod, RepoDigest и config ID из containerd. Ответ TLS endpoint должен подтвердить версию 3.6.17 и избранного лидера. При отказе проверьте доступ к GHCR без учётных данных и соответствие манифеста платформе Linux AMD64. Для воспроизведения перехода со штатной версии и отката используется отдельная [исходная конфигурация](../../infra/kind-etcd-3.6.17-baseline.yaml).
+4. В полном отчёте найдите компонент по `observed_reference`, сверьте `runtime_image_id`, 154 строки описи и семь координат в `etcd_patched_supplemental`. Сверьте находки с `original_result` этого компонента. При неполной описи или отсутствии квитанции оставьте результат неопределённым и разберите расхождение по версии, пути и сборщику пакетов. Оцените остальные образы отдельно. При общем `fail` выпуск остаётся закрытым.
+5. Убедитесь, что в журнале аудита есть `runtime_audit_cluster_absent=pass` и завершены шаги остановки сервисов. Прочитайте итог очистки и во втором workflow. Неподтверждённая очистка требует проверки журналов соответствующего одноразового запуска.
+
 ## Сравнение двух версий CoreDNS
 
 В двух полных аудитах совпали схема Grype и время сборки базы. SHA-256 файлов `6/vulnerability.db` различался. Для проверки влияния обновления один hosted job просканировал оба закреплённых образа, смонтировав один каталог базы только для чтения. Проверены хеши файлов до и после каждого скана. SHA-256 файла базы в парном запуске составил `aaceea30e7446b2a365d171916ef3fbcaf719e194e0062c97c9ce2b4f0ccdfd8`. [Парный прогон](https://github.com/Abrakadabra124/trusted-mlsecops-platform/actions/runs/44960164029), [код проверки](../../scripts/image_coredns_pair.py).
