@@ -26,6 +26,7 @@ from mlsecops.kube_worker import image_document
 from mlsecops.storage_bootstrap import IMAGE as STORAGE_IMAGE
 from scripts import (
     image_candidates,
+    image_cilium_agent_inventory,
     image_etcd_candidate,
     image_kubernetes_aliases,
     image_kubernetes_export,
@@ -526,6 +527,8 @@ def audit(root, include_candidates=False, runtime_state=None, include_node_candi
                 component["package_observation"] = observe_packages(sbom, config_id)
                 version_diagnostic = image_kubernetes_inventory.diagnose(
                     component["package_observation"]
+                ) or image_cilium_agent_inventory.diagnose(
+                    component["package_observation"], reference
                 )
                 if version_diagnostic is not None:
                     component["application_inventory"] = version_diagnostic

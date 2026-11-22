@@ -1,0 +1,98 @@
+name: Compare the two dirty Go main modules shipped in Cilium Agent 1.20.5
+on:
+  workflow_dispatch:
+  push:
+    branches: [qualify/r1-cilium-agent-coverage]
+    paths: [.github/workflows/cilium-agent-main-rebuild.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    name: Compare ${{ matrix.file }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - file: cilium-cni
+            dir: plugins/cilium-cni
+            path: /opt/cni/bin/cilium-cni
+            sha: 5dcc388265be382d8a2f7fea3db693088ef79be3b8c9a81f518f2cd91b00e117
+          - file: hubble
+            dir: hubble
+            path: /usr/bin/hubble
+            sha: e51fc3222cf3966eb8478b9e96ff40291947664b4c806b4d5416d3ee7caeca43
+    env:
+      FILE: ${{ matrix.file }}
+      SOURCE_DIR: ${{ matrix.dir }}
+      IMAGE_PATH: ${{ matrix.path }}
+      SHIPPED_SHA: ${{ matrix.sha }}
+      REVISION: 150121410c147fad575ac5dcbce6de923be69042
+      BUILDER: quay.io/cilium/cilium-builder@sha256:aa0c951a0ff66cb7eedadf0f75e61037255478f0f31b54b1dc94c2b0aec9919c
+      AGENT: quay.io/cilium/cilium@sha256:a54ced05354670afb7fecd075e91130dff5cca16518da7ff3d1ef093c5c2d0ae
+      CONFIG: sha256:33f1b95a921dd4ed3acfb9a7fbaa003f51bd221295e6715c7904682d11525264
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Bind upstream tag, Git tree and shipped linux/amd64 file
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          git init -q src
+          git -C src fetch --depth=1 https://github.com/cilium/cilium.git refs/tags/v1.20.5:refs/tags/v1.20.5
+          test "$(git -C src rev-parse 'v1.20.5^{commit}')" = "$REVISION"
+          git -C src -c advice.detachedHead=false checkout --detach "$REVISION"
+          test "$(git -C src rev-parse 'HEAD^{tree}')" = 613f5de40391c182ba6c4fdeb0134252cd0db2bf
+          git -C src config core.abbrev 8
+          mkdir out
+          docker pull --platform linux/amd64 "$AGENT"
+          test "$(docker image inspect -f '{{.Id}} {{.Os}}/{{.Architecture}}' "$AGENT")" = "$CONFIG linux/amd64"
+          cid=$(docker create --network none "$AGENT" /unused)
+          trap 'docker rm -v "$cid" >/dev/null' EXIT
+          docker cp "$cid:$IMAGE_PATH" shipped
+          test -f shipped
+          test ! -L shipped
+          echo "$SHIPPED_SHA  shipped" | sha256sum -c -
+
+      - name: Build only the named target and reproduce upstream ELF stripping offline
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          docker pull --platform linux/amd64 "$BUILDER"
+          src=/go/src/github.com/cilium/cilium
+          docker run --rm -i --pull=never --platform linux/amd64 --network none \
+            --cap-drop ALL --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            -v "$PWD/src:$src" -v "$PWD/out:/out" -w "$src" --entrypoint /bin/bash \
+            -e FILE -e SOURCE_DIR -e REVISION -e GOTOOLCHAIN=local -e GOPROXY=off \
+            -e GOCACHE=/tmp/go-cache -e GOMODCACHE=/tmp/go-mod "$BUILDER" -euo pipefail <<'BUILD'
+          test "$(go env GOVERSION)" = go1.26.11
+          test -z "$(git status --porcelain)"
+          # Model only the observed VCS dirty bit with a non-source file.
+          # The pinned tracked files, vendor tree and upstream build flags stay intact.
+          git rev-parse HEAD > .qualification-revision
+          test "$(git status --porcelain)" = '?? .qualification-revision'
+          make -C "$SOURCE_DIR" GOARCH=amd64 PKG_BUILD=1 NOSTRIP=1 "$FILE"
+          git diff --exit-code HEAD --
+          test "$(git status --porcelain)" = '?? .qualification-revision'
+          cp "$SOURCE_DIR/$FILE" "/out/$FILE"
+          cd /out
+          go version -m "$FILE" > buildinfo
+          grep -Fx "$(printf '\tbuild\tvcs.revision=%s' "$REVISION")" buildinfo
+          grep -Fx "$(printf '\tbuild\tvcs.modified=true')" buildinfo
+          x86_64-linux-gnu-objcopy --only-keep-debug "$FILE" "$FILE.debug"
+          x86_64-linux-gnu-objcopy --strip-all "$FILE"
+          x86_64-linux-gnu-objcopy --add-gnu-debuglink="$FILE.debug" "$FILE"
+          BUILD
+
+      - name: Compare complete files including the debug link
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          sha256sum shipped "out/$FILE"
+          echo "$SHIPPED_SHA  shipped" | sha256sum -c -
+          cmp shipped "out/$FILE"
+          printf '%s\n' "$IMAGE_PATH sha256:$SHIPPED_SHA matches tracked source $REVISION (vcs.modified=true), linux/amd64 $CONFIG" >> "$GITHUB_STEP_SUMMARY"

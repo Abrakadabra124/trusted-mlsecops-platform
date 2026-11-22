@@ -36,7 +36,7 @@ jobs:
           uv run --locked coverage report --data-file=.coverage-image-patched-etcd --fail-under=95
           uv run --locked coverage json --data-file=.coverage-image-patched-etcd -o .coverage-image-patched-etcd.json
           uv run --locked python -c "import json; t=json.load(open('.coverage-image-patched-etcd.json'))['totals']; raise SystemExit(0 if t['num_branches'] and t['covered_branches']/t['num_branches'] >= 0.95 else 1)"
-          uv run --locked python -m unittest scripts.image_cilium_operator_qualification scripts.image_cilium_join_qualification
+          uv run --locked python -m unittest scripts.image_cilium_agent_qualification scripts.image_cilium_operator_qualification scripts.image_cilium_join_qualification
           uv run --locked coverage run --branch --source=scripts.image_scope -m unittest scripts.image_scope_qualification
           uv run --locked coverage report --fail-under=95
           uv run --locked coverage json -o .coverage-scope.json
