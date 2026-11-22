@@ -122,15 +122,15 @@ def check_layer(layer, base):
         raise Rejected("runc_file_missing")
 
 
-def check_archive(path, config):
+def check_archive(path, config, *, base_layers=node.LAYERS):
     ids = config["rootfs"]["diff_ids"]
     with tarfile.open(path, "r:") as archive:
         (manifest,) = json.load(archive.extractfile("manifest.json"))
         layers = manifest["Layers"]
-        if ids[:-1] != list(node.LAYERS) or len(layers) != len(ids):
+        if ids[:-1] != list(base_layers) or len(layers) != len(ids):
             raise Rejected("runc_archive_layer_set_changed")
         base = {}
-        for name, diff in zip(layers[:-1], node.LAYERS, strict=True):
+        for name, diff in zip(layers[:-1], base_layers, strict=True):
             with node.verified_layer(archive, name, diff) as layer:
                 node.apply_base_layer(base, layer)
         with node.verified_layer(archive, layers[-1], ids[-1]) as layer:

@@ -9,6 +9,23 @@ from scripts import image_node_runc as runc
 
 
 class NodeRuncTests(unittest.TestCase):
+    def test_second_update_preserves_the_verified_intermediate_layer(self):
+        intermediate = [*runc.node.LAYERS, "sha256:" + "1" * 64]
+        config = {
+            "config": {"Entrypoint": ["/init"]},
+            "rootfs": {"type": "layers", "diff_ids": intermediate},
+        }
+        final = copy.deepcopy(config)
+        final["rootfs"]["diff_ids"].append("sha256:" + "2" * 64)
+        runc.node.check_oci(config, final, base_layers=intermediate)
+        for layers in (list(runc.node.LAYERS), intermediate[:-1] + ["sha256:" + "3" * 64]):
+            with self.assertRaises(Rejected):
+                runc.node.check_oci(config, final, base_layers=layers)
+        changed = copy.deepcopy(final)
+        changed["rootfs"]["diff_ids"][-2] = "sha256:" + "3" * 64
+        with self.assertRaises(Rejected):
+            runc.node.check_oci(config, changed, base_layers=intermediate)
+
     def test_single_binary_layer(self):
         parents = ["usr", "usr/local", "usr/local/sbin"]
         dirs = []

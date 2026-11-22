@@ -175,14 +175,14 @@ def check_findings(source, candidate):
         raise Rejected("node_openssl_residual_finding")
 
 
-def check_oci(base, candidate):
-    if base["rootfs"] != {"type": "layers", "diff_ids": list(LAYERS)}:
+def check_oci(base, candidate, *, base_layers=LAYERS):
+    if base["rootfs"] != {"type": "layers", "diff_ids": list(base_layers)}:
         raise Rejected("node_base_layers_changed")
     layers = candidate["rootfs"]["diff_ids"]
     if (
         candidate["config"] != base["config"]
         or candidate["rootfs"]["type"] != "layers"
-        or layers[:-1] != list(LAYERS)
+        or layers[:-1] != list(base_layers)
         or not re.fullmatch(r"sha256:[a-f0-9]{64}", layers[-1])
     ):
         raise Rejected("node_runtime_config_or_layers_changed")
