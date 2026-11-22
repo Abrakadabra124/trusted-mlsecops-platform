@@ -5,7 +5,9 @@ import importlib
 import importlib.util
 import io
 import os
+import runpy
 import shutil
+import sys
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -122,6 +124,177 @@ class ServingExportTests(unittest.TestCase):
         return self.exporter.replay(
             self.root, self.destination, index_pin=result["index_pin"], **(self.owner | changes)
         )
+
+    def draft_plan(self):
+        # Freeze the fixture inventories independently of the reports handed to the reader.
+        plan = copy.deepcopy(self.fx.plan)
+        intake = decode(bounded_read(self.root / "policies/m18-foundation-intake.json"))["M02"]
+        plan["rejections"]["M02"] = {k: v for k, v in intake.items() if v is not True}
+        plan["rejections"]["M03"] = {
+            k + ":controlled": "denied" for k in ("filesystem", "storage", "pipeline")
+        }
+        plan["cases"].update(
+            M02=digest(canonical(sorted(intake))),
+            M03=decode(bounded_read(self.root / "policies/m18-integrity.json"))["case_inventory"],
+            M07="a24156fbf5b26508cb1468dfe9f61d154485bc2c2c446448b61aeed400ac4636",
+            **dict.fromkeys(("M13", "M14", "M15"), digest(canonical(["controlled"]))),
+        )
+        plan["artifacts"].update(
+            M02=digest(canonical(["data_qualification"])),
+            M03=digest(canonical(["filesystem", "integrity_qualification", "pipeline", "storage"])),
+            M07="9d122e03f2c366a2fd2f3048a07f3881364a9c681e0e7a9394c1cb18219ec63f",
+            M13="2ef2dfc27a13bf7af837b3491562ffe5bcaf1c0d4120a7250172c54a43631991",
+            M14="9dfc9ccb0ab844580b56dc523dcecc7ff1a81f2a1168ab66bcebc4900881388b",
+            M15="855ddbf5b8fcc61e3d0bd45b3e41a7caeaffd4ad99a85a84255dd214437bd35d",
+        )
+        path = self.root / ".runtime/evidence/M18-plan.json"
+        write_json(path, plan)
+        return path, digest(bounded_read(path))
+
+    def test_archived_draft_six_gates_remain_readable_after_consumer_deletion(self):
+        plan_path, plan_pin = self.draft_plan()
+        index_pin = self.retain()["index_pin"]
+        native = self.root / ".runtime/ci-serving-native"
+        native.mkdir(mode=0o700)
+        self.destination = self.destination.rename(native / "retained")
+        owner_path = native / "retention-private.json"
+        write_json(owner_path, dict(authority=self.owner, index_pin=index_pin, release_ready=False))
+        owner_pin = digest(bounded_read(owner_path))
+        shutil.rmtree(self.state)
+        runtime = self.root / ".runtime"
+        final_index = runtime / self.exporter.final.INDEX
+        final_index.write_bytes(b"existing final index")
+        before = {
+            p.name: digest(bounded_read(p))
+            for p in (self.destination / self.exporter.transfer.CAS).iterdir()
+        }
+        draft = self.exporter.assemble_draft(
+            self.root, self.destination, index_pin=index_pin, plan_pin=plan_pin, **self.owner
+        )
+        output = runtime / "m18-serving-drafts"
+        self.assertEqual(set(draft), {"status", "release_ready", "index_sha256"})
+        self.assertEqual(draft["status"], "inconclusive")
+        self.assertIs(draft["release_ready"], False)
+        record = decode(self.exporter.final.blob(output, draft["index_sha256"]))
+        self.assertEqual(record["reports"], self.owner["report_pins"])
+        self.assertEqual(set(record["retained"]), {"M13", "M15"})
+        self.assertEqual(record["proposal_reference"], self.owner["expected"]["proposal_reference"])
+        self.assertEqual(record["freeze_sha256"], self.owner["freeze_pin"])
+        self.assertEqual(record["plan"], plan_pin)
+        for gate, pin in record["reports"].items():
+            report = decode(self.exporter.final.blob(self.destination, pin))
+            self.assertEqual(report["gate"], gate)
+            for ref in report["artifact_hashes"].values():
+                self.exporter.final.blob(self.destination, ref)
+        marker = output / "receipts" / index_pin / (plan_pin + ".json")
+        self.assertEqual(decode(bounded_read(marker)), draft)
+        with (
+            patch.object(
+                self.exporter, "__file__", str(self.root / "scripts/ci_serving_retention.py")
+            ),
+            patch.dict(os.environ, M18_PLAN_SHA256=plan_pin, M18_SERVING_OWNER_SHA256=owner_pin),
+            redirect_stdout(io.StringIO()) as stdout,
+        ):
+            self.exporter.main(["assemble-draft"])
+            self.assertEqual(
+                decode(stdout.getvalue().encode()),
+                {"status": "inconclusive", "release_ready": False},
+            )
+            self.assertEqual(decode(bounded_read(marker)), draft)
+            with (
+                patch.dict(os.environ, M18_SERVING_OWNER_SHA256="1" * 64),
+                self.assertRaises(Rejected),
+            ):
+                self.exporter.main(["assemble-draft"])
+        self.assertEqual(
+            before,
+            {
+                p.name: digest(bounded_read(p))
+                for p in (self.destination / self.exporter.transfer.CAS).iterdir()
+            },
+        )
+        self.assertEqual(bounded_read(final_index), b"existing final index")
+        self.assertEqual(digest(bounded_read(plan_path)), plan_pin)
+        self.assertEqual(digest(bounded_read(owner_path)), owner_pin)
+        self.assertFalse(list(native.glob("serving-reader-*")))
+
+    def test_archived_draft_rejects_substitution_and_missing_source_preimages(self):
+        plan_path, pin = self.draft_plan()
+        index_pin = self.retain()["index_pin"]
+        original = bounded_read(plan_path)
+
+        def assemble(plan_pin=pin, **changes):
+            return self.exporter.assemble_draft(
+                self.root,
+                self.destination,
+                index_pin=index_pin,
+                plan_pin=plan_pin,
+                **(self.owner | changes),
+            )
+
+        for field, gate in (
+            ("cases", "M02"),
+            ("artifacts", "M07"),
+            ("rejections", "M02"),
+            ("rejections", "M03"),
+        ):
+            plan = decode(original)
+            if field == "rejections":
+                outcomes = plan[field][gate]
+                outcomes[next(iter(outcomes))] = "wrong-outcome"
+            else:
+                plan[field][gate] = digest(b"foreign inventory")
+            write_json(plan_path, plan)
+            with self.subTest(field=field, gate=gate):
+                reason = {
+                    "cases": "case-inventory",
+                    "artifacts": "artifact-inventory",
+                    "rejections": "negative-observations",
+                }[field]
+                with self.assertRaisesRegex(Rejected, "draft-" + reason):
+                    assemble(digest(bounded_read(plan_path)))
+                self.assertFalse((self.root / ".runtime/m18-serving-drafts").exists())
+        plan_path.write_bytes(original + b" ")
+        with self.assertRaises(Rejected):
+            assemble()
+        plan_path.write_bytes(original)
+        for changed in ({"M02": self.owner["report_pins"]["M03"]}, {"M01": "a" * 64}):
+            with self.subTest(changed=changed), self.assertRaises(Rejected):
+                assemble(report_pins=self.owner["report_pins"] | changed)
+        with self.assertRaises(Rejected):
+            assemble(expected=self.owner["expected"] | {"proposal_reference": "f" * 64})
+        for verifier in ("verify_early", "verify_integrity", "verify_evaluation"):
+            with (
+                self.subTest(verifier=verifier),
+                patch.object(
+                    self.exporter.frozen, verifier, side_effect=Rejected("original rejected")
+                ) as call,
+                self.assertRaises(Rejected),
+            ):
+                try:
+                    assemble()
+                finally:
+                    call.assert_called_once()
+                    if verifier == "verify_early":
+                        self.assertEqual(call.call_args.kwargs, {"intake_only": True})
+        # Original reports are still available in the consumer. A missing archived preimage is fatal.
+        archive = decode(self.exporter.final.blob(self.destination, index_pin))
+        ref = archive["files"]["evidence/M03-filesystem.json"]
+        (self.destination / self.exporter.transfer.CAS / ref).unlink()
+        with self.assertRaises((Rejected, OSError)):
+            assemble()
+        self.assertFalse((self.root / ".runtime/m18-serving-drafts").exists())
+
+    def test_archive_cli_refuses_path_arguments_without_printing_private_inputs(self):
+        script = self.exporter.__file__
+        with (
+            patch.object(sys, "argv", [script, "assemble-draft", "../private"]),
+            redirect_stdout(io.StringIO()) as stdout,
+            self.assertRaisesRegex(SystemExit, "^M18 serving archive draft verification failed$"),
+        ):
+            runpy.run_path(script, run_name="__main__")
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertFalse((self.root / ".runtime/m18-serving-drafts").exists())
 
     def test_wrong_report_pin_rejects_without_destination_or_temporary_files(self):
         reports = dict(self.owner["report_pins"], M13="0" * 64)

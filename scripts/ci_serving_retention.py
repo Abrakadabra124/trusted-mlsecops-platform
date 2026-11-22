@@ -1,10 +1,13 @@
 """Durable private serving preimages and historical replay, never release authority."""
 
+import os
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from mlsecops import final_evidence as final
 from mlsecops.contracts import (
+    Rejected,
     atomic_write,
     bounded_read,
     canonical,
@@ -25,6 +28,7 @@ TOTAL = 256 * 1024**2
 MAX_FILES = 384
 MAX_OBJECTS = 512
 SCOPE = "original-serving-primary-not-M18-acceptance"
+DRAFTS = "m18-serving-drafts"
 
 
 def need(value, reason):
@@ -365,3 +369,78 @@ def replay(
             seen.add(path.name)
         need(seen == names, "missing-file")
     return verify(root, target.parent, files, objects, serving_pin, owner)
+
+
+def assemble_draft(root, archive, *, index_pin, freeze_pin, plan_pin, **owner):
+    """Replay the six original gates and publish only their private draft outside the archive."""
+    runtime = plain(safe_child(plain(root), ".runtime"))
+    source = location(root, archive)
+    output = location(root, runtime / DRAFTS)
+    need(not output.is_relative_to(source) and not source.is_relative_to(output), "draft-overlap")
+    plan = final.pinned(safe_child(runtime, "evidence/M18-plan.json"), plan_pin)
+    verified = replay(root, source, index_pin=index_pin, freeze_pin=freeze_pin, **owner)
+    # verify() checked the three upstream primaries. The campaign receipt binds all six to this freeze.
+    receipt, trio = verified["receipt"], verified["replay"]
+    require_fields(receipt["reports"], campaign.GATES)
+    final.subset(receipt["reports"], trio["reports"], "draft-serving-report-pins")
+    raw = serving._draft_bytes(
+        source,
+        dict(trio, reports=receipt["reports"]),
+        freeze_pin=freeze_pin,
+        proposal_reference=receipt["proposal_reference"],
+        plan_raw=plan,
+        plan_pin=plan_pin,
+    )
+    result = dict(status="inconclusive", release_ready=False, index_sha256=digest(raw))
+    # A private receipt locates the draft without sending object pins to stdout.
+    path = safe_child(output, f"receipts/{object_id(index_pin)}/{object_id(plan_pin)}.json")
+    content = canonical(result) + b"\n"
+    if path.exists():
+        need(bounded_read(path, final.LIMIT) == content, "draft-receipt-collision")
+    serving.put(output, raw)
+    final.blob(output, result["index_sha256"], final.LIMIT)
+    if not path.exists():
+        atomic_write(path, content)
+    final.pinned(path, digest(content))
+    return result
+
+
+def main(arguments=None):
+    need((sys.argv[1:] if arguments is None else arguments) == ["assemble-draft"], "arguments")
+    root = Path(__file__).resolve().parents[1]
+    native = location(root, root / ".runtime/ci-serving-native")
+    raw = final.pinned(
+        safe_child(native, "retention-private.json"), os.environ["M18_SERVING_OWNER_SHA256"]
+    )
+    receipt = decode(raw, final.LIMIT)
+    require_fields(receipt, ("authority", "index_pin", "release_ready"))
+    need(receipt["release_ready"] is False, "owner-mode")
+    owner = receipt["authority"]
+    require_fields(
+        owner,
+        (
+            "freeze_pin",
+            "freeze",
+            "expected",
+            "run_owner",
+            "report_pins",
+            "admission_pins",
+            "transitions",
+            "consumer_storage_pin",
+        ),
+    )
+    result = assemble_draft(
+        root,
+        native / "retained",
+        index_pin=receipt["index_pin"],
+        plan_pin=os.environ["M18_PLAN_SHA256"],
+        **owner,
+    )
+    print(canonical({k: result[k] for k in ("status", "release_ready")}).decode())
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (Rejected, OSError, KeyError, TypeError, ValueError):
+        sys.exit("M18 serving archive draft verification failed")

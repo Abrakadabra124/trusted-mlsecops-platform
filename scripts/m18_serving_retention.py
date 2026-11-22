@@ -316,6 +316,22 @@ def assemble_draft(
     verified = replay(
         root, state, receipt_pin, freeze_pin=freeze_pin, reports=reports, admissions=admissions
     )
+    raw = _draft_bytes(
+        state,
+        verified,
+        freeze_pin=freeze_pin,
+        proposal_reference=proposal_reference,
+        plan_raw=final.pinned(safe_child(state, "evidence/M18-plan.json"), plan_pin),
+        plan_pin=plan_pin,
+        base_pin=base_pin,
+    )
+    return dict(status="inconclusive", release_ready=False, index_sha256=put(state, raw))
+
+
+def _draft_bytes(
+    state, verified, *, freeze_pin, proposal_reference, plan_raw, plan_pin, base_pin=None
+):
+    """Assemble from a completed local or archive replay. All report preimages live in state."""
     final.same(verified["proposal_reference"], object_id(proposal_reference), "draft-proposal")
     frozen = decode(final.blob(state, freeze_pin))
     # Early performance freezes predate the explicit version field.
@@ -323,7 +339,8 @@ def assemble_draft(
     header = dict(
         schema_version=1, **{k: frozen[k] for k in (*delivery.SOURCE, "freeze", "policy_reference")}
     )
-    plan = decode(final.pinned(safe_child(state, "evidence/M18-plan.json"), plan_pin))
+    final.same(digest(plan_raw), object_id(plan_pin), "draft-plan-pin")
+    plan = decode(plan_raw)
     final.need(isinstance(plan, dict), "draft-plan-shape")
     final.subset(
         plan,
@@ -337,6 +354,7 @@ def assemble_draft(
             object_id(pin)
     for gate, pin in verified["reports"].items():
         report = decode(final.blob(state, pin))
+        final.same(report["gate"], gate, "draft-report-gate")
         case_ids = sorted(row["id"] for row in report["cases"])
         final.same(digest(canonical(case_ids)), plan["cases"][gate], "draft-case-inventory")
         final.same(
@@ -344,6 +362,12 @@ def assemble_draft(
             plan["artifacts"][gate],
             "draft-artifact-inventory",
         )
+        if gate in ("M02", "M03"):
+            final.same(
+                {c["id"]: c["actual"] for c in report["cases"] if c["expected"] == "reject"},
+                plan["rejections"][gate],
+                "draft-negative-observations",
+            )
     identity = dict(
         **header,
         scope="M18-private-index-draft",
@@ -370,7 +394,7 @@ def assemble_draft(
     # A content-addressed write leaves the pinned parent and authoritative INDEX intact.
     raw = canonical(draft) + b"\n"
     final.need(len(raw) <= final.LIMIT, "draft-size")
-    return dict(status="inconclusive", release_ready=False, index_sha256=put(state, raw))
+    return raw
 
 
 def main(arguments=None):

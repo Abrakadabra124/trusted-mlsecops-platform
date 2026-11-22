@@ -348,6 +348,18 @@ class ServingPrimaryTests(unittest.TestCase):
         self.assertEqual(repeated["index_sha256"], pin)
         self.assertEqual(collector.final.blob(self.state, repeated["index_sha256"]), raw)
 
+    def test_trio_draft_keeps_original_plan_contract_without_upstream_rejections(self):
+        receipt, args = self.draft_inputs()
+        name = "evidence/M18-plan.json"
+        plan = decode(collector.final.pinned(self.state / name, args["plan_pin"]))
+        del plan["rejections"]
+        args["plan_pin"] = self.file(name, plan)
+        result = collector.assemble_draft(self.root, self.state, receipt, **args)
+        draft = decode(collector.final.blob(self.state, result["index_sha256"]))
+        self.assertEqual(draft["reports"], self.reports)
+        self.assertEqual(result["status"], "inconclusive")
+        self.assertIs(result["release_ready"], False)
+
     def test_draft_merges_m02_without_overwriting_base(self):
         receipt, args = self.draft_inputs()
         first = collector.assemble_draft(self.root, self.state, receipt, **args)
